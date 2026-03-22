@@ -131,8 +131,11 @@ class _DiaryEntryEditScreenState extends State<DiaryEntryEditScreen> {
 
   Future<void> _save() async {
     final tempText = _tempController.text.trim();
-    final temp =
+    final parsedTemp =
         tempText.isEmpty ? null : double.tryParse(tempText.replaceAll(',', '.'));
+    final temp = (parsedTemp != null && (parsedTemp < -50 || parsedTemp > 100))
+        ? null
+        : parsedTemp;
 
     final isNew = widget.entry == null;
     FeedbackService.log(

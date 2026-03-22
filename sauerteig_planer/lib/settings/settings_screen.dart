@@ -35,7 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final notifEnabled = await StarterStorage.isNotificationEnabled();
     setState(() {
       // onboarding_done == false → Tutorial ist aktiv
-      _tutorialEnabled = !(prefs.getBool('onboarding_done') ?? true);
+      _tutorialEnabled = !(prefs.getBool('onboarding_done') ?? false);
       _starterNotifEnabled = notifEnabled;
     });
   }
