@@ -1,0 +1,55 @@
+name: sauerteig_planer
+description: Sauerteig Zeitplan & Verhältnis Rechner
+
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  url_launcher: ^6.2.5
+  # Kalender-Export (.ics)
+  share_plus: ^7.2.1
+  # Pfade für Datei-Speicherung
+  path_provider: ^2.1.2
+  # PDF Export
+  pdf: ^3.10.8
+  printing: ^5.12.0
+  # Lokale Benachrichtigungen (Timer-Erinnerungen)
+  flutter_local_notifications: ^17.0.0
+  # Datum/Zeit Formatierung
+  intl: ^0.19.0
+  # Rezepte lokal speichern
+  shared_preferences: ^2.3.0
+  # Nativen Android-Timer öffnen
+  android_intent_plus: ^5.0.0
+  open_filex: ^4.7.0
+  timezone: ^0.9.4
+  # Fotos im Tagebuch aufnehmen
+  image_picker: ^1.1.2
+  # Fehlerberichte direkt aus der App senden (Telegram Bot)
+  http: ^1.2.0
+  # E-Mail mit Anhang öffnen (Android + iOS)
+  flutter_email_sender: ^6.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.14.1
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#FDF0E0"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
+  min_sdk_android: 21
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon/

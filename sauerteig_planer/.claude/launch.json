@@ -1,0 +1,24 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Flutter Web (Chrome)",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "C:\\flutter\\bin\\flutter.bat", "run", "-d", "chrome", "--web-port", "8080"],
+      "port": 8080
+    },
+    {
+      "name": "Flutter Android (S10 Lite WLAN)",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "C:\\flutter\\bin\\flutter.bat", "run", "-d", "192.168.178.92:37243"],
+      "port": 8081,
+      "autoPort": true
+    },
+    {
+      "name": "Flutter Windows",
+      "runtimeExecutable": "flutter",
+      "runtimeArgs": ["run", "-d", "windows"],
+      "port": 8080
+    }
+  ]
+}

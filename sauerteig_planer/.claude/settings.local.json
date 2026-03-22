@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(C:flutterbinflutter.bat devices:*)",
+      "Bash(cmd /c \"C:\\\\flutter\\\\bin\\\\flutter.bat devices\")",
+      "Bash(cmd /c \"C:\\\\flutter\\\\bin\\\\flutter.bat devices 2>&1\")",
+      "Bash(powershell -Command \"& ''C:\\\\flutter\\\\bin\\\\flutter.bat'' devices\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path ''C:\\\\Users\\\\klaas\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\'' -Filter ''adb.exe'' -ErrorAction SilentlyContinue | Select-Object FullName\")",
+      "Bash(where adb:*)",
+      "Bash(dir \"C:\\\\Users\\\\klaas\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\")",
+      "Bash(dir \"C:\\\\Android\\\\platform-tools\\\\adb.exe\")",
+      "Bash(\"C:\\\\Users\\\\klaas\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" pair:*)",
+      "Bash(\"C:\\\\Users\\\\klaas\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" connect:*)",
+      "Bash(flutter build:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(flutter pub:*)",
+      "Bash(dart run:*)",
+      "Bash(flutter install:*)",
+      "Bash(flutter run:*)",
+      "Bash(flutter devices:*)",
+      "Bash(adb devices:*)",
+      "Bash(pip show:*)",
+      "Bash(pip install:*)",
+      "Bash(python3 -m pip show reportlab)",
+      "Bash(python3 -m pip install reportlab)",
+      "Bash(python3 \"C:/Users/klaas/Desktop/gen_flutter_pdf.py\")",
+      "Bash(where python3.exe)",
+      "Bash(where python.exe)",
+      "Bash(\"C:/Users/klaas/AppData/Local/Python/bin/python3.exe\" \"C:/Users/klaas/Desktop/gen_flutter_pdf.py\")",
+      "Bash(python generate_flutter_pdf.py)",
+      "Bash(py --version)",
+      "Bash(where py:*)",
+      "Bash(py -c \"import reportlab; print\\(reportlab.Version\\)\")",
+      "Bash(py generate_flutter_pdf.py)"
+    ]
+  }
+}
