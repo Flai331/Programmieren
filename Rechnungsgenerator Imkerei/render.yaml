@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: rechnungsgenerator-backend
+    env: python
+    plan: free
+    buildCommand: "cd Backend && pip install -r requirements.txt"
+    startCommand: "cd Backend && uvicorn main:app --host 0.0.0.0 --port 10000"
+    envVars:
+      - key: DATABASE_URL
+        scope: PROJECT
+      - key: CORS_ORIGINS
+        value: "https://rechnungsgenerator-frontend.onrender.com"
+        scope: PROJECT
+      - key: SECRET_KEY
+        scope: PROJECT
+      - key: ALGORITHM
+        value: "HS256"
+        scope: PROJECT
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "1440"
+        scope: PROJECT
+
+  - type: web
+    name: rechnungsgenerator-frontend
+    env: node
+    plan: free
+    buildCommand: "cd _backend/projekt/frontend && npm install && npm run build"
+    startCommand: "cd _backend/projekt/frontend && npx serve -s dist -l 3000"
+    envVars:
+      - key: VITE_API_URL
+        value: "https://rechnungsgenerator-backend.onrender.com/api"
+        scope: PROJECT
+
+databases:
+  - name: rechnungsgenerator-db
+    databaseName: rechnungsgenerator
+    plan: free

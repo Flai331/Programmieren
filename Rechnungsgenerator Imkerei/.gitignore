@@ -37,5 +37,6 @@ _backend/**/__pycache__/
 # General
 *.log
 .env
-.env.*
+.env.local
+.env.*.local
 *.exe
