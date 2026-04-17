@@ -1,0 +1,72 @@
+================================================================================
+              RECHNUNGSGENERATOR PRO - MOBILE VERSION
+================================================================================
+
+Diese Version ist optimiert für Smartphones und Tablets.
+
+
+SCHNELLSTART
+------------
+1. Datei "RECHNUNGSGENERATOR_MOBILE.html" im Browser öffnen
+2. Die App erkennt automatisch Ihr Mobilgerät
+3. Unten finden Sie die Navigation: Design | Absender | Empfänger | Rechnung | Vorschau
+4. Daten eingeben und "PDF generieren" tippen
+5. Fertig!
+
+
+MOBILE NAVIGATION
+-----------------
+Am unteren Bildschirmrand finden Sie 5 Buttons:
+
+  [🎨 Design] [👤 Absender] [📬 Empfänger] [📝 Rechnung] [👁️ Vorschau]
+
+- Tippen Sie auf einen Button um den Bereich zu öffnen
+- Der aktive Bereich wird farblich hervorgehoben
+
+
+VORSCHAU ANZEIGEN
+-----------------
+Zwei Möglichkeiten:
+
+1. Tippen Sie auf [👁️ Vorschau] in der unteren Navigation
+2. Tippen Sie auf den schwebenden Button (📄) unten rechts
+
+Die Vorschau wird dann oben angezeigt.
+Tippen Sie erneut um sie zu schließen.
+
+
+DIE VIER BEREICHE
+-----------------
+1. DESIGN:    Logo hochladen, Daten zurücksetzen
+2. ABSENDER:  Ihre Firmendaten und Bankverbindung
+3. EMPFÄNGER: Kundendaten (Name, Adresse)
+4. RECHNUNG:  Positionen, Datum, MwSt., PDF erstellen
+
+
+ANSICHTSMODUS UMSCHALTEN
+------------------------
+Oben rechts: [Auto] [Mobil] [Desktop]
+
+- AUTO:    Automatische Erkennung (empfohlen)
+- MOBIL:   Erzwingt mobile Ansicht
+- DESKTOP: Wechselt zur Desktop-Ansicht
+
+
+TIPPS FÜR MOBILE NUTZUNG
+------------------------
+- Alle Eingabefelder sind für Touch optimiert
+- Scrollen Sie nach unten für weitere Felder
+- Die PDF wird automatisch heruntergeladen
+- Alle Daten werden im Browser gespeichert
+- Funktioniert offline nach dem ersten Laden
+
+
+UNTERSTÜTZTE BROWSER
+--------------------
+- Safari (iPhone/iPad)
+- Chrome (Android)
+- Firefox Mobile
+- Samsung Internet
+
+
+================================================================================

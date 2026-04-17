@@ -1,0 +1,61 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+pubspec.lock
+
+# Android
+android/
+.gradle/
+*.apk
+*.zip
+*.aab
+
+# iOS
+ios/
+.symlinks/
+*.xcworkspace/
+*.xcodeproj/
+
+# macOS
+macos/
+
+# Web
+web/
+
+# Windows
+windows/
+
+# Linux
+linux/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated files
+*.g.dart
+*.config.dart
+
+# Coverage
+coverage/
+
+# Misc
+*.iml
+.packages
+*.log

@@ -1,0 +1,102 @@
+=====================================================
+  RECHNUNGSGENERATOR IMKEREI - DESKTOP APP
+  Anleitung
+=====================================================
+
+VORAUSSETZUNGEN
+---------------
+1. Node.js (v18 oder neuer)
+   Download: https://nodejs.org/
+
+2. Backend Server (muss laufen!)
+   Siehe: Backend/ANLEITUNG.txt
+
+INSTALLATION
+------------
+1. Kommandozeile im DesktopApp-Ordner oeffnen
+2. Abhaengigkeiten installieren:
+   npm install
+
+STARTEN (Entwicklung)
+--------------------
+1. Zuerst das Backend starten (Backend/start_backend.bat)
+2. Dann: start_app.bat ausfuehren
+   ODER: npm start
+
+WINDOWS EXE ERSTELLEN
+---------------------
+1. build_exe.bat ausfuehren
+   ODER: npm run build
+2. Die fertige EXE liegt im Ordner: dist/
+
+FUNKTIONEN
+----------
+- Login/Registrierung
+  Erstellen Sie ein Benutzerkonto oder melden Sie sich an.
+
+- Dashboard
+  Uebersicht mit Statistiken und Schnellaktionen.
+
+- Rechnungen
+  * Neue Rechnungen erstellen
+  * Kunden und Artikel aus der Datenbank waehlen
+  * PDF generieren und herunterladen
+  * Rechnung per E-Mail versenden (wenn SMTP konfiguriert)
+  * Status verfolgen (Entwurf, Versendet, Bezahlt, Ueberfaellig)
+
+- Kunden
+  * Kundendatenbank verwalten
+  * Name, Firma, Adresse, E-Mail, Telefon speichern
+
+- Artikel
+  * Artikelkatalog verwalten
+  * Artikelnummer, Name, Preis, Einheit speichern
+  * Kategorien zuweisen
+
+- Einstellungen
+  * Backup erstellen und herunterladen
+  * E-Mail-Konfiguration pruefen
+  * Profil bearbeiten
+  * Passwort aendern
+
+ORDNERSTRUKTUR
+--------------
+DesktopApp/
+  ├── src/
+  │   ├── main.js         (Electron Hauptprozess)
+  │   ├── preload.js      (IPC Bruecke)
+  │   └── renderer/       (UI)
+  │       ├── index.html
+  │       ├── styles.css
+  │       └── app.js
+  ├── package.json
+  ├── start_app.bat       (App starten)
+  ├── build_exe.bat       (EXE erstellen)
+  └── ANLEITUNG.txt       (Diese Datei)
+
+PROBLEMBEHANDLUNG
+-----------------
+"Keine Verbindung zum Server"
+  -> Backend starten (Backend/start_backend.bat)
+  -> Pruefen ob Backend auf Port 8000 laeuft
+
+"npm nicht gefunden"
+  -> Node.js installieren und Terminal neu starten
+
+"Electron-Fehler"
+  -> node_modules loeschen
+  -> npm install erneut ausfuehren
+
+TECHNISCHE DETAILS
+------------------
+- Electron v28
+- Backend API: http://localhost:8000/api
+- Token-Speicherung: localStorage
+
+KONTAKT
+-------
+Bei Fragen oder Problemen wenden Sie sich an den Entwickler.
+
+=====================================================
+  Version 1.0.0
+=====================================================

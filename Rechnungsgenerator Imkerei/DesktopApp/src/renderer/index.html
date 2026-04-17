@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:*">
+    <title>Rechnungsgenerator Imkerei</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h1>🐝 Imkerei</h1>
+                <span class="version" id="appVersion">v1.0.0</span>
+            </div>
+
+            <ul class="nav-menu">
+                <li class="nav-item active" data-page="dashboard">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-text">Dashboard</span>
+                </li>
+                <li class="nav-item" data-page="invoices">
+                    <span class="nav-icon">📄</span>
+                    <span class="nav-text">Rechnungen</span>
+                </li>
+                <li class="nav-item" data-page="customers">
+                    <span class="nav-icon">👥</span>
+                    <span class="nav-text">Kunden</span>
+                </li>
+                <li class="nav-item" data-page="articles">
+                    <span class="nav-icon">🍯</span>
+                    <span class="nav-text">Artikel</span>
+                </li>
+                <li class="nav-item" data-page="settings">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-text">Einstellungen</span>
+                </li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="connection-status" id="connectionStatus">
+                    <span class="status-dot offline"></span>
+                    <span class="status-text">Offline</span>
+                </div>
+                <button class="btn-logout" id="btnLogout" style="display: none;">
+                    Abmelden
+                </button>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Login Page -->
+            <div class="page active" id="page-login">
+                <div class="login-container">
+                    <div class="login-box">
+                        <h2>🐝 Anmeldung</h2>
+                        <p>Bitte melden Sie sich an oder registrieren Sie sich.</p>
+
+                        <form id="loginForm">
+                            <div class="form-group">
+                                <label for="loginUsername">Benutzername oder E-Mail</label>
+                                <input type="text" id="loginUsername" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="loginPassword">Passwort</label>
+                                <input type="password" id="loginPassword" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block">Anmelden</button>
+                        </form>
+
+                        <div class="login-divider">
+                            <span>oder</span>
+                        </div>
+
+                        <button class="btn btn-secondary btn-block" id="btnShowRegister">
+                            Neu registrieren
+                        </button>
+
+                        <div class="error-message" id="loginError" style="display: none;"></div>
+                    </div>
+
+                    <!-- Register Form (hidden by default) -->
+                    <div class="login-box" id="registerBox" style="display: none;">
+                        <h2>📝 Registrierung</h2>
+
+                        <form id="registerForm">
+                            <div class="form-group">
+                                <label for="regUsername">Benutzername</label>
+                                <input type="text" id="regUsername" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="regEmail">E-Mail</label>
+                                <input type="email" id="regEmail" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="regFullName">Vollständiger Name</label>
+                                <input type="text" id="regFullName">
+                            </div>
+                            <div class="form-group">
+                                <label for="regPassword">Passwort</label>
+                                <input type="password" id="regPassword" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block">Registrieren</button>
+                        </form>
+
+                        <button class="btn btn-link" id="btnShowLogin">
+                            Zurück zur Anmeldung
+                        </button>
+
+                        <div class="error-message" id="registerError" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard Page -->
+            <div class="page" id="page-dashboard">
+                <div class="page-header">
+                    <h2>Dashboard</h2>
+                    <p>Willkommen zurück, <span id="userName">Benutzer</span>!</p>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">📄</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="statInvoices">0</div>
+                            <div class="stat-label">Rechnungen</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">👥</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="statCustomers">0</div>
+                            <div class="stat-label">Kunden</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">💰</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="statRevenue">0 €</div>
+                            <div class="stat-label">Umsatz (diesen Monat)</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">⏳</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="statPending">0 €</div>
+                            <div class="stat-label">Ausstehend</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quick-actions">
+                    <h3>Schnellaktionen</h3>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="showPage('invoices'); createNewInvoice();">
+                            ➕ Neue Rechnung
+                        </button>
+                        <button class="btn btn-secondary" onclick="showPage('customers');">
+                            👥 Kunden verwalten
+                        </button>
+                        <button class="btn btn-secondary" onclick="createBackup();">
+                            💾 Backup erstellen
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Invoices Page -->
+            <div class="page" id="page-invoices">
+                <div class="page-header">
+                    <h2>Rechnungen</h2>
+                    <button class="btn btn-primary" onclick="createNewInvoice();">
+                        ➕ Neue Rechnung
+                    </button>
+                </div>
+
+                <div class="filter-bar">
+                    <input type="text" id="invoiceSearch" placeholder="Suchen..." class="search-input">
+                    <select id="invoiceStatusFilter" class="filter-select">
+                        <option value="">Alle Status</option>
+                        <option value="draft">Entwurf</option>
+                        <option value="sent">Versendet</option>
+                        <option value="paid">Bezahlt</option>
+                        <option value="overdue">Überfällig</option>
+                    </select>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Nr.</th>
+                                <th>Kunde</th>
+                                <th>Datum</th>
+                                <th>Betrag</th>
+                                <th>Status</th>
+                                <th>Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoicesTableBody">
+                            <tr>
+                                <td colspan="6" class="loading">Lade Rechnungen...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Customers Page -->
+            <div class="page" id="page-customers">
+                <div class="page-header">
+                    <h2>Kunden</h2>
+                    <button class="btn btn-primary" onclick="createNewCustomer();">
+                        ➕ Neuer Kunde
+                    </button>
+                </div>
+
+                <div class="filter-bar">
+                    <input type="text" id="customerSearch" placeholder="Suchen..." class="search-input">
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Firma</th>
+                                <th>E-Mail</th>
+                                <th>Telefon</th>
+                                <th>Ort</th>
+                                <th>Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customersTableBody">
+                            <tr>
+                                <td colspan="6" class="loading">Lade Kunden...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Articles Page -->
+            <div class="page" id="page-articles">
+                <div class="page-header">
+                    <h2>Artikel</h2>
+                    <button class="btn btn-primary" onclick="createNewArticle();">
+                        ➕ Neuer Artikel
+                    </button>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Artikel-Nr.</th>
+                                <th>Name</th>
+                                <th>Kategorie</th>
+                                <th>Preis</th>
+                                <th>Einheit</th>
+                                <th>Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="articlesTableBody">
+                            <tr>
+                                <td colspan="6" class="loading">Lade Artikel...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Settings Page -->
+            <div class="page" id="page-settings">
+                <div class="page-header">
+                    <h2>Einstellungen</h2>
+                </div>
+
+                <div class="settings-grid">
+                    <div class="settings-card">
+                        <h3>💾 Backup</h3>
+                        <p>Erstellen Sie regelmäßig Backups Ihrer Daten.</p>
+                        <button class="btn btn-primary" onclick="createBackup();">Backup erstellen</button>
+                        <button class="btn btn-secondary" onclick="listBackups();">Backups anzeigen</button>
+                    </div>
+
+                    <div class="settings-card">
+                        <h3>📧 E-Mail Einstellungen</h3>
+                        <p>Konfigurieren Sie den E-Mail-Versand.</p>
+                        <button class="btn btn-secondary" onclick="checkEmailConfig();">Status prüfen</button>
+                    </div>
+
+                    <div class="settings-card">
+                        <h3>👤 Profil</h3>
+                        <p>Bearbeiten Sie Ihr Benutzerprofil.</p>
+                        <button class="btn btn-secondary" onclick="showProfileSettings();">Profil bearbeiten</button>
+                    </div>
+
+                    <div class="settings-card">
+                        <h3>ℹ️ Info</h3>
+                        <p id="appInfoText">Rechnungsgenerator Imkerei</p>
+                        <p class="version-info">Version: <span id="appVersionInfo">1.0.0</span></p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Container -->
+    <div class="modal-overlay" id="modalOverlay" style="display: none;">
+        <div class="modal" id="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">Modal</h3>
+                <button class="modal-close" onclick="closeModal();">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Dynamic content -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,2166 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rechnungsgenerator Pro - Design Builder</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .main-layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .preview-column {
+            background: #2c3e50;
+            padding: 20px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 650px;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+        }
+
+        .preview-scroll-container {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 20px 10px;
+        }
+
+        .form-column {
+            background: white;
+            overflow-y: auto;
+            margin-left: 650px;
+            width: calc(100% - 650px);
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+            color: #333;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+
+        .tab.active {
+            background: white;
+            border-bottom-color: #fda085;
+            color: #fda085;
+        }
+
+        .tab:hover {
+            background: #fff;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #fda085;
+        }
+
+        .two-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .upload-box {
+            border: 3px dashed #fda085;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .upload-box:hover {
+            background: #fff8f0;
+        }
+
+        .upload-box.has-file {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+
+        .upload-preview {
+            max-width: 200px;
+            max-height: 200px;
+            margin: 10px auto;
+        }
+
+        .color-picker {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .color-preview {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            border: 2px solid #ddd;
+        }
+
+        button {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+            color: #333;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(253, 160, 133, 0.4);
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .items-container {
+            border: 2px dashed #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .item-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr auto;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .btn-remove {
+            padding: 10px 15px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .btn-add {
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .summary {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 16px;
+        }
+
+        .summary-row.total {
+            border-top: 2px solid #333;
+            margin-top: 10px;
+            padding-top: 15px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .design-preview {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .preview-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        @media (max-width: 768px) {
+            .two-columns {
+                grid-template-columns: 1fr;
+            }
+            .item-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="main-layout">
+            <!-- Linke Spalte: Vorschau -->
+            <div class="preview-column">
+                <h2 style="color: white; text-align: center; margin-bottom: 10px; flex-shrink: 0;">📄 Live-Vorschau</h2>
+                <!-- Seiten-Navigation -->
+                <div style="display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 10px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; flex-shrink: 0;">
+                    <button id="prevPageBtn" onclick="changePreviewPage(-1)" style="padding: 8px 15px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 14px;">← Vorherige</button>
+                    <span id="pageIndicator" style="font-weight: bold; font-size: 14px; color: white;">Seite 1 von 1</span>
+                    <button id="nextPageBtn" onclick="changePreviewPage(1)" style="padding: 8px 15px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 14px;">Nächste →</button>
+                </div>
+                <div class="preview-scroll-container">
+                    <div id="a4PreviewMain" style="width: 595px; height: 842px; border: 2px solid #333; position: relative; background: white; overflow: visible; box-shadow: 0 5px 15px rgba(0,0,0,0.3); transform: scale(0.7); transform-origin: top center; margin: 0 auto;">
+                    <!-- Faltmarken nach DIN 5008 -->
+                    <div style="position: absolute; left: 0; top: 297.64px; width: 10px; height: 0.5px; background: #000;"></div>
+                    <div style="position: absolute; left: 0; top: 420.94px; width: 15px; height: 0.5px; background: #000;"></div>
+                    <div style="position: absolute; left: 0; top: 595.28px; width: 10px; height: 0.5px; background: #000;"></div>
+
+                    <!-- Logo rechts oben -->
+                    <img id="previewLogoMain" src="" style="position: absolute; right: 50px; top: 100px; height: 50px; display: none;" alt="Logo">
+                    <div id="previewLogoPlaceholderMain" style="position: absolute; right: 50px; top: 100px; width: 80px; height: 50px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; background: #f9f9f9; font-size: 10px; color: #999; text-align: center;">Logo</div>
+
+                    <!-- Firmenname unter oberem Bild -->
+                    <div id="previewHeaderTextPlaceholderMain" style="position: absolute; left: 50px; top: 115px; width: 200px; height: 30px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; background: #f9f9f9; font-size: 10px; color: #999; text-align: center; z-index: 1;">Firmenname</div>
+                    <div id="previewHeaderTextMain" style="position: absolute; left: 50px; top: 115px; font-weight: bold; display: none; max-width: 350px; word-wrap: break-word; overflow-wrap: break-word; z-index: 2; overflow: hidden; line-height: 1.2;"></div>
+
+                    <!-- Absenderzeile -->
+                    <div id="previewSenderLineMain" style="position: absolute; left: 50px; top: 200px; font-size: 7px; color: #666;"></div>
+
+                    <!-- Empfängeradresse -->
+                    <div id="previewRecipientMain" style="position: absolute; left: 50px; top: 220px; font-size: 11px; line-height: 1.3;">
+                        <div>Max Mustermann</div>
+                        <div>Musterstraße 123</div>
+                        <div>12345 Musterstadt</div>
+                    </div>
+
+                    <!-- Rechnungsinfo rechts -->
+                    <div style="position: absolute; right: 50px; top: 200px; font-size: 9px; text-align: right;">
+                        <div><strong>Rechnungs Nr: <span id="previewInvoiceNumberMain">RE-1001</span></strong></div>
+                        <div style="margin-top: 5px;">Datum: <span id="previewDateMain"></span></div>
+                    </div>
+
+                    <!-- Zusatzinformationen -->
+                    <div id="previewAdditionalInfoMain" style="position: absolute; left: 50px; width: 495px; top: 310px; font-size: 9px; color: #555; display: none; word-wrap: break-word; overflow-wrap: break-word; word-break: break-all;"></div>
+
+                    <!-- Tabellenkopf -->
+                    <div style="position: absolute; left: 50px; right: 50px; top: 380px; font-size: 9px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 5px;">
+                        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 10px;">
+                            <div>Beschreibung</div>
+                            <div style="text-align: center;">Ust. Satz</div>
+                            <div style="text-align: right;">VP (netto)</div>
+                            <div style="text-align: center;">Menge</div>
+                            <div style="text-align: right;">Nettosumme</div>
+                        </div>
+                    </div>
+
+                    <!-- Positionen (dynamisch) -->
+                    <div id="previewItemsMain" style="position: absolute; left: 50px; right: 50px; top: 410px; font-size: 8px;">
+                        <!-- Wird von JavaScript befüllt -->
+                    </div>
+
+                    <!-- Summen (dynamisch) -->
+                    <div id="previewSumsMain" style="position: absolute; right: 50px; font-size: 9px; width: 175px;">
+                        <!-- Wird von JavaScript befüllt -->
+                    </div>
+
+                    <!-- Zahlungsziel - wird dynamisch unter Bruttosumme positioniert -->
+                    <div id="previewPaymentTermsMain" style="position: absolute; right: 50px; font-size: 8px; font-weight: bold;">
+                        <div>Zahlbar innerhalb von <strong><span id="previewPaymentDaysMain">14</span> Tagen</strong></div>
+                    </div>
+
+                    <!-- Seitenzahl -->
+                    <div id="previewPageNumber" style="position: absolute; left: 270px; bottom: 22px; font-size: 8px;">Seite 1 von 1</div>
+
+                    <!-- Fußzeile ganz unten -->
+                    <div id="previewPaymentMain" style="position: absolute; left: 50px; right: 50px; bottom: 5px; font-size: 8px; line-height: 1.5;">
+                        <div style="display: grid; grid-template-columns: auto 1fr; gap: 8px 15px; line-height: 1.5; font-size: 8px;">
+                            <div>Bank</div><div>Commerzbank Solingen</div>
+                            <div>Kontoname</div><div>Musterimkerei</div>
+                            <div>Kontonummer</div><div>0000 0000</div>
+                            <div>IBAN:</div><div>DE54 0000 0000 0000 0000 00</div>
+                        </div>
+                        <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #000; font-size: 7px; line-height: 1.4;">
+                            123 Anywhere St., jede Stadt - 123-456-7890 - info@beispiel.de
+                        </div>
+                    </div>
+
+                    <!-- Platzhalter für oberes Bild -->
+                    <div id="topImagePlaceholderMain" style="position: absolute; left: 50px; top: 50px; width: 150px; height: 60px; border: 2px dashed #fda085; display: flex; align-items: center; justify-content: center; background: #fff8f0; font-size: 11px; color: #fda085; text-align: center;">Oberes Bild<br/>(optional)</div>
+
+                    <!-- Verschiebbares oberes Bild -->
+                    <img id="draggableImageMain" src="" style="position: absolute; cursor: move; border: 2px dashed #fda085; display: none; z-index: 100;" draggable="false">
+                    <!-- Resize-Handles für oberes Bild -->
+                    <div id="resizeHandleMain-nw" class="resize-handle" style="position: absolute; width: 12px; height: 12px; background: #fda085; cursor: nw-resize; display: none; border-radius: 50%; z-index: 101; border: 2px solid white;"></div>
+                    <div id="resizeHandleMain-ne" class="resize-handle" style="position: absolute; width: 12px; height: 12px; background: #fda085; cursor: ne-resize; display: none; border-radius: 50%; z-index: 101; border: 2px solid white;"></div>
+                    <div id="resizeHandleMain-sw" class="resize-handle" style="position: absolute; width: 12px; height: 12px; background: #fda085; cursor: sw-resize; display: none; border-radius: 50%; z-index: 101; border: 2px solid white;"></div>
+                    <div id="resizeHandleMain-se" class="resize-handle" style="position: absolute; width: 12px; height: 12px; background: #fda085; cursor: se-resize; display: none; border-radius: 50%; z-index: 101; border: 2px solid white;"></div>
+                    <div id="resizeHandleMain-n" class="resize-handle" style="position: absolute; width: 12px; height: 12px; background: #fda085; cursor: n-resize; display: none; border-radius: 50%; z-index: 101; border: 2px solid white;"></div>
+                    <div id="resizeHandleMain-s" class="resize-handle" style="position: absolute; width: 12px; height: 12px; background: #fda085; cursor: s-resize; display: none; border-radius: 50%; z-index: 101; border: 2px solid white;"></div>
+                    <div id="resizeHandleMain-e" class="resize-handle" style="position: absolute; width: 12px; height: 12px; background: #fda085; cursor: e-resize; display: none; border-radius: 50%; z-index: 101; border: 2px solid white;"></div>
+                    <div id="resizeHandleMain-w" class="resize-handle" style="position: absolute; width: 12px; height: 12px; background: #fda085; cursor: w-resize; display: none; border-radius: 50%; z-index: 101; border: 2px solid white;"></div>
+
+                    </div>
+                </div>
+                <p style="text-align: center; color: #fff; font-size: 11px; margin-top: 10px; flex-shrink: 0;">
+                    💡 Bilder ziehen zum Verschieben • Ecke ziehen zum Skalieren
+                </p>
+            </div>
+
+            <!-- Rechte Spalte: Formulare -->
+            <div class="form-column">
+                <div class="header">
+                    <h1>🐝 Rechnungsgenerator Pro</h1>
+                    <p>Design Builder - Logo, Farben & Layout anpassen</p>
+                </div>
+
+                <div class="tabs">
+            <div class="tab active" onclick="switchTab(0)">1. Design</div>
+            <div class="tab" onclick="switchTab(1)">2. Absender</div>
+            <div class="tab" onclick="switchTab(2)">3. Empfänger</div>
+            <div class="tab" onclick="switchTab(3)">4. Rechnung</div>
+        </div>
+
+        <div class="content">
+            <!-- TAB 1: Design -->
+            <div class="tab-content active" data-tab="0">
+                <h2>Design & Branding</h2>
+                <p style="margin-bottom: 20px; color: #666;">
+                    Gestalten Sie Ihr Rechnungs-Design. Logo und Hintergrund werden automatisch positioniert.
+                </p>
+
+                <!-- Logo Upload -->
+                <div class="form-group">
+                    <label>Logo hochladen</label>
+                    <div class="upload-box" id="logoUpload" onclick="document.getElementById('logoFile').click()">
+                        <div id="logoPlaceholder">
+                            <p style="font-size: 48px; margin-bottom: 10px;">🖼️</p>
+                            <p style="font-weight: bold;">Logo hochladen</p>
+                            <p style="color: #666; font-size: 14px;">PNG, JPG - wird oben links platziert</p>
+                        </div>
+                        <div id="logoPreview" class="hidden">
+                            <img id="logoImage" class="upload-preview" alt="Logo">
+                            <p style="color: #28a745; font-weight: bold;">✓ Logo hochgeladen</p>
+                            <button type="button" class="btn-remove" onclick="deleteLogo(event)" style="margin-top: 10px;">🗑️ Logo löschen</button>
+                        </div>
+                    </div>
+                    <input type="file" id="logoFile" accept="image/png,image/jpeg,image/jpg" class="hidden">
+                </div>
+
+
+                <button class="btn-primary" onclick="switchTab(1)">Weiter zu Absenderdaten →</button>
+            </div>
+
+            <!-- TAB 2: Absender -->
+            <div class="tab-content" data-tab="1">
+                <h2>Ihre Daten (Absender)</h2>
+
+                <div class="two-columns">
+                    <div class="form-group">
+                        <label>Name / Firma *</label>
+                        <input type="text" id="senderName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>E-Mail (optional)</label>
+                        <input type="email" id="senderEmail">
+                    </div>
+                </div>
+
+                <div class="two-columns">
+                    <div class="form-group">
+                        <label>Straße & Hausnummer (optional)</label>
+                        <input type="text" id="senderStreet">
+                    </div>
+                    <div class="form-group">
+                        <label>PLZ & Ort (optional)</label>
+                        <input type="text" id="senderCity">
+                    </div>
+                </div>
+
+                <div class="two-columns">
+                    <div class="form-group">
+                        <label>Telefon (optional)</label>
+                        <input type="tel" id="senderPhone">
+                    </div>
+                    <div class="form-group">
+                        <label>Steuernummer (optional)</label>
+                        <input type="text" id="senderTaxId">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Webseite (optional)</label>
+                    <input type="url" id="senderWebsite" placeholder="www.imkerei-beispiel.de">
+                </div>
+
+                <h3 style="margin-top: 30px; margin-bottom: 15px; color: #333;">Zahlungsinformationen</h3>
+
+                <div class="form-group">
+                    <label>Kontoinhaber (optional)</label>
+                    <input type="text" id="senderAccountHolder" placeholder="Falls abweichend vom Absender">
+                </div>
+
+                <div class="two-columns">
+                    <div class="form-group">
+                        <label>IBAN (optional)</label>
+                        <input type="text" id="senderIban" placeholder="DE89 3704 0044 0532 0130 00">
+                    </div>
+                    <div class="form-group">
+                        <label>BIC (optional)</label>
+                        <input type="text" id="senderBic" placeholder="COBADEFFXXX">
+                    </div>
+                </div>
+
+                <div class="two-columns">
+                    <div class="form-group">
+                        <label>Bank (optional)</label>
+                        <input type="text" id="senderBank" placeholder="Commerzbank">
+                    </div>
+                    <div class="form-group">
+                        <label>PayPal (optional)</label>
+                        <input type="email" id="senderPaypal" placeholder="paypal@beispiel.de">
+                    </div>
+                </div>
+
+                <button class="btn-primary" onclick="switchTab(2)">Weiter zu Empfänger →</button>
+            </div>
+
+            <!-- TAB 3: Empfänger -->
+            <div class="tab-content" data-tab="2">
+                <h2>Rechnungsempfänger</h2>
+
+                <div class="form-group">
+                    <label>Firma / Name *</label>
+                    <input type="text" id="customerName" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Straße & Hausnummer (optional)</label>
+                    <input type="text" id="customerStreet">
+                </div>
+
+                <div class="two-columns">
+                    <div class="form-group">
+                        <label>PLZ (optional)</label>
+                        <input type="text" id="customerZip">
+                    </div>
+                    <div class="form-group">
+                        <label>Ort (optional)</label>
+                        <input type="text" id="customerCity">
+                    </div>
+                </div>
+
+                <button class="btn-primary" onclick="switchTab(3)">Weiter zur Rechnung →</button>
+            </div>
+
+            <!-- TAB 4: Rechnung -->
+            <div class="tab-content" data-tab="3">
+                <h2>Rechnungspositionen</h2>
+
+                <div class="two-columns" style="margin-bottom: 20px;">
+                    <div class="form-group">
+                        <label>Rechnungsnummer (optional)</label>
+                        <input type="text" id="invoiceNumber" placeholder="z.B. RE-2024-001 (leer lassen für automatische Nummer)">
+                    </div>
+                    <div class="form-group">
+                        <label>Rechnungsdatum *</label>
+                        <input type="date" id="invoiceDate" required>
+                    </div>
+                </div>
+
+                <div class="two-columns" style="margin-bottom: 20px;">
+                    <div class="form-group">
+                        <label>Zahlungsziel (Tage)</label>
+                        <input type="number" id="paymentTerms" value="14">
+                    </div>
+                    <div class="form-group">
+                        <!-- Platzhalter für Layout -->
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Bild ganz oben am Rand (optional)</label>
+                    <div class="upload-box" id="topHeaderUpload" onclick="document.getElementById('topHeaderFile').click()">
+                        <div id="topHeaderPlaceholder">
+                            <p style="font-size: 48px; margin-bottom: 10px;">🖼️</p>
+                            <p style="font-weight: bold;">Bild für oberen Rand hochladen</p>
+                            <p style="color: #666; font-size: 14px;">PNG, JPG - Position anpassbar</p>
+                        </div>
+                        <div id="topHeaderPreview" class="hidden">
+                            <img id="topHeaderImage" class="upload-preview" alt="Top Header">
+                            <p style="color: #28a745; font-weight: bold;">✓ Bild hochgeladen</p>
+                            <button type="button" class="btn-remove" onclick="deleteTopImage(event)" style="margin-top: 10px;">🗑️ Bild löschen</button>
+                        </div>
+                    </div>
+                    <input type="file" id="topHeaderFile" accept="image/png,image/jpeg,image/jpg" class="hidden">
+                </div>
+
+
+                <!-- Versteckte Felder für Bildposition (werden nur per Drag & Drop gesetzt) -->
+                <input type="hidden" id="topHeaderX" value="50">
+                <input type="hidden" id="topHeaderY" value="50">
+
+                <!-- Versteckte Felder für Bildgröße (werden nur per Drag & Drop gesetzt) -->
+                <input type="hidden" id="topHeaderWidth" value="150">
+                <input type="hidden" id="topHeaderHeight" value="0">
+
+                <div class="form-group">
+                    <label>Firmenname über Adresse (optional - max. 2 Zeilen)</label>
+                    <textarea id="headerText" rows="2" placeholder="z.B. Firmenname, Slogan, etc. (erscheint über der Adresse)" style="resize: vertical;"></textarea>
+                    <div id="headerTextWarning" style="display: none; color: #dc3545; font-size: 12px; margin-top: 5px; font-weight: bold;">⚠️ Text zu lang! Maximal 2 Zeilen erlaubt - bitte kürzen oder Schriftgröße reduzieren.</div>
+                </div>
+
+                <div class="two-columns">
+                    <div class="form-group">
+                        <label>Schriftgröße Firmenname (max. 30 Punkte)</label>
+                        <input type="number" id="headerTextSize" value="24" min="10" max="30" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Farbe Firmenname</label>
+                        <div class="color-picker">
+                            <input type="color" id="headerTextColor" value="#000000">
+                            <span id="headerTextColorHex">#000000</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Zusatzinformationen (optional - max. 4 Zeilen)</label>
+                    <textarea id="additionalInfo" rows="4" placeholder="z.B. Lieferhinweise, Bestellnummer, Kundenauftrag, etc." style="word-wrap: break-word;"></textarea>
+                    <div id="additionalInfoWarning" style="display: none; color: #dc3545; font-size: 12px; margin-top: 5px; font-weight: bold;">⚠️ Maximal 4 Zeilen erlaubt!</div>
+                </div>
+
+
+                <div class="two-columns">
+                    <div class="form-group">
+                        <label>MwSt.-Satz (%)</label>
+                        <input type="number" id="taxRate" value="19" step="0.01" oninput="calculateTotal()">
+                    </div>
+                    <div class="form-group">
+                        <label>Preiseingabe</label>
+                        <div style="display: flex; gap: 10px; align-items: center; padding: 12px; background: #f8f9fa; border-radius: 8px;">
+                            <label style="margin: 0; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                <input type="radio" name="priceMode" value="gross" checked onchange="togglePriceMode()">
+                                <span>Brutto (inkl. MwSt.)</span>
+                            </label>
+                            <label style="margin: 0; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                <input type="radio" name="priceMode" value="net" onchange="togglePriceMode()">
+                                <span>Netto (exkl. MwSt.)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="items-container">
+                    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 10px; margin-bottom: 15px; font-weight: bold;">
+                        <div>Beschreibung</div>
+                        <div>Menge</div>
+                        <div>Einheit</div>
+                        <div id="priceHeader">Preis inkl. MwSt.</div>
+                        <div></div>
+                    </div>
+                    <div id="itemsList"></div>
+                    <button class="btn-add" onclick="addItem()">+ Position hinzufügen</button>
+                </div>
+
+                <div class="summary">
+                    <div class="summary-row">
+                        <span>Netto:</span>
+                        <span id="subtotal">0.00 €</span>
+                    </div>
+                    <div class="summary-row">
+                        <span>MwSt. (<span id="taxRateDisplay">19</span>%):</span>
+                        <span id="taxAmount">0.00 €</span>
+                    </div>
+                    <div class="summary-row total">
+                        <span>Gesamt:</span>
+                        <span id="total">0.00 €</span>
+                    </div>
+                </div>
+
+                <button class="btn-success" onclick="generatePDF()">📄 PDF mit Design generieren</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script>
+        let logoData = null;
+        let topHeaderData = null;
+        let currentTab = 0;
+
+        // Tab-Switching Funktion (muss vor onclick-Handlern definiert sein)
+        function switchTab(index) {
+            currentTab = index;
+            document.querySelectorAll('.tab').forEach((tab, i) => {
+                tab.classList.toggle('active', i === index);
+            });
+            document.querySelectorAll('.tab-content').forEach((content, i) => {
+                content.classList.toggle('active', i === index);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('invoiceDate').valueAsDate = new Date();
+            addItem();
+            loadFromStorage();
+            updatePreviewData(); // Initiale Vorschau-Aktualisierung
+
+            // Logo Upload
+            document.getElementById('logoFile').addEventListener('change', handleLogoUpload);
+            document.getElementById('topHeaderFile').addEventListener('change', handleTopHeaderUpload);
+
+            // Farbänderungen
+            document.getElementById('headerTextColor').addEventListener('input', (e) => {
+                document.getElementById('headerTextColorHex').textContent = e.target.value;
+                updatePreviewData();
+                saveToStorage();
+            });
+
+            // Event Listener für alle Felder, die die Vorschau beeinflussen
+            document.getElementById('headerText').addEventListener('input', updatePreviewData);
+            document.getElementById('headerTextSize').addEventListener('input', updatePreviewData);
+            document.getElementById('senderName').addEventListener('input', updatePreviewData);
+            document.getElementById('senderStreet').addEventListener('input', updatePreviewData);
+            document.getElementById('senderCity').addEventListener('input', updatePreviewData);
+            document.getElementById('senderAccountHolder').addEventListener('input', updatePreviewData);
+            document.getElementById('invoiceDate').addEventListener('change', updatePreviewData);
+
+            // Zusatzinformationen mit 4-Zeilen-Limit (basierend auf tatsächlicher Darstellung)
+            document.getElementById('additionalInfo').addEventListener('input', function(e) {
+                const textarea = e.target;
+                const warning = document.getElementById('additionalInfoWarning');
+
+                // Berechne wie viele Zeilen der Text tatsächlich einnimmt
+                let text = textarea.value;
+                const allLines = text.split('\n');
+
+                // Begrenze auf maximal 4 manuelle Zeilen
+                if (allLines.length > 4) {
+                    textarea.value = allLines.slice(0, 4).join('\n');
+                    text = textarea.value;
+                    if (warning) warning.style.display = 'block';
+                    updatePreviewData();
+                    return;
+                }
+
+                // Simuliere die Zeilenumbrüche basierend auf der Breite
+                const maxCharsPerLine = 150; // Maximale Zeichen für volle Zeilen
+                let totalVisualLines = 0;
+                let validText = '';
+                let lineCount = 0;
+
+                for (let line of allLines) {
+                    if (line.trim() === '') {
+                        lineCount++;
+                        continue;
+                    }
+
+                    // Berechne wie viele Zeilen diese Textzeile benötigt
+                    const visualLines = Math.ceil(line.length / maxCharsPerLine);
+
+                    if (totalVisualLines + visualLines > 4) {
+                        // Diese Zeile würde die 4-Zeilen-Grenze überschreiten
+                        // Kürze die Zeile so, dass sie noch passt
+                        const remainingLines = 4 - totalVisualLines;
+                        if (remainingLines > 0) {
+                            const maxChars = remainingLines * maxCharsPerLine;
+                            validText += (lineCount > 0 ? '\n' : '') + line.substring(0, maxChars);
+                        }
+                        break;
+                    }
+
+                    validText += (lineCount > 0 ? '\n' : '') + line;
+                    totalVisualLines += visualLines;
+                    lineCount++;
+                }
+
+                // Wenn Text gekürzt wurde, setze den gekürzten Text
+                if (validText !== text) {
+                    textarea.value = validText;
+                    if (warning) warning.style.display = 'block';
+                } else {
+                    if (warning) warning.style.display = 'none';
+                }
+
+                updatePreviewData();
+            });
+            document.getElementById('invoiceNumber').addEventListener('input', updatePreviewData);
+            document.getElementById('customerName').addEventListener('input', updatePreviewData);
+            document.getElementById('customerStreet').addEventListener('input', updatePreviewData);
+            document.getElementById('customerZip').addEventListener('input', updatePreviewData);
+            document.getElementById('customerCity').addEventListener('input', updatePreviewData);
+            document.getElementById('senderIban').addEventListener('input', updatePreviewData);
+            document.getElementById('senderBic').addEventListener('input', updatePreviewData);
+            document.getElementById('senderWebsite').addEventListener('input', updatePreviewData);
+            document.getElementById('senderEmail').addEventListener('input', updatePreviewData);
+            document.getElementById('senderPaypal').addEventListener('input', updatePreviewData);
+            document.getElementById('senderBank').addEventListener('input', updatePreviewData);
+            document.getElementById('senderPhone').addEventListener('input', updatePreviewData);
+            document.getElementById('senderTaxId').addEventListener('input', updatePreviewData);
+            document.getElementById('paymentTerms').addEventListener('input', updatePreviewData);
+
+            // Initiale Vorschau anzeigen
+            updatePreviewData();
+        });
+
+        function togglePriceMode() {
+            const mode = document.querySelector('input[name="priceMode"]:checked').value;
+            const header = document.getElementById('priceHeader');
+            if (mode === 'gross') {
+                header.textContent = 'Preis inkl. MwSt.';
+            } else {
+                header.textContent = 'Preis exkl. MwSt.';
+            }
+            calculateTotal();
+        }
+
+        function handleLogoUpload(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    logoData = event.target.result;
+                    document.getElementById('logoImage').src = logoData;
+                    document.getElementById('logoPlaceholder').classList.add('hidden');
+                    document.getElementById('logoPreview').classList.remove('hidden');
+                    document.getElementById('logoUpload').classList.add('has-file');
+                    updatePreviewData();
+                    saveToStorage();
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function handleTopHeaderUpload(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    topHeaderData = event.target.result;
+                    document.getElementById('topHeaderImage').src = topHeaderData;
+                    document.getElementById('topHeaderPlaceholder').classList.add('hidden');
+                    document.getElementById('topHeaderPreview').classList.remove('hidden');
+                    document.getElementById('topHeaderUpload').classList.add('has-file');
+
+                    // Interaktive Vorschau anzeigen
+                    initializeDraggableImage(topHeaderData);
+
+                    saveToStorage();
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+
+        // Drag & Drop und Resize für Bildpositionierung
+        function initializeDraggableImage(imageSrc) {
+            const draggableImgMain = document.getElementById('draggableImageMain');
+            const placeholder = document.getElementById('topImagePlaceholderMain');
+
+            draggableImgMain.src = imageSrc;
+            draggableImgMain.style.display = 'block';
+            placeholder.style.display = 'none';
+
+            const x = parseFloat(document.getElementById('topHeaderX').value) || 50;
+            const y = parseFloat(document.getElementById('topHeaderY').value) || 50;
+            const width = parseFloat(document.getElementById('topHeaderWidth').value) || 150;
+            draggableImgMain.style.left = x + 'px';
+            draggableImgMain.style.top = y + 'px';
+            draggableImgMain.style.width = width + 'px';
+            draggableImgMain.style.height = 'auto';
+
+            draggableImgMain.onload = function() {
+                updateResizeHandlesMain();
+            };
+
+            if (!draggableImgMain.dataset.initialized) {
+                draggableImgMain.addEventListener('mousedown', startDragMain);
+
+                // Event Listener für alle 8 Resize-Handles
+                const directions = ['nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'];
+                directions.forEach(dir => {
+                    const handle = document.getElementById(`resizeHandleMain-${dir}`);
+                    handle.addEventListener('mousedown', (e) => startResizeMain(e, dir));
+                });
+
+                document.addEventListener('mousemove', dragMain);
+                document.addEventListener('mouseup', stopDragMain);
+                draggableImgMain.dataset.initialized = 'true';
+            }
+
+            updatePreviewData();
+        }
+
+        // Drag & Drop für Hauptvorschau (oberes Bild)
+        let isDraggingMain = false;
+        let isResizingMain = false;
+        let resizeDirectionMain = null;
+        let startXMain, startYMain, startLeftMain, startTopMain, startWidthMain, startHeightMain;
+
+        function startDragMain(e) {
+            // Nicht verschieben, wenn ein Resize-Handle angeklickt wurde
+            if (e.target.classList.contains('resize-handle')) return;
+
+            isDraggingMain = true;
+            const img = document.getElementById('draggableImageMain');
+            startXMain = e.clientX;
+            startYMain = e.clientY;
+            startLeftMain = parseInt(img.style.left) || 0;
+            startTopMain = parseInt(img.style.top) || 0;
+            e.preventDefault();
+        }
+
+        function startResizeMain(e, direction) {
+            isResizingMain = true;
+            resizeDirectionMain = direction;
+            const img = document.getElementById('draggableImageMain');
+            startXMain = e.clientX;
+            startYMain = e.clientY;
+            startLeftMain = parseInt(img.style.left) || 0;
+            startTopMain = parseInt(img.style.top) || 0;
+            startWidthMain = img.offsetWidth;
+            startHeightMain = img.offsetHeight;
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        function dragMain(e) {
+            const img = document.getElementById('draggableImageMain');
+
+            if (isDraggingMain) {
+                const dx = e.clientX - startXMain;
+                const dy = e.clientY - startYMain;
+                const newLeft = startLeftMain + dx;
+                const newTop = startTopMain + dy;
+                img.style.left = newLeft + 'px';
+                img.style.top = newTop + 'px';
+                document.getElementById('topHeaderX').value = Math.round(newLeft);
+                document.getElementById('topHeaderY').value = Math.round(newTop);
+                updateResizeHandlesMain();
+            } else if (isResizingMain) {
+                const dx = e.clientX - startXMain;
+                const dy = e.clientY - startYMain;
+
+                let newLeft = startLeftMain;
+                let newTop = startTopMain;
+                let newWidth = startWidthMain;
+                let newHeight = startHeightMain;
+
+                // Berechne neue Größe basierend auf Richtung
+                switch (resizeDirectionMain) {
+                    case 'se': // Südost (rechts unten)
+                        newWidth = Math.max(50, startWidthMain + dx);
+                        newHeight = Math.max(30, startHeightMain + dy);
+                        break;
+                    case 'sw': // Südwest (links unten)
+                        newWidth = Math.max(50, startWidthMain - dx);
+                        newHeight = Math.max(30, startHeightMain + dy);
+                        newLeft = startLeftMain + (startWidthMain - newWidth);
+                        break;
+                    case 'ne': // Nordost (rechts oben)
+                        newWidth = Math.max(50, startWidthMain + dx);
+                        newHeight = Math.max(30, startHeightMain - dy);
+                        newTop = startTopMain + (startHeightMain - newHeight);
+                        break;
+                    case 'nw': // Nordwest (links oben)
+                        newWidth = Math.max(50, startWidthMain - dx);
+                        newHeight = Math.max(30, startHeightMain - dy);
+                        newLeft = startLeftMain + (startWidthMain - newWidth);
+                        newTop = startTopMain + (startHeightMain - newHeight);
+                        break;
+                    case 'e': // Ost (rechts)
+                        newWidth = Math.max(50, startWidthMain + dx);
+                        break;
+                    case 'w': // West (links)
+                        newWidth = Math.max(50, startWidthMain - dx);
+                        newLeft = startLeftMain + (startWidthMain - newWidth);
+                        break;
+                    case 's': // Süd (unten)
+                        newHeight = Math.max(30, startHeightMain + dy);
+                        break;
+                    case 'n': // Nord (oben)
+                        newHeight = Math.max(30, startHeightMain - dy);
+                        newTop = startTopMain + (startHeightMain - newHeight);
+                        break;
+                }
+
+                img.style.left = newLeft + 'px';
+                img.style.top = newTop + 'px';
+                img.style.width = newWidth + 'px';
+                img.style.height = newHeight + 'px';
+
+                document.getElementById('topHeaderX').value = Math.round(newLeft);
+                document.getElementById('topHeaderY').value = Math.round(newTop);
+                document.getElementById('topHeaderWidth').value = Math.round(newWidth);
+                document.getElementById('topHeaderHeight').value = Math.round(newHeight);
+
+                updateResizeHandlesMain();
+            }
+        }
+
+        function stopDragMain() {
+            if (isDraggingMain || isResizingMain) {
+                saveToStorage();
+            }
+            isDraggingMain = false;
+            isResizingMain = false;
+            resizeDirectionMain = null;
+        }
+
+        function updateResizeHandlesMain() {
+            const img = document.getElementById('draggableImageMain');
+            const left = parseInt(img.style.left) || 0;
+            const top = parseInt(img.style.top) || 0;
+            const width = img.offsetWidth;
+            const height = img.offsetHeight;
+
+            // Zeige alle Handles
+            const handles = document.querySelectorAll('.resize-handle');
+            handles.forEach(h => h.style.display = 'block');
+
+            // Positioniere jedes Handle
+            const offset = 6; // Halbe Größe des Handles (12px / 2)
+
+            document.getElementById('resizeHandleMain-nw').style.left = (left - offset) + 'px';
+            document.getElementById('resizeHandleMain-nw').style.top = (top - offset) + 'px';
+
+            document.getElementById('resizeHandleMain-ne').style.left = (left + width - offset) + 'px';
+            document.getElementById('resizeHandleMain-ne').style.top = (top - offset) + 'px';
+
+            document.getElementById('resizeHandleMain-sw').style.left = (left - offset) + 'px';
+            document.getElementById('resizeHandleMain-sw').style.top = (top + height - offset) + 'px';
+
+            document.getElementById('resizeHandleMain-se').style.left = (left + width - offset) + 'px';
+            document.getElementById('resizeHandleMain-se').style.top = (top + height - offset) + 'px';
+
+            document.getElementById('resizeHandleMain-n').style.left = (left + width/2 - offset) + 'px';
+            document.getElementById('resizeHandleMain-n').style.top = (top - offset) + 'px';
+
+            document.getElementById('resizeHandleMain-s').style.left = (left + width/2 - offset) + 'px';
+            document.getElementById('resizeHandleMain-s').style.top = (top + height - offset) + 'px';
+
+            document.getElementById('resizeHandleMain-e').style.left = (left + width - offset) + 'px';
+            document.getElementById('resizeHandleMain-e').style.top = (top + height/2 - offset) + 'px';
+
+            document.getElementById('resizeHandleMain-w').style.left = (left - offset) + 'px';
+            document.getElementById('resizeHandleMain-w').style.top = (top + height/2 - offset) + 'px';
+        }
+
+        function updatePreviewData() {
+            // Logo anzeigen
+            const previewLogoMain = document.getElementById('previewLogoMain');
+            const previewLogoPlaceholderMain = document.getElementById('previewLogoPlaceholderMain');
+            if (logoData) {
+                previewLogoMain.src = logoData;
+                previewLogoMain.style.display = 'block';
+                previewLogoPlaceholderMain.style.display = 'none';
+            } else {
+                previewLogoMain.style.display = 'none';
+                previewLogoPlaceholderMain.style.display = 'flex';
+            }
+
+            // Oberes Bild Platzhalter ausblenden wenn Bild geladen
+            const topImagePlaceholder = document.getElementById('topImagePlaceholderMain');
+            const draggableImage = document.getElementById('draggableImageMain');
+            if (topHeaderData && draggableImage.style.display === 'block') {
+                topImagePlaceholder.style.display = 'none';
+            } else {
+                topImagePlaceholder.style.display = 'flex';
+            }
+
+            // Firmenname über Adresse
+            const headerText = document.getElementById('headerText').value;
+            const headerTextSize = document.getElementById('headerTextSize').value || 24;
+            const headerTextColor = document.getElementById('headerTextColor').value || '#000000';
+            const previewHeaderTextMain = document.getElementById('previewHeaderTextMain');
+            const previewHeaderTextPlaceholderMain = document.getElementById('previewHeaderTextPlaceholderMain');
+
+            if (headerText && headerText.trim() !== '') {
+                // Ersetze \n durch <br> für HTML-Anzeige (ohne Leerzeilen)
+                const lines = headerText.split('\n').filter(line => line.trim() !== '');
+                previewHeaderTextMain.innerHTML = lines.join('<br>');
+                const limitedSize = Math.min(headerTextSize, 30); // Maximal 30px
+                previewHeaderTextMain.style.fontSize = limitedSize + 'px';
+                previewHeaderTextMain.style.lineHeight = '1.1';
+                const maxAllowedHeight = limitedSize * 1.1 * 2;
+                previewHeaderTextMain.style.maxHeight = maxAllowedHeight + 'px'; // 2 Zeilen
+                previewHeaderTextMain.style.display = 'block';
+                previewHeaderTextMain.style.whiteSpace = 'normal';
+                previewHeaderTextMain.style.color = headerTextColor;
+                if (previewHeaderTextPlaceholderMain) previewHeaderTextPlaceholderMain.style.display = 'none';
+
+                // Prüfe ob Text zu lang ist (mehr als 2 Zeilen)
+                const headerTextWarning = document.getElementById('headerTextWarning');
+                setTimeout(() => {
+                    // Zähle tatsächliche Zeilen (ohne Leerzeilen)
+                    const nonEmptyLines = headerText.split('\n').filter(line => line.trim() !== '');
+
+                    // Erstelle temporäres Element für genaue Messung
+                    const tempDiv = document.createElement('div');
+                    tempDiv.style.position = 'absolute';
+                    tempDiv.style.visibility = 'hidden';
+                    tempDiv.style.fontSize = limitedSize + 'px';
+                    tempDiv.style.fontWeight = 'bold';
+                    tempDiv.style.lineHeight = '1.1';
+                    tempDiv.style.maxWidth = '350px';
+                    tempDiv.style.wordWrap = 'break-word';
+                    tempDiv.innerHTML = nonEmptyLines.join('<br>');
+                    document.body.appendChild(tempDiv);
+
+                    const actualHeight = tempDiv.offsetHeight;
+                    document.body.removeChild(tempDiv);
+
+                    if (actualHeight > maxAllowedHeight + 2 || nonEmptyLines.length > 2) {
+                        if (headerTextWarning) headerTextWarning.style.display = 'block';
+                    } else {
+                        if (headerTextWarning) headerTextWarning.style.display = 'none';
+                    }
+                }, 10);
+            } else {
+                previewHeaderTextMain.style.display = 'none';
+                if (previewHeaderTextPlaceholderMain) previewHeaderTextPlaceholderMain.style.display = 'flex';
+                const headerTextWarning = document.getElementById('headerTextWarning');
+                if (headerTextWarning) headerTextWarning.style.display = 'none';
+            }
+
+            // Absenderzeile
+            const senderName = document.getElementById('senderName').value;
+            const senderStreet = document.getElementById('senderStreet').value || '';
+            const senderCity = document.getElementById('senderCity').value || '';
+            let senderLine = senderName || '';
+            if (senderStreet) senderLine += ', ' + senderStreet;
+            if (senderCity) senderLine += ', ' + senderCity;
+            document.getElementById('previewSenderLineMain').textContent = senderLine;
+
+            // Kontoinhaber in Fußzeile
+            const accountHolder = document.getElementById('senderAccountHolder').value || senderName;
+
+            // Datum
+            const invoiceDate = document.getElementById('invoiceDate').value;
+            const dateText = invoiceDate ? new Date(invoiceDate).toLocaleDateString('de-DE') : new Date().toLocaleDateString('de-DE');
+            document.getElementById('previewDateMain').textContent = dateText;
+
+            // Rechnungsnummer
+            const invoiceNumber = document.getElementById('invoiceNumber').value || 'RE-1001';
+            document.getElementById('previewInvoiceNumberMain').textContent = invoiceNumber;
+
+            // Zusatzinformationen
+            const additionalInfo = document.getElementById('additionalInfo').value;
+            const previewAdditionalInfo = document.getElementById('previewAdditionalInfoMain');
+            if (additionalInfo && additionalInfo.trim() !== '') {
+                // Entferne Leerzeilen, begrenze auf 4 Zeilen (kein Text-Kürzen, word-break macht das automatisch)
+                const infoLines = additionalInfo.split('\n')
+                    .filter(line => line.trim() !== '')
+                    .slice(0, 4);
+                previewAdditionalInfo.innerHTML = infoLines.join('<br>');
+                previewAdditionalInfo.style.display = 'block';
+            } else {
+                previewAdditionalInfo.style.display = 'none';
+            }
+
+            // Empfängeradresse
+            const customerName = document.getElementById('customerName').value;
+            const customerStreet = document.getElementById('customerStreet').value;
+            const customerZip = document.getElementById('customerZip').value;
+            const customerCity = document.getElementById('customerCity').value;
+
+            const previewRecipientMain = document.getElementById('previewRecipientMain');
+            let recipientHTML = '';
+            if (customerName) recipientHTML += `<div>${customerName}</div>`;
+            if (customerStreet) recipientHTML += `<div>${customerStreet}</div>`;
+            if (customerZip || customerCity) {
+                const cityLine = `${customerZip || ''} ${customerCity || ''}`.trim();
+                if (cityLine) recipientHTML += `<div>${cityLine}</div>`;
+            }
+            previewRecipientMain.innerHTML = recipientHTML;
+
+            // Zahlungsinformationen in Fußzeile
+            const iban = document.getElementById('senderIban').value || 'DE89 3704 0044 0532 0130 00';
+            const bic = document.getElementById('senderBic').value || 'COBADEFFXXX';
+            const website = document.getElementById('senderWebsite').value || 'www.beispiel.de';
+            const email = document.getElementById('senderEmail').value || 'info@beispiel.de';
+            const paypal = document.getElementById('senderPaypal').value || '';
+            const bank = document.getElementById('senderBank').value || 'Commerzbank Solingen';
+            const phone = document.getElementById('senderPhone').value || '';
+            const taxId = document.getElementById('senderTaxId').value || '';
+
+            // Zahlungsziel
+            const paymentTerms = document.getElementById('paymentTerms').value || '14';
+            const previewPaymentDaysMain = document.getElementById('previewPaymentDaysMain');
+            if (previewPaymentDaysMain) {
+                previewPaymentDaysMain.textContent = paymentTerms;
+            }
+
+            // Fußzeile: Nur Zahlungsinformationen UNTER dem Strich in 5 Zeilen
+            const previewPaymentMain = document.getElementById('previewPaymentMain');
+
+            if (previewPaymentMain) {
+                let paymentHTML = `
+                    <!-- Trennlinie -->
+                    <div style="position: absolute; left: 0; bottom: 106px; width: calc(100% - 50px); height: 1px; background: #000;"></div>
+
+                    <!-- Zeile 1: Kontoname (links) + E-Mail (rechts) -->
+                    <div style="position: absolute; left: 0; bottom: 95px; font-size: 7px;">
+                        Kontoname: ${accountHolder}
+                    </div>
+                    <div style="position: absolute; left: 250px; bottom: 95px; font-size: 7px;">
+                        E-Mail: ${email}
+                    </div>
+
+                    <!-- Zeile 2: Bank (links) + Webseite (rechts) -->
+                    <div style="position: absolute; left: 0; bottom: 82px; font-size: 7px;">
+                        Bank: ${bank}
+                    </div>
+                    <div style="position: absolute; left: 250px; bottom: 82px; font-size: 7px;">
+                        Webseite: ${website}
+                    </div>
+
+                    <!-- Zeile 3: IBAN (links) + PayPal (rechts) -->
+                    <div style="position: absolute; left: 0; bottom: 69px; font-size: 7px;">
+                        IBAN: ${iban}
+                    </div>
+                    <div style="position: absolute; left: 250px; bottom: 69px; font-size: 7px;">
+                        PayPal: ${paypal}
+                    </div>
+
+                    <!-- Zeile 4: BIC (links) + Telefon (rechts) -->
+                    <div style="position: absolute; left: 0; bottom: 56px; font-size: 7px;">
+                        BIC: ${bic}
+                    </div>
+                    <div style="position: absolute; left: 250px; bottom: 56px; font-size: 7px;">
+                        Tel.: ${phone || '123-456-7890'}
+                    </div>
+
+                    <!-- Zeile 5: Steuernummer (links) -->
+                    <div style="position: absolute; left: 0; bottom: 43px; font-size: 7px;">
+                        Steuernummer: ${taxId}
+                    </div>
+                `;
+                previewPaymentMain.innerHTML = paymentHTML;
+            }
+
+            // Rechnungspositionen und Summen
+            updatePreviewItems();
+        }
+
+        // Globale Variablen für Seitenverwaltung
+        let currentPreviewPage = 1;
+        let totalPreviewPages = 1;
+        let allPreviewItems = [];
+
+        function updatePreviewItems() {
+            const items = document.querySelectorAll('.item-row');
+            const previewItemsMain = document.getElementById('previewItemsMain');
+            const previewSumsMain = document.getElementById('previewSumsMain');
+
+            if (!previewItemsMain || !previewSumsMain) return;
+
+            const priceMode = document.querySelector('input[name="priceMode"]:checked')?.value || 'gross';
+            const taxRate = parseFloat(document.getElementById('taxRate').value) || 19;
+
+            // Sammle alle nicht-leeren Positionen
+            allPreviewItems = [];
+            items.forEach((item, index) => {
+                const description = item.querySelector('.item-description').value;
+                const quantity = parseFloat(item.querySelector('.item-quantity').value) || 0;
+                const unit = item.querySelector('.item-unit').value || 'Stück';
+                const price = parseFloat(item.querySelector('.item-price').value) || 0;
+
+                // Nur Positionen mit Beschreibung UND (Menge ODER Preis) anzeigen
+                if (description && description.trim() !== '' && (quantity > 0 || price > 0)) {
+                    let priceNet, total;
+                    if (priceMode === 'gross') {
+                        priceNet = price / (1 + taxRate / 100);
+                        total = priceNet * quantity;
+                    } else {
+                        priceNet = price;
+                        total = price * quantity;
+                    }
+
+                    allPreviewItems.push({
+                        description,
+                        taxRate,
+                        priceNet,
+                        quantity,
+                        unit,
+                        total
+                    });
+                }
+            });
+
+            // Berechne Anzahl der Seiten - berücksichtige Zusatzinformationen
+            const additionalInfo = document.getElementById('additionalInfo').value;
+            const additionalInfoLines = additionalInfo ? additionalInfo.split('\n').filter(line => line.trim() !== '').length : 0;
+
+            // Wenn Zusatzinfos vorhanden, reduziere die Anzahl der Positionen auf der ersten Seite
+            // Jede Zeile Zusatzinfo = ca. 1 Position weniger
+            const ITEMS_FIRST_PAGE = 12 - Math.min(additionalInfoLines, 4);
+            const ITEMS_PER_PAGE = 12;
+
+            // Erste Seite hat weniger Platz, weitere Seiten haben vollen Platz
+            let remainingItems = allPreviewItems.length - ITEMS_FIRST_PAGE;
+            if (remainingItems <= 0) {
+                totalPreviewPages = 1;
+            } else {
+                totalPreviewPages = 1 + Math.ceil(remainingItems / ITEMS_PER_PAGE);
+            }
+
+            // Stelle sicher, dass currentPreviewPage gültig ist
+            if (currentPreviewPage > totalPreviewPages) currentPreviewPage = totalPreviewPages;
+
+            renderPreviewPage(currentPreviewPage);
+
+            // Update der Seitenanzeige
+            updatePageIndicator();
+        }
+
+        function renderPreviewPage(pageNum) {
+            const previewItemsMain = document.getElementById('previewItemsMain');
+            const previewSumsMain = document.getElementById('previewSumsMain');
+            const previewPaymentTermsMain = document.getElementById('previewPaymentTermsMain');
+
+            if (!previewItemsMain || !previewSumsMain) return;
+
+            // Berechne Items pro Seite basierend auf Zusatzinfos
+            const additionalInfo = document.getElementById('additionalInfo').value;
+            const additionalInfoLines = additionalInfo ? additionalInfo.split('\n').filter(line => line.trim() !== '').length : 0;
+            const ITEMS_FIRST_PAGE = 12 - Math.min(additionalInfoLines, 4);
+            const ITEMS_PER_PAGE = 12;
+
+            let startIndex, endIndex;
+            if (pageNum === 1) {
+                startIndex = 0;
+                endIndex = ITEMS_FIRST_PAGE;
+            } else {
+                startIndex = ITEMS_FIRST_PAGE + (pageNum - 2) * ITEMS_PER_PAGE;
+                endIndex = startIndex + ITEMS_PER_PAGE;
+            }
+
+            const pageItems = allPreviewItems.slice(startIndex, endIndex);
+
+            let itemsHTML = '';
+            let yOffset = 0;
+
+            pageItems.forEach((item, idx) => {
+                const globalIndex = startIndex + idx;
+                itemsHTML += `
+                    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 4px; line-height: 1.2;">
+                        <div><strong>${globalIndex + 1}.</strong> ${item.description}</div>
+                        <div style="text-align: center;">${item.taxRate.toFixed(0)}%</div>
+                        <div style="text-align: right;">${item.priceNet.toFixed(2)} €</div>
+                        <div style="text-align: center;">${item.quantity.toFixed(2)} ${item.unit}</div>
+                        <div style="text-align: right;">${item.total.toFixed(2)} €</div>
+                    </div>
+                `;
+                yOffset += 15;
+            });
+
+            previewItemsMain.innerHTML = itemsHTML || '<div style="color: #999; text-align: center; padding: 20px;">Keine Positionen auf dieser Seite</div>';
+
+            // Summen nur auf der letzten Seite anzeigen
+            if (pageNum === totalPreviewPages) {
+                const subtotal = parseFloat(document.getElementById('subtotal').textContent.replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
+                const taxAmount = parseFloat(document.getElementById('taxAmount').textContent.replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
+                const total = parseFloat(document.getElementById('total').textContent.replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
+
+                const sumsTop = 410 + yOffset + 10;
+                previewSumsMain.style.display = 'block';
+                previewSumsMain.style.top = sumsTop + 'px';
+                previewSumsMain.innerHTML = `
+                    <div style="border-top: 1px solid #000; padding-top: 10px; margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Nettosumme:</span>
+                            <span>${subtotal.toFixed(2)} €</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span>Ust. gesamt:</span>
+                        <span>${taxAmount.toFixed(2)} €</span>
+                    </div>
+                    <div style="border-top: 1px solid #000; padding-top: 10px; background: #d9d9d9; padding: 5px; margin: 0 -5px;">
+                        <div style="display: flex; justify-content: space-between; font-weight: bold;">
+                            <span>Bruttosumme:</span>
+                            <span>${total.toFixed(2)} €</span>
+                        </div>
+                    </div>
+                `;
+
+                // Zahlungsziel direkt unter Bruttosumme positionieren
+                const paymentTermsTop = sumsTop + 95;
+                if (previewPaymentTermsMain) {
+                    previewPaymentTermsMain.style.display = 'block';
+                    previewPaymentTermsMain.style.top = paymentTermsTop + 'px';
+                }
+            } else {
+                // Auf anderen Seiten: Summen und Zahlungsziel ausblenden
+                previewSumsMain.style.display = 'none';
+                if (previewPaymentTermsMain) {
+                    previewPaymentTermsMain.style.display = 'none';
+                }
+            }
+        }
+
+        function changePreviewPage(direction) {
+            currentPreviewPage += direction;
+            if (currentPreviewPage < 1) currentPreviewPage = 1;
+            if (currentPreviewPage > totalPreviewPages) currentPreviewPage = totalPreviewPages;
+
+            renderPreviewPage(currentPreviewPage);
+            updatePageIndicator();
+        }
+
+        function updatePageIndicator() {
+            const indicator = document.getElementById('pageIndicator');
+            const previewPageNumber = document.getElementById('previewPageNumber');
+            const prevBtn = document.getElementById('prevPageBtn');
+            const nextBtn = document.getElementById('nextPageBtn');
+
+            if (indicator) {
+                indicator.textContent = `Seite ${currentPreviewPage} von ${totalPreviewPages}`;
+            }
+
+            // Auch die Seitenzahl in der Vorschau aktualisieren
+            if (previewPageNumber) {
+                previewPageNumber.textContent = `Seite ${currentPreviewPage} von ${totalPreviewPages}`;
+            }
+
+            // Buttons aktivieren/deaktivieren
+            if (prevBtn) {
+                prevBtn.disabled = currentPreviewPage === 1;
+                prevBtn.style.opacity = currentPreviewPage === 1 ? '0.5' : '1';
+                prevBtn.style.cursor = currentPreviewPage === 1 ? 'not-allowed' : 'pointer';
+            }
+
+            if (nextBtn) {
+                nextBtn.disabled = currentPreviewPage === totalPreviewPages;
+                nextBtn.style.opacity = currentPreviewPage === totalPreviewPages ? '0.5' : '1';
+                nextBtn.style.cursor = currentPreviewPage === totalPreviewPages ? 'not-allowed' : 'pointer';
+            }
+        }
+
+        // switchTab Funktion wurde nach oben verschoben (direkt nach den globalen Variablen)
+
+        function addItem() {
+            const id = Date.now();
+            const itemRow = document.createElement('div');
+            itemRow.className = 'item-row';
+            itemRow.dataset.id = id;
+            itemRow.innerHTML = `
+                <input type="text" placeholder="Beschreibung" class="item-description" oninput="updatePreviewData()">
+                <input type="number" placeholder="Menge" value="1" step="0.01" class="item-quantity" oninput="calculateTotal(); updatePreviewData();">
+                <input type="text" placeholder="Stück" value="Stück" class="item-unit" oninput="updatePreviewData()">
+                <input type="number" placeholder="Preis" step="0.01" class="item-price" oninput="calculateTotal(); updatePreviewData();">
+                <button class="btn-remove" onclick="removeItem(${id})">🗑️</button>
+            `;
+            document.getElementById('itemsList').appendChild(itemRow);
+            calculateTotal();
+            updatePreviewData(); // Sofort die Vorschau aktualisieren
+        }
+
+        function removeItem(id) {
+            const item = document.querySelector(`[data-id="${id}"]`);
+            if (item) {
+                item.remove();
+                updatePreviewData(); // Vorschau aktualisieren nach Löschen
+                calculateTotal();
+            }
+        }
+
+        function calculateTotal() {
+            const itemRows = document.querySelectorAll('.item-row');
+            const taxRate = parseFloat(document.getElementById('taxRate').value) || 0;
+            const priceMode = document.querySelector('input[name="priceMode"]:checked').value;
+            let totalGross = 0;
+            let subtotal = 0;
+
+            itemRows.forEach(row => {
+                const quantity = parseFloat(row.querySelector('.item-quantity').value) || 0;
+                const price = parseFloat(row.querySelector('.item-price').value) || 0;
+
+                if (priceMode === 'gross') {
+                    // Brutto-Eingabe
+                    totalGross += quantity * price;
+                } else {
+                    // Netto-Eingabe
+                    const netTotal = quantity * price;
+                    subtotal += netTotal;
+                }
+            });
+
+            if (priceMode === 'gross') {
+                subtotal = totalGross / (1 + taxRate / 100);
+                const taxAmount = totalGross - subtotal;
+                document.getElementById('subtotal').textContent = subtotal.toFixed(2) + ' €';
+                document.getElementById('taxAmount').textContent = taxAmount.toFixed(2) + ' €';
+                document.getElementById('total').textContent = totalGross.toFixed(2) + ' €';
+            } else {
+                const taxAmount = subtotal * (taxRate / 100);
+                totalGross = subtotal + taxAmount;
+                document.getElementById('subtotal').textContent = subtotal.toFixed(2) + ' €';
+                document.getElementById('taxAmount').textContent = taxAmount.toFixed(2) + ' €';
+                document.getElementById('total').textContent = totalGross.toFixed(2) + ' €';
+            }
+
+            document.getElementById('taxRateDisplay').textContent = taxRate.toFixed(0);
+
+            // Update preview items
+            updatePreviewItems();
+        }
+
+        function saveToStorage() {
+            const data = {
+                logo: logoData,
+                topHeader: topHeaderData,
+                topHeaderX: document.getElementById('topHeaderX').value,
+                topHeaderY: document.getElementById('topHeaderY').value,
+                topHeaderWidth: document.getElementById('topHeaderWidth').value,
+                topHeaderHeight: document.getElementById('topHeaderHeight').value,
+                headerTextColor: document.getElementById('headerTextColor').value,
+                headerTextSize: document.getElementById('headerTextSize').value,
+                senderName: document.getElementById('senderName').value,
+                senderEmail: document.getElementById('senderEmail').value,
+                senderStreet: document.getElementById('senderStreet').value,
+                senderCity: document.getElementById('senderCity').value,
+                senderPhone: document.getElementById('senderPhone').value,
+                senderTaxId: document.getElementById('senderTaxId').value,
+                senderWebsite: document.getElementById('senderWebsite').value,
+                senderAccountHolder: document.getElementById('senderAccountHolder').value,
+                senderIban: document.getElementById('senderIban').value,
+                senderBic: document.getElementById('senderBic').value,
+                senderBank: document.getElementById('senderBank').value,
+                senderPaypal: document.getElementById('senderPaypal').value
+            };
+            localStorage.setItem('invoiceDesign', JSON.stringify(data));
+        }
+
+        function loadFromStorage() {
+            const saved = localStorage.getItem('invoiceDesign');
+            if (saved) {
+                const data = JSON.parse(saved);
+                if (data.logo) {
+                    logoData = data.logo;
+                    document.getElementById('logoImage').src = logoData;
+                    document.getElementById('logoPlaceholder').classList.add('hidden');
+                    document.getElementById('logoPreview').classList.remove('hidden');
+                    document.getElementById('logoUpload').classList.add('has-file');
+                }
+                if (data.topHeader) {
+                    topHeaderData = data.topHeader;
+                    document.getElementById('topHeaderImage').src = topHeaderData;
+                    document.getElementById('topHeaderPlaceholder').classList.add('hidden');
+                    document.getElementById('topHeaderPreview').classList.remove('hidden');
+                    document.getElementById('topHeaderUpload').classList.add('has-file');
+
+                    // Bild in der Vorschau anzeigen
+                    initializeDraggableImage(topHeaderData);
+                }
+                if (data.topHeaderX) document.getElementById('topHeaderX').value = data.topHeaderX;
+                if (data.topHeaderY) document.getElementById('topHeaderY').value = data.topHeaderY;
+                if (data.topHeaderWidth) document.getElementById('topHeaderWidth').value = data.topHeaderWidth;
+                if (data.topHeaderHeight) document.getElementById('topHeaderHeight').value = data.topHeaderHeight;
+                if (data.headerTextColor) document.getElementById('headerTextColor').value = data.headerTextColor;
+                if (data.headerTextSize) document.getElementById('headerTextSize').value = data.headerTextSize;
+                if (data.senderName) document.getElementById('senderName').value = data.senderName;
+                if (data.senderEmail) document.getElementById('senderEmail').value = data.senderEmail;
+                if (data.senderStreet) document.getElementById('senderStreet').value = data.senderStreet;
+                if (data.senderCity) document.getElementById('senderCity').value = data.senderCity;
+                if (data.senderPhone) document.getElementById('senderPhone').value = data.senderPhone;
+                if (data.senderTaxId) document.getElementById('senderTaxId').value = data.senderTaxId;
+                if (data.senderWebsite) document.getElementById('senderWebsite').value = data.senderWebsite;
+                if (data.senderAccountHolder) document.getElementById('senderAccountHolder').value = data.senderAccountHolder;
+                if (data.senderIban) document.getElementById('senderIban').value = data.senderIban;
+                if (data.senderBic) document.getElementById('senderBic').value = data.senderBic;
+                if (data.senderBank) document.getElementById('senderBank').value = data.senderBank;
+                if (data.senderPaypal) document.getElementById('senderPaypal').value = data.senderPaypal;
+            }
+        }
+
+        // Löschen-Funktionen für Bilder
+        function deleteLogo(e) {
+            e.stopPropagation();
+            logoData = null;
+            document.getElementById('logoImage').src = '';
+            document.getElementById('logoPlaceholder').classList.remove('hidden');
+            document.getElementById('logoPreview').classList.add('hidden');
+            document.getElementById('logoFile').value = '';
+            document.getElementById('previewLogoMain').style.display = 'none';
+            saveToStorage();
+        }
+
+        function deleteTopImage(e) {
+            e.stopPropagation();
+            topHeaderData = null;
+            document.getElementById('topHeaderImage').src = '';
+            document.getElementById('topHeaderPlaceholder').classList.remove('hidden');
+            document.getElementById('topHeaderPreview').classList.add('hidden');
+            document.getElementById('topHeaderFile').value = '';
+            document.getElementById('draggableImageMain').style.display = 'none';
+            document.getElementById('topImagePlaceholderMain').style.display = 'flex';
+            const handles = document.querySelectorAll('.resize-handle');
+            handles.forEach(h => h.style.display = 'none');
+            saveToStorage();
+        }
+
+
+        async function generatePDF() {
+            try {
+                // Validierung: Absendername und Empfängername sind Pflichtfelder
+                const senderName = document.getElementById('senderName').value;
+                const customerName = document.getElementById('customerName').value;
+
+                if (!senderName || senderName.trim() === '') {
+                    alert('Bitte geben Sie einen Absendernamen ein!');
+                    switchTab(1); // Wechsel zu Absender-Tab
+                    document.getElementById('senderName').focus();
+                    return;
+                }
+
+                if (!customerName || customerName.trim() === '') {
+                    alert('Bitte geben Sie einen Empfängernamen ein!');
+                    switchTab(2); // Wechsel zu Empfänger-Tab
+                    document.getElementById('customerName').focus();
+                    return;
+                }
+
+                // Speichern vor PDF-Generierung
+                saveToStorage();
+
+                const { PDFDocument, StandardFonts } = PDFLib;
+                const rgb = PDFLib.rgb;
+
+                // Rechnungsnummer: Entweder vom Benutzer eingegeben oder automatisch generiert
+                let invoiceNumber;
+                const customInvoiceNumber = document.getElementById('invoiceNumber').value;
+                if (customInvoiceNumber && customInvoiceNumber.trim() !== '') {
+                    invoiceNumber = customInvoiceNumber.trim();
+                } else {
+                    const autoNumber = parseInt(localStorage.getItem('lastInvoiceNumber') || 1000) + 1;
+                    localStorage.setItem('lastInvoiceNumber', autoNumber);
+                    invoiceNumber = 'RE-' + autoNumber;
+                }
+
+                const pdfDoc = await PDFDocument.create();
+                const page = pdfDoc.addPage([595, 842]); // A4
+                const { width, height } = page.getSize();
+                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+                // currentPage für mehrseitige PDFs initialisieren
+                let currentPage = page;
+
+                // Farben und Größen holen
+                const headerTextColorHex = document.getElementById('headerTextColor').value;
+                const headerTextSize = Math.min(parseInt(document.getElementById('headerTextSize').value) || 24, 30); // Maximal 30
+                const headerTextColorRgb = hexToRgb(headerTextColorHex);
+
+
+                // Logo (falls vorhanden) - RECHTS - ca. 2cm über Rechnungsnummer
+                let logoHeight = 0;
+                let logoWidth = 0;
+                if (logoData) {
+                    try {
+                        const logoBytes = Uint8Array.from(atob(logoData.split(',')[1]), c => c.charCodeAt(0));
+                        let logoImage;
+                        if (logoData.includes('data:image/png')) {
+                            logoImage = await pdfDoc.embedPng(logoBytes);
+                        } else if (logoData.includes('data:image/jpeg') || logoData.includes('data:image/jpg')) {
+                            logoImage = await pdfDoc.embedJpg(logoBytes);
+                        } else {
+                            console.warn('Unbekanntes Bildformat für Logo');
+                            throw new Error('Logo muss PNG oder JPG sein');
+                        }
+
+                        // Logo auf max 70px Höhe skalieren
+                        const origLogoWidth = logoImage.width;
+                        const origLogoHeight = logoImage.height;
+                        const maxLogoHeight = 70;
+                        const logoScale = maxLogoHeight / origLogoHeight;
+                        logoWidth = origLogoWidth * logoScale;
+                        logoHeight = maxLogoHeight;
+
+                        // Rechts positionieren - höher (100px von oben)
+                        page.drawImage(logoImage, {
+                            x: width - logoWidth - 50,
+                            y: height - logoHeight - 100,
+                            width: logoWidth,
+                            height: logoHeight
+                        });
+                    } catch (e) {
+                        console.error('Fehler beim Laden des Logos:', e);
+                        alert('⚠️ Logo konnte nicht geladen werden: ' + e.message);
+                    }
+                }
+
+                // Bild ganz oben - mit frei wählbarer Position und Größe
+                if (topHeaderData) {
+                    try {
+                        const topHeaderBytes = Uint8Array.from(atob(topHeaderData.split(',')[1]), c => c.charCodeAt(0));
+                        let topHeaderImage;
+                        if (topHeaderData.includes('data:image/png')) {
+                            topHeaderImage = await pdfDoc.embedPng(topHeaderBytes);
+                        } else if (topHeaderData.includes('data:image/jpeg') || topHeaderData.includes('data:image/jpg')) {
+                            topHeaderImage = await pdfDoc.embedJpg(topHeaderBytes);
+                        }
+
+                        if (topHeaderImage) {
+                            // Position und Größe aus Eingabefeldern holen - WICHTIG: direkt aus Vorschau auslesen
+                            const draggableImg = document.getElementById('draggableImageMain');
+                            const topHeaderX = parseFloat(draggableImg.style.left) || 50;
+                            const topHeaderY = parseFloat(draggableImg.style.top) || 50;
+                            const topHeaderWidth = parseFloat(draggableImg.offsetWidth) || 150;
+                            let topHeaderHeight = parseFloat(draggableImg.offsetHeight) || 0;
+
+                            // Wenn Höhe = 0, dann automatisch berechnen (Seitenverhältnis beibehalten)
+                            if (topHeaderHeight === 0) {
+                                const imgWidth = topHeaderImage.width;
+                                const imgHeight = topHeaderImage.height;
+                                const aspectRatio = imgWidth / imgHeight;
+                                topHeaderHeight = topHeaderWidth / aspectRatio;
+                            }
+
+                            page.drawImage(topHeaderImage, {
+                                x: topHeaderX,
+                                y: height - topHeaderY - topHeaderHeight,  // Von oben nach unten
+                                width: topHeaderWidth,
+                                height: topHeaderHeight
+                            });
+                        }
+                    } catch (e) {
+                        console.error('Fehler beim Laden des Top-Header-Bildes:', e);
+                    }
+                }
+
+                // DIN 5008 Faltmarken (exakte Positionen in mm -> pt)
+                // 105mm von oben = 297.64pt
+                currentPage.drawLine({
+                    start: { x: 5, y: height - 297.64 },
+                    end: { x: 10, y: height - 297.64 },
+                    thickness: 0.5,
+                    color: rgb(0, 0, 0)
+                });
+                // 148.5mm von oben = 420.94pt (Lochmarke - länger)
+                currentPage.drawLine({
+                    start: { x: 5, y: height - 420.94 },
+                    end: { x: 15, y: height - 420.94 },
+                    thickness: 0.5,
+                    color: rgb(0, 0, 0)
+                });
+                // 210mm von oben = 595.28pt
+                currentPage.drawLine({
+                    start: { x: 5, y: height - 595.28 },
+                    end: { x: 10, y: height - 595.28 },
+                    thickness: 0.5,
+                    color: rgb(0, 0, 0)
+                });
+
+                // Firmenname über Adresse - mit Zeilenumbrüchen aus Eingabefeld (keine Leerzeilen)
+                const headerText = document.getElementById('headerText').value;
+                if (headerText && headerText.trim() !== '') {
+                    const maxWidth = 350; // Maximale Breite in Punkten
+                    const lines = headerText.split('\n').filter(line => line.trim() !== ''); // Leerzeilen entfernen
+                    let yPosHeader = height - 120;
+                    let lineCount = 0;
+
+                    for (let line of lines) {
+                        if (lineCount >= 2) break; // Maximal 2 Zeilen
+
+                        // Teile lange Zeilen basierend auf Breite
+                        while (line.length > 0 && lineCount < 2) {
+                            let textWidth = fontBold.widthOfTextAtSize(line, headerTextSize);
+
+                            if (textWidth <= maxWidth) {
+                                // Ganze Zeile passt
+                                currentPage.drawText(line, { x: 50, y: yPosHeader, size: headerTextSize, font: fontBold, color: headerTextColorRgb });
+                                yPosHeader -= headerTextSize * 1.2;
+                                lineCount++;
+                                break;
+                            } else {
+                                // Zeile zu lang - finde Umbruchpunkt
+                                let chunk = line;
+                                let chunkWidth = fontBold.widthOfTextAtSize(chunk, headerTextSize);
+
+                                // Reduziere Chunk bis er passt
+                                while (chunkWidth > maxWidth && chunk.length > 1) {
+                                    chunk = chunk.substring(0, chunk.length - 1);
+                                    chunkWidth = fontBold.widthOfTextAtSize(chunk, headerTextSize);
+                                }
+
+                                // Zeichne Chunk
+                                if (chunk.length > 0 && lineCount < 2) {
+                                    currentPage.drawText(chunk, { x: 50, y: yPosHeader, size: headerTextSize, font: fontBold, color: headerTextColorRgb });
+                                    yPosHeader -= headerTextSize * 1.2;
+                                    lineCount++;
+                                    line = line.substring(chunk.length);
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // DIN 5008 - Absenderzeile klein (für Fensterkuvert) - Position 200px von oben
+                const sender = document.getElementById('senderName').value;
+                const senderStreet = document.getElementById('senderStreet').value;
+                const senderCity = document.getElementById('senderCity').value;
+                const senderLine = `${sender}${senderStreet ? ', ' + senderStreet : ''}${senderCity ? ', ' + senderCity : ''}`;
+                let yPos = height - 200;
+                currentPage.drawText(senderLine.substring(0, 80), { x: 50, y: yPos, size: 7, font: font, color: rgb(0.4, 0.4, 0.4) });
+
+                // Empfängeradresse - 220px von oben (20px unter Absenderzeile)
+                // customerName wurde bereits oben deklariert
+                const customerStreet = document.getElementById('customerStreet').value;
+                const customerZip = document.getElementById('customerZip').value;
+                const customerCity = document.getElementById('customerCity').value;
+
+                yPos = height - 220;
+                // Name ist Pflichtfeld, wird immer angezeigt
+                currentPage.drawText(customerName, { x: 50, y: yPos, size: 11, font: font });
+                yPos -= 14;
+
+                // Straße nur wenn vorhanden
+                if (customerStreet && customerStreet.trim() !== '') {
+                    currentPage.drawText(customerStreet, { x: 50, y: yPos, size: 11, font: font });
+                    yPos -= 14;
+                }
+
+                // PLZ/Stadt nur wenn mindestens eines vorhanden
+                const cityLine = `${customerZip || ''} ${customerCity || ''}`.trim();
+                if (cityLine !== '') {
+                    currentPage.drawText(cityLine, { x: 50, y: yPos, size: 11, font: font });
+                }
+
+                // Rechnungsinfo rechts oben
+                const invoiceDate = new Date(document.getElementById('invoiceDate').value);
+                const infoYStart = height - 190;
+
+                currentPage.drawText('Rechnungs Nr:', { x: 380, y: infoYStart, size: 9, font: font });
+                currentPage.drawText(invoiceNumber, { x: 450, y: infoYStart, size: 9, font: fontBold });
+
+                currentPage.drawText('Datum:', { x: 380, y: infoYStart - 14, size: 9, font: font });
+                currentPage.drawText(invoiceDate.toLocaleDateString('de-DE'), { x: 450, y: infoYStart - 14, size: 9, font: fontBold });
+
+                // Zusatzinformationen - mit Zeilenumbrüchen (keine Leerzeilen, max. 4 Zeilen)
+                const additionalInfo = document.getElementById('additionalInfo').value;
+                // Setze yPos auf feste Position für Zusatzinformationen: 310px von oben
+                yPos = height - 310;
+                if (additionalInfo && additionalInfo.trim() !== '') {
+                    const maxInfoWidth = 495; // Maximale Breite für Zusatzinfos
+                    const infoLines = additionalInfo.split('\n').filter(line => line.trim() !== '').slice(0, 4); // Leerzeilen entfernen, max 4 Zeilen
+                    let drawnLines = 0; // Zähler für tatsächlich gezeichnete Zeilen
+
+                    for (let infoLine of infoLines) {
+                        if (drawnLines >= 4) break; // Maximal 4 Zeilen im PDF
+
+                        // Teile lange Zeilen in Chunks - Start mit größerer Zahl und reduziere bis es passt
+                        while (infoLine.length > 0 && drawnLines < 4) {
+                            // Start mit maximal 150 Zeichen für VOLLE Zeilen
+                            let chunk = infoLine.substring(0, 150);
+
+                            // Prüfe ob Chunk in die Breite passt
+                            let chunkWidth = font.widthOfTextAtSize(chunk, 9);
+
+                            // Wenn zu breit, reduziere Chunk-Größe
+                            while (chunkWidth > maxInfoWidth && chunk.length > 0) {
+                                chunk = chunk.substring(0, chunk.length - 1);
+                                chunkWidth = font.widthOfTextAtSize(chunk, 9);
+                            }
+
+                            // Zeichne den Chunk
+                            if (chunk.length > 0 && drawnLines < 4) {
+                                currentPage.drawText(chunk, { x: 50, y: yPos, size: 9, font: font });
+                                yPos -= 11;
+                                drawnLines++;
+                                infoLine = infoLine.substring(chunk.length);
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    yPos -= 14; // Zusätzlicher Abstand nach Zusatzinfos
+                }
+
+                // MEHR PLATZ zwischen Adresse und Positionen
+                yPos -= 60;
+
+                // Tabellenkopf mit Linie darunter
+                currentPage.drawText('Beschreibung', { x: 50, y: yPos, size: 9, font: fontBold });
+                currentPage.drawText('Ust. Satz', { x: 320, y: yPos, size: 9, font: fontBold });
+                currentPage.drawText('VP (netto)', { x: 395, y: yPos, size: 9, font: fontBold });
+                currentPage.drawText('Menge', { x: 470, y: yPos, size: 9, font: fontBold });
+                currentPage.drawText('Nettosumme', { x: 520, y: yPos, size: 9, font: fontBold });
+
+                // Linie unter Tabellenkopf
+                yPos -= 5;
+                currentPage.drawLine({
+                    start: { x: 50, y: yPos },
+                    end: { x: 545, y: yPos },
+                    thickness: 1,
+                    color: rgb(0, 0, 0)
+                });
+
+                // Positionen mit Trennstrichen
+                const taxRate = parseFloat(document.getElementById('taxRate').value) || 0;
+                const priceMode = document.querySelector('input[name="priceMode"]:checked').value;
+                const itemRows = document.querySelectorAll('.item-row');
+
+                // Sammle nur nicht-leere Positionen
+                const validItems = [];
+                itemRows.forEach(row => {
+                    const quantity = parseFloat(row.querySelector('.item-quantity').value) || 0;
+                    const price = parseFloat(row.querySelector('.item-price').value) || 0;
+                    const desc = row.querySelector('.item-description').value || '';
+
+                    if (desc || quantity > 0 || price > 0) {
+                        validItems.push({ desc, quantity, price });
+                    }
+                });
+
+                // Berechne wie viele Seiten benötigt werden
+                const ITEMS_PER_PAGE = 12; // Ab 12 Positionen wird eine 2. Seite erstellt
+                const totalPages = Math.max(1, Math.ceil(validItems.length / ITEMS_PER_PAGE));
+                let pageNumber = 1;
+
+                yPos -= 15;
+
+                validItems.forEach((item, index) => {
+                    const { desc, quantity, price } = item;
+
+                    // Prüfe ob neue Seite benötigt wird (nach genau 12 Positionen pro Seite)
+                    if (index > 0 && index % ITEMS_PER_PAGE === 0) {
+                        // Seitenzahl auf aktueller Seite - bottom: 22
+                        currentPage.drawText(`Seite ${pageNumber} von ${totalPages}`, {
+                            x: 270,
+                            y: 22,
+                            size: 8,
+                            font: font
+                        });
+
+                        // Neue Seite erstellen
+                        currentPage = pdfDoc.addPage([595, 842]);
+                        pageNumber++;
+                        yPos = height - 100;
+
+                        // Tabellenkopf auf neuer Seite
+                        currentPage.drawText('Beschreibung', { x: 50, y: yPos, size: 9, font: fontBold });
+                        currentPage.drawText('Ust. Satz', { x: 320, y: yPos, size: 9, font: fontBold });
+                        currentPage.drawText('VP (netto)', { x: 395, y: yPos, size: 9, font: fontBold });
+                        currentPage.drawText('Menge', { x: 470, y: yPos, size: 9, font: fontBold });
+                        currentPage.drawText('Nettosumme', { x: 520, y: yPos, size: 9, font: fontBold });
+
+                        yPos -= 5;
+                        currentPage.drawLine({
+                            start: { x: 50, y: yPos },
+                            end: { x: 545, y: yPos },
+                            thickness: 1,
+                            color: rgb(0, 0, 0)
+                        });
+                        yPos -= 15;
+                    }
+
+                    let priceNet, totalNet;
+                    if (priceMode === 'gross') {
+                        priceNet = price / (1 + taxRate / 100);
+                        totalNet = quantity * priceNet;
+                    } else {
+                        priceNet = price;
+                        totalNet = quantity * price;
+                    }
+
+                    // Positionsnummer und Beschreibung links
+                    const posNumber = `${index + 1}. `;
+                    currentPage.drawText(posNumber, { x: 50, y: yPos, size: 9, font: fontBold });
+                    const posNumberWidth = fontBold.widthOfTextAtSize(posNumber, 9);
+                    currentPage.drawText(desc.substring(0, 35), { x: 50 + posNumberWidth, y: yPos, size: 9, font: font });
+
+                    // Ust. Satz zentriert
+                    const taxText = `${taxRate.toFixed(0)}%`;
+                    const taxWidth = font.widthOfTextAtSize(taxText, 9);
+                    currentPage.drawText(taxText, { x: 335 - taxWidth / 2, y: yPos, size: 9, font: font });
+
+                    // VP (netto) rechtsbündig
+                    const priceText = `${priceNet.toFixed(2)} €`;
+                    const priceWidth = font.widthOfTextAtSize(priceText, 9);
+                    currentPage.drawText(priceText, { x: 440 - priceWidth, y: yPos, size: 9, font: font });
+
+                    // Menge zentriert
+                    const qtyText = `${quantity}`;
+                    const qtyWidth = font.widthOfTextAtSize(qtyText, 9);
+                    currentPage.drawText(qtyText, { x: 485 - qtyWidth / 2, y: yPos, size: 9, font: font });
+
+                    // Nettosumme rechtsbündig
+                    const totalText = `${totalNet.toFixed(2)} €`;
+                    const totalWidth = font.widthOfTextAtSize(totalText, 9);
+                    currentPage.drawText(totalText, { x: 545 - totalWidth, y: yPos, size: 9, font: font });
+
+                    yPos -= 15;
+
+                    // Trennlinie nach jeder Position (außer der letzten)
+                    if (index < validItems.length - 1) {
+                        currentPage.drawLine({
+                            start: { x: 50, y: yPos },
+                            end: { x: 545, y: yPos },
+                            thickness: 0.3,
+                            color: rgb(0.7, 0.7, 0.7)
+                        });
+                    }
+
+                    yPos -= 8;
+                });
+
+                // Summen mit Tabellenlinie davor
+                const subtotal = parseFloat(document.getElementById('subtotal').textContent);
+                const taxAmount = parseFloat(document.getElementById('taxAmount').textContent);
+                const total = parseFloat(document.getElementById('total').textContent);
+
+                yPos -= 10;
+
+                // Linie vor Summen
+                currentPage.drawLine({
+                    start: { x: 370, y: yPos },
+                    end: { x: 545, y: yPos },
+                    thickness: 1,
+                    color: rgb(0, 0, 0)
+                });
+
+                yPos -= 20;
+                currentPage.drawText('Nettosumme:', { x: 370, y: yPos, size: 9, font: font });
+                const subtotalText = `${subtotal.toFixed(2)} €`;
+                const subtotalWidth = font.widthOfTextAtSize(subtotalText, 9);
+                currentPage.drawText(subtotalText, { x: 545 - subtotalWidth, y: yPos, size: 9, font: font });
+
+                yPos -= 15;
+                currentPage.drawText('Ust. gesamt:', { x: 370, y: yPos, size: 9, font: font });
+                // MwSt. NICHT runden - exakte Berechnung
+                const exactTaxAmount = total - subtotal;
+                const taxTextExact = `${exactTaxAmount.toFixed(2)} €`;
+                const taxTextWidth = font.widthOfTextAtSize(taxTextExact, 9);
+                currentPage.drawText(taxTextExact, { x: 545 - taxTextWidth, y: yPos, size: 9, font: font });
+
+                yPos -= 5;
+                // Linie vor Bruttosumme
+                currentPage.drawLine({
+                    start: { x: 370, y: yPos },
+                    end: { x: 545, y: yPos },
+                    thickness: 1,
+                    color: rgb(0, 0, 0)
+                });
+
+                yPos -= 20;
+                // Grauer Hintergrund für Bruttosumme
+                currentPage.drawRectangle({
+                    x: 365,
+                    y: yPos - 5,
+                    width: 180,
+                    height: 18,
+                    color: rgb(0.85, 0.85, 0.85)
+                });
+
+                currentPage.drawText('Bruttosumme:', { x: 370, y: yPos, size: 10, font: fontBold });
+                const totalText = `${total.toFixed(2)} €`;
+                const totalTextWidth = fontBold.widthOfTextAtSize(totalText, 10);
+                currentPage.drawText(totalText, { x: 545 - totalTextWidth, y: yPos, size: 10, font: fontBold });
+
+                // Zahlungsziel direkt unter Bruttosumme
+                const paymentTermsDays = parseInt(document.getElementById('paymentTerms').value) || 14;
+                const paymentTermsText = `Zahlbar innerhalb von ${paymentTermsDays} Tagen`;
+                yPos -= 20; // 20px unter Bruttosumme
+                currentPage.drawText(paymentTermsText, { x: 370, y: yPos, size: 8, font: fontBold });
+
+                // Fußzeile wie im Bild - Links Zahlungsinfos, Rechts Logo
+                const iban = document.getElementById('senderIban').value;
+                const bic = document.getElementById('senderBic').value;
+                const bank = document.getElementById('senderBank').value;
+                const accountHolder = document.getElementById('senderAccountHolder').value;
+                const paypal = document.getElementById('senderPaypal').value;
+                const paymentTerms = parseInt(document.getElementById('paymentTerms').value) || 14;
+                const website = document.getElementById('senderWebsite').value;
+                const email = document.getElementById('senderEmail').value;
+                const phone = document.getElementById('senderPhone').value;
+                const taxId = document.getElementById('senderTaxId').value;
+
+                // Fußzeile: Rest UNTER dem Strich in 3 Zeilen
+                const displayAccountHolder = accountHolder || sender;
+
+                // Trennlinie - bottom: 106
+                currentPage.drawLine({
+                    start: { x: 51, y: 106 },
+                    end: { x: 545, y: 106 },
+                    thickness: 0.5,
+                    color: rgb(0, 0, 0)
+                });
+
+                // === UNTER DEM STRICH - 4 Zeilen mit mehreren Elementen nebeneinander ===
+
+                // Zeile 1 (y: 93): Kontoname (links) + E-Mail (rechts)
+                if (displayAccountHolder) currentPage.drawText(`Kontoname: ${displayAccountHolder}`, { x: 52, y: 93, size: 7, font: font });
+                if (email) currentPage.drawText(`E-Mail: ${email}`, { x: 300, y: 93, size: 7, font: font });
+
+                // Zeile 2 (y: 80): Bank (links) + Webseite (rechts)
+                if (bank) currentPage.drawText(`Bank: ${bank}`, { x: 52, y: 80, size: 7, font: font });
+                if (website) currentPage.drawText(`Webseite: ${website}`, { x: 300, y: 80, size: 7, font: font });
+
+                // Zeile 3 (y: 67): IBAN (links) + PayPal (rechts)
+                if (iban) currentPage.drawText(`IBAN: ${iban}`, { x: 52, y: 67, size: 7, font: font });
+                if (paypal) currentPage.drawText(`PayPal: ${paypal}`, { x: 300, y: 67, size: 7, font: font });
+
+                // Zeile 4 (y: 54): BIC (links) + Telefon (rechts)
+                if (bic) currentPage.drawText(`BIC: ${bic}`, { x: 52, y: 54, size: 7, font: font });
+                const phoneText = phone || '123-456-7890';
+                if (phone) currentPage.drawText(`Tel.: ${phoneText}`, { x: 300, y: 54, size: 7, font: font });
+
+                // Zeile 5 (y: 41): Steuernummer (links)
+                if (taxId) currentPage.drawText(`Steuernummer: ${taxId}`, { x: 52, y: 41, size: 7, font: font });
+
+                // Seitenzahl auf letzter Seite hinzufügen - bottom: 22
+                currentPage.drawText(`Seite ${pageNumber} von ${totalPages}`, {
+                    x: 270,
+                    y: 22,
+                    size: 8,
+                    font: font
+                });
+
+                // Seitenzahl auf erster Seite (falls mehrere Seiten) - bottom: 22
+                if (totalPages > 1) {
+                    page.drawText(`Seite 1 von ${totalPages}`, {
+                        x: 270,
+                        y: 22,
+                        size: 8,
+                        font: font
+                    });
+                }
+
+                // PDF speichern
+                const pdfBytes = await pdfDoc.save();
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `Rechnung_${invoiceNumber}.pdf`;
+                link.click();
+
+                alert('✅ PDF mit Ihrem Design wurde erstellt!');
+            } catch (error) {
+                console.error('PDF-Generierungsfehler:', error);
+                alert('❌ Fehler beim Erstellen des PDFs: ' + error.message + '\n\nBitte öffnen Sie die Browser-Konsole (F12) für weitere Details.');
+            }
+        }
+
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? PDFLib.rgb(
+                parseInt(result[1], 16) / 255,
+                parseInt(result[2], 16) / 255,
+                parseInt(result[3], 16) / 255
+            ) : PDFLib.rgb(0, 0, 0);
+        }
+    </script>
+</body>
+</html>

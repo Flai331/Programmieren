@@ -1,0 +1,41 @@
+# Build artifacts
+DesktopApp/build/
+DesktopApp/dist/
+DesktopApp/node_modules/
+DesktopApp/logs/
+
+# Python
+Backend/__pycache__/
+Backend/**/__pycache__/
+Backend/**/**/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+Backend/.venv/
+Backend/venv/
+Backend/*.db
+Backend/*.sqlite
+
+# Flutter/Android build
+MobileApp/build/
+MobileApp/.dart_tool/
+MobileApp/android/.gradle/
+MobileApp/android/app/build/
+rechnungsgenerator_app/build/
+rechnungsgenerator_app/.dart_tool/
+rechnungsgenerator_app/android/.gradle/
+rechnungsgenerator_app/android/app/build/
+
+# Archiv build artifacts
+_archiv/DesktopApp/build/
+_archiv/DesktopApp/dist/
+_archiv/DesktopApp/node_modules/
+_backend/__pycache__/
+_backend/**/__pycache__/
+
+# General
+*.log
+.env
+.env.*
+*.exe

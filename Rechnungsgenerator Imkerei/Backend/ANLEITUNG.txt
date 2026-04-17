@@ -1,0 +1,50 @@
+================================================================================
+                    BACKEND SERVER - ANLEITUNG
+================================================================================
+
+VORAUSSETZUNGEN
+---------------
+1. Python 3.10 oder höher (https://www.python.org/downloads/)
+2. PostgreSQL Datenbank (optional, SQLite als Fallback)
+
+
+SCHNELLSTART
+------------
+1. Doppelklick auf "start_backend.bat"
+2. Server läuft auf http://localhost:8000
+3. API-Dokumentation: http://localhost:8000/docs
+
+
+MANUELLE INSTALLATION
+---------------------
+1. Öffne Kommandozeile in diesem Ordner
+2. python -m venv venv
+3. venv\Scripts\activate
+4. pip install -r requirements.txt
+5. python -m uvicorn app.main:app --reload
+
+
+API ENDPUNKTE
+-------------
+Kunden:      /api/customers
+Rechnungen:  /api/invoices
+Artikel:     /api/articles
+Vorlagen:    /api/templates
+Statistiken: /api/statistics
+
+
+DATENBANK
+---------
+Standard: SQLite (rechnungen.db)
+Optional: PostgreSQL (in .env konfigurieren)
+
+
+UMGEBUNGSVARIABLEN (.env)
+-------------------------
+DATABASE_URL=postgresql://user:pass@localhost/dbname
+API_SECRET_KEY=dein-geheimer-schlüssel
+GMAIL_CLIENT_ID=xxx (für E-Mail-Versand)
+GMAIL_CLIENT_SECRET=xxx
+
+
+================================================================================

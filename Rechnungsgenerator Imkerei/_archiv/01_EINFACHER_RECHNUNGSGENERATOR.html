@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Einfacher Rechnungsgenerator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .progress-bar {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .progress-step {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            position: relative;
+        }
+
+        .progress-step.active {
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .progress-step.completed {
+            color: #28a745;
+        }
+
+        .progress-step:not(:last-child)::after {
+            content: '→';
+            position: absolute;
+            right: -10px;
+            color: #ccc;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .step {
+            display: none;
+        }
+
+        .step.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        button {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .items-container {
+            border: 2px dashed #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .item-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr auto;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .item-row input {
+            margin-bottom: 0;
+        }
+
+        .btn-remove {
+            padding: 10px 15px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .btn-add {
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .summary {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 16px;
+        }
+
+        .summary-row.total {
+            border-top: 2px solid #333;
+            margin-top: 10px;
+            padding-top: 15px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .file-upload {
+            border: 3px dashed #667eea;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .file-upload:hover {
+            background: #f8f9fa;
+            border-color: #5568d3;
+        }
+
+        .file-upload.has-file {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .two-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .two-columns {
+                grid-template-columns: 1fr;
+            }
+
+            .item-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐝 Rechnungsgenerator</h1>
+            <p>Einfach. Schnell. Professionell.</p>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-step active" data-step="1">1. Vorlage</div>
+            <div class="progress-step" data-step="2">2. Absender</div>
+            <div class="progress-step" data-step="3">3. Empfänger</div>
+            <div class="progress-step" data-step="4">4. Positionen</div>
+            <div class="progress-step" data-step="5">5. Fertig</div>
+        </div>
+
+        <div class="content">
+            <!-- Step 1: PDF Vorlage -->
+            <div class="step active" data-step="1">
+                <h2>PDF-Hintergrundvorlage</h2>
+                <p style="margin-bottom: 20px; color: #666;">
+                    Laden Sie einmalig Ihre PDF-Vorlage hoch. Diese wird lokal gespeichert und bei jeder Rechnung als Hintergrund verwendet.
+                </p>
+
+                <div class="file-upload" id="pdfUpload">
+                    <div id="uploadPlaceholder">
+                        <p style="font-size: 48px; margin-bottom: 10px;">📄</p>
+                        <p style="font-weight: bold; margin-bottom: 5px;">PDF-Vorlage hochladen</p>
+                        <p style="color: #666; font-size: 14px;">Klicken oder Datei hier ablegen</p>
+                    </div>
+                    <div id="uploadSuccess" class="hidden">
+                        <p style="font-size: 48px; margin-bottom: 10px;">✅</p>
+                        <p style="font-weight: bold; color: #28a745;">Vorlage gespeichert!</p>
+                        <p style="color: #666; font-size: 14px;" id="fileName"></p>
+                    </div>
+                    <input type="file" id="pdfFile" accept=".pdf" class="hidden">
+                </div>
+
+                <div class="alert alert-info" style="margin-top: 20px;">
+                    <strong>Hinweis:</strong> Sie können auch ohne Vorlage fortfahren. Dann wird ein einfaches PDF ohne Hintergrund erstellt.
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-primary" onclick="nextStep()">Weiter →</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Absenderdaten -->
+            <div class="step" data-step="2">
+                <h2>Ihre Daten (Absender)</h2>
+
+                <div class="two-columns">
+                    <div class="form-group">
+                        <label>Name / Firma *</label>
+                        <input type="text" id="senderName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>E-Mail</label>
+                        <input type="email" id="senderEmail">
+                    </div>
+                </div>
+
+                <div class="two-columns">
+                    <div class="form-group">
+                        <label>Straße & Hausnummer</label>
+                        <input type="text" id="senderStreet">
+                    </div>
+                    <div class="form-group">
+                        <label>PLZ & Ort</label>
+                        <input type="text" id="senderCity">
+                    </div>
+                </div>
+
+                <div class="two-columns">
+                    <div class="form-group">
+                        <label>Telefon</label>
+                        <input type="tel" id="senderPhone">
+                    </div>
+                    <div class="form-group">
+                        <label>Steuernummer</label>
+                        <input type="text" id="senderTaxId">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Bankverbindung (IBAN)</label>
+                    <input type="text" id="senderIban" placeholder="DE89 3704 0044 0532 0130 00">
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="prevStep()">← Zurück</button>
+                    <button class="btn-primary" onclick="nextStep()">Weiter →</button>
+                </div>
+            </div>
+
+            <!-- Step 3: Empfängerdaten -->
+            <div class="step" data-step="3">
+                <h2>Rechnungsempfänger</h2>
+
+                <div class="form-group">
+                    <label>Firma / Name *</label>
+                    <input type="text" id="customerName" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Straße & Hausnummer *</label>
+                    <input type="text" id="customerStreet" required>
+                </div>
+
+                <div class="two-columns">
+                    <div class="form-group">
+                        <label>PLZ *</label>
+                        <input type="text" id="customerZip" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Ort *</label>
+                        <input type="text" id="customerCity" required>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="prevStep()">← Zurück</button>
+                    <button class="btn-primary" onclick="nextStep()">Weiter →</button>
+                </div>
+            </div>
+
+            <!-- Step 4: Positionen -->
+            <div class="step" data-step="4">
+                <h2>Rechnungspositionen</h2>
+
+                <div class="two-columns" style="margin-bottom: 20px;">
+                    <div class="form-group">
+                        <label>Rechnungsdatum *</label>
+                        <input type="date" id="invoiceDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Zahlungsziel (Tage)</label>
+                        <input type="number" id="paymentTerms" value="14">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>MwSt.-Satz (%)</label>
+                    <input type="number" id="taxRate" value="19" step="0.01">
+                </div>
+
+                <div class="items-container">
+                    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 10px; margin-bottom: 15px; font-weight: bold; color: #666;">
+                        <div>Beschreibung</div>
+                        <div>Menge</div>
+                        <div>Einheit</div>
+                        <div>Preis inkl. MwSt. (€)</div>
+                        <div></div>
+                    </div>
+                    <div id="itemsList">
+                        <!-- Items werden hier eingefügt -->
+                    </div>
+                    <button class="btn-add" onclick="addItem()">+ Position hinzufügen</button>
+                </div>
+
+                <div class="summary" id="summary">
+                    <div class="summary-row">
+                        <span>Netto:</span>
+                        <span id="subtotal">0.00 €</span>
+                    </div>
+                    <div class="summary-row">
+                        <span>MwSt. (<span id="taxRateDisplay">19</span>%):</span>
+                        <span id="taxAmount">0.00 €</span>
+                    </div>
+                    <div class="summary-row total">
+                        <span>Gesamt:</span>
+                        <span id="total">0.00 €</span>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="prevStep()">← Zurück</button>
+                    <button class="btn-primary" onclick="nextStep()">Weiter →</button>
+                </div>
+            </div>
+
+            <!-- Step 5: Fertig -->
+            <div class="step" data-step="5">
+                <h2>Rechnung erstellen</h2>
+
+                <div class="alert alert-success">
+                    <p style="font-size: 18px; margin-bottom: 10px;"><strong>✅ Alle Daten erfasst!</strong></p>
+                    <p>Ihre Rechnung ist bereit zum Download.</p>
+                </div>
+
+                <div class="summary">
+                    <h3 style="margin-bottom: 15px;">Zusammenfassung</h3>
+                    <div class="summary-row">
+                        <span>Empfänger:</span>
+                        <span id="summaryCustomer"></span>
+                    </div>
+                    <div class="summary-row">
+                        <span>Datum:</span>
+                        <span id="summaryDate"></span>
+                    </div>
+                    <div class="summary-row">
+                        <span>Positionen:</span>
+                        <span id="summaryItemsCount"></span>
+                    </div>
+                    <div class="summary-row total">
+                        <span>Gesamtbetrag:</span>
+                        <span id="summaryTotal"></span>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="prevStep()">← Zurück</button>
+                    <button class="btn-success" onclick="generatePDF()">📄 PDF Herunterladen</button>
+                </div>
+
+                <div style="margin-top: 20px; text-align: center;">
+                    <button class="btn-primary" onclick="resetForm()" style="width: auto; padding: 10px 30px;">
+                        🔄 Neue Rechnung erstellen
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        let currentStep = 1;
+        let items = [];
+        let pdfTemplate = null;
+
+        // Initialisierung
+        document.addEventListener('DOMContentLoaded', () => {
+            // Heutiges Datum setzen
+            document.getElementById('invoiceDate').valueAsDate = new Date();
+
+            // Erste Position hinzufügen
+            addItem();
+
+            // PDF-Upload Event
+            document.getElementById('pdfUpload').addEventListener('click', () => {
+                document.getElementById('pdfFile').click();
+            });
+
+            document.getElementById('pdfFile').addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file && file.type === 'application/pdf') {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        pdfTemplate = event.target.result;
+                        localStorage.setItem('pdfTemplate', pdfTemplate);
+                        localStorage.setItem('pdfTemplateFilename', file.name);
+                        showUploadSuccess(file.name);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            // Gespeicherte Vorlage laden
+            const savedTemplate = localStorage.getItem('pdfTemplate');
+            const savedFilename = localStorage.getItem('pdfTemplateFilename');
+            if (savedTemplate && savedFilename) {
+                pdfTemplate = savedTemplate;
+                showUploadSuccess(savedFilename);
+            }
+
+            // Absenderdaten aus LocalStorage laden
+            loadSenderData();
+        });
+
+        function showUploadSuccess(filename) {
+            document.getElementById('uploadPlaceholder').classList.add('hidden');
+            document.getElementById('uploadSuccess').classList.remove('hidden');
+            document.getElementById('fileName').textContent = filename;
+            document.getElementById('pdfUpload').classList.add('has-file');
+        }
+
+        function addItem() {
+            const id = Date.now();
+            const itemRow = document.createElement('div');
+            itemRow.className = 'item-row';
+            itemRow.dataset.id = id;
+            itemRow.innerHTML = `
+                <input type="text" placeholder="Beschreibung" class="item-description" oninput="calculateTotal()">
+                <input type="number" placeholder="Menge" value="1" step="0.01" class="item-quantity" oninput="calculateTotal()">
+                <input type="text" placeholder="Stück" value="Stück" class="item-unit">
+                <input type="number" placeholder="Preis" step="0.01" class="item-price" oninput="calculateTotal()">
+                <button class="btn-remove" onclick="removeItem(${id})">🗑️</button>
+            `;
+            document.getElementById('itemsList').appendChild(itemRow);
+            calculateTotal();
+        }
+
+        function removeItem(id) {
+            const item = document.querySelector(`[data-id="${id}"]`);
+            if (item) {
+                item.remove();
+                calculateTotal();
+            }
+        }
+
+        function calculateTotal() {
+            const itemRows = document.querySelectorAll('.item-row');
+            const taxRate = parseFloat(document.getElementById('taxRate').value) || 0;
+
+            // Brutto-Summe berechnen (Preise sind inkl. MwSt.)
+            let totalGross = 0;
+            itemRows.forEach(row => {
+                const quantity = parseFloat(row.querySelector('.item-quantity').value) || 0;
+                const priceGross = parseFloat(row.querySelector('.item-price').value) || 0;
+                totalGross += quantity * priceGross;
+            });
+
+            // Aus Brutto -> Netto und MwSt. herausrechnen
+            const subtotal = totalGross / (1 + taxRate / 100);
+            const taxAmount = totalGross - subtotal;
+
+            document.getElementById('subtotal').textContent = subtotal.toFixed(2) + ' €';
+            document.getElementById('taxAmount').textContent = taxAmount.toFixed(2) + ' €';
+            document.getElementById('total').textContent = totalGross.toFixed(2) + ' €';
+            document.getElementById('taxRateDisplay').textContent = taxRate.toFixed(0);
+        }
+
+        function nextStep() {
+            // Validierung
+            if (currentStep === 2 && !document.getElementById('senderName').value) {
+                alert('Bitte geben Sie mindestens Ihren Namen ein.');
+                return;
+            }
+            if (currentStep === 3) {
+                if (!document.getElementById('customerName').value ||
+                    !document.getElementById('customerStreet').value ||
+                    !document.getElementById('customerZip').value ||
+                    !document.getElementById('customerCity').value) {
+                    alert('Bitte füllen Sie alle Pflichtfelder aus.');
+                    return;
+                }
+            }
+            if (currentStep === 4) {
+                if (!document.getElementById('invoiceDate').value) {
+                    alert('Bitte geben Sie ein Rechnungsdatum an.');
+                    return;
+                }
+                const itemRows = document.querySelectorAll('.item-row');
+                if (itemRows.length === 0) {
+                    alert('Bitte fügen Sie mindestens eine Position hinzu.');
+                    return;
+                }
+                // Absenderdaten speichern
+                saveSenderData();
+                // Zusammenfassung aktualisieren
+                updateSummary();
+            }
+
+            if (currentStep < 5) {
+                currentStep++;
+                updateStepDisplay();
+            }
+        }
+
+        function prevStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                updateStepDisplay();
+            }
+        }
+
+        function updateStepDisplay() {
+            document.querySelectorAll('.step').forEach(step => {
+                step.classList.remove('active');
+            });
+            document.querySelector(`.step[data-step="${currentStep}"]`).classList.add('active');
+
+            document.querySelectorAll('.progress-step').forEach(step => {
+                const stepNum = parseInt(step.dataset.step);
+                step.classList.remove('active', 'completed');
+                if (stepNum === currentStep) {
+                    step.classList.add('active');
+                } else if (stepNum < currentStep) {
+                    step.classList.add('completed');
+                }
+            });
+        }
+
+        function updateSummary() {
+            const customerName = document.getElementById('customerName').value;
+            const invoiceDate = document.getElementById('invoiceDate').value;
+            const itemRows = document.querySelectorAll('.item-row');
+            const total = document.getElementById('total').textContent;
+
+            document.getElementById('summaryCustomer').textContent = customerName;
+            document.getElementById('summaryDate').textContent = new Date(invoiceDate).toLocaleDateString('de-DE');
+            document.getElementById('summaryItemsCount').textContent = itemRows.length;
+            document.getElementById('summaryTotal').textContent = total;
+        }
+
+        function saveSenderData() {
+            const senderData = {
+                name: document.getElementById('senderName').value,
+                email: document.getElementById('senderEmail').value,
+                street: document.getElementById('senderStreet').value,
+                city: document.getElementById('senderCity').value,
+                phone: document.getElementById('senderPhone').value,
+                taxId: document.getElementById('senderTaxId').value,
+                iban: document.getElementById('senderIban').value
+            };
+            localStorage.setItem('senderData', JSON.stringify(senderData));
+        }
+
+        function loadSenderData() {
+            const saved = localStorage.getItem('senderData');
+            if (saved) {
+                const data = JSON.parse(saved);
+                document.getElementById('senderName').value = data.name || '';
+                document.getElementById('senderEmail').value = data.email || '';
+                document.getElementById('senderStreet').value = data.street || '';
+                document.getElementById('senderCity').value = data.city || '';
+                document.getElementById('senderPhone').value = data.phone || '';
+                document.getElementById('senderTaxId').value = data.taxId || '';
+                document.getElementById('senderIban').value = data.iban || '';
+            }
+        }
+
+        async function generatePDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            // Rechnungsnummer generieren
+            let invoiceNumber = localStorage.getItem('lastInvoiceNumber') || 1000;
+            invoiceNumber = parseInt(invoiceNumber) + 1;
+            localStorage.setItem('lastInvoiceNumber', invoiceNumber);
+
+            // Daten sammeln
+            const invoiceDate = new Date(document.getElementById('invoiceDate').value);
+            const paymentTerms = parseInt(document.getElementById('paymentTerms').value) || 14;
+            const dueDate = new Date(invoiceDate);
+            dueDate.setDate(dueDate.getDate() + paymentTerms);
+
+            // Absender
+            const sender = {
+                name: document.getElementById('senderName').value,
+                street: document.getElementById('senderStreet').value,
+                city: document.getElementById('senderCity').value,
+                phone: document.getElementById('senderPhone').value,
+                email: document.getElementById('senderEmail').value,
+                taxId: document.getElementById('senderTaxId').value,
+                iban: document.getElementById('senderIban').value
+            };
+
+            // Empfänger
+            const customer = {
+                name: document.getElementById('customerName').value,
+                street: document.getElementById('customerStreet').value,
+                zip: document.getElementById('customerZip').value,
+                city: document.getElementById('customerCity').value
+            };
+
+            // Positionen (Preise sind Brutto inkl. MwSt.)
+            const itemRows = document.querySelectorAll('.item-row');
+            const items = [];
+            const taxRate = parseFloat(document.getElementById('taxRate').value) || 0;
+
+            itemRows.forEach(row => {
+                const quantity = parseFloat(row.querySelector('.item-quantity').value);
+                const priceGross = parseFloat(row.querySelector('.item-price').value);
+                const priceNet = priceGross / (1 + taxRate / 100);
+                const totalGross = quantity * priceGross;
+
+                items.push({
+                    description: row.querySelector('.item-description').value,
+                    quantity: quantity,
+                    unit: row.querySelector('.item-unit').value,
+                    priceGross: priceGross,
+                    priceNet: priceNet,
+                    total: totalGross
+                });
+            });
+
+            // Beträge (aus der Anzeige übernehmen)
+            const subtotal = parseFloat(document.getElementById('subtotal').textContent);
+            const taxAmount = parseFloat(document.getElementById('taxAmount').textContent);
+            const total = parseFloat(document.getElementById('total').textContent);
+
+            // PDF erstellen
+            let y = 20;
+
+            // Absender klein oben
+            doc.setFontSize(8);
+            doc.text(`${sender.name} • ${sender.street} • ${sender.city}`, 20, y);
+            y += 15;
+
+            // Empfängeradresse
+            doc.setFontSize(11);
+            doc.text(customer.name, 20, y);
+            y += 5;
+            doc.text(customer.street, 20, y);
+            y += 5;
+            doc.text(`${customer.zip} ${customer.city}`, 20, y);
+            y += 20;
+
+            // Rechnungsinfo rechts
+            doc.setFontSize(10);
+            doc.text(`Rechnungsnr.: RE-${invoiceNumber}`, 140, 50);
+            doc.text(`Datum: ${invoiceDate.toLocaleDateString('de-DE')}`, 140, 56);
+            doc.text(`Fällig: ${dueDate.toLocaleDateString('de-DE')}`, 140, 62);
+
+            // Titel
+            y = 80;
+            doc.setFontSize(16);
+            doc.setFont(undefined, 'bold');
+            doc.text('RECHNUNG', 20, y);
+            y += 15;
+
+            // Positionen
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'bold');
+            doc.text('Pos.', 20, y);
+            doc.text('Beschreibung', 35, y);
+            doc.text('Menge', 120, y);
+            doc.text('Preis', 145, y);
+            doc.text('Gesamt', 175, y, { align: 'right' });
+            y += 7;
+
+            // Linie
+            doc.line(20, y, 190, y);
+            y += 7;
+
+            // Items (auf Rechnung Nettopreise anzeigen)
+            doc.setFont(undefined, 'normal');
+            items.forEach((item, index) => {
+                const itemNetTotal = item.quantity * item.priceNet;
+                doc.text(`${index + 1}`, 20, y);
+                doc.text(item.description, 35, y);
+                doc.text(`${item.quantity} ${item.unit}`, 120, y);
+                doc.text(`${item.priceNet.toFixed(2)} €`, 145, y);
+                doc.text(`${itemNetTotal.toFixed(2)} €`, 175, y, { align: 'right' });
+                y += 7;
+            });
+
+            // Summen
+            y += 10;
+            doc.line(120, y, 190, y);
+            y += 7;
+
+            doc.text('Netto:', 120, y);
+            doc.text(`${subtotal.toFixed(2)} €`, 175, y, { align: 'right' });
+            y += 6;
+
+            doc.text(`MwSt. (${taxRate}%):`, 120, y);
+            doc.text(`${taxAmount.toFixed(2)} €`, 175, y, { align: 'right' });
+            y += 6;
+
+            doc.setFont(undefined, 'bold');
+            doc.setFontSize(12);
+            doc.text('Gesamt:', 120, y);
+            doc.text(`${total.toFixed(2)} €`, 175, y, { align: 'right' });
+
+            // Fußzeile
+            y = 270;
+            doc.setFontSize(8);
+            doc.setFont(undefined, 'normal');
+            if (sender.iban) {
+                doc.text(`IBAN: ${sender.iban}`, 20, y);
+                y += 4;
+            }
+            if (sender.taxId) {
+                doc.text(`Steuernr.: ${sender.taxId}`, 20, y);
+                y += 4;
+            }
+            if (sender.phone || sender.email) {
+                doc.text(`${sender.phone || ''} • ${sender.email || ''}`, 20, y);
+            }
+
+            // PDF speichern
+            doc.save(`Rechnung_RE-${invoiceNumber}.pdf`);
+
+            alert('✅ PDF wurde erfolgreich erstellt und heruntergeladen!');
+        }
+
+        function resetForm() {
+            if (confirm('Möchten Sie wirklich eine neue Rechnung erstellen? Alle aktuellen Daten gehen verloren.')) {
+                // Felder zurücksetzen (außer Absender)
+                document.getElementById('customerName').value = '';
+                document.getElementById('customerStreet').value = '';
+                document.getElementById('customerZip').value = '';
+                document.getElementById('customerCity').value = '';
+
+                // Items zurücksetzen
+                document.getElementById('itemsList').innerHTML = '';
+                addItem();
+
+                // Datum zurücksetzen
+                document.getElementById('invoiceDate').valueAsDate = new Date();
+
+                // Zurück zu Schritt 1
+                currentStep = 1;
+                updateStepDisplay();
+            }
+        }
+    </script>
+</body>
+</html>

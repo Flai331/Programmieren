@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Positions-Helper</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #2c3e50;
+            color: white;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 600px 1fr;
+            gap: 30px;
+        }
+        .preview {
+            width: 595px;
+            height: 842px;
+            background: white;
+            position: relative;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            transform: scale(0.85);
+            transform-origin: top left;
+        }
+        .draggable {
+            position: absolute;
+            cursor: move;
+            background: rgba(255, 255, 0, 0.3);
+            border: 2px solid red;
+            padding: 3px 5px;
+            font-size: 8px;
+            color: #000;
+            user-select: none;
+        }
+        .draggable:hover {
+            background: rgba(255, 255, 0, 0.6);
+            z-index: 1000;
+        }
+        .controls {
+            background: #34495e;
+            padding: 20px;
+            border-radius: 8px;
+            max-height: 842px;
+            overflow-y: auto;
+        }
+        .controls h2 {
+            margin-top: 0;
+            color: #3498db;
+        }
+        .position-item {
+            background: #2c3e50;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border: 1px solid #3498db;
+        }
+        .position-item strong {
+            color: #e74c3c;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .position-item code {
+            background: #1a252f;
+            padding: 5px 10px;
+            border-radius: 3px;
+            display: block;
+            margin-top: 5px;
+            color: #2ecc71;
+            font-family: 'Courier New', monospace;
+        }
+        button {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            margin-top: 20px;
+        }
+        button:hover {
+            background: #c0392b;
+        }
+        .line {
+            height: 1px;
+            background: black;
+            border: 2px solid red;
+        }
+        .info {
+            background: #16a085;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div>
+            <h1 style="margin-top: 0;">📐 Positions-Helper für Rechnung</h1>
+            <div class="preview">
+                <!-- A4 Vorschau (595x842 px) -->
+
+                <!-- Zahlungsziel -->
+                <div id="zahlungsziel" class="draggable" style="left: 370px; top: 500px;">
+                    Zahlbar innerhalb von 14 Tagen
+                </div>
+
+                <!-- Bank -->
+                <div id="bank" class="draggable" style="left: 50px; top: 700px;">
+                    Bank: Commerzbank Solingen
+                </div>
+
+                <!-- Kontoname -->
+                <div id="kontoname" class="draggable" style="left: 50px; top: 715px;">
+                    Kontoname: Musterimkerei
+                </div>
+
+                <!-- Kontonummer -->
+                <div id="kontonummer" class="draggable" style="left: 50px; top: 730px;">
+                    Kontonummer: 0000 0000
+                </div>
+
+                <!-- IBAN -->
+                <div id="iban" class="draggable" style="left: 50px; top: 745px;">
+                    IBAN: DE54 0000 0000 0000 0000 00
+                </div>
+
+                <!-- Trennlinie -->
+                <div id="trennlinie" class="draggable line" style="left: 50px; top: 765px; width: 250px;">
+                </div>
+
+                <!-- Kontaktzeile -->
+                <div id="kontaktzeile" class="draggable" style="left: 50px; top: 775px; font-size: 7px;">
+                    123-456-7890 - info@beispiel.de
+                </div>
+
+                <!-- Website -->
+                <div id="website" class="draggable" style="left: 50px; top: 790px; font-size: 7px;">
+                    www.beispiel.de
+                </div>
+
+                <!-- Seitenzahl -->
+                <div id="seitenzahl" class="draggable" style="left: 270px; top: 820px; font-size: 8px;">
+                    Seite 1 von 1
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="info">
+                <strong>🎯 So funktioniert's:</strong><br>
+                1. Ziehe die gelben Boxen auf der A4-Seite an die gewünschte Position<br>
+                2. Klicke auf "Positionen kopieren"<br>
+                3. Schicke mir die kopierten Werte<br>
+                4. Ich setze sie dann im echten Code
+            </div>
+
+            <h2>📍 Aktuelle Positionen:</h2>
+            <div id="positions"></div>
+
+            <button onclick="copyPositions()">📋 Positionen kopieren</button>
+        </div>
+    </div>
+
+    <script>
+        let currentElement = null;
+        let startX = 0;
+        let startY = 0;
+        let elementStartX = 0;
+        let elementStartY = 0;
+
+        document.querySelectorAll('.draggable').forEach(element => {
+            element.addEventListener('mousedown', (e) => {
+                currentElement = element;
+                startX = e.clientX;
+                startY = e.clientY;
+                elementStartX = parseInt(element.style.left) || 0;
+                elementStartY = parseInt(element.style.top) || 0;
+                e.preventDefault();
+            });
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!currentElement) return;
+
+            const deltaX = (e.clientX - startX) / 0.85; // Skalierung berücksichtigen
+            const deltaY = (e.clientY - startY) / 0.85;
+
+            const newLeft = Math.max(0, Math.min(595, elementStartX + deltaX));
+            const newTop = Math.max(0, Math.min(842, elementStartY + deltaY));
+
+            currentElement.style.left = Math.round(newLeft) + 'px';
+            currentElement.style.top = Math.round(newTop) + 'px';
+
+            updatePositions();
+        });
+
+        document.addEventListener('mouseup', () => {
+            currentElement = null;
+        });
+
+        function updatePositions() {
+            const positionsDiv = document.getElementById('positions');
+            let html = '';
+
+            document.querySelectorAll('.draggable').forEach(element => {
+                const id = element.id;
+                const left = element.style.left;
+                const top = element.style.top;
+                const bottom = 842 - parseInt(top);
+
+                html += `
+                    <div class="position-item">
+                        <strong>${id}</strong>
+                        <code>left: ${left}, top: ${top}</code>
+                        <code>bottom: ${bottom}px</code>
+                    </div>
+                `;
+            });
+
+            positionsDiv.innerHTML = html;
+        }
+
+        function copyPositions() {
+            let text = '=== POSITIONEN FÜR PDF ===\n\n';
+
+            document.querySelectorAll('.draggable').forEach(element => {
+                const id = element.id;
+                const left = parseInt(element.style.left);
+                const top = parseInt(element.style.top);
+                const bottom = 842 - top;
+
+                text += `${id}:\n`;
+                text += `  x: ${left}, y: ${top}\n`;
+                text += `  bottom: ${bottom}\n\n`;
+            });
+
+            navigator.clipboard.writeText(text).then(() => {
+                alert('✅ Positionen in Zwischenablage kopiert!\n\nSchicke mir den Text!');
+            });
+        }
+
+        // Initial positions anzeigen
+        updatePositions();
+    </script>
+</body>
+</html>

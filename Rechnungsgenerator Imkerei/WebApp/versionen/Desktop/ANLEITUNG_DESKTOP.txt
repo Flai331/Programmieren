@@ -1,0 +1,59 @@
+================================================================================
+              RECHNUNGSGENERATOR PRO - DESKTOP VERSION
+================================================================================
+
+Diese Version ist optimiert für die Nutzung am Computer (PC/Laptop).
+
+
+SCHNELLSTART
+------------
+1. Datei "RECHNUNGSGENERATOR_DESKTOP.html" im Browser öffnen (Doppelklick)
+2. Tab "Design": Logo hochladen (optional)
+3. Tab "Absender": Ihre Firmendaten eingeben
+4. Tab "Empfänger": Kundendaten eingeben
+5. Tab "Rechnung": Positionen hinzufügen
+6. Button "PDF mit Design generieren" klicken
+7. Fertig! Die PDF wird heruntergeladen.
+
+
+DESKTOP-LAYOUT
+--------------
+- Linke Spalte: Live-Vorschau der Rechnung (A4-Format)
+- Rechte Spalte: Formulare für die Dateneingabe
+- Die Vorschau aktualisiert sich in Echtzeit
+
+
+VORSCHAU-FUNKTIONEN
+-------------------
+- Zoom: Strg + Mausrad
+- Bei mehreren Seiten: Buttons "Vorherige" / "Nächste"
+- Faltmarken nach DIN 5008 werden angezeigt
+- Header-Bild per Drag & Drop positionieren
+
+
+DIE VIER TABS
+-------------
+1. DESIGN:    Logo hochladen, Daten zurücksetzen
+2. ABSENDER:  Ihre Firmendaten und Bankverbindung
+3. EMPFÄNGER: Kundendaten (Name, Adresse)
+4. RECHNUNG:  Positionen, Datum, MwSt., PDF erstellen
+
+
+ANSICHTSMODUS UMSCHALTEN
+------------------------
+Oben rechts: [Auto] [Mobil] [Desktop]
+
+- AUTO:    Automatische Erkennung des Geräts
+- MOBIL:   Wechselt zur mobilen Ansicht
+- DESKTOP: Bleibt in der Desktop-Ansicht (empfohlen für PC)
+
+
+TIPPS
+-----
+- Logo: PNG mit transparentem Hintergrund empfohlen
+- Header-Bild: Ziehen zum Verschieben, Ecken ziehen zum Skalieren
+- Alle Daten werden automatisch im Browser gespeichert
+- Empfohlene Browser: Chrome, Firefox, Edge
+
+
+================================================================================

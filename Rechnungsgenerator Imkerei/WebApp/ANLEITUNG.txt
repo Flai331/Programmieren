@@ -1,0 +1,184 @@
+================================================================================
+                    RECHNUNGSGENERATOR PRO - ANLEITUNG
+================================================================================
+
+INHALTSVERZEICHNIS
+------------------
+1. Schnellstart
+2. Die vier Tabs
+3. Mobile Version
+4. Funktionen im Detail
+5. Tipps & Tricks
+6. Ordnerstruktur
+
+
+================================================================================
+1. SCHNELLSTART
+================================================================================
+
+1. Datei "RECHNUNGSGENERATOR.html" im Browser öffnen (Doppelklick)
+2. Tab "Design": Logo hochladen (optional)
+3. Tab "Absender": Ihre Firmendaten eingeben
+4. Tab "Empfänger": Kundendaten eingeben
+5. Tab "Rechnung": Positionen hinzufügen
+6. Button "PDF mit Design generieren" klicken
+7. Fertig! Die PDF wird heruntergeladen.
+
+Alle Daten werden automatisch im Browser gespeichert und sind beim
+nächsten Öffnen wieder da.
+
+
+================================================================================
+2. DIE VIER TABS
+================================================================================
+
+TAB 1: DESIGN
+-------------
+- Logo hochladen (PNG, JPG) - erscheint oben rechts auf der Rechnung
+- "Daten zurücksetzen" löscht alle gespeicherten Daten
+
+TAB 2: ABSENDER (Ihre Daten)
+----------------------------
+- Name/Firma (Pflichtfeld)
+- Adresse, E-Mail, Telefon, Steuernummer, Webseite
+- Zahlungsinformationen: IBAN, BIC, Bank, PayPal
+
+TAB 3: EMPFÄNGER (Kunde)
+------------------------
+- Firma/Name des Kunden (Pflichtfeld)
+- Adresse (Straße, PLZ, Ort)
+
+TAB 4: RECHNUNG
+---------------
+- Rechnungsnummer (automatisch oder manuell)
+- Rechnungsdatum
+- Zahlungsziel in Tagen
+- Oberes Bild (optional, z.B. Banner)
+- Firmenname über Adresse (max. 2 Zeilen)
+- Zusatzinformationen (max. 4 Zeilen)
+- MwSt.-Satz (Standard: 19%)
+- Preiseingabe: Brutto oder Netto
+- Rechnungspositionen hinzufügen
+
+
+================================================================================
+3. MOBILE VERSION
+================================================================================
+
+Der Rechnungsgenerator erkennt automatisch, ob Sie ein Smartphone oder
+Tablet verwenden und passt die Darstellung entsprechend an.
+
+UMSCHALTEN ZWISCHEN DESKTOP UND MOBIL:
+--------------------------------------
+Oben rechts finden Sie drei Buttons:
+
+  [Auto]  [Mobil]  [Desktop]
+
+- AUTO:    Automatische Erkennung (empfohlen)
+- MOBIL:   Erzwingt die mobile Ansicht
+- DESKTOP: Erzwingt die Desktop-Ansicht
+
+Die Einstellung wird gespeichert.
+
+MOBILE ANSICHT - BESONDERHEITEN:
+--------------------------------
+- Die Vorschau ist standardmäßig ausgeblendet
+- Unten gibt es eine Navigation mit 5 Buttons:
+
+  [Design] [Absender] [Empfänger] [Rechnung] [Vorschau]
+
+- Tippen Sie auf "Vorschau" um die Live-Vorschau zu öffnen
+- Der schwebende Button unten rechts (📄) öffnet ebenfalls die Vorschau
+- Alle Formularfelder sind für Touch optimiert
+
+
+================================================================================
+4. FUNKTIONEN IM DETAIL
+================================================================================
+
+LIVE-VORSCHAU (Desktop)
+-----------------------
+- Zeigt die Rechnung in Echtzeit an
+- Linke Spalte: A4-Vorschau mit Faltmarken nach DIN 5008
+- Zoom: Strg + Mausrad
+- Bei mehreren Seiten: Buttons "Vorherige" / "Nächste"
+
+OBERES BILD (Header-Bild)
+-------------------------
+- Optional: Ein Bild ganz oben auf der Rechnung
+- Position anpassbar durch Ziehen
+- Größe anpassbar durch Ziehen an den Ecken
+- Wird im oberen Bereich begrenzt (max. 110px Höhe)
+
+RECHNUNGSPOSITIONEN
+-------------------
+- Beliebig viele Positionen hinzufügen
+- Pro Position: Beschreibung, Menge, Einheit, Preis
+- Automatische Nummerierung (1., 2., 3., ...)
+- Automatische Berechnung: Netto, MwSt., Brutto
+
+PREISEINGABE
+------------
+- BRUTTO: Sie geben Preise inklusive MwSt. ein
+- NETTO:  Sie geben Preise ohne MwSt. ein
+Die Berechnung passt sich automatisch an.
+
+AUTOMATISCHE SPEICHERUNG
+------------------------
+Alle Eingaben werden automatisch im Browser gespeichert:
+- Absenderdaten (bleiben für zukünftige Rechnungen)
+- Logo und Header-Bild
+- Position und Größe des Header-Bildes
+- Ansichtsmodus (Auto/Mobil/Desktop)
+
+PDF-ERSTELLUNG
+--------------
+- Button "PDF mit Design generieren"
+- Erstellt eine professionelle PDF im DIN A4 Format
+- Enthält: Logo, Header-Bild, alle Daten, Faltmarken
+- Automatischer Download
+
+
+================================================================================
+5. TIPPS & TRICKS
+================================================================================
+
+- LOGO: Verwenden Sie ein PNG mit transparentem Hintergrund
+- HEADER-BILD: Ideal für Banner, Briefkopf-Grafiken
+- FIRMENNAME: Maximal 2 Zeilen, Schriftgröße max. 30pt
+- ZUSATZINFOS: Ideal für Lieferhinweise, Bestellnummern
+- ZAHLUNGSZIEL: Standard 14 Tage, anpassbar
+- RECHNUNGSNUMMER: Leer lassen für automatische Nummer
+
+BEI PROBLEMEN:
+- "Daten zurücksetzen" im Design-Tab löscht alles
+- Browser-Cache leeren bei Darstellungsproblemen
+- Aktuelle Browser verwenden (Chrome, Firefox, Edge)
+
+
+================================================================================
+6. ORDNERSTRUKTUR
+================================================================================
+
+Rechnungsgenerator Imkerei/
+│
+├── RECHNUNGSGENERATOR.html    <- Hauptdatei (diese hier verwenden!)
+├── ANLEITUNG.txt              <- Diese Anleitung
+│
+├── _fertig/                   <- Backup der fertigen Version
+│   └── RECHNUNGSGENERATOR.html
+│
+├── _archiv/                   <- Alte Versionen (nicht mehr verwenden)
+│   ├── 01_EINFACHER_RECHNUNGSGENERATOR.html
+│   ├── 02_RECHNUNGSGENERATOR_MIT_VORLAGE.html
+│   ├── 03_RECHNUNGSGENERATOR_PRO.html
+│   └── 04_POSITIONS_HELPER.html
+│
+└── _backend/                  <- Für spätere Erweiterungen
+    ├── projekt/
+    └── *.bat Dateien
+
+
+================================================================================
+                              Viel Erfolg!
+================================================================================
