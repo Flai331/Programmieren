@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: rechnungsgenerator-mobile-web
+    env: node
+    plan: free
+    buildCommand: "cd 'Rechnungsgenerator Imkerei/rechnungsgenerator_app' && flutter pub get && flutter build web --release"
+    startCommand: "cd 'Rechnungsgenerator Imkerei/rechnungsgenerator_app' && npx serve -s build/web -l 3000"
+    envVars:
+      - key: FLUTTER_WEB_API_URL
+        value: "https://rechnungsgenerator-backend.onrender.com/api"
+        scope: PROJECT

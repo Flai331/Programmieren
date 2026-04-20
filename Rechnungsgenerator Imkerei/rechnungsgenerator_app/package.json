@@ -1,0 +1,11 @@
+{
+  "name": "rechnungsgenerator-mobile-web",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "serve": "serve -s build/web -l 3000"
+  },
+  "dependencies": {
+    "serve": "^14.0.0"
+  }
+}
