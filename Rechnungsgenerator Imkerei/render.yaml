@@ -3,24 +3,13 @@ services:
     name: rechnungsgenerator-backend
     env: python
     plan: free
-    buildCommand: "cd Backend && pip install -r requirements.txt"
-    startCommand: "cd Backend && uvicorn main:app --host 0.0.0.0 --port 10000"
+    buildCommand: "cd 'Rechnungsgenerator Imkerei/Backend' && pip install -r requirements.txt"
+    startCommand: "cd 'Rechnungsgenerator Imkerei/Backend' && uvicorn main:app --host 0.0.0.0 --port 10000"
     envVars:
       - key: DATABASE_URL
         scope: PROJECT
-      - key: CORS_ORIGINS
+      - key: API_SECRET_KEY
+        scope: PROJECT
+      - key: ALLOWED_ORIGINS
         value: "https://rechnungsgenerator-frontend.vercel.app,http://localhost:3000"
         scope: PROJECT
-      - key: SECRET_KEY
-        scope: PROJECT
-      - key: ALGORITHM
-        value: "HS256"
-        scope: PROJECT
-      - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: "1440"
-        scope: PROJECT
-
-databases:
-  - name: rechnungsgenerator-db
-    databaseName: rechnungsgenerator
-    plan: free

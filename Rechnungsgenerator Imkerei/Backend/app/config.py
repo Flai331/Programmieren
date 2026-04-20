@@ -7,11 +7,11 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Database
-    database_url: str
+    database_url: str = "sqlite:///./test.db"
     database_test_url: str = ""
 
     # API Security
-    api_secret_key: str
+    api_secret_key: str = "change-me-in-production"
     api_algorithm: str = "HS256"
     api_access_token_expire_minutes: int = 10080
 
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     app_name: str = "Rechnungsgenerator Imkerei"
     app_version: str = "1.0.0"
     debug: bool = False
-    allowed_origins: str = "http://localhost:3000"
+    allowed_origins: str = "http://localhost:3000,https://rechnungsgenerator-frontend.vercel.app"
 
     # Invoice Settings
     invoice_number_prefix: str = "RE"
