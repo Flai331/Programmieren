@@ -9,7 +9,7 @@ services:
       - key: DATABASE_URL
         scope: PROJECT
       - key: CORS_ORIGINS
-        value: "https://rechnungsgenerator-frontend.onrender.com"
+        value: "https://rechnungsgenerator-frontend.vercel.app,http://localhost:3000"
         scope: PROJECT
       - key: SECRET_KEY
         scope: PROJECT
@@ -18,17 +18,6 @@ services:
         scope: PROJECT
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "1440"
-        scope: PROJECT
-
-  - type: web
-    name: rechnungsgenerator-frontend
-    env: node
-    plan: free
-    buildCommand: "cd _backend/projekt/frontend && npm install && npm run build"
-    startCommand: "cd _backend/projekt/frontend && npx serve -s dist -l 3000"
-    envVars:
-      - key: VITE_API_URL
-        value: "https://rechnungsgenerator-backend.onrender.com/api"
         scope: PROJECT
 
 databases:
