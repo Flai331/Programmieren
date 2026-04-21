@@ -14,6 +14,14 @@ class InvoiceModel {
   final DateTime createdAt;
   final DateTime? updatedAt;
 
+  // ── Neue Felder (wie HTML-Referenz) ─────────────────────────
+  /// Firmenname/Slogan über der Absender-Adresse (max. 2 Zeilen)
+  final String? headerText;
+  /// Schriftgröße für headerText (10–30), default 24
+  final int headerTextSize;
+  /// true = Preise sind Brutto (inkl. MwSt.), false = Netto
+  final bool isGrossPrice;
+
   InvoiceModel({
     required this.id,
     required this.invoiceNumber,
@@ -29,6 +37,9 @@ class InvoiceModel {
     this.synced = false,
     required this.createdAt,
     this.updatedAt,
+    this.headerText,
+    this.headerTextSize = 24,
+    this.isGrossPrice = true,
   });
 
   DateTime get dueDate => date.add(Duration(days: paymentTerms));
@@ -49,6 +60,9 @@ class InvoiceModel {
       'synced': synced ? 1 : 0,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
+      'header_text': headerText,
+      'header_text_size': headerTextSize,
+      'is_gross_price': isGrossPrice ? 1 : 0,
     };
   }
 
@@ -70,6 +84,9 @@ class InvoiceModel {
       updatedAt: map['updated_at'] != null
           ? DateTime.parse(map['updated_at'] as String)
           : null,
+      headerText: map['header_text'] as String?,
+      headerTextSize: (map['header_text_size'] as int?) ?? 24,
+      isGrossPrice: ((map['is_gross_price'] as int?) ?? 1) == 1,
     );
   }
 
@@ -88,6 +105,9 @@ class InvoiceModel {
     bool? synced,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? headerText,
+    int? headerTextSize,
+    bool? isGrossPrice,
   }) {
     return InvoiceModel(
       id: id ?? this.id,
@@ -104,6 +124,9 @@ class InvoiceModel {
       synced: synced ?? this.synced,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      headerText: headerText ?? this.headerText,
+      headerTextSize: headerTextSize ?? this.headerTextSize,
+      isGrossPrice: isGrossPrice ?? this.isGrossPrice,
     );
   }
 

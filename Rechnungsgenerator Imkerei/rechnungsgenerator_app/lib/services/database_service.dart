@@ -1,10 +1,11 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/models.dart';
+import '../utils/feedback_service.dart';
 
 class DatabaseService {
   static const String _dbName = 'rechnungsgenerator.db';
-  static const int _dbVersion = 1;
+  static const int _dbVersion = 2;
 
   static final DatabaseService _instance = DatabaseService._internal();
 
@@ -25,11 +26,28 @@ class DatabaseService {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, _dbName);
 
-    return await openDatabase(
+    final db = await openDatabase(
       path,
       version: _dbVersion,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
+    FeedbackService.log('🗄️ DB geöffnet: $path');
+    return db;
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    FeedbackService.log('🗄️ DB Migration: v$oldVersion → v$newVersion');
+    if (oldVersion < 2) {
+      // Version 2: 3 neue Spalten in invoices
+      await db.execute(
+          'ALTER TABLE invoices ADD COLUMN header_text TEXT');
+      await db.execute(
+          'ALTER TABLE invoices ADD COLUMN header_text_size INTEGER NOT NULL DEFAULT 24');
+      await db.execute(
+          'ALTER TABLE invoices ADD COLUMN is_gross_price INTEGER NOT NULL DEFAULT 1');
+      FeedbackService.log('🗄️ Migration v2: invoices-Spalten hinzugefügt');
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -87,6 +105,9 @@ class DatabaseService {
         synced INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT,
+        header_text TEXT,
+        header_text_size INTEGER NOT NULL DEFAULT 24,
+        is_gross_price INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (company_id) REFERENCES companies(id),
         FOREIGN KEY (customer_id) REFERENCES customers(id)
       )

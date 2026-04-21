@@ -4,6 +4,7 @@ import 'database_service.dart';
 import 'api_service.dart';
 import 'connectivity_service.dart';
 import '../models/models.dart';
+import '../utils/feedback_service.dart';
 
 class SyncQueueItem {
   final String id;
@@ -25,7 +26,7 @@ class SyncQueueItem {
 
 class SyncService with ChangeNotifier {
   final DatabaseService _db = DatabaseService();
-  final ApiService _api = APIService();
+  final APIService _api = APIService();
   final ConnectivityService _connectivity = ConnectivityService();
 
   List<SyncQueueItem> _syncQueue = [];
@@ -36,7 +37,6 @@ class SyncService with ChangeNotifier {
   static final SyncService _instance = SyncService._internal();
 
   SyncService._internal() {
-    // Listen to connectivity changes
     _connectivity.addListener(_onConnectivityChanged);
   }
 
@@ -53,7 +53,7 @@ class SyncService with ChangeNotifier {
 
   void _onConnectivityChanged() {
     if (_connectivity.isOnline && _syncQueue.isNotEmpty) {
-      print('📡 Internet connection restored, attempting sync...');
+      FeedbackService.log('📡 Verbindung wiederhergestellt – Sync startet');
       syncAll();
     }
   }
@@ -67,14 +67,17 @@ class SyncService with ChangeNotifier {
 
     _isSyncing = true;
     notifyListeners();
+    FeedbackService.logEvent('SYNC_START',
+        details: {'pending': _syncQueue.length.toString()});
 
     try {
       await _processSyncQueue();
       _lastSyncTime = DateTime.now();
       _lastSyncError = null;
+      FeedbackService.logEvent('SYNC_SUCCESS');
     } catch (e) {
       _lastSyncError = e.toString();
-      print('❌ Sync error: $e');
+      FeedbackService.logError(e.toString(), context: 'SyncAll');
     } finally {
       _isSyncing = false;
       notifyListeners();
@@ -91,11 +94,10 @@ class SyncService with ChangeNotifier {
         notifyListeners();
       } else {
         item.retryCount++;
-        // Keep in queue for retry
         if (item.retryCount > 5) {
-          // Remove after 5 retries
           _syncQueue.removeWhere((i) => i.id == item.id);
-          print('⚠️ Sync item removed after max retries: ${item.id}');
+          FeedbackService.log(
+              '⚠️ Sync-Item nach max. Versuchen entfernt: ${item.id}');
         }
         notifyListeners();
       }
@@ -112,10 +114,12 @@ class SyncService with ChangeNotifier {
         case 'DELETE':
           return await _syncDelete(item);
         default:
+          FeedbackService.log('Unbekannte Sync-Operation: ${item.operation}');
           return false;
       }
     } catch (e) {
-      print('Error syncing item ${item.id}: $e');
+      FeedbackService.logError(e.toString(),
+          context: 'SyncItem ${item.id}');
       return false;
     }
   }
@@ -132,6 +136,7 @@ class SyncService with ChangeNotifier {
         final company = CompanyModel.fromMap(item.data);
         return await _api.createCompany(company);
       default:
+        FeedbackService.log('Unbekannter Entity-Typ: ${item.entityType}');
         return false;
     }
   }
@@ -139,21 +144,27 @@ class SyncService with ChangeNotifier {
   Future<bool> _syncUpdate(SyncQueueItem item) async {
     switch (item.entityType) {
       case 'INVOICE':
-        final invoice = InvoiceModel.fromMap(item.data);
-        return await _api.updateCompany(CompanyModel.fromMap(item.data));
+        // TODO: API-Endpoint für Invoice-Update implementieren
+        FeedbackService.log(
+            '⚠️ Invoice-Update noch nicht implementiert (API fehlt)');
+        return false;
       case 'CUSTOMER':
-        // API would have updateCustomer endpoint
+        // TODO: API-Endpoint für Customer-Update implementieren
+        FeedbackService.log(
+            '⚠️ Customer-Update noch nicht implementiert (API fehlt)');
         return false;
       case 'COMPANY':
         final company = CompanyModel.fromMap(item.data);
         return await _api.updateCompany(company);
       default:
+        FeedbackService.log('Unbekannter Entity-Typ: ${item.entityType}');
         return false;
     }
   }
 
   Future<bool> _syncDelete(SyncQueueItem item) async {
-    // TODO: Implement DELETE endpoints in API
+    // TODO: DELETE-Endpoints im Backend implementieren
+    FeedbackService.log('⚠️ DELETE-Sync noch nicht implementiert');
     return false;
   }
 
@@ -174,8 +185,9 @@ class SyncService with ChangeNotifier {
 
     _syncQueue.add(item);
     notifyListeners();
+    FeedbackService.logEvent('SYNC_QUEUE_ADD',
+        details: {'type': entityType, 'op': operation});
 
-    // Try sync if online
     if (_connectivity.isOnline) {
       syncAll();
     }
@@ -184,6 +196,7 @@ class SyncService with ChangeNotifier {
   void clearQueue() {
     _syncQueue.clear();
     notifyListeners();
+    FeedbackService.log('Sync-Queue geleert');
   }
 
   void removeQueueItem(String id) {
@@ -198,6 +211,8 @@ class SyncService with ChangeNotifier {
     if (invoice != null) {
       final syncedInvoice = invoice.copyWith(synced: true);
       await _db.updateInvoice(syncedInvoice);
+      FeedbackService.logDbOperation('UPDATE', 'invoices',
+          id: invoiceId);
     }
   }
 
@@ -205,12 +220,13 @@ class SyncService with ChangeNotifier {
     return await _db.getUnsyncedInvoices();
   }
 
-  // ============ MANUAL SYNC OPERATIONS ============
+  // ============ MANUAL SYNC ============
 
   Future<void> syncInvoicesManual() async {
     if (_connectivity.isOffline) {
-      _lastSyncError = 'No internet connection';
+      _lastSyncError = 'Keine Internetverbindung';
       notifyListeners();
+      FeedbackService.log('Sync abgebrochen: Offline');
       return;
     }
 
@@ -222,6 +238,7 @@ class SyncService with ChangeNotifier {
       if (unsyncedInvoices.isEmpty) {
         _lastSyncTime = DateTime.now();
         _lastSyncError = null;
+        FeedbackService.log('Sync: Alle Rechnungen bereits synchronisiert');
         return;
       }
 
@@ -232,12 +249,16 @@ class SyncService with ChangeNotifier {
         }
         _lastSyncTime = DateTime.now();
         _lastSyncError = null;
-        print('✅ Synced ${unsyncedInvoices.length} invoices');
+        FeedbackService.logEvent('SYNC_INVOICES_SUCCESS',
+            details: {'count': unsyncedInvoices.length.toString()});
       } else {
-        _lastSyncError = 'Sync failed';
+        _lastSyncError = 'Sync fehlgeschlagen';
+        FeedbackService.logError('Sync fehlgeschlagen',
+            context: 'syncInvoicesManual');
       }
     } catch (e) {
       _lastSyncError = e.toString();
+      FeedbackService.logError(e.toString(), context: 'syncInvoicesManual');
     } finally {
       _isSyncing = false;
       notifyListeners();

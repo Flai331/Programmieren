@@ -1,15 +1,17 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../models/models.dart';
+import '../utils/feedback_service.dart';
 
 class APIService {
   // Render Backend URL
-  static const String baseUrl = 'https://rechnungsgenerator-backend.onrender.com';
+  static const String baseUrl =
+      'https://rechnungsgenerator-backend.onrender.com';
   static const String apiVersion = 'api';
 
-  static final ApiService _instance = ApiService._internal();
+  static final APIService _instance = APIService._internal();
 
-  ApiService._internal();
+  APIService._internal();
 
   factory APIService() {
     return _instance;
@@ -23,13 +25,14 @@ class APIService {
         Uri.parse('$baseUrl/$apiVersion/companies/$id'),
         headers: _headers(),
       );
-
+      FeedbackService.logApiCall('/companies/$id', 'GET',
+          statusCode: response.statusCode);
       if (response.statusCode == 200) {
         return CompanyModel.fromMap(jsonDecode(response.body));
       }
       return null;
     } catch (e) {
-      print('Error fetching company: $e');
+      FeedbackService.logApiCall('/companies/$id', 'GET', error: e.toString());
       return null;
     }
   }
@@ -40,14 +43,18 @@ class APIService {
         Uri.parse('$baseUrl/$apiVersion/companies'),
         headers: _headers(),
       );
-
+      FeedbackService.logApiCall('/companies', 'GET',
+          statusCode: response.statusCode);
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.map((item) => CompanyModel.fromMap(item as Map<String, dynamic>)).toList();
+        return data
+            .map((item) =>
+                CompanyModel.fromMap(item as Map<String, dynamic>))
+            .toList();
       }
       return [];
     } catch (e) {
-      print('Error fetching companies: $e');
+      FeedbackService.logApiCall('/companies', 'GET', error: e.toString());
       return [];
     }
   }
@@ -59,10 +66,11 @@ class APIService {
         headers: _headers(),
         body: jsonEncode(company.toMap()),
       );
-
+      FeedbackService.logApiCall('/companies', 'POST',
+          statusCode: response.statusCode);
       return response.statusCode == 201;
     } catch (e) {
-      print('Error creating company: $e');
+      FeedbackService.logApiCall('/companies', 'POST', error: e.toString());
       return false;
     }
   }
@@ -74,10 +82,12 @@ class APIService {
         headers: _headers(),
         body: jsonEncode(company.toMap()),
       );
-
+      FeedbackService.logApiCall('/companies/${company.id}', 'PUT',
+          statusCode: response.statusCode);
       return response.statusCode == 200;
     } catch (e) {
-      print('Error updating company: $e');
+      FeedbackService.logApiCall('/companies/${company.id}', 'PUT',
+          error: e.toString());
       return false;
     }
   }
@@ -90,13 +100,14 @@ class APIService {
         Uri.parse('$baseUrl/$apiVersion/customers/$id'),
         headers: _headers(),
       );
-
+      FeedbackService.logApiCall('/customers/$id', 'GET',
+          statusCode: response.statusCode);
       if (response.statusCode == 200) {
         return CustomerModel.fromMap(jsonDecode(response.body));
       }
       return null;
     } catch (e) {
-      print('Error fetching customer: $e');
+      FeedbackService.logApiCall('/customers/$id', 'GET', error: e.toString());
       return null;
     }
   }
@@ -107,14 +118,18 @@ class APIService {
         Uri.parse('$baseUrl/$apiVersion/customers'),
         headers: _headers(),
       );
-
+      FeedbackService.logApiCall('/customers', 'GET',
+          statusCode: response.statusCode);
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.map((item) => CustomerModel.fromMap(item as Map<String, dynamic>)).toList();
+        return data
+            .map((item) =>
+                CustomerModel.fromMap(item as Map<String, dynamic>))
+            .toList();
       }
       return [];
     } catch (e) {
-      print('Error fetching customers: $e');
+      FeedbackService.logApiCall('/customers', 'GET', error: e.toString());
       return [];
     }
   }
@@ -126,10 +141,11 @@ class APIService {
         headers: _headers(),
         body: jsonEncode(customer.toMap()),
       );
-
+      FeedbackService.logApiCall('/customers', 'POST',
+          statusCode: response.statusCode);
       return response.statusCode == 201;
     } catch (e) {
-      print('Error creating customer: $e');
+      FeedbackService.logApiCall('/customers', 'POST', error: e.toString());
       return false;
     }
   }
@@ -142,13 +158,14 @@ class APIService {
         Uri.parse('$baseUrl/$apiVersion/invoices/$id'),
         headers: _headers(),
       );
-
+      FeedbackService.logApiCall('/invoices/$id', 'GET',
+          statusCode: response.statusCode);
       if (response.statusCode == 200) {
         return InvoiceModel.fromMap(jsonDecode(response.body));
       }
       return null;
     } catch (e) {
-      print('Error fetching invoice: $e');
+      FeedbackService.logApiCall('/invoices/$id', 'GET', error: e.toString());
       return null;
     }
   }
@@ -159,14 +176,18 @@ class APIService {
         Uri.parse('$baseUrl/$apiVersion/invoices'),
         headers: _headers(),
       );
-
+      FeedbackService.logApiCall('/invoices', 'GET',
+          statusCode: response.statusCode);
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.map((item) => InvoiceModel.fromMap(item as Map<String, dynamic>)).toList();
+        return data
+            .map((item) =>
+                InvoiceModel.fromMap(item as Map<String, dynamic>))
+            .toList();
       }
       return [];
     } catch (e) {
-      print('Error fetching invoices: $e');
+      FeedbackService.logApiCall('/invoices', 'GET', error: e.toString());
       return [];
     }
   }
@@ -178,10 +199,11 @@ class APIService {
         headers: _headers(),
         body: jsonEncode(invoice.toMap()),
       );
-
+      FeedbackService.logApiCall('/invoices', 'POST',
+          statusCode: response.statusCode);
       return response.statusCode == 201;
     } catch (e) {
-      print('Error creating invoice: $e');
+      FeedbackService.logApiCall('/invoices', 'POST', error: e.toString());
       return false;
     }
   }
@@ -194,10 +216,12 @@ class APIService {
         headers: _headers(),
         body: jsonEncode({'invoices': data}),
       );
-
+      FeedbackService.logApiCall('/invoices/sync', 'POST',
+          statusCode: response.statusCode);
       return response.statusCode == 200;
     } catch (e) {
-      print('Error syncing invoices: $e');
+      FeedbackService.logApiCall('/invoices/sync', 'POST',
+          error: e.toString());
       return false;
     }
   }
@@ -210,13 +234,15 @@ class APIService {
         Uri.parse('$baseUrl/$apiVersion/design-settings/$companyId'),
         headers: _headers(),
       );
-
+      FeedbackService.logApiCall('/design-settings/$companyId', 'GET',
+          statusCode: response.statusCode);
       if (response.statusCode == 200) {
         return DesignSettingsModel.fromMap(jsonDecode(response.body));
       }
       return null;
     } catch (e) {
-      print('Error fetching design settings: $e');
+      FeedbackService.logApiCall('/design-settings/$companyId', 'GET',
+          error: e.toString());
       return null;
     }
   }
@@ -224,17 +250,27 @@ class APIService {
   Future<bool> updateDesignSettings(DesignSettingsModel settings) async {
     try {
       final response = await http.put(
-        Uri.parse('$baseUrl/$apiVersion/design-settings/${settings.companyId}'),
+        Uri.parse(
+            '$baseUrl/$apiVersion/design-settings/${settings.companyId}'),
         headers: _headers(),
         body: jsonEncode(settings.toMap()),
       );
-
+      FeedbackService.logApiCall(
+          '/design-settings/${settings.companyId}', 'PUT',
+          statusCode: response.statusCode);
       return response.statusCode == 200;
     } catch (e) {
-      print('Error updating design settings: $e');
+      FeedbackService.logApiCall(
+          '/design-settings/${settings.companyId}', 'PUT',
+          error: e.toString());
       return false;
     }
   }
+
+  // ============ CONVENIENCE ALIASES ============
+
+  Future<List<InvoiceModel>> getInvoices() => getAllInvoices();
+  Future<List<CustomerModel>> getCustomers() => getAllCustomers();
 
   // ============ UTILITIES ============
 
@@ -242,28 +278,29 @@ class APIService {
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      // TODO: Add authentication headers when backend is ready
-      // 'Authorization': 'Bearer $token',
     };
   }
 
   Future<void> testConnection() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/$apiVersion/health'),
-        headers: _headers(),
-      ).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          throw Exception('Connection timeout');
-        },
-      );
-
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/$apiVersion/health'),
+            headers: _headers(),
+          )
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              throw Exception('Connection timeout');
+            },
+          );
+      FeedbackService.logApiCall('/health', 'GET',
+          statusCode: response.statusCode);
       if (response.statusCode != 200) {
         throw Exception('API returned status ${response.statusCode}');
       }
     } catch (e) {
-      print('Connection test failed: $e');
+      FeedbackService.logApiCall('/health', 'GET', error: e.toString());
       rethrow;
     }
   }

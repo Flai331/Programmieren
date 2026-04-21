@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 class AppConstants {
   // App Info
   static const String appName = 'Rechnungsgenerator Pro';
@@ -8,6 +10,13 @@ class AppConstants {
   static const int primaryLightColor = 0xFFf6d365; // Light orange
   static const int primaryDarkColor = 0xFFf29c71; // Dark orange
   static const int accentColor = 0xFF2c3e50; // Dark blue-gray
+
+  // Gradient & Action Colors (gleich wie HTML-Referenz)
+  static const gradientStart = Color(0xFFf6d365); // Gold
+  static const gradientEnd   = Color(0xFFfda085); // Orange
+  static const successColor  = Color(0xFF28a745); // Grün
+  static const dangerColor   = Color(0xFFdc3545); // Rot
+  static const previewBg     = Color(0xFF2c3e50); // Dunkelblau (Preview)
 
   // Sizes
   static const double paddingSmall = 8.0;
