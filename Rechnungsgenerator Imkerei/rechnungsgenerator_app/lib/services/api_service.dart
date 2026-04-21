@@ -2,16 +2,16 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../models/models.dart';
 
-class ApiService {
-  // TODO: Replace with actual Render API URL when backend is ready
-  static const String baseUrl = 'https://api.example.com';
-  static const String apiVersion = 'v1';
+class APIService {
+  // Render Backend URL
+  static const String baseUrl = 'https://rechnungsgenerator-backend.onrender.com';
+  static const String apiVersion = 'api';
 
   static final ApiService _instance = ApiService._internal();
 
   ApiService._internal();
 
-  factory ApiService() {
+  factory APIService() {
     return _instance;
   }
 

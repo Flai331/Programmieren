@@ -111,74 +111,9 @@ class MyApp extends StatelessWidget {
           ),
         ),
         themeMode: ThemeMode.light,
-        home: const HomeScreen(),
+        home: const MainNavigationScreen(),
         debugShowCheckedModeBanner: false,
       ),
-    );
-  }
-}
-
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
-
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  int _selectedIndex = 0;
-
-  final List<Widget> _screens = [
-    const InvoiceListScreen(),
-    const AddressBookScreen(),
-    const SettingsScreen(),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rechnungsgenerator Pro'),
-        elevation: 0,
-        backgroundColor: const Color(0xFFfda085),
-        foregroundColor: Colors.white,
-      ),
-      body: _screens[_selectedIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.receipt),
-            label: 'Rechnungen',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.contacts),
-            label: 'Adressbuch',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Einstellungen',
-          ),
-        ],
-      ),
-      floatingActionButton: _selectedIndex == 0
-          ? FloatingActionButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const InvoiceEditScreen(),
-                  ),
-                );
-              },
-              backgroundColor: const Color(0xFFfda085),
-              child: const Icon(Icons.add),
-            )
-          : null,
     );
   }
 }

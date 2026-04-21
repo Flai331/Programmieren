@@ -25,7 +25,7 @@ class SyncQueueItem {
 
 class SyncService with ChangeNotifier {
   final DatabaseService _db = DatabaseService();
-  final ApiService _api = ApiService();
+  final ApiService _api = APIService();
   final ConnectivityService _connectivity = ConnectivityService();
 
   List<SyncQueueItem> _syncQueue = [];
