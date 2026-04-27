@@ -11,21 +11,20 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../build_info.dart';
+import 'app_secrets.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  FEEDBACK & ERROR LOGGER — Rechnungsgenerator Imkerei
 //
 //  Primär: Notion-Datenbank → sendet direkt aus der App.
-//  Fallback: öffnet E-Mail-App.
+//  Fallback: öffnet E-Mail-App (nur wenn Notion fehlschlägt).
 // ═══════════════════════════════════════════════════════════════
 
 class FeedbackService {
   // ── Notion-Konfiguration ────────────────────────────────────
-  // Token via --dart-define=NOTION_TOKEN=ntn_... beim Build setzen
-  static const String _notionToken =
-      String.fromEnvironment('NOTION_TOKEN', defaultValue: '');
-  static const String _notionDbId =
-      String.fromEnvironment('NOTION_DB_ID', defaultValue: 'de7285f4a31a4c69ba86588b7c918aa1');
+  // Token aus app_secrets.dart (gitignoriert, nie committen)
+  static const String _notionToken = kNotionToken;
+  static const String _notionDbId  = kNotionDbId;
 
   // E-Mail-Empfänger (Fallback)
   static const String _supportEmail = 'klaasotte99@gmail.com';

@@ -918,8 +918,10 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
       child: Row(children: [
         Icon(active ? Icons.check_circle : icon, color: color, size: 20),
         const SizedBox(width: 10),
-        Text(active ? activeText : inactiveText,
-            style: TextStyle(color: color, fontSize: 13)),
+        Expanded(
+          child: Text(active ? activeText : inactiveText,
+              style: TextStyle(color: color, fontSize: 13)),
+        ),
       ]),
     );
   }

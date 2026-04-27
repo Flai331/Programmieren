@@ -44,6 +44,9 @@ linux/
 .env
 .env.local
 
+# Secrets (nie committen!)
+lib/utils/app_secrets.dart
+
 # OS
 .DS_Store
 Thumbs.db
