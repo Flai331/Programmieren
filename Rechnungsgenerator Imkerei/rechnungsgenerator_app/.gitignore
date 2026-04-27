@@ -46,6 +46,7 @@ linux/
 
 # Secrets (nie committen!)
 lib/utils/app_secrets.dart
+.vscode/launch.json
 
 # OS
 .DS_Store
