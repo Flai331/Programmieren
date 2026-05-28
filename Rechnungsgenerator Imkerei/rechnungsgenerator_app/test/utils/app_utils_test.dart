@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rechnungsgenerator_app/utils/utils.dart';
+import 'package:beebrain/utils/utils.dart';
 
 void main() {
   group('AppUtils Tests', () {

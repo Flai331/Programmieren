@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import '../widgets/feedback_actions.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart' show Share, XFile;
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import '../services/services.dart';
+import '../services/database_service.dart';
 import '../models/models.dart';
+import '../utils/utils.dart';
 
 class PdfPreviewScreen extends StatefulWidget {
   final InvoiceModel invoice;
@@ -30,11 +33,13 @@ class PdfPreviewScreen extends StatefulWidget {
 class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
   late Future<pw.Document> _pdfFuture;
   late PdfService _pdfService;
+  late DatabaseService _dbService;
 
   @override
   void initState() {
     super.initState();
     _pdfService = PdfService();
+    _dbService = DatabaseService();
     _pdfFuture = _generatePdf();
   }
 
@@ -91,27 +96,29 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
     try {
       final pdf = await _pdfFuture;
       final bytes = await pdf.save();
-
-      // Create temporary file for sharing
       final tempDir = await getTemporaryDirectory();
-      final fileName = 'Rechnung_${widget.invoice.invoiceNumber}.pdf';
+      final isQuote = widget.invoice.isQuote;
+      final label = isQuote ? 'Angebot' : 'Rechnung';
+      final fileName = '${label}_${widget.invoice.invoiceNumber}.pdf';
       final file = File('${tempDir.path}/$fileName');
-
-      // Write the PDF bytes to temporary file
       await file.writeAsBytes(bytes);
-
-      // Share the file
+      final dateStr = AppUtils.formatDate(widget.invoice.date);
+      final subject = isQuote
+          ? 'Angebot: ${widget.invoice.invoiceNumber} vom $dateStr'
+          : 'Rechnungsnummer: ${widget.invoice.invoiceNumber} vom $dateStr';
+      final body = isQuote
+          ? 'Moin,\n\nanbei unser Angebot.'
+          : 'Moin,\n\nanbei die Rechnung für die letzte Honiglieferung.';
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
-        text: 'Rechnung ${widget.invoice.invoiceNumber}',
+        subject: subject,
+        text: body,
       );
+      await _dbService.updateInvoiceStatus(widget.invoice.id, 'sent');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Fehler: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -149,6 +156,11 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
                   onPressed: _savePdf,
                 ),
                 IconButton(
+                  icon: const Icon(Icons.mail_outline),
+                  tooltip: 'Per Mail senden',
+                  onPressed: _sharePdf,
+                ),
+                IconButton(
                   icon: const Icon(Icons.share),
                   tooltip: 'Teilen',
                   onPressed: _sharePdf,
@@ -161,6 +173,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
               ],
             ),
           ),
+          const FeedbackActions(),
         ],
       ),
       body: FutureBuilder<pw.Document>(
@@ -212,15 +225,15 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
             canChangePageFormat: false,
             canChangeOrientation: false,
             canDebug: false,
-            scrollViewDecoration: BoxDecoration(
-              color: Colors.grey[100],
+            scrollViewDecoration: const BoxDecoration(
+              color: Color(0xFF050507), // bg-stage per design system
             ),
           );
         },
       ),
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(16),
-        color: Colors.grey[100],
+        color: const Color(0xFF111114),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
@@ -230,14 +243,17 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
               label: const Text('Speichern'),
             ),
             ElevatedButton.icon(
+              onPressed: _sharePdf,
+              icon: const Icon(Icons.mail_outline),
+              label: const Text('Senden'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3b82f6),
+              ),
+            ),
+            ElevatedButton.icon(
               onPressed: _printPdf,
               icon: const Icon(Icons.print),
               label: const Text('Drucken'),
-            ),
-            ElevatedButton.icon(
-              onPressed: _sharePdf,
-              icon: const Icon(Icons.share),
-              label: const Text('Teilen'),
             ),
           ],
         ),

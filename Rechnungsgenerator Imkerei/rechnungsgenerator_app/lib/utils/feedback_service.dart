@@ -13,29 +13,24 @@ import 'package:url_launcher/url_launcher.dart';
 import '../build_info.dart';
 
 // ═══════════════════════════════════════════════════════════════
-//  FEEDBACK & ERROR LOGGER — Rechnungsgenerator Imkerei
+//  FEEDBACK & ERROR LOGGER — BeeBrain
 //
 //  Primär: Notion-Datenbank → sendet direkt aus der App.
 //  Fallback: öffnet E-Mail-App (nur wenn Notion fehlschlägt).
 //
-//  Token beim Build übergeben:
-//    flutter run  --dart-define=NOTION_TOKEN=ntn_...
-//    flutter build apk --dart-define=NOTION_TOKEN=ntn_...
+//  Token-Konfiguration via --dart-define=NOTION_TOKEN=ntn_...
 // ═══════════════════════════════════════════════════════════════
 
 class FeedbackService {
   // ── Notion-Konfiguration ────────────────────────────────────
-  // Token via --dart-define=NOTION_TOKEN=ntn_... beim Build setzen.
-  // Ohne dart-define: leer → E-Mail-Fallback wird genutzt.
   static const String _notionToken =
       String.fromEnvironment('NOTION_TOKEN', defaultValue: '');
   static const String _notionDbId =
-      String.fromEnvironment('NOTION_DB_ID',
-          defaultValue: '34a85584dd1280a488b5d0e698f1b200');
+      String.fromEnvironment('NOTION_DB_ID', defaultValue: '');
 
   // E-Mail-Empfänger (Fallback)
   static const String _supportEmail = 'klaasotte99@gmail.com';
-  static const String _appName = 'Rechnungsgenerator Imkerei';
+  static const String _appName = 'BeeBrain';
 
   static bool get _notionConfigured => _notionToken.isNotEmpty;
 
@@ -59,6 +54,10 @@ class FeedbackService {
 
   // Verhindert dass mehrere Fehler gleichzeitig mehrere Dialoge öffnen
   static bool _dialogOpen = false;
+
+  // Auto-Send Dedup: gleicher Fehler max alle 30s
+  static String? _lastErrorFingerprint;
+  static DateTime? _lastErrorSentAt;
 
   // ── Automatisch bei abgefangenem Fehler aufrufen ────────────
   static Future<void> showAutoErrorDialog() async {
@@ -134,6 +133,113 @@ class FeedbackService {
     if (stackTrace != null) {
       log('Stack: ${stackTrace.toString().split('\n').first}');
     }
+    // Auto-Send zu Notion (fire-and-forget, mit Dedup)
+    _autoSendError(error, context: context, stack: stackTrace);
+  }
+
+  /// Sendet Fehler automatisch an Notion. Dedupt gleiche Fehler innerhalb 30s.
+  static void _autoSendError(String error,
+      {String? context, StackTrace? stack}) {
+    if (!_notionConfigured) return;
+    final fp = '$error|$context';
+    final now = DateTime.now();
+    if (_lastErrorFingerprint == fp &&
+        _lastErrorSentAt != null &&
+        now.difference(_lastErrorSentAt!).inSeconds < 30) {
+      return;
+    }
+    _lastErrorFingerprint = fp;
+    _lastErrorSentAt = now;
+    // fire-and-forget
+    _notionSendError(error, context: context, stack: stack);
+  }
+
+  static Future<void> _notionSendError(String error,
+      {String? context, StackTrace? stack}) async {
+    try {
+      final now = DateTime.now();
+      String pad(int n) => n.toString().padLeft(2, '0');
+      final shortErr =
+          error.length > 70 ? '${error.substring(0, 67)}...' : error;
+      final titel = '⚠️ $shortErr — ${pad(now.day)}.${pad(now.month)} '
+          '${pad(now.hour)}:${pad(now.minute)}';
+
+      final logTail = _log
+          .skip(_log.length > 50 ? _log.length - 50 : 0)
+          .join('\n');
+      final body = [
+        'FEHLER: $error',
+        if (context != null) 'KONTEXT: $context',
+        if (stack != null)
+          'STACK:\n${stack.toString().split('\n').take(10).join('\n')}',
+        if (_currentScreen.isNotEmpty) 'SEITE: $_currentScreen',
+        '---',
+        'PROTOKOLL:',
+        logTail,
+      ].join('\n');
+      final truncated = body.length > 1990
+          ? '…${body.substring(body.length - 1989)}'
+          : body;
+
+      String os = 'Web';
+      if (!kIsWeb) {
+        try {
+          os = '${Platform.operatingSystem} '
+              '${Platform.operatingSystemVersion}';
+        } catch (_) {}
+      }
+
+      final props = <String, dynamic>{
+        'Titel': {
+          'title': [
+            {'text': {'content': titel}}
+          ]
+        },
+        'Status': {'select': {'name': 'Offen'}},
+        'App-Version': {
+          'rich_text': [
+            {'text': {'content': 'Build $kBuildNumber'}}
+          ]
+        },
+        'Protokoll': {
+          'rich_text': [
+            {'text': {'content': truncated}}
+          ]
+        },
+        'OS': {
+          'rich_text': [
+            {'text': {'content': os}}
+          ]
+        },
+        'Zeitstempel': {'date': {'start': now.toIso8601String()}},
+        'Beschreibung': {
+          'rich_text': [
+            {'text': {'content': error.length > 2000 ? error.substring(0, 2000) : error}}
+          ]
+        },
+      };
+
+      final res = await http
+          .post(
+            Uri.parse('https://api.notion.com/v1/pages'),
+            headers: {
+              'Authorization': 'Bearer $_notionToken',
+              'Notion-Version': '2022-06-28',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'parent': {'database_id': _notionDbId},
+              'properties': props,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      log('Notion auto-send: ${res.statusCode}'
+          '${res.statusCode != 200 ? " body=${res.body.length > 200 ? res.body.substring(0, 200) : res.body}" : ""}');
+    } catch (e) {
+      // bewusst still — kein Endlos-Loop wenn Notion offline
+      debugPrint('Notion auto-send Fehler: $e');
+    }
   }
 
   static void logWidgetState(String widgetName,
@@ -172,9 +278,9 @@ class FeedbackService {
       log('Screenshot: Web nicht unterstützt');
       return null;
     }
-    // Kamera-Screenshot auf Windows nicht verfügbar
     if (!kIsWeb && Platform.isWindows) {
-      log('Screenshot: Windows-Repaint wird versucht');
+      log('Screenshot: Windows nicht unterstützt');
+      return null;
     }
     if (_repaintKey == null) {
       log('Screenshot: RepaintKey nicht gesetzt');
@@ -222,26 +328,31 @@ class FeedbackService {
     BuildContext context, {
     bool isAutoError = false,
   }) async {
+    if (_dialogOpen) return;
     if (_currentScreen.isNotEmpty) {
       log('${isAutoError ? 'Auto-Fehler' : 'Fehlerbericht'} auf Screen: $_currentScreen');
     }
-    await Future.delayed(Duration.zero);
-    final screenshotPath = await _captureScreenshot();
+    // Dialog sofort zeigen — nicht auf Screenshot warten
     if (!context.mounted) return;
-    await showDialog(
-      context: context,
-      barrierDismissible: !isAutoError,
-      builder: (_) => _FeedbackDialog(
-        notionAvailable: _notionConfigured,
-        isAutoError: isAutoError,
-        supportEmail: _supportEmail,
-        appName: _appName,
-        initialPhotoPaths:
-            screenshotPath != null ? [screenshotPath] : [],
-        onSend: (note, photoPaths) =>
-            sendReport(userNote: note, photoPaths: photoPaths),
-      ),
-    );
+    _dialogOpen = true;
+    try {
+      await showDialog(
+        context: context,
+        barrierDismissible: !isAutoError,
+        builder: (_) => _FeedbackDialog(
+          notionAvailable: _notionConfigured,
+          isAutoError: isAutoError,
+          supportEmail: _supportEmail,
+          appName: _appName,
+          // Screenshot wird im Dialog selbst im Hintergrund geladen
+          initialPhotoPaths: const [],
+          onSend: (note, photoPaths) =>
+              sendReport(userNote: note, photoPaths: photoPaths),
+        ),
+      );
+    } finally {
+      _dialogOpen = false;
+    }
   }
 
   // ── Fehlerbericht senden ────────────────────────────────────
@@ -317,13 +428,6 @@ class FeedbackService {
           ]
         },
         'Zeitstempel': {'date': {'start': now.toIso8601String()}},
-        'App': {
-          'rich_text': [
-            {
-              'text': {'content': _appName}
-            }
-          ]
-        },
       };
 
       if (userNote != null && userNote.isNotEmpty) {
@@ -488,6 +592,17 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
   void initState() {
     super.initState();
     _photoPaths = List.from(widget.initialPhotoPaths);
+    // Screenshot nach Dialog-Öffnung im Hintergrund laden
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAutoScreenshot();
+    });
+  }
+
+  Future<void> _loadAutoScreenshot() async {
+    final path = await FeedbackService._captureScreenshot();
+    if (path != null && mounted) {
+      setState(() => _photoPaths.insert(0, path));
+    }
   }
 
   @override

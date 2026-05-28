@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../services/api_service.dart';
-import '../models/models.dart';
+import '../services/database_service.dart';
+import '../utils/feedback_service.dart';
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({Key? key}) : super(key: key);
@@ -11,42 +11,46 @@ class StatisticsScreen extends StatefulWidget {
 }
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
-  late APIService apiService;
+  final _dbService = DatabaseService();
   late Future<Map<String, dynamic>> statisticsFuture;
 
   @override
   void initState() {
     super.initState();
-    apiService = APIService();
+    FeedbackService.logScreenLoad('Statistiken');
     statisticsFuture = _loadDetailedStatistics();
   }
 
   Future<Map<String, dynamic>> _loadDetailedStatistics() async {
     try {
-      final invoices = await apiService.getInvoices();
+      final all = await _dbService.getAllInvoices();
+      // Angebote nicht in Statistik einrechnen
+      final invoices =
+          all.where((i) => i.documentType == 'invoice').toList();
 
       double totalRevenue = 0;
-      double paidAmount = 0;
+      double overdueAmount = 0;
       double pendingAmount = 0;
       Map<String, double> monthlyRevenue = {};
+      final now = DateTime.now();
 
       for (var invoice in invoices) {
-        totalRevenue += invoice.amount;
+        totalRevenue += invoice.total;
 
-        if (invoice.status == 'paid') {
-          paidAmount += invoice.amount;
+        if (invoice.dueDate.isBefore(now)) {
+          overdueAmount += invoice.total;
         } else {
-          pendingAmount += invoice.amount;
+          pendingAmount += invoice.total;
         }
 
         // Gruppiere nach Monat
-        final month = invoice.createdAt.substring(0, 7); // YYYY-MM
-        monthlyRevenue[month] = (monthlyRevenue[month] ?? 0) + invoice.amount;
+        final month = '${invoice.createdAt.year}-${invoice.createdAt.month.toString().padLeft(2, '0')}';
+        monthlyRevenue[month] = (monthlyRevenue[month] ?? 0) + invoice.total;
       }
 
       return {
         'totalRevenue': totalRevenue,
-        'paidAmount': paidAmount,
+        'paidAmount': overdueAmount,
         'pendingAmount': pendingAmount,
         'monthlyRevenue': monthlyRevenue,
         'invoices': invoices,
@@ -59,10 +63,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Statistiken'),
-        elevation: 0,
-      ),
       body: RefreshIndicator(
         onRefresh: () async {
           setState(() {

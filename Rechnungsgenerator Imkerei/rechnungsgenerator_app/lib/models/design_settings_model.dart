@@ -7,10 +7,20 @@ class DesignSettingsModel {
   final String? topHeaderUrl; // URL to Cloudinary
   final double? logoX;
   final double? logoY;
+  final double? logoWidth;
+  final double? logoHeight;
   final double? headerX;
   final double? headerY;
   final double? headerWidth;
   final double? headerHeight;
+  final bool logoFlipH;
+  final bool logoFlipV;
+  final bool headerFlipH;
+  final bool headerFlipV;
+  final String tableHeaderColor;
+  /// JSON-String mit Positionen aller Layout-Elemente
+  /// Format: {"elementId": {"x": .., "y": .., "w": .., "h": .., "fh": false, "fv": false}, ...}
+  final String? layoutJson;
   final DateTime createdAt;
   final DateTime? updatedAt;
 
@@ -23,10 +33,18 @@ class DesignSettingsModel {
     this.topHeaderUrl,
     this.logoX,
     this.logoY,
+    this.logoWidth,
+    this.logoHeight,
     this.headerX,
     this.headerY,
     this.headerWidth,
     this.headerHeight,
+    this.logoFlipH = false,
+    this.logoFlipV = false,
+    this.headerFlipH = false,
+    this.headerFlipV = false,
+    this.tableHeaderColor = '#fda085',
+    this.layoutJson,
     required this.createdAt,
     this.updatedAt,
   });
@@ -41,10 +59,18 @@ class DesignSettingsModel {
       'top_header_url': topHeaderUrl,
       'logo_x': logoX,
       'logo_y': logoY,
+      'logo_width': logoWidth,
+      'logo_height': logoHeight,
       'header_x': headerX,
       'header_y': headerY,
       'header_width': headerWidth,
       'header_height': headerHeight,
+      'logo_flip_h': logoFlipH,
+      'logo_flip_v': logoFlipV,
+      'header_flip_h': headerFlipH,
+      'header_flip_v': headerFlipV,
+      'table_header_color': tableHeaderColor,
+      'layout_json': layoutJson,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };
@@ -58,12 +84,20 @@ class DesignSettingsModel {
       headerTextSize: map['header_text_size'] as int? ?? 16,
       logoUrl: map['logo_url'] as String?,
       topHeaderUrl: map['top_header_url'] as String?,
-      logoX: map['logo_x'] as double?,
-      logoY: map['logo_y'] as double?,
-      headerX: map['header_x'] as double?,
-      headerY: map['header_y'] as double?,
-      headerWidth: map['header_width'] as double?,
-      headerHeight: map['header_height'] as double?,
+      logoX: (map['logo_x'] as num?)?.toDouble(),
+      logoY: (map['logo_y'] as num?)?.toDouble(),
+      logoWidth: (map['logo_width'] as num?)?.toDouble(),
+      logoHeight: (map['logo_height'] as num?)?.toDouble(),
+      headerX: (map['header_x'] as num?)?.toDouble(),
+      headerY: (map['header_y'] as num?)?.toDouble(),
+      headerWidth: (map['header_width'] as num?)?.toDouble(),
+      headerHeight: (map['header_height'] as num?)?.toDouble(),
+      logoFlipH: map['logo_flip_h'] as bool? ?? false,
+      logoFlipV: map['logo_flip_v'] as bool? ?? false,
+      headerFlipH: map['header_flip_h'] as bool? ?? false,
+      headerFlipV: map['header_flip_v'] as bool? ?? false,
+      tableHeaderColor: map['table_header_color'] as String? ?? '#fda085',
+      layoutJson: map['layout_json'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: map['updated_at'] != null
           ? DateTime.parse(map['updated_at'] as String)
@@ -80,10 +114,18 @@ class DesignSettingsModel {
     String? topHeaderUrl,
     double? logoX,
     double? logoY,
+    double? logoWidth,
+    double? logoHeight,
     double? headerX,
     double? headerY,
     double? headerWidth,
     double? headerHeight,
+    bool? logoFlipH,
+    bool? logoFlipV,
+    bool? headerFlipH,
+    bool? headerFlipV,
+    String? tableHeaderColor,
+    String? layoutJson,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -96,10 +138,18 @@ class DesignSettingsModel {
       topHeaderUrl: topHeaderUrl ?? this.topHeaderUrl,
       logoX: logoX ?? this.logoX,
       logoY: logoY ?? this.logoY,
+      logoWidth: logoWidth ?? this.logoWidth,
+      logoHeight: logoHeight ?? this.logoHeight,
       headerX: headerX ?? this.headerX,
       headerY: headerY ?? this.headerY,
       headerWidth: headerWidth ?? this.headerWidth,
       headerHeight: headerHeight ?? this.headerHeight,
+      logoFlipH: logoFlipH ?? this.logoFlipH,
+      logoFlipV: logoFlipV ?? this.logoFlipV,
+      headerFlipH: headerFlipH ?? this.headerFlipH,
+      headerFlipV: headerFlipV ?? this.headerFlipV,
+      tableHeaderColor: tableHeaderColor ?? this.tableHeaderColor,
+      layoutJson: layoutJson ?? this.layoutJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

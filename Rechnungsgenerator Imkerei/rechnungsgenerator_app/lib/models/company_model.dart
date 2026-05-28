@@ -15,6 +15,8 @@ class CompanyModel {
   final String? paypal;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  /// Pattern für Rechnungsnummern (z.B. 'RE-{YEAR}-{SEQ:3}')
+  final String invoiceNumberPattern;
 
   CompanyModel({
     required this.id,
@@ -33,6 +35,7 @@ class CompanyModel {
     this.paypal,
     required this.createdAt,
     this.updatedAt,
+    this.invoiceNumberPattern = 'RE-{YEAR}-{SEQ:3}',
   });
 
   // Convert to JSON for API/Database
@@ -54,6 +57,7 @@ class CompanyModel {
       'paypal': paypal,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
+      'invoice_number_pattern': invoiceNumberPattern,
     };
   }
 
@@ -78,6 +82,8 @@ class CompanyModel {
       updatedAt: map['updated_at'] != null
           ? DateTime.parse(map['updated_at'] as String)
           : null,
+      invoiceNumberPattern: map['invoice_number_pattern'] as String? ??
+          'RE-{YEAR}-{SEQ:3}',
     );
   }
 
@@ -99,6 +105,7 @@ class CompanyModel {
     String? paypal,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? invoiceNumberPattern,
   }) {
     return CompanyModel(
       id: id ?? this.id,
@@ -117,6 +124,8 @@ class CompanyModel {
       paypal: paypal ?? this.paypal,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      invoiceNumberPattern:
+          invoiceNumberPattern ?? this.invoiceNumberPattern,
     );
   }
 

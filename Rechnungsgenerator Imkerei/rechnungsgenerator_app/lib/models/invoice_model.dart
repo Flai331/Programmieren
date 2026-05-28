@@ -21,6 +21,11 @@ class InvoiceModel {
   final int headerTextSize;
   /// true = Preise sind Brutto (inkl. MwSt.), false = Netto
   final bool isGrossPrice;
+  /// 'draft' | 'sent' | 'paid' (Rechnung)  bzw.
+  /// 'draft' | 'sent' | 'accepted' | 'rejected' (Angebot)
+  final String status;
+  /// 'invoice' = Rechnung | 'quote' = Angebot
+  final String documentType;
 
   InvoiceModel({
     required this.id,
@@ -40,7 +45,11 @@ class InvoiceModel {
     this.headerText,
     this.headerTextSize = 24,
     this.isGrossPrice = true,
+    this.status = 'draft',
+    this.documentType = 'invoice',
   });
+
+  bool get isQuote => documentType == 'quote';
 
   DateTime get dueDate => date.add(Duration(days: paymentTerms));
 
@@ -63,6 +72,8 @@ class InvoiceModel {
       'header_text': headerText,
       'header_text_size': headerTextSize,
       'is_gross_price': isGrossPrice ? 1 : 0,
+      'status': status,
+      'document_type': documentType,
     };
   }
 
@@ -87,6 +98,8 @@ class InvoiceModel {
       headerText: map['header_text'] as String?,
       headerTextSize: (map['header_text_size'] as int?) ?? 24,
       isGrossPrice: ((map['is_gross_price'] as int?) ?? 1) == 1,
+      status: (map['status'] as String?) ?? 'draft',
+      documentType: (map['document_type'] as String?) ?? 'invoice',
     );
   }
 
@@ -108,6 +121,8 @@ class InvoiceModel {
     String? headerText,
     int? headerTextSize,
     bool? isGrossPrice,
+    String? status,
+    String? documentType,
   }) {
     return InvoiceModel(
       id: id ?? this.id,
@@ -127,6 +142,8 @@ class InvoiceModel {
       headerText: headerText ?? this.headerText,
       headerTextSize: headerTextSize ?? this.headerTextSize,
       isGrossPrice: isGrossPrice ?? this.isGrossPrice,
+      status: status ?? this.status,
+      documentType: documentType ?? this.documentType,
     );
   }
 

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rechnungsgenerator_app/models/models.dart';
+import 'package:beebrain/models/models.dart';
 
 void main() {
   group('InvoiceItemModel Tests', () {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/feedback_service.dart';
+import '../widgets/feedback_actions.dart';
 import 'screens.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -15,12 +16,32 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   static const Color _peach = Color(0xFFfda085);
   static const Color _gold  = Color(0xFFf6d365);
 
+  static const List<String> _titles = [
+    'Dashboard',
+    'Völker',
+    'Rechnungen',
+    'Kunden',
+    'Artikel',
+    'Vorlagen',
+    'Briefe',
+    'Statistiken',
+    'Einstellungen',
+  ];
+
+  void _goToTab(int index) {
+    setState(() => _selectedIndex = index);
+    FeedbackService.logUserAction('Tab gewechselt (Dashboard)',
+        context: {'tab': index.toString()});
+  }
+
   late final List<Widget> _screens = [
-    const DashboardScreen(),
+    DashboardScreen(onNavigate: _goToTab),
+    const HiveListScreen(),
     const InvoiceListScreen(),
     const AddressBookScreen(),
     const ArticlesScreen(),
     const TemplatesScreen(),
+    const LetterListScreen(),
     const StatisticsScreen(),
     const SettingsScreen(),
   ];
@@ -29,12 +50,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     NavigationDestination(
       icon: Icon(Icons.dashboard_outlined),
       selectedIcon: Icon(Icons.dashboard),
-      label: 'Dashboard',
+      label: 'Start',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.hive_outlined),
+      selectedIcon: Icon(Icons.hive),
+      label: 'Völker',
     ),
     NavigationDestination(
       icon: Icon(Icons.receipt_outlined),
       selectedIcon: Icon(Icons.receipt),
-      label: 'Rechnungen',
+      label: 'Rechng.',
     ),
     NavigationDestination(
       icon: Icon(Icons.contacts_outlined),
@@ -52,6 +78,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       label: 'Vorlagen',
     ),
     NavigationDestination(
+      icon: Icon(Icons.mail_outline),
+      selectedIcon: Icon(Icons.mail),
+      label: 'Briefe',
+    ),
+    NavigationDestination(
       icon: Icon(Icons.bar_chart_outlined),
       selectedIcon: Icon(Icons.bar_chart),
       label: 'Stats',
@@ -59,7 +90,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     NavigationDestination(
       icon: Icon(Icons.settings_outlined),
       selectedIcon: Icon(Icons.settings),
-      label: 'Einstellungen',
+      label: 'Mehr',
     ),
   ];
 
@@ -72,18 +103,85 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: Text(_titles[_selectedIndex]),
+        actions: const [FeedbackActions()],
+      ),
       body: _screens[_selectedIndex],
-      floatingActionButton: _buildFab(context),
+      // FAB nur auf Rechnungen-Tab (Index 2). Völker (Index 1) hat eigenen FAB.
+      floatingActionButton: _selectedIndex == 2 ? _buildFab(context) : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        indicatorColor: _peach.withAlpha(40),
-        onDestinationSelected: (int index) {
-          setState(() => _selectedIndex = index);
-          FeedbackService.logUserAction('Tab gewechselt',
-              context: {'tab': index.toString()});
-        },
-        destinations: _destinations,
+      bottomNavigationBar: NavigationBarTheme(
+        data: NavigationBarThemeData(
+          labelTextStyle: WidgetStateProperty.all(
+            const TextStyle(
+              fontSize: 10,
+              height: 1.0,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          // Labels einzeilig halten
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        ),
+        child: NavigationBar(
+          selectedIndex: _selectedIndex,
+          indicatorColor: _peach.withAlpha(51), // 20% per design system
+          onDestinationSelected: (int index) {
+            setState(() => _selectedIndex = index);
+            FeedbackService.logScreenLoad(_titles[index]);
+            FeedbackService.logUserAction('Tab gewechselt',
+                context: {'tab': index.toString()});
+          },
+          destinations: _destinations,
+        ),
+      ),
+    );
+  }
+
+  void _showCreateChooser(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.receipt_outlined, color: _peach),
+              title: const Text('Neue Rechnung'),
+              onTap: () {
+                Navigator.pop(ctx);
+                FeedbackService.logUserAction('Neue Rechnung (FAB)');
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const InvoiceEditScreen(documentType: 'invoice'),
+                ));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.description_outlined, color: _peach),
+              title: const Text('Neues Angebot'),
+              onTap: () {
+                Navigator.pop(ctx);
+                FeedbackService.logUserAction('Neues Angebot (FAB)');
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const InvoiceEditScreen(documentType: 'quote'),
+                ));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.mail_outline, color: _peach),
+              title: const Text('Neuer Brief'),
+              onTap: () {
+                Navigator.pop(ctx);
+                FeedbackService.logUserAction('Neuer Brief (FAB)');
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const LetterEditScreen(),
+                ));
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }
@@ -99,9 +197,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: _peach.withAlpha(100),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: _peach.withAlpha(89), // 35% per design system
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -109,15 +207,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         highlightElevation: 0,
-        onPressed: () {
-          FeedbackService.logUserAction('Neue Rechnung erstellen (FAB)');
-          Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => const InvoiceEditScreen(),
-          ));
-        },
+        onPressed: () => _showCreateChooser(context),
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text(
-          'Neue Rechnung',
+          'Neu',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
       ),

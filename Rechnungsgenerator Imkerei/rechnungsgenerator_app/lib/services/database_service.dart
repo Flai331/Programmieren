@@ -3,64 +3,42 @@ import 'package:path/path.dart';
 import '../models/models.dart';
 import '../utils/feedback_service.dart';
 
+/// Lokale SQLite-Datenbank via sqflite (offline-only, Play-Store-ready).
 class DatabaseService {
-  static const String _dbName = 'rechnungsgenerator.db';
-  static const int _dbVersion = 2;
-
   static final DatabaseService _instance = DatabaseService._internal();
+  DatabaseService._internal();
+  factory DatabaseService() => _instance;
 
   Database? _database;
 
-  DatabaseService._internal();
-
-  factory DatabaseService() {
-    return _instance;
-  }
-
   Future<Database> get database async {
-    _database ??= await _initDatabase();
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    FeedbackService.log('🗄️ SQLite-Datenbank bereit');
     return _database!;
   }
 
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, _dbName);
+    final path = join(dbPath, 'beebrain.db');
 
-    final db = await openDatabase(
+    return openDatabase(
       path,
-      version: _dbVersion,
+      version: 1,
       onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
     );
-    FeedbackService.log('🗄️ DB geöffnet: $path');
-    return db;
-  }
-
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    FeedbackService.log('🗄️ DB Migration: v$oldVersion → v$newVersion');
-    if (oldVersion < 2) {
-      // Version 2: 3 neue Spalten in invoices
-      await db.execute(
-          'ALTER TABLE invoices ADD COLUMN header_text TEXT');
-      await db.execute(
-          'ALTER TABLE invoices ADD COLUMN header_text_size INTEGER NOT NULL DEFAULT 24');
-      await db.execute(
-          'ALTER TABLE invoices ADD COLUMN is_gross_price INTEGER NOT NULL DEFAULT 1');
-      FeedbackService.log('🗄️ Migration v2: invoices-Spalten hinzugefügt');
-    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
-    // Companies table
     await db.execute('''
       CREATE TABLE companies (
         id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        email TEXT NOT NULL,
-        street TEXT NOT NULL,
-        city TEXT NOT NULL,
-        zipcode TEXT NOT NULL,
-        phone TEXT NOT NULL,
+        name TEXT,
+        email TEXT,
+        street TEXT,
+        city TEXT,
+        zipcode TEXT,
+        phone TEXT,
         tax_id TEXT,
         website TEXT,
         account_holder TEXT,
@@ -68,73 +46,71 @@ class DatabaseService {
         bic TEXT,
         bank TEXT,
         paypal TEXT,
-        created_at TEXT NOT NULL,
+        invoice_number_pattern TEXT DEFAULT 'RE-{YEAR}-{SEQ:3}',
+        created_at TEXT,
         updated_at TEXT
       )
     ''');
 
-    // Customers table
     await db.execute('''
       CREATE TABLE customers (
         id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        street TEXT NOT NULL,
-        city TEXT NOT NULL,
-        zipcode TEXT NOT NULL,
+        customer_number INTEGER,
+        name TEXT,
+        street TEXT,
+        city TEXT,
+        zipcode TEXT,
         phone TEXT,
         email TEXT,
-        created_at TEXT NOT NULL,
+        created_at TEXT,
         updated_at TEXT
       )
     ''');
 
-    // Invoices table
     await db.execute('''
       CREATE TABLE invoices (
         id TEXT PRIMARY KEY,
-        invoice_number TEXT NOT NULL UNIQUE,
-        company_id TEXT NOT NULL,
-        customer_id TEXT NOT NULL,
-        date TEXT NOT NULL,
-        payment_terms INTEGER NOT NULL,
+        invoice_number TEXT,
+        company_id TEXT,
+        customer_id TEXT,
+        date TEXT,
+        payment_terms INTEGER DEFAULT 14,
         additional_info TEXT,
-        tax_rate REAL NOT NULL,
-        subtotal REAL NOT NULL,
-        vat REAL NOT NULL,
-        total REAL NOT NULL,
-        synced INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        updated_at TEXT,
+        tax_rate REAL,
+        subtotal REAL,
+        vat REAL,
+        total REAL,
+        synced INTEGER DEFAULT 0,
         header_text TEXT,
-        header_text_size INTEGER NOT NULL DEFAULT 24,
-        is_gross_price INTEGER NOT NULL DEFAULT 1,
-        FOREIGN KEY (company_id) REFERENCES companies(id),
-        FOREIGN KEY (customer_id) REFERENCES customers(id)
+        header_text_size INTEGER DEFAULT 24,
+        is_gross_price INTEGER DEFAULT 1,
+        status TEXT DEFAULT 'draft',
+        document_type TEXT DEFAULT 'invoice',
+        created_at TEXT,
+        updated_at TEXT
       )
     ''');
 
-    // Invoice Items table
     await db.execute('''
       CREATE TABLE invoice_items (
         id TEXT PRIMARY KEY,
         invoice_id TEXT NOT NULL,
-        description TEXT NOT NULL,
-        quantity REAL NOT NULL,
-        unit TEXT NOT NULL,
-        price REAL NOT NULL,
-        tax_rate REAL NOT NULL,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+        description TEXT,
+        quantity REAL,
+        unit TEXT,
+        price REAL,
+        tax_rate REAL,
+        created_at TEXT,
+        FOREIGN KEY (invoice_id) REFERENCES invoices (id) ON DELETE CASCADE
       )
     ''');
 
-    // Design Settings table
     await db.execute('''
       CREATE TABLE design_settings (
         id TEXT PRIMARY KEY,
-        company_id TEXT NOT NULL UNIQUE,
-        header_text_color TEXT NOT NULL DEFAULT '#000000',
-        header_text_size INTEGER NOT NULL DEFAULT 16,
+        company_id TEXT,
+        header_text_color TEXT,
+        header_text_size INTEGER,
         logo_url TEXT,
         top_header_url TEXT,
         logo_x REAL,
@@ -143,103 +119,195 @@ class DatabaseService {
         header_y REAL,
         header_width REAL,
         header_height REAL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT,
-        FOREIGN KEY (company_id) REFERENCES companies(id)
+        layout_json TEXT,
+        table_header_color TEXT,
+        created_at TEXT,
+        updated_at TEXT
       )
     ''');
 
-    // Address Templates table
     await db.execute('''
       CREATE TABLE address_templates (
         id TEXT PRIMARY KEY,
-        company_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        street TEXT NOT NULL,
-        city TEXT NOT NULL,
-        zipcode TEXT NOT NULL,
+        company_id TEXT,
+        name TEXT,
+        street TEXT,
+        city TEXT,
+        zipcode TEXT,
         phone TEXT,
         email TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT,
-        FOREIGN KEY (company_id) REFERENCES companies(id)
+        created_at TEXT,
+        updated_at TEXT
       )
     ''');
 
-    // Create indices for faster queries
-    await db.execute('CREATE INDEX idx_invoices_company_id ON invoices(company_id)');
-    await db.execute('CREATE INDEX idx_invoices_customer_id ON invoices(customer_id)');
-    await db.execute('CREATE INDEX idx_invoice_items_invoice_id ON invoice_items(invoice_id)');
-    await db.execute('CREATE INDEX idx_address_templates_company_id ON address_templates(company_id)');
+    await db.execute('''
+      CREATE TABLE articles (
+        id TEXT PRIMARY KEY,
+        description TEXT,
+        quantity REAL,
+        unit TEXT,
+        price REAL,
+        tax_rate REAL,
+        created_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE letters (
+        id TEXT PRIMARY KEY,
+        company_id TEXT,
+        customer_id TEXT,
+        letter_form TEXT,
+        envelope_format TEXT,
+        letter_date TEXT,
+        location TEXT,
+        ref_your TEXT,
+        ref_your_date TEXT,
+        ref_our TEXT,
+        ref_our_date TEXT,
+        subject TEXT,
+        salutation TEXT,
+        body TEXT,
+        closing TEXT,
+        signer_name TEXT,
+        recipient_zusatz TEXT,
+        recipient_name TEXT,
+        recipient_street TEXT,
+        recipient_city TEXT,
+        recipient_country TEXT,
+        show_fold_marks INTEGER DEFAULT 1,
+        show_punch_mark INTEGER DEFAULT 1,
+        status TEXT DEFAULT 'draft',
+        created_at TEXT,
+        updated_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE hives (
+        id TEXT PRIMARY KEY,
+        number INTEGER,
+        name TEXT,
+        qr_id TEXT UNIQUE,
+        queen_year INTEGER,
+        queen_origin TEXT,
+        location TEXT,
+        status TEXT DEFAULT 'aktiv',
+        notes TEXT,
+        created_at TEXT,
+        updated_at TEXT
+      )
+    ''');
+
+    FeedbackService.log('🗄️ SQLite-Schema erstellt (v1)');
   }
 
   // ============ COMPANY OPERATIONS ============
 
   Future<void> insertCompany(CompanyModel company) async {
-    final db = await database;
-    await db.insert(
-      'companies',
-      company.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    try {
+      final db = await database;
+      await db.insert(
+        'companies',
+        company.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      FeedbackService.logDbOperation('INSERT', 'companies', id: company.id);
+    } catch (e) {
+      FeedbackService.logError('insertCompany: $e', context: 'companies');
+      rethrow;
+    }
   }
 
   Future<CompanyModel?> getCompany(String id) async {
     final db = await database;
-    final result = await db.query(
-      'companies',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    final result = await db.query('companies', where: 'id = ?', whereArgs: [id]);
     return result.isNotEmpty ? CompanyModel.fromMap(result.first) : null;
   }
 
   Future<List<CompanyModel>> getAllCompanies() async {
-    final db = await database;
-    final result = await db.query('companies');
-    return result.map((map) => CompanyModel.fromMap(map)).toList();
+    try {
+      final db = await database;
+      final result = await db.query('companies');
+      return result.map((map) => CompanyModel.fromMap(map)).toList();
+    } catch (e) {
+      FeedbackService.logApiCall('/companies', 'GET', error: e.toString());
+      return [];
+    }
   }
 
   Future<void> updateCompany(CompanyModel company) async {
-    final db = await database;
-    await db.update(
-      'companies',
-      company.toMap(),
-      where: 'id = ?',
-      whereArgs: [company.id],
-    );
+    try {
+      final db = await database;
+      await db.update(
+        'companies',
+        company.toMap(),
+        where: 'id = ?',
+        whereArgs: [company.id],
+      );
+      FeedbackService.logDbOperation('UPDATE', 'companies', id: company.id);
+    } catch (e) {
+      FeedbackService.logError('updateCompany: $e', context: 'companies');
+      rethrow;
+    }
   }
 
   Future<void> deleteCompany(String id) async {
     final db = await database;
     await db.delete('companies', where: 'id = ?', whereArgs: [id]);
+    FeedbackService.logDbOperation('DELETE', 'companies', id: id);
   }
 
   // ============ CUSTOMER OPERATIONS ============
 
   Future<void> insertCustomer(CustomerModel customer) async {
-    final db = await database;
-    await db.insert(
-      'customers',
-      customer.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    try {
+      final db = await database;
+      var data = customer.toMap();
+      if (customer.customerNumber == null) {
+        final next = await getNextCustomerNumber();
+        data['customer_number'] = next;
+      }
+      await db.insert(
+        'customers',
+        data,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      FeedbackService.logDbOperation('INSERT', 'customers', id: customer.id);
+    } catch (e) {
+      FeedbackService.logError('insertCustomer: $e', context: 'customers');
+      rethrow;
+    }
+  }
+
+  Future<int> getNextCustomerNumber() async {
+    try {
+      final db = await database;
+      final result = await db.rawQuery(
+          'SELECT MAX(customer_number) as max_num FROM customers');
+      final current = result.first['max_num'] as int?;
+      return (current ?? 0) + 1;
+    } catch (_) {
+      return 1;
+    }
   }
 
   Future<CustomerModel?> getCustomer(String id) async {
     final db = await database;
-    final result = await db.query(
-      'customers',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    final result = await db.query('customers', where: 'id = ?', whereArgs: [id]);
     return result.isNotEmpty ? CustomerModel.fromMap(result.first) : null;
   }
 
   Future<List<CustomerModel>> getAllCustomers() async {
-    final db = await database;
-    final result = await db.query('customers');
-    return result.map((map) => CustomerModel.fromMap(map)).toList();
+    try {
+      final db = await database;
+      final result = await db.query('customers');
+      return result.map((map) => CustomerModel.fromMap(map)).toList();
+    } catch (e) {
+      FeedbackService.logApiCall('/customers', 'GET', error: e.toString());
+      return [];
+    }
   }
 
   Future<void> updateCustomer(CustomerModel customer) async {
@@ -250,31 +318,35 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [customer.id],
     );
+    FeedbackService.logDbOperation('UPDATE', 'customers', id: customer.id);
   }
 
   Future<void> deleteCustomer(String id) async {
     final db = await database;
     await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+    FeedbackService.logDbOperation('DELETE', 'customers', id: id);
   }
 
   // ============ INVOICE OPERATIONS ============
 
   Future<void> insertInvoice(InvoiceModel invoice) async {
-    final db = await database;
-    await db.insert(
-      'invoices',
-      invoice.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    try {
+      final db = await database;
+      await db.insert(
+        'invoices',
+        invoice.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      FeedbackService.logDbOperation('INSERT', 'invoices', id: invoice.id);
+    } catch (e) {
+      FeedbackService.logError('insertInvoice: $e', context: 'invoices');
+      rethrow;
+    }
   }
 
   Future<InvoiceModel?> getInvoice(String id) async {
     final db = await database;
-    final result = await db.query(
-      'invoices',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    final result = await db.query('invoices', where: 'id = ?', whereArgs: [id]);
     return result.isNotEmpty ? InvoiceModel.fromMap(result.first) : null;
   }
 
@@ -300,20 +372,18 @@ class DatabaseService {
   }
 
   Future<List<InvoiceModel>> getAllInvoices() async {
-    final db = await database;
-    final result = await db.query('invoices', orderBy: 'date DESC');
-    return result.map((map) => InvoiceModel.fromMap(map)).toList();
+    try {
+      final db = await database;
+      final result = await db.query('invoices', orderBy: 'date DESC');
+      return result.map((map) => InvoiceModel.fromMap(map)).toList();
+    } catch (e) {
+      FeedbackService.logApiCall('/invoices', 'GET', error: e.toString());
+      return [];
+    }
   }
 
-  Future<List<InvoiceModel>> getUnsyncedInvoices() async {
-    final db = await database;
-    final result = await db.query(
-      'invoices',
-      where: 'synced = ?',
-      whereArgs: [0],
-    );
-    return result.map((map) => InvoiceModel.fromMap(map)).toList();
-  }
+  /// Offline-only → immer leer.
+  Future<List<InvoiceModel>> getUnsyncedInvoices() async => [];
 
   Future<void> updateInvoice(InvoiceModel invoice) async {
     final db = await database;
@@ -323,14 +393,30 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [invoice.id],
     );
+    FeedbackService.logDbOperation('UPDATE', 'invoices', id: invoice.id);
   }
 
   Future<void> deleteInvoice(String id) async {
     final db = await database;
-    // Delete items first
     await db.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [id]);
-    // Then invoice
     await db.delete('invoices', where: 'id = ?', whereArgs: [id]);
+    FeedbackService.logDbOperation('DELETE', 'invoices', id: id);
+  }
+
+  Future<void> updateInvoiceStatus(String id, String status) async {
+    try {
+      final db = await database;
+      await db.update(
+        'invoices',
+        {'status': status},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      FeedbackService.logDbOperation('UPDATE_STATUS', 'invoices', id: id);
+    } catch (e) {
+      FeedbackService.logError('updateInvoiceStatus: $e', context: 'invoices');
+      rethrow;
+    }
   }
 
   Future<String?> getLastInvoiceNumber() async {
@@ -341,7 +427,16 @@ class DatabaseService {
       orderBy: 'created_at DESC',
       limit: 1,
     );
-    return result.isNotEmpty ? result.first['invoice_number'] as String : null;
+    return result.isNotEmpty ? result.first['invoice_number'] as String? : null;
+  }
+
+  Future<List<String>> getAllInvoiceNumbers() async {
+    final db = await database;
+    final result = await db.query('invoices', columns: ['invoice_number']);
+    return result
+        .map((r) => r['invoice_number'] as String)
+        .where((n) => n.isNotEmpty)
+        .toList();
   }
 
   // ============ INVOICE ITEM OPERATIONS ============
@@ -381,15 +476,80 @@ class DatabaseService {
     await db.delete('invoice_items', where: 'id = ?', whereArgs: [id]);
   }
 
+  // ============ ARTICLE TEMPLATE OPERATIONS ============
+
+  Future<List<InvoiceItemModel>> getAllArticles() async {
+    try {
+      final db = await database;
+      final result = await db.query('articles', orderBy: 'created_at DESC');
+      return result.map((map) => InvoiceItemModel.fromMap({
+            ...map,
+            'invoice_id': '',
+          })).toList();
+    } catch (e) {
+      FeedbackService.logError('getAllArticles: $e', context: 'articles');
+      rethrow;
+    }
+  }
+
+  Future<void> insertArticle(InvoiceItemModel article) async {
+    final db = await database;
+    await db.insert(
+      'articles',
+      {
+        'id': article.id,
+        'description': article.description,
+        'quantity': article.quantity,
+        'unit': article.unit,
+        'price': article.price,
+        'tax_rate': article.taxRate,
+        'created_at': article.createdAt.toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    FeedbackService.logDbOperation('INSERT', 'articles', id: article.id);
+  }
+
+  Future<void> updateArticle(InvoiceItemModel article) async {
+    final db = await database;
+    await db.update(
+      'articles',
+      {
+        'description': article.description,
+        'quantity': article.quantity,
+        'unit': article.unit,
+        'price': article.price,
+        'tax_rate': article.taxRate,
+      },
+      where: 'id = ?',
+      whereArgs: [article.id],
+    );
+    FeedbackService.logDbOperation('UPDATE', 'articles', id: article.id);
+  }
+
+  Future<void> deleteArticle(String id) async {
+    final db = await database;
+    await db.delete('articles', where: 'id = ?', whereArgs: [id]);
+    FeedbackService.logDbOperation('DELETE', 'articles', id: id);
+  }
+
   // ============ DESIGN SETTINGS OPERATIONS ============
 
   Future<void> insertDesignSettings(DesignSettingsModel settings) async {
-    final db = await database;
-    await db.insert(
-      'design_settings',
-      settings.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    try {
+      final db = await database;
+      await db.insert(
+        'design_settings',
+        settings.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      FeedbackService.logDbOperation('UPSERT', 'design_settings',
+          id: settings.companyId);
+    } catch (e) {
+      FeedbackService.logError('insertDesignSettings: $e',
+          context: 'design_settings');
+      rethrow;
+    }
   }
 
   Future<DesignSettingsModel?> getDesignSettings(String companyId) async {
@@ -410,6 +570,8 @@ class DatabaseService {
       where: 'company_id = ?',
       whereArgs: [settings.companyId],
     );
+    FeedbackService.logDbOperation('UPDATE', 'design_settings',
+        id: settings.companyId);
   }
 
   // ============ ADDRESS TEMPLATE OPERATIONS ============
@@ -423,7 +585,8 @@ class DatabaseService {
     );
   }
 
-  Future<List<AddressTemplateModel>> getAddressTemplates(String companyId) async {
+  Future<List<AddressTemplateModel>> getAddressTemplates(
+      String companyId) async {
     final db = await database;
     final result = await db.query(
       'address_templates',
@@ -449,6 +612,127 @@ class DatabaseService {
     await db.delete('address_templates', where: 'id = ?', whereArgs: [id]);
   }
 
+  // ============ LETTER OPERATIONS ============
+
+  Future<List<LetterModel>> getAllLetters() async {
+    try {
+      final db = await database;
+      final result = await db.query('letters', orderBy: 'created_at DESC');
+      return result.map((map) => LetterModel.fromMap(map)).toList();
+    } catch (e) {
+      FeedbackService.logError('getAllLetters: $e', context: 'letters');
+      return [];
+    }
+  }
+
+  Future<LetterModel?> getLetter(String id) async {
+    final db = await database;
+    final result = await db.query('letters', where: 'id = ?', whereArgs: [id]);
+    return result.isNotEmpty ? LetterModel.fromMap(result.first) : null;
+  }
+
+  Future<void> insertLetter(LetterModel letter) async {
+    final db = await database;
+    await db.insert(
+      'letters',
+      letter.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    FeedbackService.logDbOperation('INSERT', 'letters', id: letter.id);
+  }
+
+  Future<void> updateLetter(LetterModel letter) async {
+    final db = await database;
+    await db.update(
+      'letters',
+      letter.toMap(),
+      where: 'id = ?',
+      whereArgs: [letter.id],
+    );
+    FeedbackService.logDbOperation('UPDATE', 'letters', id: letter.id);
+  }
+
+  Future<void> deleteLetter(String id) async {
+    final db = await database;
+    await db.delete('letters', where: 'id = ?', whereArgs: [id]);
+    FeedbackService.logDbOperation('DELETE', 'letters', id: id);
+  }
+
+  Future<void> updateLetterStatus(String id, String status) async {
+    final db = await database;
+    await db.update(
+      'letters',
+      {'status': status},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // ============ HIVE OPERATIONS (Imkerei) ============
+
+  Future<List<HiveModel>> getAllHives() async {
+    try {
+      final db = await database;
+      final result = await db.query('hives', orderBy: 'number ASC');
+      return result.map((m) => HiveModel.fromMap(m)).toList();
+    } catch (e) {
+      FeedbackService.logError('getAllHives: $e', context: 'hives');
+      return [];
+    }
+  }
+
+  Future<HiveModel?> getHive(String id) async {
+    final db = await database;
+    final result = await db.query('hives', where: 'id = ?', whereArgs: [id]);
+    return result.isNotEmpty ? HiveModel.fromMap(result.first) : null;
+  }
+
+  Future<HiveModel?> getHiveByQrId(String qrId) async {
+    final db = await database;
+    final result =
+        await db.query('hives', where: 'qr_id = ?', whereArgs: [qrId]);
+    return result.isNotEmpty ? HiveModel.fromMap(result.first) : null;
+  }
+
+  Future<void> insertHive(HiveModel hive) async {
+    final db = await database;
+    await db.insert(
+      'hives',
+      hive.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    FeedbackService.logDbOperation('INSERT', 'hives', id: hive.id);
+  }
+
+  Future<void> updateHive(HiveModel hive) async {
+    final db = await database;
+    await db.update(
+      'hives',
+      hive.toMap(),
+      where: 'id = ?',
+      whereArgs: [hive.id],
+    );
+    FeedbackService.logDbOperation('UPDATE', 'hives', id: hive.id);
+  }
+
+  Future<void> deleteHive(String id) async {
+    final db = await database;
+    await db.delete('hives', where: 'id = ?', whereArgs: [id]);
+    FeedbackService.logDbOperation('DELETE', 'hives', id: id);
+  }
+
+  Future<int> getNextHiveNumber() async {
+    try {
+      final db = await database;
+      final result =
+          await db.rawQuery('SELECT MAX(number) as max_num FROM hives');
+      final current = result.first['max_num'] as int?;
+      return (current ?? 0) + 1;
+    } catch (_) {
+      return 1;
+    }
+  }
+
   // ============ UTILITY OPERATIONS ============
 
   Future<void> clearAllData() async {
@@ -459,11 +743,16 @@ class DatabaseService {
     await db.delete('address_templates');
     await db.delete('design_settings');
     await db.delete('companies');
+    await db.delete('letters');
+    await db.delete('hives');
+    await db.delete('articles');
+    FeedbackService.log('🗄️ Alle Daten gelöscht');
   }
 
   Future<void> closeDatabase() async {
-    if (_database != null) {
-      await _database!.close();
+    final db = _database;
+    if (db != null) {
+      await db.close();
       _database = null;
     }
   }

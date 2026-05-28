@@ -1,11 +1,14 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:vector_math/vector_math_64.dart' show Matrix4;
 import 'package:intl/intl.dart';
 import '../models/models.dart';
+import '../widgets/invoice_layout_canvas.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  PDF SERVICE — generiert professionelle DIN-A4-Rechnungen
-//  Ähnlich wie HTML-Referenz: Falzmarken, Header-Text, Bankinfos
+//  WYSIWYG: Nutzt layout_json aus DesignSettings für Positionen
 // ═══════════════════════════════════════════════════════════════
 
 class PdfService {
@@ -22,138 +25,256 @@ class PdfService {
     required List<InvoiceItemModel> items,
     required DesignSettingsModel designSettings,
   }) async {
-    final pdf = pw.Document();
+    // Roboto-Font laden (Unicode-fähig, kennt €)
+    final base = await PdfGoogleFonts.robotoRegular();
+    final bold = await PdfGoogleFonts.robotoBold();
+    final italic = await PdfGoogleFonts.robotoItalic();
+
+    // Logo + Header-Bild laden (falls URL gesetzt)
+    pw.ImageProvider? logoImg;
+    pw.ImageProvider? headerImg;
+    try {
+      if (designSettings.logoUrl != null &&
+          designSettings.logoUrl!.isNotEmpty) {
+        logoImg = await networkImage(designSettings.logoUrl!);
+      }
+    } catch (_) {}
+    try {
+      if (designSettings.topHeaderUrl != null &&
+          designSettings.topHeaderUrl!.isNotEmpty) {
+        headerImg = await networkImage(designSettings.topHeaderUrl!);
+      }
+    } catch (_) {}
+
+    // Layout-Positionen aus JSON (oder Default)
+    final layout = InvoiceLayoutCanvas.decodeLayout(designSettings.layoutJson);
+
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: base,
+        bold: bold,
+        italic: italic,
+      ),
+    );
 
     pdf.addPage(
-      pw.MultiPage(
+      pw.Page(
         pageFormat: PdfPageFormat.a4,
         margin: pw.EdgeInsets.zero,
-        header: (ctx) => _buildPageHeader(company, invoice, designSettings),
-        footer: (ctx) => _buildFooter(invoice, company, ctx),
-        build: (ctx) => [
-          pw.Padding(
-            padding: const pw.EdgeInsets.symmetric(horizontal: 20),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.SizedBox(height: 10),
-                _buildCustomerSection(customer),
-                pw.SizedBox(height: 8),
-                if (invoice.additionalInfo != null &&
-                    invoice.additionalInfo!.isNotEmpty) ...[
-                  _buildAdditionalInfo(invoice.additionalInfo!),
-                  pw.SizedBox(height: 10),
-                ],
+        build: (ctx) {
+          return pw.Stack(
+            children: [
+              // DIN 5008 Falz- und Lochmarken (kurze Striche links)
+              ..._buildDinFoldMarks(),
+
+              // ── Header-Bild ──
+              if (headerImg != null)
+                _positioned(
+                  layout['header_image'],
+                  pw.Transform(
+                    alignment: pw.Alignment.center,
+                    transform: _flipMatrix(
+                        layout['header_image']?.flipH ?? designSettings.headerFlipH,
+                        layout['header_image']?.flipV ?? designSettings.headerFlipV),
+                    child: pw.Image(headerImg, fit: pw.BoxFit.fill),
+                  ),
+                ),
+
+              // ── Logo ──
+              if (logoImg != null)
+                _positioned(
+                  layout['logo'],
+                  pw.Transform(
+                    alignment: pw.Alignment.center,
+                    transform: _flipMatrix(
+                        layout['logo']?.flipH ?? designSettings.logoFlipH,
+                        layout['logo']?.flipV ?? designSettings.logoFlipV),
+                    child: pw.Image(logoImg, fit: pw.BoxFit.fill),
+                  ),
+                ),
+
+              // ── Firmenname-Überschrift ──
+              _positionedClamped(
+                layout['company_header'],
+                pw.Text(
+                  company.name,
+                  softWrap: false,
+                  overflow: pw.TextOverflow.clip,
+                  style: pw.TextStyle(
+                    fontSize: designSettings.headerTextSize.toDouble(),
+                    fontWeight: pw.FontWeight.bold,
+                    color: _parseColor(designSettings.headerTextColor),
+                  ),
+                ),
+              ),
+
+              // ── Absender / Rücksendeangabe (DIN 5008 Form B) ──
+              // Einzeilige Mini-Zeile in der Rücksendezone (17.7mm hoch),
+              // 7pt mit Unterstreichung. Kein Firmenname.
+              _positionedClamped(
+                layout['company_address'],
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  mainAxisSize: pw.MainAxisSize.min,
+                  children: [
+                    pw.Container(
+                      padding: const pw.EdgeInsets.only(bottom: 2),
+                      decoration: const pw.BoxDecoration(
+                        border: pw.Border(
+                          bottom: pw.BorderSide(
+                              color: PdfColors.grey700, width: 0.4),
+                        ),
+                      ),
+                      child: pw.Text(
+                        '${company.name} · ${company.street} · ${company.zipcode} ${company.city}',
+                        style: const pw.TextStyle(fontSize: 7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // ── Empfänger ──
+              _positionedClamped(
+                layout['customer_address'],
+                _buildCustomerSection(customer, invoice),
+              ),
+
+              // ── Rechnungs-Meta ──
+              _positionedClamped(
+                layout['invoice_meta'],
                 _buildInvoiceInfo(invoice),
-                pw.SizedBox(height: 20),
-                _buildItemsTable(items, invoice),
-                pw.SizedBox(height: 16),
-                _buildSummary(invoice),
-                pw.SizedBox(height: 24),
-                _buildBankInfo(company),
-                pw.SizedBox(height: 30),
-              ],
-            ),
-          ),
-        ],
+              ),
+
+              // ── Positionen-Tabelle ──
+              _positionedClamped(
+                layout['items_table'],
+                _buildItemsTable(items, invoice,
+                    tableHeaderColor: _parseColor(designSettings.tableHeaderColor)),
+              ),
+
+              // ── Zusatzinformationen ──
+              if (invoice.additionalInfo != null &&
+                  invoice.additionalInfo!.isNotEmpty)
+                _positionedClamped(
+                  layout['additional_info'],
+                  pw.Text(
+                    invoice.additionalInfo!,
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      color: PdfColors.grey700,
+                      fontStyle: pw.FontStyle.italic,
+                    ),
+                  ),
+                ),
+
+              // ── Zusammenfassung ──
+              _positionedClamped(
+                layout['summary'],
+                _buildSummary(invoice, items),
+              ),
+
+              // ── Bankdaten (nur Rechnung, nicht Angebot) ──
+              _positionedClamped(
+                layout['bank_info'],
+                invoice.isQuote ? pw.SizedBox() : _buildBankInfo(company),
+              ),
+
+              // ── Fußzeile (DIN 5008 Kommunikationsangaben) ──
+              _positionedClamped(
+                layout['footer'],
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                  children: [
+                    pw.Container(
+                      decoration: const pw.BoxDecoration(
+                        border: pw.Border(
+                          top: pw.BorderSide(
+                              color: PdfColors.grey400, width: 0.4),
+                        ),
+                      ),
+                      padding: const pw.EdgeInsets.only(top: 3),
+                      // DIN 5008: nur briefwichtige Daten. Tel/Mail entfernt.
+                      child: pw.Text(company.name,
+                          style: pw.TextStyle(
+                              fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text(
+                          [
+                            if (company.website != null &&
+                                company.website!.isNotEmpty)
+                              company.website!,
+                            if (company.taxId != null &&
+                                company.taxId!.isNotEmpty)
+                              'St-Nr: ${company.taxId}',
+                          ].join(' · '),
+                          style: const pw.TextStyle(fontSize: 7),
+                        ),
+                        pw.Text(
+                            '${invoice.isQuote ? 'Angebot' : 'Rechnung'} ${invoice.invoiceNumber} · Seite ${ctx.pageNumber}/${ctx.pagesCount}',
+                            style: const pw.TextStyle(fontSize: 7)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
 
     return pdf;
   }
 
-  // ── Seiten-Header ────────────────────────────────────────────
-  pw.Widget _buildPageHeader(
-    CompanyModel company,
-    InvoiceModel invoice,
-    DesignSettingsModel designSettings,
-  ) {
-    final headerColor = _parseColor(designSettings.headerTextColor);
-    final textSize = designSettings.headerTextSize.toDouble();
-
-    return pw.Stack(
-      children: [
-        // DIN 5008 Falzmarken (links, 7mm lang)
-        ..._buildDinFoldMarks(),
-
-        // Eigentlicher Header-Inhalt (mit Padding damit Falzmarken sichtbar)
-        pw.Padding(
-          padding: const pw.EdgeInsets.fromLTRB(20, 10, 20, 10),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  // Firmenname + Adresse links
-                  pw.Expanded(
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        // Header-Text (Firmenname über Adresse)
-                        if (invoice.headerText != null &&
-                            invoice.headerText!.isNotEmpty)
-                          pw.Text(
-                            invoice.headerText!,
-                            style: pw.TextStyle(
-                              fontSize: invoice.headerTextSize
-                                  .clamp(10, 30)
-                                  .toDouble(),
-                              fontWeight: pw.FontWeight.bold,
-                              color: headerColor,
-                            ),
-                          )
-                        else
-                          pw.Text(
-                            company.name,
-                            style: pw.TextStyle(
-                              fontSize: textSize,
-                              fontWeight: pw.FontWeight.bold,
-                              color: headerColor,
-                            ),
-                          ),
-                        pw.SizedBox(height: 4),
-                        pw.Text(
-                          '${company.street} · ${company.zipcode} ${company.city}',
-                          style: const pw.TextStyle(fontSize: 9),
-                        ),
-                        pw.Text(
-                          'Tel: ${company.phone}'
-                          '${company.email.isNotEmpty ? ' · ${company.email}' : ''}',
-                          style: const pw.TextStyle(fontSize: 9),
-                        ),
-                        if (company.website != null &&
-                            company.website!.isNotEmpty)
-                          pw.Text(
-                            company.website!,
-                            style: const pw.TextStyle(fontSize: 9),
-                          ),
-                        if (company.taxId != null && company.taxId!.isNotEmpty)
-                          pw.Text(
-                            'St-Nr: ${company.taxId}',
-                            style: const pw.TextStyle(fontSize: 9),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 6),
-              pw.Container(
-                height: 2,
-                color: headerColor,
-              ),
-            ],
-          ),
-        ),
-      ],
+  // ── Absolut positioniertes Element laut Layout ───────────────
+  pw.Widget _positioned(ElementPos? pos, pw.Widget child) {
+    final p = pos ?? const ElementPos(x: 20, y: 20, w: 200, h: 50);
+    return pw.Positioned(
+      left: p.x,
+      top: p.y,
+      child: pw.SizedBox(
+        width: p.w,
+        height: p.h,
+        child: child,
+      ),
     );
   }
 
-  // ── DIN 5008 Falzmarken ──────────────────────────────────────
+  // Wie _positioned aber x darf Lochrand (55pt ≈ 17mm+Puffer) nicht unterschreiten
+  pw.Widget _positionedClamped(ElementPos? pos, pw.Widget child) {
+    const holeMarginPt = 55.0; // 17mm + Sicherheitsabstand
+    final p = pos ?? const ElementPos(x: 55, y: 20, w: 200, h: 50);
+    final clampedX = p.x < holeMarginPt ? holeMarginPt : p.x;
+    // Breite anpassen damit rechter Rand nicht rauswächst
+    final clampedW = p.w - (clampedX - p.x);
+    return pw.Positioned(
+      left: clampedX,
+      top: p.y,
+      child: pw.SizedBox(
+        width: clampedW,
+        height: p.h,
+        child: child,
+      ),
+    );
+  }
+
+  // ── Flip-Matrix für PDF Transform ────────────────────────────
+  Matrix4 _flipMatrix(bool h, bool v) {
+    return Matrix4.diagonal3Values(
+        h ? -1.0 : 1.0, v ? -1.0 : 1.0, 1.0);
+  }
+
+  // ── DIN 5008 Falz- und Lochmarken ────────────────────────────
+  // Kurze solide Striche am linken Rand:
+  //  - Falzmarke 1: 105mm (1. Falz für Briefumschlag)
+  //  - Lochmarke:  148.5mm (Mittelpunkt für Lochung)
+  //  - Falzmarke 2: 210mm (2. Falz)
   List<pw.Widget> _buildDinFoldMarks() {
-    // 105mm und 210mm von oben, 7mm lang, links am Rand
     const markWidth = 7.0 * PdfPageFormat.mm;
     const markThickness = 0.5;
     const markColor = PdfColors.grey400;
@@ -170,7 +291,7 @@ class PdfService {
       ),
       pw.Positioned(
         left: 0,
-        top: 148.5 * PdfPageFormat.mm, // Lochmarke (länger)
+        top: 148.5 * PdfPageFormat.mm,
         child: pw.Container(
           width: markWidth * 1.5,
           height: markThickness,
@@ -190,52 +311,32 @@ class PdfService {
   }
 
   // ── Empfänger-Adresse ────────────────────────────────────────
-  pw.Widget _buildCustomerSection(CustomerModel customer) {
+  pw.Widget _buildCustomerSection(CustomerModel customer, InvoiceModel invoice) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          'Rechnungsadresse',
-          style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
-        ),
-        pw.SizedBox(height: 3),
-        pw.Text(
-          customer.name,
-          style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
-        ),
+        pw.Text(customer.name, style: const pw.TextStyle(fontSize: 11)),
         if (customer.street.isNotEmpty)
-          pw.Text(customer.street, style: const pw.TextStyle(fontSize: 10)),
+          pw.Text(customer.street, style: const pw.TextStyle(fontSize: 11)),
         if (customer.zipcode.isNotEmpty || customer.city.isNotEmpty)
           pw.Text('${customer.zipcode} ${customer.city}',
-              style: const pw.TextStyle(fontSize: 10)),
+              style: const pw.TextStyle(fontSize: 11)),
       ],
     );
   }
 
-  // ── Zusatzinformationen ──────────────────────────────────────
-  pw.Widget _buildAdditionalInfo(String info) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(8),
-      decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey300),
-        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-      ),
-      child: pw.Text(info, style: const pw.TextStyle(fontSize: 9)),
-    );
-  }
-
-  // ── Rechnungsdaten ───────────────────────────────────────────
+  // ── Rechnungs-/Angebotsdaten ─────────────────────────────────
   pw.Widget _buildInvoiceInfo(InvoiceModel invoice) {
-    return pw.Row(
+    final isQuote = invoice.isQuote;
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            _infoRow('Rechnungsnummer:', invoice.invoiceNumber),
-            _infoRow('Rechnungsdatum:', _formatDate(invoice.date)),
-            _infoRow('Zahlbar bis:', _formatDate(invoice.dueDate)),
-          ],
-        ),
+        _infoRow(isQuote ? 'Angebotsnummer:' : 'Rechnungsnummer:',
+            invoice.invoiceNumber),
+        _infoRow(isQuote ? 'Angebotsdatum:' : 'Rechnungsdatum:',
+            _formatDate(invoice.date)),
+        _infoRow(isQuote ? 'Gültig bis:' : 'Zahlbar bis:',
+            _formatDate(invoice.dueDate)),
       ],
     );
   }
@@ -243,8 +344,9 @@ class PdfService {
   // ── Positionen-Tabelle ───────────────────────────────────────
   pw.Widget _buildItemsTable(
     List<InvoiceItemModel> items,
-    InvoiceModel invoice,
-  ) {
+    InvoiceModel invoice, {
+    PdfColor? tableHeaderColor,
+  }) {
     final priceLabel =
         invoice.isGrossPrice ? 'Preis (Brutto)' : 'Preis (Netto)';
     final totalLabel =
@@ -269,7 +371,7 @@ class PdfService {
         fontSize: 9,
         color: PdfColors.white,
       ),
-      headerDecoration: pw.BoxDecoration(color: _peach),
+      headerDecoration: pw.BoxDecoration(color: tableHeaderColor ?? _peach),
       cellHeight: 22,
       cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
       cellAlignment: pw.Alignment.centerLeft,
@@ -284,46 +386,54 @@ class PdfService {
   }
 
   // ── Zusammenfassung ──────────────────────────────────────────
-  pw.Widget _buildSummary(InvoiceModel invoice) {
-    return pw.Align(
-      alignment: pw.Alignment.centerRight,
-      child: pw.SizedBox(
-        width: 200,
-        child: pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.end,
-          children: [
-            _summaryRow(
-                invoice.isGrossPrice ? 'Netto (berechnet):' : 'Netto:',
-                '${invoice.subtotal.toStringAsFixed(2)} €'),
-            _summaryRow(
-                'MwSt. (${invoice.taxRate.toStringAsFixed(0)}%):',
-                '${invoice.vat.toStringAsFixed(2)} €'),
-            pw.SizedBox(height: 4),
-            pw.Container(
-              padding: const pw.EdgeInsets.symmetric(vertical: 5),
-              decoration: const pw.BoxDecoration(
-                border: pw.Border(
-                  top: pw.BorderSide(color: PdfColors.black, width: 1),
-                  bottom: pw.BorderSide(color: PdfColors.black, width: 2),
-                ),
-              ),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Gesamtbetrag:',
-                      style: pw.TextStyle(
-                          fontSize: 11, fontWeight: pw.FontWeight.bold)),
-                  pw.Text(
-                    '${invoice.total.toStringAsFixed(2)} €',
-                    style: pw.TextStyle(
-                        fontSize: 11, fontWeight: pw.FontWeight.bold),
-                  ),
-                ],
-              ),
+  pw.Widget _buildSummary(InvoiceModel invoice, List<InvoiceItemModel> items) {
+    // Netto + MwSt pro Steuersatz berechnen
+    final byRate = <double, Map<String, double>>{};
+    for (final item in items) {
+      final itemNet = invoice.isGrossPrice
+          ? item.total / (1 + item.taxRate / 100)
+          : item.total;
+      final itemVat = itemNet * (item.taxRate / 100);
+      byRate[item.taxRate] ??= {'netto': 0, 'vat': 0};
+      byRate[item.taxRate]!['netto'] = byRate[item.taxRate]!['netto']! + itemNet;
+      byRate[item.taxRate]!['vat'] = byRate[item.taxRate]!['vat']! + itemVat;
+    }
+    final sortedRates = byRate.keys.toList()..sort();
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.end,
+      children: [
+        _summaryRow(
+            invoice.isGrossPrice ? 'Netto (berechnet):' : 'Netto:',
+            '${invoice.subtotal.toStringAsFixed(2)} €'),
+        ...sortedRates.map((rate) => _summaryRow(
+              'MwSt. (${_formatTaxRate(rate)}%):',
+              '${byRate[rate]!['vat']!.toStringAsFixed(2)} €',
+            )),
+        pw.SizedBox(height: 4),
+        pw.Container(
+          padding: const pw.EdgeInsets.symmetric(vertical: 5),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              top: pw.BorderSide(color: PdfColors.black, width: 1),
+              bottom: pw.BorderSide(color: PdfColors.black, width: 2),
             ),
-          ],
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('Gesamtbetrag:',
+                  style: pw.TextStyle(
+                      fontSize: 11, fontWeight: pw.FontWeight.bold)),
+              pw.Text(
+                '${invoice.total.toStringAsFixed(2)} €',
+                style: pw.TextStyle(
+                    fontSize: 11, fontWeight: pw.FontWeight.bold),
+              ),
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -334,7 +444,7 @@ class PdfService {
     if (!hasBank && !hasPaypal) return pw.SizedBox();
 
     return pw.Container(
-      padding: const pw.EdgeInsets.all(10),
+      padding: const pw.EdgeInsets.all(8),
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: PdfColors.grey300),
         borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
@@ -365,33 +475,6 @@ class PdfService {
             pw.Text('PayPal: ${company.paypal}',
                 style: const pw.TextStyle(fontSize: 9)),
           ],
-        ],
-      ),
-    );
-  }
-
-  // ── Footer ───────────────────────────────────────────────────
-  pw.Widget _buildFooter(
-    InvoiceModel invoice,
-    CompanyModel company,
-    pw.Context ctx,
-  ) {
-    return pw.Container(
-      margin: const pw.EdgeInsets.fromLTRB(20, 5, 20, 10),
-      padding: const pw.EdgeInsets.only(top: 5),
-      decoration: const pw.BoxDecoration(
-        border: pw.Border(
-          top: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-        ),
-      ),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Text(company.name, style: const pw.TextStyle(fontSize: 8)),
-          pw.Text('Rechnung ${invoice.invoiceNumber}',
-              style: const pw.TextStyle(fontSize: 8)),
-          pw.Text('Seite ${ctx.pageNumber} von ${ctx.pagesCount}',
-              style: const pw.TextStyle(fontSize: 8)),
         ],
       ),
     );
@@ -431,6 +514,11 @@ class PdfService {
 
   String _formatNumber(double n) =>
       n == n.truncateToDouble() ? n.toInt().toString() : n.toString();
+
+  String _formatTaxRate(double rate) {
+    if (rate == rate.truncateToDouble()) return rate.toInt().toString();
+    return rate.toString().replaceAll('.', ',');
+  }
 
   PdfColor _parseColor(String hexColor) {
     try {

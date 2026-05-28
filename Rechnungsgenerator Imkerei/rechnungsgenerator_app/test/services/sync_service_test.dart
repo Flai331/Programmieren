@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rechnungsgenerator_app/services/services.dart';
+import 'package:beebrain/services/services.dart';
 
 void main() {
-  group('SyncService Tests', () {
+  group('SyncService Tests (no-op stub)', () {
     late SyncService syncService;
 
     setUp(() {
@@ -12,97 +12,43 @@ void main() {
     test('SyncService is singleton', () {
       final instance1 = SyncService();
       final instance2 = SyncService();
-
       expect(identical(instance1, instance2), true);
     });
 
-    test('addToQueue adds operation to sync queue', () {
-      final beforeCount = syncService.pendingSyncCount;
-
-      syncService.addToQueue(
-        operation: 'CREATE',
-        entityType: 'INVOICE',
-        data: {'id': 'inv-001', 'number': 'RG-2026-001'},
-      );
-
-      final afterCount = syncService.pendingSyncCount;
-      expect(afterCount, greaterThan(beforeCount));
-    });
-
-    test('addToQueue with multiple operations', () {
-      final beforeCount = syncService.pendingSyncCount;
-
+    test('pendingSyncCount is always 0 (offline-only)', () {
       syncService.addToQueue(
         operation: 'CREATE',
         entityType: 'INVOICE',
         data: {'id': 'inv-001'},
       );
-
-      syncService.addToQueue(
-        operation: 'CREATE',
-        entityType: 'CUSTOMER',
-        data: {'id': 'cust-001'},
-      );
-
-      final afterCount = syncService.pendingSyncCount;
-      expect(afterCount, greaterThanOrEqualTo(beforeCount + 2));
+      expect(syncService.pendingSyncCount, 0);
     });
 
-    test('pendingSyncCount returns queue size', () {
-      final beforeCount = syncService.pendingSyncCount;
-
-      syncService.addToQueue(
-        operation: 'UPDATE',
-        entityType: 'INVOICE',
-        data: {'id': 'inv-001'},
-      );
-
-      final afterCount = syncService.pendingSyncCount;
-      expect(afterCount, greaterThanOrEqualTo(beforeCount + 1));
+    test('isSyncing is always false', () {
+      expect(syncService.isSyncing, false);
     });
 
-    test('isSyncing getter returns boolean', () {
-      final isSyncing = syncService.isSyncing;
-
-      expect(isSyncing, isA<bool>());
+    test('lastSyncTime is always null', () {
+      expect(syncService.lastSyncTime, isNull);
     });
 
-    test('lastSyncTime getter returns nullable DateTime', () {
-      final lastSyncTime = syncService.lastSyncTime;
-
-      expect(lastSyncTime, anyOf(isNull, isA<DateTime>()));
-    });
-
-    test('addToQueue with different entity types', () {
-      final beforeCount = syncService.pendingSyncCount;
-      final entityTypes = ['INVOICE', 'CUSTOMER', 'COMPANY', 'DESIGN_SETTINGS'];
-
-      for (final entityType in entityTypes) {
-        syncService.addToQueue(
+    test('addToQueue does not throw', () {
+      expect(
+        () => syncService.addToQueue(
           operation: 'CREATE',
-          entityType: entityType,
-          data: {'id': 'test-id'},
-        );
-      }
-
-      final afterCount = syncService.pendingSyncCount;
-      expect(afterCount, greaterThanOrEqualTo(beforeCount + entityTypes.length));
+          entityType: 'INVOICE',
+          data: {'id': 'inv-001'},
+        ),
+        returnsNormally,
+      );
     });
 
-    test('addToQueue with different operations', () {
-      final beforeCount = syncService.pendingSyncCount;
-      final operations = ['CREATE', 'UPDATE', 'DELETE'];
+    test('syncAll completes without error', () async {
+      await expectLater(syncService.syncAll(), completes);
+    });
 
-      for (final operation in operations) {
-        syncService.addToQueue(
-          operation: operation,
-          entityType: 'INVOICE',
-          data: {'id': 'test-id'},
-        );
-      }
-
-      final afterCount = syncService.pendingSyncCount;
-      expect(afterCount, greaterThanOrEqualTo(beforeCount + operations.length));
+    test('clearQueue does not throw', () {
+      expect(() => syncService.clearQueue(), returnsNormally);
     });
   });
 }

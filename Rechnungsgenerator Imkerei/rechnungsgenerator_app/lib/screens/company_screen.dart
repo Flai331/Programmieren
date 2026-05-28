@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../services/services.dart';
 import '../models/models.dart';
 import '../utils/utils.dart';
+import '../widgets/feedback_actions.dart';
 
 class CompanyScreen extends StatefulWidget {
   const CompanyScreen({Key? key}) : super(key: key);
@@ -208,6 +209,7 @@ class _CompanyScreenState extends State<CompanyScreen> {
               ),
             ),
           ),
+          const FeedbackActions(),
         ],
       ),
       body: SingleChildScrollView(

@@ -4,3 +4,6 @@ export 'invoice_model.dart';
 export 'invoice_item_model.dart';
 export 'design_settings_model.dart';
 export 'address_template_model.dart';
+export 'design_template_model.dart';
+export 'letter_model.dart';
+export 'hive_model.dart';

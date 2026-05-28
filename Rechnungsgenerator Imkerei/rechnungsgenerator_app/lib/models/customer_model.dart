@@ -1,5 +1,6 @@
 class CustomerModel {
   final String id;
+  final int? customerNumber;
   final String name;
   final String street;
   final String city;
@@ -11,6 +12,7 @@ class CustomerModel {
 
   CustomerModel({
     required this.id,
+    this.customerNumber,
     required this.name,
     required this.street,
     required this.city,
@@ -24,6 +26,7 @@ class CustomerModel {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'customer_number': customerNumber,
       'name': name,
       'street': street,
       'city': city,
@@ -38,6 +41,7 @@ class CustomerModel {
   factory CustomerModel.fromMap(Map<String, dynamic> map) {
     return CustomerModel(
       id: map['id'] as String,
+      customerNumber: map['customer_number'] as int?,
       name: map['name'] as String,
       street: map['street'] as String,
       city: map['city'] as String,
@@ -53,6 +57,7 @@ class CustomerModel {
 
   CustomerModel copyWith({
     String? id,
+    int? customerNumber,
     String? name,
     String? street,
     String? city,
@@ -64,6 +69,7 @@ class CustomerModel {
   }) {
     return CustomerModel(
       id: id ?? this.id,
+      customerNumber: customerNumber ?? this.customerNumber,
       name: name ?? this.name,
       street: street ?? this.street,
       city: city ?? this.city,
