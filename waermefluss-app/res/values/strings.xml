@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Wärmefluss-Rechner</string>
+    <string name="title_einfach">Einfache Wand</string>
+    <string name="hint_lambda">Wärmeleitfähigkeit λ [W/(m·K)]</string>
+    <string name="hint_dicke">Wanddicke d [m]</string>
+    <string name="hint_t1">Temperatur T₁ [°C]</string>
+    <string name="hint_t2">Temperatur T₂ [°C]</string>
+    <string name="hint_flaeche">Fläche A [m²]</string>
+    <string name="btn_berechnen">Berechnen</string>
+    <string name="btn_reset">Zurücksetzen</string>
+    <string name="label_ergebnis">Ergebnisse</string>
+    <string name="error_input">Bitte alle Felder ausfüllen</string>
+    <string name="error_invalid">Ungültige Eingabe</string>
+</resources>
