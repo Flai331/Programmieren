@@ -36,6 +36,13 @@
 #include <fstream>
 #include <ctime>
 
+// Unter Windows: Konsole auf UTF-8 stellen, damit Umlaute und Sonderzeichen
+// (λ, °C, ₁₂ …) korrekt angezeigt werden. Unter Linux wird dieser Block
+// vom Präprozessor übersprungen.
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 // ─── Datenstrukturen ─────────────────────────────────────────────────────────
 
 struct Material {
@@ -48,6 +55,10 @@ struct Schicht {
     Material material;
     double   dicke;         // [m]
 };
+
+// Kreiszahl π (portabel; PI ist keine Standard-C++-Konstante und fehlt z. B.
+// bei MinGW/Windows ohne zusätzliche Defines).
+constexpr double PI = 3.14159265358979323846;
 
 // ─── Materialdatenbank ───────────────────────────────────────────────────────
 // Richtwerte für λ in W/(m·K) (Bemessungswerte, gerundet).
@@ -487,7 +498,7 @@ void rohr_modus() {
     double R_perL = 0.0;
     double r_inner = ri;
     for (int i = 0; i < n; ++i) {
-        R_perL += std::log(r_aussen[i] / r_inner) / (2.0 * M_PI * mats[i].lambda);
+        R_perL += std::log(r_aussen[i] / r_inner) / (2.0 * PI * mats[i].lambda);
         r_inner = r_aussen[i];
     }
 
@@ -497,8 +508,8 @@ void rohr_modus() {
     if (konv) {
         hi = eingabe_double("  α innen  [W/(m²·K)] (z.B. 8): ", 0.0);
         ha = eingabe_double("  α außen  [W/(m²·K)] (z.B. 23): ", 0.0);
-        R_perL += 1.0 / (2.0 * M_PI * ri * hi);
-        R_perL += 1.0 / (2.0 * M_PI * ra * ha);
+        R_perL += 1.0 / (2.0 * PI * ri * hi);
+        R_perL += 1.0 / (2.0 * PI * ra * ha);
     }
 
     double dT     = Ti - Te;
@@ -605,6 +616,12 @@ void datenbank_anzeigen() {
 // ─── Hauptmenü ───────────────────────────────────────────────────────────────
 
 int main() {
+#ifdef _WIN32
+    // UTF-8-Ausgabe/-Eingabe auf der Windows-Konsole aktivieren.
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
+
     std::cout << "\n";
     trennlinie('=');
     std::cout << "            WÄRMEFLUSS-RECHNER\n";
