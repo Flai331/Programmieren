@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1f2733">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Rettungshunde Theorie-Trainer</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#1f2733;--card:#2c3846;--card2:#33415a;
+  --gold:#f6d365;--orange:#fda085;
+  --ok:#28a745;--err:#dc3545;
+  --text:#e8eaf0;--muted:rgba(255,255,255,.55);
+  --radius:12px;
+}
+body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh}
+.screen{display:none;flex-direction:column;min-height:100vh}
+.screen.active{display:flex}
+.appbar{display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--card);border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;z-index:10}
+.appbar h1{font-size:1.05rem;font-weight:600;flex:1}
+.appbar .back{background:none;border:none;color:var(--text);font-size:1.4rem;cursor:pointer;padding:4px 8px;border-radius:8px}
+.appbar .back:hover{background:rgba(255,255,255,.08)}
+.chip{padding:4px 10px;border-radius:20px;font-size:.75rem;font-weight:600}
+.chip-retry{background:rgba(220,53,69,.25);color:#ff8a95}
+.content{flex:1;padding:16px;max-width:600px;width:100%;margin:0 auto}
+.content.centered{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:calc(100vh - 60px)}
+.card{background:var(--card);border-radius:var(--radius);padding:16px;border:1px solid rgba(255,255,255,.06);margin-bottom:12px}
+.card-clickable{cursor:pointer;transition:background .15s}
+.card-clickable:hover{background:var(--card2)}
+.card-row{display:flex;align-items:center;gap:12px}
+.card-icon{font-size:1.4rem;flex-shrink:0}
+.card-title{font-weight:600;font-size:.95rem}
+.card-sub{font-size:.8rem;color:var(--muted);margin-top:2px}
+.card-arrow{margin-left:auto;color:var(--muted);font-size:1.2rem}
+.btn{width:100%;padding:14px 20px;border:none;border-radius:var(--radius);font-size:1rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-grad{background:linear-gradient(135deg,var(--gold),var(--orange));color:#1a1a1a}
+.btn-grad:hover:not(:disabled){opacity:.88}
+.btn-ok{background:var(--ok);color:#fff}
+.btn-ok:hover:not(:disabled){opacity:.88}
+.btn-sm{padding:10px 16px;font-size:.9rem}
+.progress-bar{height:4px;background:rgba(255,255,255,.1);position:sticky;top:60px;z-index:9}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--orange));transition:width .3s}
+.question-text{font-size:1rem;line-height:1.55;margin-bottom:16px}
+.option{display:flex;align-items:flex-start;gap:12px;padding:13px 14px;background:rgba(255,255,255,.04);border:2px solid rgba(255,255,255,.08);border-radius:10px;cursor:pointer;margin-bottom:8px;transition:background .12s,border-color .12s}
+.option:hover:not(.disabled){background:rgba(255,255,255,.08);border-color:rgba(246,211,101,.35)}
+.option.selected{border-color:var(--gold);background:rgba(246,211,101,.1)}
+.option.correct{border-color:var(--ok)!important;background:rgba(40,167,69,.15)!important}
+.option.wrong{border-color:var(--err)!important;background:rgba(220,53,69,.15)!important}
+.option.disabled{cursor:default}
+.option-letter{font-weight:700;font-size:.85rem;min-width:22px;padding-top:1px;color:var(--muted)}
+.option.selected .option-letter,.option.correct .option-letter{color:var(--gold)}
+.option.wrong .option-letter{color:#ff8a95}
+.option-text{font-size:.9rem;line-height:1.45;flex:1}
+.explanation{background:rgba(246,211,101,.07);border:1px solid rgba(246,211,101,.2);border-radius:10px;padding:13px;margin-top:12px;font-size:.85rem;line-height:1.5;color:rgba(255,255,255,.85)}
+.explanation-label{font-weight:700;color:var(--gold);margin-bottom:4px}
+.result-badge{font-size:3rem;font-weight:800;text-align:center}
+.result-sub{text-align:center;color:var(--muted);margin-top:4px;font-size:.9rem}
+.pass{color:var(--ok)}.fail{color:var(--err)}
+.review-item{margin-bottom:8px;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.06)}
+.review-header{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;background:var(--card)}
+.review-header:hover{background:var(--card2)}
+.review-body{padding:14px;background:rgba(255,255,255,.03);display:none;border-top:1px solid rgba(255,255,255,.06)}
+.review-body.open{display:block}
+.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.dot-ok{background:var(--ok)}.dot-err{background:var(--err)}
+.license-logo{font-size:3.5rem;text-align:center;margin-bottom:10px}
+.license-title{font-size:1.3rem;font-weight:700;text-align:center;margin-bottom:6px}
+.license-sub{color:var(--muted);text-align:center;font-size:.88rem;margin-bottom:28px;line-height:1.5}
+input[type=text]{width:100%;padding:13px 14px;background:var(--card);border:2px solid rgba(255,255,255,.12);border-radius:10px;color:var(--text);font-size:1rem;letter-spacing:.08em;font-family:monospace;outline:none;margin-bottom:12px}
+input[type=text]:focus{border-color:var(--gold)}
+.err-msg{color:#ff8a95;font-size:.85rem;text-align:center;margin-bottom:10px;min-height:1.2em}
+.stats-bar{padding:12px 16px;display:flex;justify-content:space-around;text-align:center;border-top:1px solid rgba(255,255,255,.06)}
+.stats-val{font-size:1.1rem;font-weight:700}
+.stats-label{font-size:.7rem;color:var(--muted);margin-top:2px}
+.timer{font-size:.85rem;color:var(--muted);padding:4px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.12)}
+.timer.warn{color:#ff8a95;border-color:#ff8a95}
+.section-hdr{font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:20px 0 10px}
+.exam-nav{display:flex;gap:10px;padding:16px;background:var(--bg);border-top:1px solid rgba(255,255,255,.06)}
+.exam-nav .btn{flex:1}
+.exam-hero{background:linear-gradient(135deg,rgba(246,211,101,.12),rgba(253,160,133,.12));border:1px solid rgba(246,211,101,.25)}
+.scroll-content{flex:1;overflow-y:auto;padding:16px;max-width:600px;width:100%;margin:0 auto}
+/* Discipline badge */
+.disc-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;border:1px solid rgba(246,211,101,.4);background:rgba(246,211,101,.1);color:var(--gold);font-size:.82rem;font-weight:600;cursor:pointer;margin:0 auto 16px;width:auto}
+.disc-badge:hover{background:rgba(246,211,101,.18)}
+/* Discipline picker overlay */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;align-items:center;justify-content:center}
+.overlay.open{display:flex}
+.modal{background:var(--card);border-radius:var(--radius);padding:24px;width:min(380px,90vw);border:1px solid rgba(255,255,255,.1)}
+.modal-title{font-size:1.1rem;font-weight:700;margin-bottom:16px}
+.disc-option{display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;cursor:pointer;border:2px solid rgba(255,255,255,.06);margin-bottom:8px;transition:background .12s,border-color .12s}
+.disc-option:hover{background:rgba(255,255,255,.05);border-color:rgba(246,211,101,.3)}
+.disc-option.sel{border-color:var(--gold);background:rgba(246,211,101,.1)}
+.disc-radio{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.3);flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.disc-option.sel .disc-radio{border-color:var(--gold)}
+.disc-radio-dot{width:8px;height:8px;border-radius:50%;background:var(--gold);display:none}
+.disc-option.sel .disc-radio-dot{display:block}
+.disc-title{font-weight:600;font-size:.9rem}
+.disc-sub{font-size:.78rem;color:var(--muted);margin-top:2px}
+.modal-actions{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+.btn-text{background:none;border:none;color:var(--muted);cursor:pointer;padding:8px 12px;border-radius:8px;font-size:.9rem}
+.btn-text:hover{background:rgba(255,255,255,.06);color:var(--text)}
+.btn-save{background:linear-gradient(135deg,var(--gold),var(--orange));color:#1a1a1a;border:none;padding:8px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:.9rem}
+/* Safe area (iPhone notch/home bar) */
+.appbar{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+.stats-bar,.exam-nav{padding-bottom:max(12px,env(safe-area-inset-bottom))}
+.scroll-content{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+
+/* Mobile */
+@media(max-width:480px){
+  .appbar h1{font-size:.95rem}
+  .appbar .back{padding:6px}
+  .scroll-content{padding:12px}
+  .card{padding:14px}
+  .option{padding:12px 12px}
+  .option-text{font-size:.88rem}
+  .question-text{font-size:.95rem}
+  .btn{padding:13px 16px;font-size:.95rem}
+  .result-badge{font-size:2.5rem}
+  .section-hdr{margin:16px 0 8px}
+  .disc-badge{font-size:.78rem;padding:4px 12px}
+  .modal{padding:18px}
+}
+/* Prevent text size inflation on iOS */
+body{-webkit-text-size-adjust:100%}
+/* Tap highlight */
+*{-webkit-tap-highlight-color:rgba(246,211,101,.15)}
+a,button,[onclick]{touch-action:manipulation}
+</style>
+</head>
+<body>
+
+<!-- ═══ DISCIPLINE PICKER (overlay modal) ════════════════════════════════ -->
+<div id="disc-overlay" class="overlay">
+  <div class="modal">
+    <div class="modal-title" id="disc-modal-title">Für welche Sparte übst du?</div>
+    <div id="disc-options"></div>
+    <div class="modal-actions">
+      <button class="btn-text" id="disc-cancel" onclick="closeDiscModal()" style="display:none">Abbrechen</button>
+      <button class="btn-save" onclick="saveDisc()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ LICENSE SCREEN ═══════════════════════════════════════════════════ -->
+<div id="screen-license" class="screen active">
+  <div class="content centered">
+    <div class="license-logo">🐕</div>
+    <div class="license-title">Rettungshunde Theorie-Trainer</div>
+    <div class="license-sub">Gib deinen Freischalt-Code ein, um auf alle 192 Prüfungsfragen zuzugreifen.</div>
+    <input type="text" id="license-input" placeholder="XXXXX-XXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="11">
+    <div class="err-msg" id="license-err"></div>
+    <button class="btn btn-grad" onclick="submitLicense()">🔓 Freischalten</button>
+  </div>
+</div>
+
+<!-- ═══ HOME SCREEN ══════════════════════════════════════════════════════ -->
+<div id="screen-home" class="screen">
+  <div class="appbar">
+    <h1>🐕 RH Theorie-Trainer</h1>
+    <button class="back" title="Statistik" onclick="showStats()">📊</button>
+    <button class="back" title="Einstellungen" onclick="showSettingsScreen()">⚙️</button>
+  </div>
+  <div class="scroll-content" id="home-content"></div>
+  <div class="stats-bar" id="home-stats"></div>
+</div>
+
+<!-- ═══ SETTINGS SCREEN ══════════════════════════════════════════════════ -->
+<div id="screen-settings" class="screen">
+  <div class="appbar">
+    <button class="back" onclick="goHome()">←</button>
+    <h1>Einstellungen</h1>
+  </div>
+  <div class="scroll-content" id="settings-content"></div>
+</div>
+
+<!-- ═══ LEARN SESSION ════════════════════════════════════════════════════ -->
+<div id="screen-learn" class="screen">
+  <div class="appbar">
+    <button class="back" onclick="goHome()">←</button>
+    <h1 id="learn-progress-label">0/0</h1>
+    <span class="chip chip-retry" id="learn-retry-chip" style="display:none">Wiederholen</span>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="learn-progress-fill" style="width:0%"></div></div>
+  <div class="scroll-content" id="learn-content"></div>
+  <div style="padding:16px;max-width:600px;width:100%;margin:0 auto;flex-shrink:0">
+    <button class="btn btn-ok" id="learn-check-btn" disabled onclick="checkLearnAnswer()">✓ Antwort prüfen</button>
+    <button class="btn btn-grad" id="learn-next-btn" onclick="nextLearnQuestion()" style="display:none">Weiter →</button>
+  </div>
+</div>
+
+<!-- ═══ EXAM SCREEN ══════════════════════════════════════════════════════ -->
+<div id="screen-exam" class="screen">
+  <div class="appbar">
+    <button class="back" onclick="confirmQuitExam()">←</button>
+    <h1 id="exam-q-label">Frage 1/25</h1>
+    <span class="timer" id="exam-timer">20:00</span>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="exam-progress-fill" style="width:0%"></div></div>
+  <div class="scroll-content" id="exam-content"></div>
+  <div class="exam-nav">
+    <button class="btn btn-grad btn-sm" id="exam-prev-btn" onclick="examPrev()" style="display:none">← Zurück</button>
+    <button class="btn btn-grad btn-sm" id="exam-next-btn" onclick="examNext()">Weiter →</button>
+    <button class="btn btn-ok btn-sm" id="exam-submit-btn" onclick="submitExam()" style="display:none">Abgeben ✓</button>
+  </div>
+</div>
+
+<!-- ═══ EXAM RESULT ══════════════════════════════════════════════════════ -->
+<div id="screen-result" class="screen">
+  <div class="appbar">
+    <button class="back" onclick="goHome()">←</button>
+    <h1>Prüfungsergebnis</h1>
+  </div>
+  <div class="scroll-content" id="result-content"></div>
+</div>
+
+<!-- ═══ STATS SCREEN ════════════════════════════════════════════════════ -->
+<div id="screen-stats" class="screen">
+  <div class="appbar">
+    <button class="back" onclick="goHome()">←</button>
+    <h1>Statistik</h1>
+  </div>
+  <div class="scroll-content" id="stats-content"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════════════════════════════════
+const QUESTIONS = [{"id": 1, "kategorie": "Erste Hilfe", "frage": "Bei einem Menschen stellen Sie eine Bewusstlosigkeit fest. Welches Erkennungszeichen ist zutreffend?", "optionen": [{"letter": "a", "text": "Es sind laute Atemgeräusche zu hören."}, {"letter": "b", "text": "Die Person ist reaktionslos."}, {"letter": "c", "text": "Es ist keinerlei Puls zu fühlen."}, {"letter": "d", "text": "Die Atmung steht still."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 2, "kategorie": "Erste Hilfe", "frage": "Welche Anzeichen weisen bei einem Notfallpatienten am ehesten auf eine Atemstörung hin?", "optionen": [{"letter": "a", "text": "Der Patient klagt über Schmerzen im Nierenbeckenbereich."}, {"letter": "b", "text": "Der Patient klagt über starke Augenschmerzen."}, {"letter": "c", "text": "Bei der Ausatmung des Patienten sind starke Atemgeräusche hörbar."}, {"letter": "d", "text": "Der Patient lässt Urin unter sich."}], "richtig": ["c"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 3, "kategorie": "Erste Hilfe", "frage": "Welche Vorgehensweise ist bei der Überprüfung der Atmung einer bewusstlosen Person die richtige?", "optionen": [{"letter": "a", "text": "Ich versuche der Person sofort Luft in die Lungen zu blasen."}, {"letter": "b", "text": "Sobald ich irgendein Atemgeräusch höre, ist die weitere Überprüfung sofort abzubrechen."}, {"letter": "c", "text": "Ich lege der Person kurz die Hände auf den Brustkorb. Wenn ich dadurch Bewegungen feststelle, brauche ich nicht weiter zu prüfen."}, {"letter": "d", "text": "Ich neige den Kopf nach hinten und hebe gleichzeitig das Kinn an. In dieser Position wird anschlie- ßend die Atmung durch Sehen, Hören und Fühlen überprüft."}], "richtig": ["d"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 4, "kategorie": "Erste Hilfe", "frage": "Was kann beim Tasten des Pulses festgestellt werden?", "optionen": [{"letter": "a", "text": "Der Herzrhythmus."}, {"letter": "b", "text": "Die Atemfrequenz."}, {"letter": "c", "text": "Den genauen Blutdruckwert."}, {"letter": "d", "text": "Die Menge des Blutes im Körper."}], "richtig": ["a"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 5, "kategorie": "Erste Hilfe", "frage": "Welche Ursache kann „primär“ (unmittelbar) eine Störung des Herz-Kreislauf-Systems hervor- rufen?", "optionen": [{"letter": "a", "text": "Eine Infektion des Wurmfortsatzes."}, {"letter": "b", "text": "Ein Herzinfarkt."}, {"letter": "c", "text": "Eine Hepatitis-Erkrankung."}, {"letter": "d", "text": "Ein Darmverschluss."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 6, "kategorie": "Erste Hilfe", "frage": "Welches Anzeichen gibt einen Hinweis auf einen Schock beim Menschen?", "optionen": [{"letter": "a", "text": "Die Person hat hochrote, heiße Haut."}, {"letter": "b", "text": "Der Puls des Patienten ist schnell und nur schwach tastbar."}, {"letter": "c", "text": "Die Person hat sehr trockene Haut."}, {"letter": "d", "text": "Die Person hat eine rosiges Aussehen."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 7, "kategorie": "Erste Hilfe", "frage": "Sie finden eine Person, die sehr lange mit unbedecktem Kopf in der prallen Sonne gelegen hat. Sie vermuten bei ihr einen Sonnenstich. Welches Anzeichen spricht dafür?", "optionen": [{"letter": "a", "text": "Die Person hat einen hochroten, heißen Kopf."}, {"letter": "b", "text": "Bei der Person messe ich eine hohe Körpertemperatur."}, {"letter": "c", "text": "Die Person hat heiße, trockene Körperhaut."}, {"letter": "d", "text": "Die Person klagt über ständigen Harndrang."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 8, "kategorie": "Erste Hilfe", "frage": "Welche Folgen hat es, wenn Sie einen großen Fremdkörper, z.B. einen Ast, aus einer Wunde am Oberschenkel entfernen würden?", "optionen": [{"letter": "a", "text": "Eine Infizierung der Wunde."}, {"letter": "b", "text": "Es kann zu einer lebensbedrohlichen Blutung kommen."}, {"letter": "c", "text": "Die Folge ist eine geringere Blutung aus der Wunde."}, {"letter": "d", "text": "Der Oberschenkel des Patienten kann besser mit einem Verband versorgt werden."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 9, "kategorie": "Erste Hilfe", "frage": "In welcher Reihenfolge führen Sie die Maßnahmen zur Stillung einer lebensbedrohlichen Blu- tung am Unterarm durch?", "optionen": [{"letter": "a", "text": "Hinlegen – Manueller Druck auf die Wunde – Druckverband – Hochlagern – Hochhalten"}, {"letter": "b", "text": "Hinlegen - Hochhalten – Manueller Druck auf die Wunde – Druckverband – Hochlagern"}, {"letter": "c", "text": "Hochhalten – Druckverband – Manueller Druck auf die Wunde – Hochlagern – Hinlegen"}, {"letter": "d", "text": "Hinlegen – Druckverband – Manueller Druck auf die Wunde – Hochhalten – Hochlagern"}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 10, "kategorie": "Erste Hilfe", "frage": "Welches der nachfolgenden Anzeichen ist ein sicheres Anzeichen für einen Knochenbruch?", "optionen": [{"letter": "a", "text": "Eine Schwellung."}, {"letter": "b", "text": "Starke Schmerzen."}, {"letter": "c", "text": "Die Gebrauchsunfähigkeit / Bewegungsunfähigkeit des betroffenen Körperteils."}, {"letter": "d", "text": "Eine Fehlstellung des betroffenen Körperteils."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 11, "kategorie": "Erste Hilfe", "frage": "Welche Überlegungen müssen Sie als Erstes anstellen, bevor Sie eine Rettungsmaßnahme durchführen können?", "optionen": [{"letter": "a", "text": "Habe ich Schutzhandschuhe an?"}, {"letter": "b", "text": "Ist meine Einheit mit ausreichend Einsatzkräften besetzt?"}, {"letter": "c", "text": "Ist ein Notarzt in der Nähe?"}, {"letter": "d", "text": "Besteht Gefahr für mich oder andere Helfer?"}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 12, "kategorie": "Erste Hilfe", "frage": "Wie hoch ist die Ruhepulsfrequenz eines Erwachsenen?", "optionen": [{"letter": "a", "text": "ca. 40–50 Schläge/ min."}, {"letter": "b", "text": "ca. 60–80 Schläge/ min."}, {"letter": "c", "text": "ca. 80–100 Schläge/ min."}, {"letter": "d", "text": "ca. 90–110 Schläge/ min."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 13, "kategorie": "Erste Hilfe", "frage": "Welches Organ reagiert sehr empfindlich auf Sauerstoffmangel?", "optionen": [{"letter": "a", "text": "Magen"}, {"letter": "b", "text": "Gehirn"}, {"letter": "c", "text": "Leber"}, {"letter": "d", "text": "Niere"}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 14, "kategorie": "Erste Hilfe", "frage": "Welches Anzeichen gibt einen Hinweis auf eine Brustkorbverletzung?", "optionen": [{"letter": "a", "text": "Eine abnorme Haltung der Arme."}, {"letter": "b", "text": "Die verletzte Person hat eine Atemstörung."}, {"letter": "c", "text": "Abgang von Stuhl oder Urin."}, {"letter": "d", "text": "Die verletzte Person versucht sich flach hinzulegen."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 15, "kategorie": "Erste Hilfe", "frage": "Welche Lagerung sollte bei einer Verletzung im Bauchbereich angestrebt werden?", "optionen": [{"letter": "a", "text": "Die Beine der betroffenen Person sollten hochgelagert werden."}, {"letter": "b", "text": "Der Oberkörper der betroffenen Person sollten hochgelagert werden."}, {"letter": "c", "text": "Die Beine der betroffenen Person sollten tiefgelagert werden."}, {"letter": "d", "text": "Die Lagerung sollte nach dem Wunsch der betroffenen Person erfolgen (evtl.mit Knierolle und De- cke)."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 16, "kategorie": "Erste Hilfe", "frage": "Welche der aufgezählten Maßnahmen soll nach einer Verätzung im Magen bereich durchge- führt werden?", "optionen": [{"letter": "a", "text": "Der Person keine Flüssigkeit und Getränke zu trinken geben."}, {"letter": "b", "text": "Die Person sofort zum Erbrechen bringen."}, {"letter": "c", "text": "Der Person Flüssigkeit in kleinen Schlucken zu trinken geben, kein Erbrechen auslösen."}, {"letter": "d", "text": "Das vorgefundene Ätzmittel sofort vernichten."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 17, "kategorie": "Erste Hilfe", "frage": "Bei welcher Verletzung / Erkrankung mit Schockanzeichen soll eine Schocklage durchgeführt werden?", "optionen": [{"letter": "a", "text": "Bei starkem Blutverlust."}, {"letter": "b", "text": "Bei einem Herzinfarkt."}, {"letter": "c", "text": "Bei einem Schädel-Hirn-Trauma."}, {"letter": "d", "text": "Bei einer Unterkühlung."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 18, "kategorie": "Erste Hilfe", "frage": "Welche der nachfolgend aufgezählten Maßnahmen dient dem Freihalten der Atemwege?", "optionen": [{"letter": "a", "text": "Die stabile Seitenlage."}, {"letter": "b", "text": "Eine flache Lagerung auf dem Rücken."}, {"letter": "c", "text": "Die Schocklage."}, {"letter": "d", "text": "Die Fritsch`schen Lagerung."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 19, "kategorie": "Erste Hilfe", "frage": "Welchen Rhythmus wenden Sie bei der HLW an?", "optionen": [{"letter": "a", "text": "30 mal beatmen, 2 mal drücken"}, {"letter": "b", "text": "15 mal drücken, 2 mal beatmen"}, {"letter": "c", "text": "15 mal beatmen, 2 mal drücken"}, {"letter": "d", "text": "30 mal drücken, 2 mal beatmen"}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 20, "kategorie": "Erste Hilfe", "frage": "Eine verletzte Person ist bewusstlos und die Atmung ist ausreichend. Welche der nachfolgen- den Maßnahmen muss durchgeführt werden?", "optionen": [{"letter": "a", "text": "Patient in Schocklage legen."}, {"letter": "b", "text": "Patient auf den Rücken legen."}, {"letter": "c", "text": "Vorgefundene Position des Patienten wegen evtl. Knochenbrüche belassen."}, {"letter": "d", "text": "Patient in die stabile Seitenlage legen."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 21, "kategorie": "Erste Hilfe", "frage": "Welche der genannten Maßnahmen führen Sie bei großflächiger Verbrennung von über 20 % der Körperoberfläche durch?", "optionen": [{"letter": "a", "text": "Die verbrannte Haut entfernen."}, {"letter": "b", "text": "Kühlende Salben auftragen."}, {"letter": "c", "text": "Ggf. Feuer löschen, betroffene Person ansprechen (Prüfung des Bewusstseins), Notruf veranlassen bzw. absetzen."}, {"letter": "d", "text": "Betroffenen sofort zum Hausarzt schicken."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 22, "kategorie": "Erste Hilfe", "frage": "Welche Lagerung bevorzugen Sie bei einer ansprechbaren verletzten Person, die schwere Atemnot hat?", "optionen": [{"letter": "a", "text": "Verletzte Person in Seitenlage bringen."}, {"letter": "b", "text": "Verletzte Person flach auf den Rücken legen."}, {"letter": "c", "text": "Verletzte Person flach mit einer Knierolle lagern."}, {"letter": "d", "text": "Verletzte Person liegend mit erhöhtem Oberkörper (halbsitzend) lagern."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 23, "kategorie": "Erste Hilfe", "frage": "Sie finden eine reglose verletzte Person. Welche Maßnahmen ergreifen Sie zuerst?", "optionen": [{"letter": "a", "text": "Eine Pupillenkontrolle."}, {"letter": "b", "text": "Eine Blutdruckkontrolle."}, {"letter": "c", "text": "Die Überprüfung der Atmung."}, {"letter": "d", "text": "Anschauen, ansprechen, anfassen, Überprüfung der Atmung und ggf. Notruf veranlassen bzw. abset- zen."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 24, "kategorie": "Erste Hilfe", "frage": "Bei welchem lebensbedrohlichen Zustand müssen Sie in erster Linie mit dem Einatmen von Fremdkörpern (Aspiration) rechnen?", "optionen": [{"letter": "a", "text": "Bei Bewusstlosigkeit."}, {"letter": "b", "text": "Bei einer arteriellen Blutung."}, {"letter": "c", "text": "Bei sogenanntem „akutem Bauch“."}, {"letter": "d", "text": "Bei einem Herzinfarkt."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 25, "kategorie": "Erste Hilfe", "frage": "Sie finden eine Person in nasser Kleidung, mit blau verfärbten Lippen und verlangsamter At- mung. Wie gehen Sie vor?", "optionen": [{"letter": "a", "text": "Die betroffene Person in eine Decke packen."}, {"letter": "b", "text": "Die Kleidung ausziehen und die betroffene Person in eine Decke packen."}, {"letter": "c", "text": "Die betroffene Person in eine Decke packen und einen heißen Grog zum Trinken geben."}, {"letter": "d", "text": "Die betroffene Person zur Bewegung animieren und ihm warme und zuckerhaltige Getränke geben."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 26, "kategorie": "Erste Hilfe", "frage": "Eine Person ist im Gelände einen Abhang hinuntergestürzt. Die verletzte Person hat einen Schock und keine Wirbelsäulenverletzung, evtl. einen Knöchelbruch und klagt über Atemnot mit Brustschmerzen. Wie lagern Sie diese Person bis zum Eintreffen des Rettungsdienstes?", "optionen": [{"letter": "a", "text": "Die Person in Seitenlage lagern."}, {"letter": "b", "text": "Die Person am Boden liegend mit erhöhtem Oberkörper lagern."}, {"letter": "c", "text": "Die Person in Schocklage bringen."}, {"letter": "d", "text": "Die Person auf keinen Fall bewegen."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 27, "kategorie": "Erste Hilfe", "frage": "Welche Lagerung bezeichnet man als Schocklagerung?", "optionen": [{"letter": "a", "text": "Rückenlagerung mit Knierolle."}, {"letter": "b", "text": "Flachlagerung mit erhöhtem Oberkörper."}, {"letter": "c", "text": "Flachlagerung mit erhöhten Beinen."}, {"letter": "d", "text": "Seitenlagerung mit angezogenen Beinen."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 28, "kategorie": "Erste Hilfe", "frage": "Welcher Begriff / Umstand gehört nicht zur HLW?", "optionen": [{"letter": "a", "text": "Harte Unterlage"}, {"letter": "b", "text": "Atemstillstand"}, {"letter": "c", "text": "Kreislaufstillstand"}, {"letter": "d", "text": "Oberkörper Hochlagerung"}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 29, "kategorie": "Erste Hilfe", "frage": "Eine Person hat eine Schädel-Hirn-Verletzung erlitten. Sie ist bei Bewusstsein und die Atmung ist ausreichend vorhanden. Wie soll die verletzte Person gelagert werden?", "optionen": [{"letter": "a", "text": "Die Person in Rückenlage bringen."}, {"letter": "b", "text": "Die Person mit erhöhtem Oberkörper lagern."}, {"letter": "c", "text": "Die Person flach in der Seitenlage lagern."}, {"letter": "d", "text": "Die Person in die Schocklage bringen."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 30, "kategorie": "Erste Hilfe", "frage": "Welche Maßnahme ist vordringlich bei einer offenen Fraktur durchzuführen?", "optionen": [{"letter": "a", "text": "Den Bruch wieder einrichten."}, {"letter": "b", "text": "Den Patienten in Schocklage legen."}, {"letter": "c", "text": "Die Wunden möglichst keimfrei bedecken."}, {"letter": "d", "text": "Eine Infusion anlegen."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 31, "kategorie": "Erste Hilfe", "frage": "Welches der nachfolgend genannten Verbandmittel ist nicht steril verpackt und darf nach dem Auspacken nicht direkt auf eine Wunde gebracht werden?", "optionen": [{"letter": "a", "text": "Verpackte Zellstoff-Mull-Kompresse."}, {"letter": "b", "text": "Verpacktes Verbandpäckchen."}, {"letter": "c", "text": "Verpacktes Verbandtuch."}, {"letter": "d", "text": "Verpacktes Dreiecktuch."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 32, "kategorie": "Erste Hilfe", "frage": "Nach einem Sturz aus großer Höhe hat eine ansprechbar verletzte Person eine offene Brust- korbverletzung. Welches ist die richtige Erste-Hilfe-Maßnahme?", "optionen": [{"letter": "a", "text": "Die betroffene Person mit erhöhtem Oberkörper lagern und die Wunde steril bedecken."}, {"letter": "b", "text": "Die Wunde sofort luftdicht verpacken, damit die Lunge nicht zusammenfällt."}, {"letter": "c", "text": "Die betroffene Person sofort in die stabile Seitenlage bringen."}, {"letter": "d", "text": "Der betroffenen Person zuerst Sauerstoff geben."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 33, "kategorie": "Erste Hilfe", "frage": "Wie reagiert der menschliche Organismus, wenn ein Atem- und Kreislaufstillstand eingetreten ist? Welche Aussage ist richtig?", "optionen": [{"letter": "a", "text": "Die Haut und die Schleimhaut werden hellrot."}, {"letter": "b", "text": "Die Haut und die Schleimhaut werden bläulich (zyanotisch)."}, {"letter": "c", "text": "Die Haut und die Schleimhaut werden heiß."}, {"letter": "d", "text": "Die Haut und die Schleimhaut werden kalt."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 34, "kategorie": "Erste Hilfe", "frage": "Warum darf einer unterkühlten Person kein Alkohol zu trinken gegeben werden? Welche Aus- sage ist zutreffend?", "optionen": [{"letter": "a", "text": "Alkohol verengt die Blutgefäße."}, {"letter": "b", "text": "Alkohol führt zu aggressivem Verhalten."}, {"letter": "c", "text": "Alkohol steigert die Körpertemperatur."}, {"letter": "d", "text": "Alkohol erweitert die Blutgefäße."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 35, "kategorie": "Erste Hilfe", "frage": "Wie weit soll der Brustkorb eines Erwachsenen bei der Herzdruckmassage komprimiert wer- den?", "optionen": [{"letter": "a", "text": "1-2 Zentimeter"}, {"letter": "b", "text": "2-3 Zentimeter"}, {"letter": "c", "text": "4-5 Zentimeter"}, {"letter": "d", "text": "5-6 Zentimeter"}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 36, "kategorie": "Erste Hilfe", "frage": "Muss ein offener Knochenbruch immer steril bedeckt werden?", "optionen": [{"letter": "a", "text": "Wenn es möglich ist, dann ja."}, {"letter": "b", "text": "Nur wenn die Knochenenden sichtbar sind."}, {"letter": "c", "text": "Nur wenn Infektionsgefahr besteht."}, {"letter": "d", "text": "Nicht, wenn die Wunde bereits desinfiziert wurde."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 37, "kategorie": "Erste Hilfe", "frage": "Wie lagern Sie eine verletzte Person, die eine offene Bauchverletzung hat?", "optionen": [{"letter": "a", "text": "Person in Schocklage bringen."}, {"letter": "b", "text": "Person in Rückenlage mit erhöhtem Kopf lagern."}, {"letter": "c", "text": "Person in Rückenlage legen und mit einer Knierolle versorgen."}, {"letter": "d", "text": "Person in Bauchlage lagern."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 38, "kategorie": "Erste Hilfe", "frage": "Welche Maßnahmen ergreifen Sie bei Nasenbluten?", "optionen": [{"letter": "a", "text": "Kopf nach hinten in den Nacken legen lassen."}, {"letter": "b", "text": "Den betroffenen Nasenflügel mit den Fingern zudrücken, anschließend Nacken kühlen."}, {"letter": "c", "text": "Salbe in die Nasenlöcher schmieren (Nasentamponade)."}, {"letter": "d", "text": "Kältetherapie im Nacken und auf der Stirn durchführen."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 39, "kategorie": "Erste Hilfe", "frage": "Welche Gefahren birgt jede offene Wunde primär?", "optionen": [{"letter": "a", "text": "Blutung, Infektion, Schmerz."}, {"letter": "b", "text": "Infektion, Schock, zusätzliches Nasenbluten."}, {"letter": "c", "text": "Atemstillstand, Herzkreislaufversagen, Schock."}, {"letter": "d", "text": "Es gibt keine primären Gefahren."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 40, "kategorie": "Erste Hilfe am Hund", "frage": "Bei welchem Notfall muss unverzüglich ein Tierarzt aufgesucht werden?", "optionen": [{"letter": "a", "text": "Bei einem Zeckenbiss."}, {"letter": "b", "text": "Bei einer vermuteten Vergiftung."}, {"letter": "c", "text": "Bei Zahnfleischbluten."}, {"letter": "d", "text": "Wenn der Hunde sich stark am Ohr kratzt."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 41, "kategorie": "Erste Hilfe am Hund", "frage": "Bei welchem Notfall muss unverzüglich ein Tierarzt aufgesucht werden?", "optionen": [{"letter": "a", "text": "Wenn der Hund „Schlitten fährt“, weil die Analdrüse platzen könnte."}, {"letter": "b", "text": "Bei Verdacht auf eine Magendrehung."}, {"letter": "c", "text": "Bei Zahnfleischbluten."}, {"letter": "d", "text": "Bei Durchfall."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 42, "kategorie": "Erste Hilfe am Hund", "frage": "Gegen welche Krankheiten kann und sollte ein Hund geimpft werden?", "optionen": [{"letter": "a", "text": "Gegen Tetanus, Meningitis und Hepatitis"}, {"letter": "b", "text": "Gegen die Aujeszky´sche Krankheit und Tollwut."}, {"letter": "c", "text": "Gegen Staupe, Hepatitis, Parvovirose, Leptospirose und Tollwut."}, {"letter": "d", "text": "Gegen Durchfallerkrankungen."}], "richtig": ["c"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 43, "kategorie": "Erste Hilfe am Hund", "frage": "Wo wird beim Hund der Puls gefühlt?", "optionen": [{"letter": "a", "text": "Am größten Blutgefäß des Ohrgrundes."}, {"letter": "b", "text": "An der Oberschenkelinnenseite."}, {"letter": "c", "text": "An der Halsschlagader."}, {"letter": "d", "text": "An der Rutenwurzel."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 44, "kategorie": "Erste Hilfe am Hund", "frage": "Wie hoch ist die durchschnittliche Pulsfrequenz eines mittelgroßen Hundes in Ruhe?", "optionen": [{"letter": "a", "text": "70 – 100"}, {"letter": "b", "text": "15 – 30"}, {"letter": "c", "text": "30 – 60"}, {"letter": "d", "text": "100 - 130"}], "richtig": ["a"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 45, "kategorie": "Erste Hilfe am Hund", "frage": "Wie viele Atemzüge in der Minute macht ein mittelgroßer Hund im Ruhezustand?", "optionen": [{"letter": "a", "text": "50 – 60"}, {"letter": "b", "text": "10 – 40"}, {"letter": "c", "text": "30 – 50"}, {"letter": "d", "text": "10 – 20"}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 46, "kategorie": "Erste Hilfe am Hund", "frage": "Welche Körperkerntemperatur haben erwachsene, gesunde Hunde?", "optionen": [{"letter": "a", "text": "35 – 36 ° C"}, {"letter": "b", "text": "36 – 37 ° C"}, {"letter": "c", "text": "38 – 39 ° C"}, {"letter": "d", "text": "39 – 40 ° C"}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 47, "kategorie": "Erste Hilfe am Hund", "frage": "Wie sollten die Schleimhäute an nicht pigmentierten Stellen beim gesunden Hund aussehen?", "optionen": [{"letter": "a", "text": "Hochrot, feucht, glattglänzend, ohne Auflagerungen."}, {"letter": "b", "text": "Bläulich, glänzend, ohne Auflagerungen."}, {"letter": "c", "text": "Porzellanweiß, trocken, mit grauen Auflagerungen."}, {"letter": "d", "text": "Blass rosa-rot, feucht, glattglänzend ohne Auflagerungen."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 48, "kategorie": "Erste Hilfe am Hund", "frage": "Wann erhöht sich die Herzfrequenz des Hundes?", "optionen": [{"letter": "a", "text": "Bei tiefen Außentemperaturen."}, {"letter": "b", "text": "Bei körperlicher Ruhe."}, {"letter": "c", "text": "Bei Aufregung."}, {"letter": "d", "text": "Im Tiefschlaf."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 49, "kategorie": "Erste Hilfe am Hund", "frage": "Wann kann die Atemfrequenz des Hundes nicht ermittelt werden?", "optionen": [{"letter": "a", "text": "Im Tiefschlaf, da sie dann abfällt"}, {"letter": "b", "text": "Wenn der Hund hechelt, da sie dann nicht aussagekräftig ist"}, {"letter": "c", "text": "Während des Streichelns, da sie dann ansteigt"}, {"letter": "d", "text": "Bei körperlicher Ruhe, da sie dann nicht aussagekräftig ist"}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 50, "kategorie": "Erste Hilfe am Hund", "frage": "Was ist bei einem bewusstlosen Hund zu tun?", "optionen": [{"letter": "a", "text": "Hund in die Seitenlage nach rechts bringen, Kopf zur Brust beugen und diesen erhöht lagern."}, {"letter": "b", "text": "Hund mit kaltem Wasser abduschen."}, {"letter": "c", "text": "Dem Hund intensiv riechende Leckerbissen vor die Nase halten."}, {"letter": "d", "text": "Die Maulhöhle des Hundes auf Fremdkörpern kontrollieren und ggf. diese entfernen, den Kopf stre- cken und Hund in Seitenlage lagern."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 51, "kategorie": "Erste Hilfe am Hund", "frage": "Was sind Anzeichen einer Magendrehung?", "optionen": [{"letter": "a", "text": "Zunehmend schwere Atmung, Speicheln, Hecheln, Anzeichen von Bauchschmerzen, Zunahme des Leibumfanges."}, {"letter": "b", "text": "Erbrechen von Magensäure."}, {"letter": "c", "text": "Der Hund wälzt sich panisch am Boden, weil er so versucht die Drehung rückgängig zu machen."}, {"letter": "d", "text": "Dauerhafter Durchfall"}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 52, "kategorie": "Erste Hilfe am Hund", "frage": "Was sind Anzeichen eines Volumenmangelschocks beim Hund?", "optionen": [{"letter": "a", "text": "Ein langsamer Puls."}, {"letter": "b", "text": "Erhebliches Zittern."}, {"letter": "c", "text": "Ein flacher schneller Puls."}, {"letter": "d", "text": "Feuchtes Fell."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 53, "kategorie": "Erste Hilfe am Hund", "frage": "Welches Symptom deutet beim Hund auf einen Hitzschlag hin?", "optionen": [{"letter": "a", "text": "Ein langsamer Puls."}, {"letter": "b", "text": "Kalter Körperschweiß."}, {"letter": "c", "text": "Rote Schleimhäute, Bewusstseinstrübung, extremes Hecheln, erhöhte Puls- und Atemfrequenz."}, {"letter": "d", "text": "Normale Körpertemperatur."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 54, "kategorie": "Erste Hilfe am Hund", "frage": "Welche Maßnahme, ist bei Erstickungsanfällen durch Fremdkörper zu ergreifen?", "optionen": [{"letter": "a", "text": "Den Fang des Hundes auf Fremdkörper kontrollieren, ggf. vorsichtig entfernen, ggf. an der Beckenge- gend anheben und auf den Brustkorb klopfen."}, {"letter": "b", "text": "Dem Hund kräftig auf die Magengegend drücken."}, {"letter": "c", "text": "Dem Hund Wasser einflößen, damit der Fremdkörper abwärts getrieben wird."}, {"letter": "d", "text": "Es sind keine Maßnahmen erforderlich, da sich der Fremdkörper nach kurzer Zeit auflöst."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 55, "kategorie": "Erste Hilfe am Hund", "frage": "Welche Maßnahme ist bei einem Hitzschlag zu ergreifen?", "optionen": [{"letter": "a", "text": "Den Hund nicht bewegen."}, {"letter": "b", "text": "Den Hund aus der Hitze bringen und für Abkühlung sorgen, Wasser anbieten und anschließend zum Tierarzt bringen."}, {"letter": "c", "text": "Dem Hund mindestens 2 Liter Wasser einflößen, damit eine Kühlung von innen heraus erfolgt."}, {"letter": "d", "text": "Den Hund in kaltem Wasser baden."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 56, "kategorie": "Erste Hilfe am Hund", "frage": "Welches der nachfolgend aufgezählten Anzeichen ist kein Hinweis auf eine Erschöpfung des Hundes?", "optionen": [{"letter": "a", "text": "Nachlassende Konzentrationsfähigkeit."}, {"letter": "b", "text": "Fanglecken, Grasfressen oder ähnliches."}, {"letter": "c", "text": "Taumelnder Gang."}, {"letter": "d", "text": "Anhaltendes Bellen."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 57, "kategorie": "Erste Hilfe am Hund", "frage": "Welche Symptome sprechen für eine akute lebensbedrohliche Blutung in die Bauchhöhle nach einem Unfall?", "optionen": [{"letter": "a", "text": "Weiße Schleimhäute und Umfangszunahme des Bauches."}, {"letter": "b", "text": "Futterverweigerung und Erbrechen."}, {"letter": "c", "text": "Apathie und Absetzen von schwarz gefärbtem Kot (Melaena)."}, {"letter": "d", "text": "Starke Schmerzen und geschwollene Beine."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 58, "kategorie": "Erste Hilfe am Hund", "frage": "Welche der aufgeführten Maßnahmen ist bei einer Vergiftung zutreffend?", "optionen": [{"letter": "a", "text": "Der Hund ist immer zum Erbrechen zu bringen."}, {"letter": "b", "text": "Dem Hund Wasser anbieten ist immer gut."}, {"letter": "c", "text": "Vitalfunktionen des Hundes überprüfen und nach Bedarf erhalten (Eigenschutz beachten). Den Tier- arzt aufsuchen."}, {"letter": "d", "text": "Beim eigenen Hund sind keine besonderen Schutzmaßnahmen zu ergreifen."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 59, "kategorie": "Erste Hilfe am Hund", "frage": "Wodurch können Vergiftungserscheinungen hervorgerufen werden?", "optionen": [{"letter": "a", "text": "Der Hund hat zu viel gefressen."}, {"letter": "b", "text": "Der Hund hat zu viel Wasser aufgenommen."}, {"letter": "c", "text": "Der Hund hatte Kontakt zu Mineralöl oder zu alten Nadeln der Eibe."}, {"letter": "d", "text": "Beim Wechsel der Futtermarke."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 60, "kategorie": "Erste Hilfe am Hund", "frage": "Welche Aussage zu den Folgen einer Verbrennung ist zutreffend?", "optionen": [{"letter": "a", "text": "Ein Schock tritt nur bei großflächigen Verbrennungen auf."}, {"letter": "b", "text": "Es kommt zu Blasenbildung und Infektionsgefahr."}, {"letter": "c", "text": "Der Hund hat keine thermische Schmerzempfindung."}, {"letter": "d", "text": "Eine Rötung der Haut kommt wegen des Felles beim Hund nicht vor."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 61, "kategorie": "Erste Hilfe am Hund", "frage": "Welche Aussage zur Versorgung von Verbrennungen ist richtig?", "optionen": [{"letter": "a", "text": "Eine Kühlung ist nur bei Blasenbildung und schlimmer nötig."}, {"letter": "b", "text": "5 Minuten kühlen der verbrannten Stelle reichen immer aus."}, {"letter": "c", "text": "Verbrennungen in der Mundhöhle brauchen wegen des Speichels nicht gekühlt werden."}, {"letter": "d", "text": "Die Wunden möglichst steril abdecken. Tücher möglichst immer feucht halten. Falls kein Wasser zur Hand sein sollte, können auch nichtalkoholische Getränke verwendet werden."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 62, "kategorie": "Erste Hilfe am Hund", "frage": "Ein fremder unbekannter Hund hat sich an der Vorderpfote verletzt. Welche Maßnahmen füh- ren Sie zuerst durch?", "optionen": [{"letter": "a", "text": "Ich beachte den Eigenschutz und binde dem Hund den Fang zu."}, {"letter": "b", "text": "Ich drücke starke Blutungen kurzfristig ab bis ein Verband angelegt ist."}, {"letter": "c", "text": "Ich polstere den Wundbereich großzügig mit Watte ab."}, {"letter": "d", "text": "Ich decke die Wunde mit einer sterilen Wundauflage ab."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 63, "kategorie": "Erste Hilfe am Hund", "frage": "Welche Aussage zu Bisswunden ist zutreffend?", "optionen": [{"letter": "a", "text": "Eine Bisswunde muss nicht kontrolliert werden, wenn der Hund ausreichend geimpft ist."}, {"letter": "b", "text": "Kleine Bisswunden müssen nicht weiter behandelt werden."}, {"letter": "c", "text": "Auch bei kleinen Bisswunden muss eine weitere Versorgung durchgeführt werden."}, {"letter": "d", "text": "In der Regel brauchen Wunden bei Tieren nicht beobachtet werden."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 64, "kategorie": "Erste Hilfe am Hund", "frage": "Welche Gefahr durch eine offene Wunde besteht beim Hund grundsätzlich nicht?", "optionen": [{"letter": "a", "text": "Tetanus."}, {"letter": "b", "text": "Blutungsgefahr."}, {"letter": "c", "text": "Gefahr eine bakteriellen Wundinfektion."}, {"letter": "d", "text": "Leptospirose."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 65, "kategorie": "Erste Hilfe am Hund", "frage": "Welche Maßnahme bei offenen Bauchhöhlenverletzungen ist richtig?", "optionen": [{"letter": "a", "text": "Die vorgefallenen Eingeweide durch einen Verband am Körper fixieren und den Hund zum Tierarzt bringen."}, {"letter": "b", "text": "Die vorgefallenen Eingeweide zurückdrücken, steril abdecken und das Tier zum Tierarzt bringen."}, {"letter": "c", "text": "Die vorgefallene Eingeweide mit Kochsalzlösung (NaCl), notfalls mit Wasser, abspülen. Danach diese steril bedecken, feucht halten und den Hund zum Tierarzt bringen."}, {"letter": "d", "text": "Die vorgefallene Eingeweide abtrocknen, steril bedecken, mit einer Wärmflasche wärmen und den Hund zum Tierarzt bringen."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 66, "kategorie": "Erste Hilfe am Hund", "frage": "Welche der nachfolgenden Maßnahmen muss bei Aufnahme von Xylit durchgeführt werden?", "optionen": [{"letter": "a", "text": "Es müssen sofort die Vitalfunktionen des Hundes geprüft werden."}, {"letter": "b", "text": "Dem Hund muss sofort Honig oder Zucker gegeben werden, um eine lebensbedrohliche Unterzucke- rung zu vermeiden."}, {"letter": "c", "text": "Xylit ist ein Zuckerersatzstoff und für Hunde ungefährlich."}, {"letter": "d", "text": "Wenn der Hund Durchfall oder Erbrechen zeigt ist unverzüglich ein Tierarzt aufzusuchen."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 67, "kategorie": "Erste Hilfe am Hund", "frage": "Welche Maßnahme bei offenen Knochenbrüchen ist richtig?", "optionen": [{"letter": "a", "text": "Die herausgetretenen Knochenenden steril abdecken. Bei längerem Transport diese feucht halten."}, {"letter": "b", "text": "Den Bruch auf jeden Fall mit einer Schiene ruhigstellen."}, {"letter": "c", "text": "Offene Brüche müssen immer ausgerichtet werden."}, {"letter": "d", "text": "Den offenen Bruch sofort auswaschen."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 68, "kategorie": "Erste Hilfe am Hund", "frage": "Welches Verhalten bei Verletzungen durch festhakenden Fremdkörper im Ohr ist richtig?", "optionen": [{"letter": "a", "text": "Den Fremdkörper im Ohr mit Kamillenlösung sofort herausspülen."}, {"letter": "b", "text": "Den Fremdkörper im Ohr mit Pinzette immer sofort entfernen."}, {"letter": "c", "text": "Warten bis der Hund den Fremdkörper selbstständig aus dem Ohr geschüttelt  hat."}, {"letter": "d", "text": "Den Hund am Schütteln hindern und zum Tierarzt bringen."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 69, "kategorie": "Erste Hilfe am Hund", "frage": "Warum verlaufen Schusswunden oft tödlich?", "optionen": [{"letter": "a", "text": "Weil Schusswunden meist infizierte Wunden sind."}, {"letter": "b", "text": "Weil die Vergiftungsgefahr durch das Blei der Geschosse hoch ist."}, {"letter": "c", "text": "Weil eine solche Verletzung oft einen hochgradigen Schock auslöst."}, {"letter": "d", "text": "Weil bei einem Steckschuss die Kugel im Körper bleibt und dadurch immer einen Herz -Kreislauf-Still- stand auslöst."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 70, "kategorie": "Kynologie", "frage": "Welche Umweltsituationen sollte ein Welpe kennenlernen?", "optionen": [{"letter": "a", "text": "Der Welpe sollte möglichst viele Umweltsituationen kennenlernen"}, {"letter": "b", "text": "Der Welpe sollte mit wenig Umweltreizen konfrontiert werden, weil er noch zu jung ist."}, {"letter": "c", "text": "Der Welpe sollte so wenig wie möglich von der Umwelt kennen lernen, damit er wesensfester wird."}, {"letter": "d", "text": "Das Kennenlernen von Umweltsituationen ist für die Entwicklung des Welpen unwesentlich."}], "richtig": ["a"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 71, "kategorie": "Kynologie", "frage": "Wie erzieht man Welpen bei Untugenden?", "optionen": [{"letter": "a", "text": "Man schüttelt seinen Nacken kräftig durch, bis der Welpe winselt."}, {"letter": "b", "text": "Man lobt ihn, wenn er das macht, was man von ihm möchte und ignoriert oder beendet Fehlverhalten."}, {"letter": "c", "text": "Man führt einen Schnauzengriff aus und wendet sich ab."}, {"letter": "d", "text": "Man tadelt ihn lautstark und sperrt ihn in die Hundebox."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 72, "kategorie": "Kynologie", "frage": "Zeigt ein vom Züchter gut sozialisierter Welpe automatisch feste Personenbindung?", "optionen": [{"letter": "a", "text": "Nein, er freut sich über jeden Menschen."}, {"letter": "b", "text": "Ja, Hunde sind von Natur aus treu."}, {"letter": "c", "text": "Ja, er hat einen natürlichen Beschützerinstinkt."}, {"letter": "d", "text": "Ja, Hunde sind automatisch an bestimmte Personen gebunden."}], "richtig": ["a"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 73, "kategorie": "Kynologie", "frage": "Lernt ein Welpe besser über positive Verstärkung oder über Strafe?", "optionen": [{"letter": "a", "text": "Über beide Möglichkeiten, wobei Strafe überwiegen sollte."}, {"letter": "b", "text": "Lernen ist weder von positiver Verstärkung noch Strafe abhängig."}, {"letter": "c", "text": "Er lernt besser über positive Verstärkung."}, {"letter": "d", "text": "Er lernt besser über Strafe."}], "richtig": ["c"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 74, "kategorie": "Kynologie", "frage": "Wie sollte man seinen Hund nicht bestrafen?", "optionen": [{"letter": "a", "text": "Man wendet sich von dem Hund ab und entfernt sich."}, {"letter": "b", "text": "Man stellt die Kommunikation mit dem Hund kurzzeitig vollständig ein."}, {"letter": "c", "text": "Durch ein klares „Nein“."}, {"letter": "d", "text": "Durch einen Alphawurf."}], "richtig": ["d"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 75, "kategorie": "Kynologie", "frage": "Wie lernt ein Hund sicher mit Kindern umzugehen?", "optionen": [{"letter": "a", "text": "Durch umfangreiche Sozialisation mit Kindern unterschiedlicher Altersstufen während der Welpenzeit ."}, {"letter": "b", "text": "Der Hund hat von Geburt an eine gute Beziehung zu Kindern."}, {"letter": "c", "text": "Man trifft sich regelmäßig mit Kindern, damit diese durch dauerhaftes und aufgeregtes Spiel mit dem Welpen dessen Reizschwelle steigern."}, {"letter": "d", "text": "Durch Betätigen eines „Stromimpulsgerätes“ mit Fernbedienung, wenn Kinder in der Nähe sind."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 76, "kategorie": "Kynologie", "frage": "Sie gehen mit ihrem angeleinten Hund spazieren. Welche Richtung sollte man einschlagen?", "optionen": [{"letter": "a", "text": "Man folgt seinem Hund dorthin wo er möchte."}, {"letter": "b", "text": "Man wartet, in welche Richtung sich der Hund in Bewegung setzt."}, {"letter": "c", "text": "Man bestimmt die Richtung und agiert."}, {"letter": "d", "text": "Man reagiert grundsätzlich auf die Beschwichtigungssignale seines Hundes und wählt danach die Richtung."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 77, "kategorie": "Kynologie", "frage": "Wie lange sollte man mit seinem Hund Sitz, Platz etc. üben?", "optionen": [{"letter": "a", "text": "Man übt solange, bis er keine Lust mehr hat."}, {"letter": "b", "text": "Man gestaltet kurze Übungsintervalle, ggf. aber mehrmals täglich."}, {"letter": "c", "text": "Man übt solange, bis der Hund es verstanden hat, auch wenn es Stunden dauert."}, {"letter": "d", "text": "Man übt solange, bis der Hund auf dem Rücken liegt und aufgibt."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 78, "kategorie": "Kynologie", "frage": "Beim Spaziergang mit Ihrem Hund kommt Ihnen ein Hundehalter mit angeleintem Hund entge- gen. Wie verhalten Sie sich?", "optionen": [{"letter": "a", "text": "Ich reiße meinen Hund mehrmals kräftig an der Leine zurück."}, {"letter": "b", "text": "Da ich den anderen Hund nicht einschätzen kann, behalte ich meinen Hund bei mir und leine ihn ebenfalls an."}, {"letter": "c", "text": "Ich nehme Rufkontakt auf und erkläre, dass mein Hund nur spielen will."}, {"letter": "d", "text": "Ich lasse meinen Hund von der Leine, damit die Hunde die Rangordnung selbst klären können."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 79, "kategorie": "Kynologie", "frage": "Wie kann sich häufiges und hartes Bestrafen auf einen Hund auswirken?", "optionen": [{"letter": "a", "text": "Der Hund wird gehorsamer."}, {"letter": "b", "text": "Der Hund wird völlig verunsichert, wodurch seine Schwelle zum Wehrtrieb stark herabgesetzt werden kann."}, {"letter": "c", "text": "Der Hund wird ruhiger reagieren."}, {"letter": "d", "text": "Das Verhältnis von Hundeführer und Hund wird immer besser."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 80, "kategorie": "Kynologie", "frage": "Kann Futter in der Tasche der Hundehalterin dazu führen, dass der Hund Artgenossen gegen- über aggressiv wird?", "optionen": [{"letter": "a", "text": "Nein, da der Hund bei Futter nie Aggressionen zu anderen Hunden zeigt."}, {"letter": "b", "text": "Ja, da der Hund Futter verteidigen könnte."}, {"letter": "c", "text": "Ja, aber nur, wenn der Hund dazu ausgebildet wurde."}, {"letter": "d", "text": "Nein, da Rettungshunde ein ruhiges Wesen haben."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 81, "kategorie": "Kynologie", "frage": "Wie lernt ein Hund am besten?", "optionen": [{"letter": "a", "text": "Der Hund lernt ausnahmslos über positive Verstärkung, ohne Strafe."}, {"letter": "b", "text": "Der Hund lernt über positive Verstärkung und Setzen von klaren Grenzen."}, {"letter": "c", "text": "Der Hund lernt über ausnahmslose Härte."}, {"letter": "d", "text": "Der Hund lernt über einen demokratischen Umgang."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 82, "kategorie": "Kynologie", "frage": "Kann auch ein älterer Hund noch lernen?", "optionen": [{"letter": "a", "text": "Hündinnen nach der letzten Läufigkeit nicht mehr."}, {"letter": "b", "text": "Nein, Hunde lernen nur, wenn sie jung sind."}, {"letter": "c", "text": "Nur wenn der Hund gut sozialisiert ist."}, {"letter": "d", "text": "Hunde können in jedem Alter etwas lernen."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 83, "kategorie": "Kynologie", "frage": "Ihr angeleinter Hund will gerade einen anderen Hund, der ebenfalls von seinem Halter ange- leint geführt wird, knurrend und zähnebleckend anspringen. Wie sollten Sie sich verhalten?", "optionen": [{"letter": "a", "text": "Man nimmt das kurze Ende der Leine und zieht es dem eigenen Hund über den Rücken."}, {"letter": "b", "text": "Man spricht seinen Hund an, dass er brav sein soll."}, {"letter": "c", "text": "Man vermittelt seinem Hund ein klares Nein, unterbricht die Aggression ggf. durch Blickkontakt und fordert ihn zu einem Alternativverhalten, z.B. Sitz auf."}, {"letter": "d", "text": "Man lässt den Hund bis auf ca. 20 Zentimeter an den anderen Hund und beobachtet vorsichtig, wie sich beide Hunde weiter verhalten."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 84, "kategorie": "Kynologie", "frage": "Ein junger Hund zwickt regelmäßig seine Hundeführerin beim Spaziergang in die Waden. Was bedeutet das?", "optionen": [{"letter": "a", "text": "Der Hund fordert ihn zum Spielen auf."}, {"letter": "b", "text": "Das ist kein ernst zu nehmendes Verhalten."}, {"letter": "c", "text": "Der Hund will mitteilen, dass er Hunger hat."}, {"letter": "d", "text": "Es handelt sich um eine Einzelsequenz aus dem Jagdverhalten, die unterbunden werden muss."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 85, "kategorie": "Kynologie", "frage": "Was bedeutet es, wenn ein Hund seinen Kopf über die Schultern eines anderen Hundes legt?", "optionen": [{"letter": "a", "text": "Das Verhalten hat keine Aussage."}, {"letter": "b", "text": "Der Hund fordert den anderen Hund zum Spielen auf."}, {"letter": "c", "text": "Er versucht, den anderen zu dominieren."}, {"letter": "d", "text": "Das macht ein Hund nur beim anderen Geschlecht."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 86, "kategorie": "Kynologie", "frage": "Zwei Hunde stehen sich im Abstand fixierend gegenüber. Was hat dieses Verhalten für eine Bedeutung?", "optionen": [{"letter": "a", "text": "Ein erwiderter Blickkontakt kann zu einer Auseinandersetzung führen."}, {"letter": "b", "text": "Das ist eine übliche Begrüßungsgeste: Sie sagen „Guten Tag“."}, {"letter": "c", "text": "Der Rüde steigert seinen Sexualtrieb."}, {"letter": "d", "text": "Die Hunde wollen nur gemeinsam spielen."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 87, "kategorie": "Kynologie", "frage": "Ein Hund läuft mit seiner Rute wedelnd auf einen Menschen zu. Ist er dann immer freundlich gestimmt?", "optionen": [{"letter": "a", "text": "Ja, es bedeutet einzig und allein: Ich will mit Dir spielen!"}, {"letter": "b", "text": "Das Wedeln mit der Rute hat gar nichts zu sagen."}, {"letter": "c", "text": "Nein, es kann auch ein negativ erregter Hund sein."}, {"letter": "d", "text": "Ja, das Wedeln mit der Rute ist immer ein Ausdruck freundlicher Stimmung."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 88, "kategorie": "Kynologie", "frage": "Welche Gesten sind Anzeichen von Aggression ohne Zeichen von Angst oder Stress?", "optionen": [{"letter": "a", "text": "Er gähnt und leckt sich häufig über die Nase."}, {"letter": "b", "text": "Er hat die Ohren nach vorne gestellt und zieht die Lefzen hoch."}, {"letter": "c", "text": "Der Hund macht sich klein und versucht zu fliehen."}, {"letter": "d", "text": "Er hechelt und hat dabei den Schwanz eingeklemmt und die Ohren nach hinten gelegt."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 89, "kategorie": "Kynologie", "frage": "Welches der aufgezählten Anzeichen ist kein Hinweis auf Angstzustände eines Hundes?", "optionen": [{"letter": "a", "text": "Der Hund bellt wie verrückt."}, {"letter": "b", "text": "Der Hund verkriecht sich."}, {"letter": "c", "text": "Der Hund meidet eine Person oder einen Gegenstand."}, {"letter": "d", "text": "Der Hund steht schwanzwedelnd an der Haustür."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 90, "kategorie": "Kynologie", "frage": "Was ist Stress?", "optionen": [{"letter": "a", "text": "Eine sogenannte Immunreaktion des Körpers."}, {"letter": "b", "text": "Die unspezifische Reaktion des Körpers auf unterschiedlichste Belastungen."}, {"letter": "c", "text": "Mangelnde körperliche Kondition."}, {"letter": "d", "text": "Eine allergische Reaktion."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 91, "kategorie": "Kynologie", "frage": "Was ist für das Prägungslernen kennzeichnend?", "optionen": [{"letter": "a", "text": "Die aufgenommene Information kann leicht durch die Aufnahme weiterer Informationen verändert werden."}, {"letter": "b", "text": "Die Lernfähigkeit bleibt bis ins hohe Alter gleich stark bestehen."}, {"letter": "c", "text": "Die aufgenommene Information ist meist nahezu irreversibel."}, {"letter": "d", "text": "Die aufgenommene Information ist in Bruchteilen von Sekunden auf Dauer verloren."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 92, "kategorie": "Kynologie", "frage": "Sie rufen Ihren Hund bei einem Spaziergang in einer ungefährlichen Situation zurück, aber er kommt nicht. Was tun Sie?", "optionen": [{"letter": "a", "text": "Ich rufe solange bis er kommt."}, {"letter": "b", "text": "Ich benutze mehrfach die Pfeife."}, {"letter": "c", "text": "Ich mache ihn auf mich aufmerksam, laufe schnell weg, verstecke mich und bestätige ihn für sein Kommen."}, {"letter": "d", "text": "Er bekommt abends kein Futter."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 93, "kategorie": "Kynologie", "frage": "Welche der folgenden Bestimmungen gelten in allen Bundesländern?", "optionen": [{"letter": "a", "text": "Es ist verboten, einen Hund freilaufend neben dem Fahrrad laufen zu lassen."}, {"letter": "b", "text": "Es ist verboten, einen Hund neben dem Kraftfahrzeug laufen zu lassen."}, {"letter": "c", "text": "Es ist verboten, einen Hund freilaufend neben dem Pferd laufen zu lassen."}, {"letter": "d", "text": "Es ist grundsätzlich verboten, einen Hund in der Stadt freilaufen zu lassen."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 94, "kategorie": "Kynologie", "frage": "Welche Aussage zum Unterschied zwischen Sozialisation und Bindung ist falsch?", "optionen": [{"letter": "a", "text": "Sozialisation bezeichnet den allgemeinen Vorgang der sozialen Identifikation beim Hund, Bindung seine spezielle Beziehung zu einzelnen Menschen oder Hunden"}, {"letter": "b", "text": "Die Sozialisation ist weitgehend irreversibel, die Bindung austauschbar."}, {"letter": "c", "text": "Bindung an einen Menschen setzt eine Sozialisation voraus, umgekehrt hingegen bedingt die Soziali- sation nicht zwangsläufig eine Bindung."}, {"letter": "d", "text": "Die Stärke der Sozialisation ist abhängig von der Rangbeziehung zwischen Mensch und Hund, die Stärke der Bindung hingegen ist davon unabhängig."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 95, "kategorie": "Kynologie", "frage": "Welche Aussage über die Vorteile des Prägungslernens trifft zu?", "optionen": [{"letter": "a", "text": "Nur im Stress werden neue Informationen aufgenommen."}, {"letter": "b", "text": "Es fällt dem Hund leichter, auf Veränderungen in der Umwelt zu reagieren."}, {"letter": "c", "text": "Der Hund zeigt Ängstlichkeit gegenüber anderen Menschen."}, {"letter": "d", "text": "Positive und negative Erfahrungen werden im sensibelsten Entwicklungsstadium des Hundes gesam- melt."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 96, "kategorie": "Kynologie", "frage": "Was kann passieren, wenn man mit dem Hund eine bestimmte Übung immer nur am gleichen Ort macht?", "optionen": [{"letter": "a", "text": "Er wird die Übung an anderen Orten gar nicht oder nicht so gut ausführen."}, {"letter": "b", "text": "Lernen ist nicht von einem bestimmten Ort abhängig. Er wird die Übung, wenn man sie häufig an ei- nem Ort geübt hat, überall sicher ausführen können."}, {"letter": "c", "text": "Der Ort ist nicht wichtig im Hundetraining. Wichtig ist, dass man immer zur selben Tageszeit übt, da- mit sich der Hund an einen geregelten Tagesablauf gewöhnt."}, {"letter": "d", "text": "Er wird bald nicht mehr an diesen Ort gehen wollen, weil ihm langweilig ist."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 97, "kategorie": "Kynologie", "frage": "Welches Triebverhalten darf während der Verweisübung nicht ausgelöst werden?", "optionen": [{"letter": "a", "text": "Spieltrieb"}, {"letter": "b", "text": "Beutetrieb"}, {"letter": "c", "text": "Wehrtrieb"}, {"letter": "d", "text": "Fresstrieb"}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 98, "kategorie": "Kynologie", "frage": "Worüber nimmt ein Hund eine Umgebung hauptsächlich wahr?", "optionen": [{"letter": "a", "text": "Über das Gehör."}, {"letter": "b", "text": "Über die Augen."}, {"letter": "c", "text": "Über das Gefühl."}, {"letter": "d", "text": "Über die Nase."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 99, "kategorie": "Kynologie", "frage": "Wie wird ein Kommando eingeübt?", "optionen": [{"letter": "a", "text": "Nur über das Gehör."}, {"letter": "b", "text": "Nur über Körperkontakt."}, {"letter": "c", "text": "Nur über Sichtzeichen."}, {"letter": "d", "text": "Über Gehör, Körpersprache und Sichtzeichen."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 100, "kategorie": "Unfallverhütung / Sicherheit im Einsatz", "frage": "Welcher der nachfolgend aufgeführten Gegenstände zählt nicht zur persönlichen Schutzaus- rüstung (PSA) für einen Trümmereinsatz?", "optionen": [{"letter": "a", "text": "Schutzhelm."}, {"letter": "b", "text": "Funktionsunterwäsche."}, {"letter": "c", "text": "Sicherheitsschuhe (Klasse S3)."}, {"letter": "d", "text": "Schutzhandschuhe."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 101, "kategorie": "Unfallverhütung / Sicherheit im Einsatz", "frage": "Wie wird ein Rettungshund bei der Flächensuche vor Jagdfeuer geschützt?", "optionen": [{"letter": "a", "text": "Durch einen implantierten Mikrochip."}, {"letter": "b", "text": "Durch die Erkennungsmarke am Halsband."}, {"letter": "c", "text": "Durch Leuchtstreifen am Halsband."}, {"letter": "d", "text": "Durch das Tragen einer Kenndecke."}], "richtig": ["d"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 102, "kategorie": "Unfallverhütung / Sicherheit im Einsatz", "frage": "Nach jedem Einsatz ist zur Wahrnehmung der Sicherheit welche Aussage zutreffend?", "optionen": [{"letter": "a", "text": "Die Verpflegung der Einsatzkräfte ist zu organisieren."}, {"letter": "b", "text": "Es ist eine Kontrolle der Vollzähligkeit aller Einsatzkräfte durchzuführen."}, {"letter": "c", "text": "Es ist eine tierärztliche Untersuchung der Hunde zu veranlassen."}, {"letter": "d", "text": "Mit den eingesetzten Kraftfahrzeugen ist ein Sicherheitscheck durchzuführen."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 103, "kategorie": "Unfallverhütung / Sicherheit im Einsatz", "frage": "Welche der nachfolgend aufgezählten Verhaltensweisen ist während des Einsatzes verboten?", "optionen": [{"letter": "a", "text": "Das Betreten des Einsatzgebietes ohne Auftrag."}, {"letter": "b", "text": "Das hygienische Reinigen der Hände nach der Suche."}, {"letter": "c", "text": "Das Funken mit der Einsatzleitung."}, {"letter": "d", "text": "Das Betreten des Einsatzleitfahrzeuges."}], "richtig": ["a"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 104, "kategorie": "Unfallverhütung / Sicherheit im Einsatz", "frage": "Welche der nachfolgend aufgezählten Verhaltensweisen ist während eines Trümmersuchein- satzes nicht erlaubt?", "optionen": [{"letter": "a", "text": "Den Hund ohne Kenndecke auf die Trümmer einzusetzen."}, {"letter": "b", "text": "Alleine, ungesichert in unübersichtliche Lagen zu gehen."}, {"letter": "c", "text": "Den Hund während der Suche über den Trümmerkegel zu dirigieren."}, {"letter": "d", "text": "Mit anderen Einsatzkräften zu funken."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 105, "kategorie": "Unfallverhütung / Sicherheit im Einsatz", "frage": "Welchen Ausrüstungsgegenstand müssen Rettungshundeteams zur Personensicherung im Trümmereinsatz mitführen?", "optionen": [{"letter": "a", "text": "Taschenmesser."}, {"letter": "b", "text": "Sicherungsleine."}, {"letter": "c", "text": "Koppel."}, {"letter": "d", "text": "Leuchtpistole."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 106, "kategorie": "Unfallverhütung / Sicherheit im Einsatz", "frage": "Worauf ist zu achten, wenn Leinen/Seile über scharfe Kanten geführt werden müssen?", "optionen": [{"letter": "a", "text": "Auf Gleitschutz."}, {"letter": "b", "text": "Auf den Schutz der Kanten durch ein Kantenschutzgerät."}, {"letter": "c", "text": "Auf Benutzung eines Seilkolbens."}, {"letter": "d", "text": "Auf Leinen- bzw. Seilschutz."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 107, "kategorie": "Unfallverhütung / Sicherheit im Einsatz", "frage": "Was muss bei der Benutzung eines Auffanggurtes als Absturzsicherung beachtet werden?", "optionen": [{"letter": "a", "text": "Ein Auffanggurt darf zur Absturzsicherung generell nicht verwendet werden."}, {"letter": "b", "text": "Es muss darauf geachtet werden, dass der Auffanggurt angenehm sitzt."}, {"letter": "c", "text": "Der Auffanggurt darf nur in Kombination mit einem Auffanggerät benutzt werden."}, {"letter": "d", "text": "Der Auffanggurt darf nur in Kombination mit einer Seilklemme benutzt werden."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 108, "kategorie": "Unfallverhütung / Sicherheit im Einsatz", "frage": "Was ist beim Nachbetanken eines Stromerzeugers zu beachten?", "optionen": [{"letter": "a", "text": "Der Motor muss während des Betankens abgestellt werden."}, {"letter": "b", "text": "Der Motor kann während des Betankens in Betrieb sein."}, {"letter": "c", "text": "Der Benzinhahn muss vor dem Betanken geschlossen sein."}, {"letter": "d", "text": "Der Benzinhahn muss beim Betanken offen sein."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 109, "kategorie": "Unfallverhütung / Sicherheit im Einsatz", "frage": "Wer ist für die Vollständigkeit und Funktionsfähigkeit der persönlichen Schutzausrüstung (PSA)verantwortlich?", "optionen": [{"letter": "a", "text": "Die Ausbildungsleitung."}, {"letter": "b", "text": "Die Staffelleitung."}, {"letter": "c", "text": "Die Einsatzkraft."}, {"letter": "d", "text": "Die Geschäftsführung der Hilfsorganisation."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 110, "kategorie": "Unfallverhütung / Sicherheit im Einsatz", "frage": "Sie werden zu einem Rettungshundeeinsatz alarmiert. Wie verhalten Sie sich auf der Fahrt mit Ihrem Privatfahrzeug zur Dienststelle?", "optionen": [{"letter": "a", "text": "Ich schalte die Warnblinkanlage an, um den anderen Verkehrsteilnehmern zu signalisieren, dass ich es eilig habe."}, {"letter": "b", "text": "Ich fahre unter Einhaltung der Verkehrsregeln zur Dienststelle."}, {"letter": "c", "text": "Ich fahre schnellstmöglich zur Dienststelle."}, {"letter": "d", "text": "Rote Ampeln und Verkehrsschilder beachte ich nicht, weil Gefahr im Verzug ist."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 111, "kategorie": "Unfallverhütung / Sicherheit im Einsatz", "frage": "Wie müssen akute Gefahrenquellen, z.B. eine Stolperfalle durch eine Drahtschlinge, beseitigt werden?", "optionen": [{"letter": "a", "text": "Drahtschlingen sind keine akuten Stolperfallen und sind deshalb nicht weiter zu beachten."}, {"letter": "b", "text": "Solche Gefahrenquellen sind sofort an die Einsatzleitung zu melden."}, {"letter": "c", "text": "Solche Gefahrenstellen kennzeichnen, wenn möglich sofort beseitigen."}, {"letter": "d", "text": "Alle eingesetzten Kräfte sollten sofort über Funk informiert werden."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 112, "kategorie": "Unfallverhütung / Sicherheit im Einsatz", "frage": "In den Trümmern befinden sich abgerissene und/oder offene Stromleitungen. Welche Aussage ist zutreffend?", "optionen": [{"letter": "a", "text": "Es besteht keine Gefahr, da bei solchen Schäden sofort durch die Energieversorger alle Versor- gungsleitungen zum Gebäude gekappt werden."}, {"letter": "b", "text": "Die Spannungsfreiheit der Leitungen ist sichergestellt, da ja die Leitungen abgerissen sind."}, {"letter": "c", "text": "Es handelt sich um einen Gefahrenbereich und daher muss sofort eine Absperrung eingerichtet wer- den und durch Fachkräfte die Spannungsfreiheit festgestellt werden."}, {"letter": "d", "text": "Für die elektrischen Leitungen sind Fachkräfte zuständig. Ich brauche mich darum nicht zu kümmern."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 113, "kategorie": "Sprechfunk", "frage": "Was bedeutet die Abkürzung „BOS“?", "optionen": [{"letter": "a", "text": "Behörden und Organisationen mit Sicherheitsaufgaben."}, {"letter": "b", "text": "Bund und Organisationen mit Sicherheitsaufgaben."}, {"letter": "c", "text": "Behörden und Ordnungsämter mit Sicherheitsaufgaben."}, {"letter": "d", "text": "Bundes- und Ordnungsämter mit Sicherheitsaufgaben."}], "richtig": ["a"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 114, "kategorie": "Sprechfunk", "frage": "Welche Redewendung sollte im Funkverkehr nicht verwendet werden?", "optionen": [{"letter": "a", "text": "Kommen!"}, {"letter": "b", "text": "Verstanden!"}, {"letter": "c", "text": "Hallo, wer ist da?"}, {"letter": "d", "text": "Wiederholen Sie!"}], "richtig": ["c"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 115, "kategorie": "Sprechfunk", "frage": "Im Funkverkehr sind Regeln zu beachten! Was sollte vermieden werden?", "optionen": [{"letter": "a", "text": "Deutlich und nicht zu schnell sprechen."}, {"letter": "b", "text": "Den Gesprächsteilnehmer mit „Sie“ ansprechen."}, {"letter": "c", "text": "Das Buchstabieren sollte vermieden werden."}, {"letter": "d", "text": "Es sollten möglichst viele Abkürzungen verwendet werden, um Zeit zu sparen."}], "richtig": ["d"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 116, "kategorie": "Sprechfunk", "frage": "BOS-Funk ist bei Großschadensereignissen und Katastrophen ein unverzichtbares Medium für eine unabhängige Kommunikation. Welche der nachfolgenden Aussagen trifft zu?", "optionen": [{"letter": "a", "text": "Mobilfunknetze ermöglichen die gleiche Aufgabe."}, {"letter": "b", "text": "BOS-Funk ist geschaffen worden, um der Presse direkte Informationen geben zu können."}, {"letter": "c", "text": "BOS-Funkkanäle sind einer geschlossenen Benutzergruppe zugewiesen."}, {"letter": "d", "text": "BOS-Funkkanäle sind einer offenen Benutzergruppe zugewiesen."}], "richtig": ["c"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 117, "kategorie": "Sprechfunk", "frage": "Um eine bestmögliche Reichweite zu erreichen, sollten Handfunkgeräte in einer besond eren Trageweise getragen werden. Welche Trageweise ist am effektivsten?", "optionen": [{"letter": "a", "text": "Das Gerät sollte an der Schulter getragen werden."}, {"letter": "b", "text": "Das Gerät sollte am Gürtel getragen werden."}, {"letter": "c", "text": "Das Gerät sollte in der Jackentasche verstaut sein."}, {"letter": "d", "text": "Das Gerät sollte in der Beintasche der Hose verstaut sein."}], "richtig": ["a"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 118, "kategorie": "Sprechfunk", "frage": "Welche Aussage über die Notwendigkeit von Funkrufnamen ist richtig?", "optionen": [{"letter": "a", "text": "Mit den Funkrufnamen werden die verschiedenen Funkstellen eindeutig identifiziert und unterschie- den."}, {"letter": "b", "text": "Durch Funkrufnamen ist ein qualitativ besseres Funknetz zu betreiben."}, {"letter": "c", "text": "Durch die Funkrufnamen kann man Funkgeräte besser finden."}, {"letter": "d", "text": "Jede Einheit kann sich selbstständig einen Funkrufnamen aussuchen."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 119, "kategorie": "Sprechfunk", "frage": "Während eines Funkgespräches teilt Ihnen die Gegenstelle mit, Sie mögen „über Draht“ kom- men. Was ist gemeint?", "optionen": [{"letter": "a", "text": "Die Verständigung ist nicht optimal, sie sollen eine andere Funkfrequenz wählen."}, {"letter": "b", "text": "Sie sollen Ihren Gesprächsteilnehmer über eine Telefonverbindung anrufen."}, {"letter": "c", "text": "Sie sollen einen Telefondraht zwischen Ihnen und dem Gesprächsteilnehmer verlegen lassen."}, {"letter": "d", "text": "Sie sollen das Handfunkgerät an das Ladekabel anschließen."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 120, "kategorie": "Sprechfunk", "frage": "Was bedeutet die Abkürzung „FMS“?", "optionen": [{"letter": "a", "text": "Funkmitteilungssystem"}, {"letter": "b", "text": "Fernmeldesystem"}, {"letter": "c", "text": "Funkmodulationssystem"}, {"letter": "d", "text": "Funkmeldesystem"}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 121, "kategorie": "Sprechfunk", "frage": "Auf der zugewiesenen Gesprächsgruppe ist viel Funkverkehr und kaum durchzukommen. Sie haben aber eine wichtige Meldung an die Einsatzleitung durchzugeben. Was machen Sie?", "optionen": [{"letter": "a", "text": "Warten, bis keiner mehr spricht und ich dran bin."}, {"letter": "b", "text": "Warteschlangenbetrieb betreiben, d.h. ich halte die Sprechfunktaste so lange gedrückt bis ich das „Piep“, die Sprechaufforderung, erhalte."}, {"letter": "c", "text": "Immer wieder die Gesprächstaste drücken bis ich das „Piep“, die Sprechaufforderung, erhalte."}, {"letter": "d", "text": "Ich suche mir eine andere Gesprächsgruppe und versuche dort die Einsatzleitung zu erreichen."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 122, "kategorie": "Sprechfunk", "frage": "Während eines Einsatzes kommen Sie mit einem Sprechfunker zusammen, der wie Sie ein Funkgerät trägt. In diesem Einsatz wird der gesamte Sprechfunkverkehr auf einem Kanal abge- wickelt. Sie selbst werden nun vom Einsatzleiter über Funk angesprochen. Worauf müssen Sie achten, bevor Sie antworten?", "optionen": [{"letter": "a", "text": "Es besteht Wechselverkehr. Ich weise den Einsatzleiter daraufhin, dass er eine Erlaubnis bei der Leit- stelle beantragen muss."}, {"letter": "b", "text": "Der andere Sprechfunker muss seine Rauschsperre abstellen."}, {"letter": "c", "text": "Den eigenen Standort so wählen, dass es zu keiner Rückkopplung mit dem anderen Funkgerät kommt."}, {"letter": "d", "text": "Es muss die richtige Taste am Gerät gedrückt werden, damit es zu keiner Rückkopplung kommt."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 123, "kategorie": "Sprechfunk", "frage": "Sie erhalten einen Suchauftrag in einem Waldgebiet. Worauf ist in Bezug auf Einschränkungen in der Kommunikation per Funk zu achten.", "optionen": [{"letter": "a", "text": "Gar keine, da Funkwellen durch die Luft übertragen werden."}, {"letter": "b", "text": "Ich kann nur auf Freiflächen und Waldschneisen funken."}, {"letter": "c", "text": "Durch dichten Waldbewuchs kann es zu Einschränkungen im Netzbetrieb (TMO) kommen. Ggf. muss die Staffelleitung den Betrieb im Einsatzstellenmodus (DMO) anordnen."}, {"letter": "d", "text": "Solange ich das Handsprechfunkgerät in optimaler Trageweise mit mir führe, gibt es keine Einschrän- kungen."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 124, "kategorie": "Sprechfunk", "frage": "Sie erhalten ein Funkgerät und werden von FLORIAN A-Stadt gerufen. Welcher BOS-Teilneh- mer / Organisation ruft Sie?", "optionen": [{"letter": "a", "text": "Bundespolizei"}, {"letter": "b", "text": "Landespolizei"}, {"letter": "c", "text": "Feuerwehr"}, {"letter": "d", "text": "THW"}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 125, "kategorie": "Sprechfunk", "frage": "Sie erhalten ein Funkgerät und werden von AKKON A-Stadt gerufen. Welcher BOS-Teilnehmer / Organisation ruft Sie?", "optionen": [{"letter": "a", "text": "Johanniter-Unfall-Hilfe"}, {"letter": "b", "text": "Polizei"}, {"letter": "c", "text": "Deutsches Rotes Kreuz"}, {"letter": "d", "text": "THW"}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 126, "kategorie": "Sprechfunk", "frage": "Wie verhalten Sie sich bei Funkstörungen?", "optionen": [{"letter": "a", "text": "Einen Standortwechsel vornehmen und die Trageposition des Funkgerätes am Körper überprüfen."}, {"letter": "b", "text": "Ich schraube die Antenne ab und wieder dran, um einen möglichen Wackelkontakt zu beheben."}, {"letter": "c", "text": "Ich mache nichts und warte die Funkstörung ab."}, {"letter": "d", "text": "Das Gerät ausschalten, nach 3 Minuten wieder einschalten, danach sollte die Funkstörung behoben sein."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 127, "kategorie": "Sprechfunk", "frage": "Was wird unter Funkdisziplin verstanden?", "optionen": [{"letter": "a", "text": "Einsatzleitung niemals ohne die Anrede „Herr“ oder „Frau“ anfunken."}, {"letter": "b", "text": "Auf keinen Fall ohne vorherige Aufforderung der Einsatzleitung funken."}, {"letter": "c", "text": "Einhalten der korrekten Formulierungen, „Erst denken – drücken – kurz warten – dann sprechen“, Vorredner vor dem Antworten aussprechen lassen, Funkspruch so kurz wie möglich und so umfas- send wie nötig abwickeln."}, {"letter": "d", "text": "Jeder Funkspruch der Einsatzleitung ist förmlich zu wiederholen."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 128, "kategorie": "Sprechfunk", "frage": "Bei Erhalt des Handsprechfunkgerätes sollten Sie folgende Funktionsprüfung durchführen:", "optionen": [{"letter": "a", "text": "Das Gerät erst einmal komplett auseinander- und wieder zusammenbauen."}, {"letter": "b", "text": "Ich prüfe, ob der Halteclip nicht ausgeleiert ist."}, {"letter": "c", "text": "Ich mache eine 30-minütige Funktionsprüfung gemäß Dienstvorschrift."}, {"letter": "d", "text": "Ich kontrolliere Akkuladung und Antennenanschluss. Danach führe ich eine Sprechprobe durch."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 129, "kategorie": "Sprechfunk", "frage": "Was müssen Sie bei der Funkübermittlung zum Datenschutz beachten?", "optionen": [{"letter": "a", "text": "Für die Nutzung von BOS-Funk ist der Datenschutz nicht relevant."}, {"letter": "b", "text": "Datenschutz ist nur auf bestimmten Frequenzbereichen des BOS-Funkes vorhanden."}, {"letter": "c", "text": "Für eine lückenlose Datenerhebung sollten Personennamen und -daten immer vollständig, d.h. mit Vor- und Zunamen sowie Geburtsdatum, genannt werden."}, {"letter": "d", "text": "Personennamen und -daten sind nur in begründeten Fällen zu nennen."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 130, "kategorie": "Sprechfunk", "frage": "Ein Funkgespräch wird beendet mit dem Wort:", "optionen": [{"letter": "a", "text": "Verstanden"}, {"letter": "b", "text": "Ende"}, {"letter": "c", "text": "Over"}, {"letter": "d", "text": "Roger"}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 131, "kategorie": "Sprechfunk", "frage": "Eine Frage wird eingeleitet mit dem Wort/den Worten:", "optionen": [{"letter": "a", "text": "Kommen, ob verstanden"}, {"letter": "b", "text": "Frage"}, {"letter": "c", "text": "Wiederholen Sie"}, {"letter": "d", "text": "Was willst du"}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 132, "kategorie": "Sprechfunk", "frage": "Ein Sprechfunkverkehr wird eröffnet durch:", "optionen": [{"letter": "a", "text": "Die Anrufantwort"}, {"letter": "b", "text": "Den Anruf"}, {"letter": "c", "text": "Den Einsatzleiter"}, {"letter": "d", "text": "Die Gegenstelle"}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 133, "kategorie": "Sprechfunk", "frage": "Die unbefugte Weitergabe von Fernsprechgeheimnissen…", "optionen": [{"letter": "a", "text": "…ist nur bei dringenden Einsatznachrichten erlaubt."}, {"letter": "b", "text": "…wird mit Freiheitsstrafe oder mit Geldstrafe bestraft."}, {"letter": "c", "text": "…darf nur der Leiter der Fernmeldezentrale anordnen."}, {"letter": "d", "text": "…ist kein Problem und kann jederzeit gemacht werden."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 134, "kategorie": "Sprechfunk", "frage": "Was ist ein MRT-Gerät?", "optionen": [{"letter": "a", "text": "Ein Handsprechfunkgerät im 2m Band."}, {"letter": "b", "text": "Ein Gerät, welches allein dem Sprechfunkbetrieb zur Einsatzstelle dient."}, {"letter": "c", "text": "Ein fest eingebautes Fahrzeugfunkgerät."}, {"letter": "d", "text": "Ein Magnetresonanztomograph."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 135, "kategorie": "Sprechfunk", "frage": "Im Digitalfunknetz der BOS werden die Betriebsarten TMO und DMO unterschieden. Welche Aussage ist hierzu richtig?", "optionen": [{"letter": "a", "text": "Die Betriebsart TMO ist für Hilfsorganisationen nicht vorgesehen und wird nur von der Polizei verwen- det."}, {"letter": "b", "text": "Die Betriebsart DMO ist ausschließlich in Gebäuden zulässig."}, {"letter": "c", "text": "In der Betriebsart DMO können zwei oder mehrere Teilnehmer direkt miteinander kommunizieren, ohne auf die Netzinfrastruktur selbst zugreifen zu müssen."}, {"letter": "d", "text": "Die Betriebsart TMO darf nicht im 5 km Grenzbereich zu anderen Ländern wie Frankreich, Polen, Nie- derlande, Österreich usw. genutzt werden."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 136, "kategorie": "Sprechfunk", "frage": "Welche Einrichtung ist der funkbetriebliche Mittelpunkt eines Funkverkehrsbereiches?", "optionen": [{"letter": "a", "text": "Die große Relaisfunkstelle."}, {"letter": "b", "text": "Die Leitstelle."}, {"letter": "c", "text": "Das Regierungspräsidium."}, {"letter": "d", "text": "Die Technische Betriebsstelle des Bundeslandes."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 137, "kategorie": "Sprechfunk", "frage": "Wie kann man im Digitalfunk einen Notruf auslösen?", "optionen": [{"letter": "a", "text": "Durch Drücken der Kennung „0“."}, {"letter": "b", "text": "Durch Drücken der orangenen/roten Taste am Bedienteil oder Funkgerät."}, {"letter": "c", "text": "Durch die Durchsage „Hier ist ein Notruf“."}, {"letter": "d", "text": "Durch den Anruf über die Tastenkombination „112“."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 138, "kategorie": "Einsatztaktik Fläche", "frage": "Wie ist die richtige Vorgehensweise bei einer Wegesuche?", "optionen": [{"letter": "a", "text": "Sie kreuzen ständig den Weg und schicken den Hund abwechselnd rechts und links ins Gelände."}, {"letter": "b", "text": "Sie gehen auf dem Weg und lassen den Hund bei Fuß laufen."}, {"letter": "c", "text": "Sie gehen auf dem Weg und schicken den Hund zuerst rechts des Weges – am Ende des Weges drehen Sie um und schicken den Hund auf der anderen Seite des Weges ins Gelände."}, {"letter": "d", "text": "Sie gehen auf dem Weg und schicken den Hund rechts bzw. links von diesem Weg ins Ge lände."}], "richtig": ["d"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 139, "kategorie": "Einsatztaktik Fläche", "frage": "Welcher Abstand zwischen den Suchteams wird i.d.R. bei einer Suchkette in der Fläche bei durchschnittlichem Bewuchs gewählt?", "optionen": [{"letter": "a", "text": "Ca. 50 m"}, {"letter": "b", "text": "Ca. 100 m"}, {"letter": "c", "text": "Ca. 150 m"}, {"letter": "d", "text": "Ca. 200 m"}], "richtig": ["a"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 140, "kategorie": "Einsatztaktik Fläche", "frage": "Wie verhalten Sie sich beim Auffinden von Kleidungsstücken die nachweislich der gesuchten Person gehören?", "optionen": [{"letter": "a", "text": "Ich lasse die Kleidungsstücke liegen, um keine Fingerabdrücke zu hinterlassen. Merke mir aber den Fundort."}, {"letter": "b", "text": "Gefundene Kleidungsstücke haben für die Suche keinerlei Bedeutung."}, {"letter": "c", "text": "Gefundene Kleidungsstücke melde ich sofort der Einsatzleitung."}, {"letter": "d", "text": "Ich nehme die Kleidungsstücke zur Übergabe an die Einsatzleitung mit."}], "richtig": ["c"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 141, "kategorie": "Einsatztaktik Fläche", "frage": "Welches ist das richtige Verhalten beim Auffinden einer leblosen Person?", "optionen": [{"letter": "a", "text": "Ich alarmiere sofort alle Hundeführer:innen, um den Einsatz abzubrechen."}, {"letter": "b", "text": "Ich nehme sofort den Hund zurück, melde den Fund der Einsatzleitung und sperre den Fundort weit- räumig ab."}, {"letter": "c", "text": "Ich melde den Fund der Einsatzleitung, damit diese den Einsatz abbrechen kann."}, {"letter": "d", "text": "Ich sperre den Fundort ab und rufe sofort ein PSNV-Team zur Überbringung der Todesnachricht."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 142, "kategorie": "Einsatztaktik Fläche", "frage": "Wie ist die Anordnung von Suchteams bei einer Hang-Quer-Suche?", "optionen": [{"letter": "a", "text": "Die Teams suchen schräg nach hinten und unten versetzt, wobei das erste Team am weitesten vorne und oben sucht."}, {"letter": "b", "text": "Die Teams suchen schräg nach oben und hinten versetzt, wobei das erste Team am weitesten vorne und unten sucht."}, {"letter": "c", "text": "Die Teams suchen sich den optimalen Weg selbst."}, {"letter": "d", "text": "Die Teams suchen in einer Suchkette mit einem Abstand von 60 m."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 143, "kategorie": "Einsatztaktik Fläche", "frage": "In welcher der genannten Einsatzsituationen wählen Sie eine Wegesuche?", "optionen": [{"letter": "a", "text": "Wenn eine rollstuhlfahrende Person gesucht wird."}, {"letter": "b", "text": "Wenn eine Person gesucht wird, die Pilze gesammelt hat."}, {"letter": "c", "text": "Wenn eine im Wald arbeitende Person (z.B. Förster:in) gesucht wird."}, {"letter": "d", "text": "Wenn eine Person mit suizidaler Absicht gesucht wird."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 144, "kategorie": "Einsatztaktik Fläche", "frage": "Was ist eine Areal- / Parzellensuche in der Rettungshundearbeit?", "optionen": [{"letter": "a", "text": "Die Suche nach einem Grundstück für die Sucharbeit."}, {"letter": "b", "text": "Das Absuchen eines besonderen Flurstückes."}, {"letter": "c", "text": "Das Absuchen eines vorgegebenen und umrissdefinierten Geländes."}, {"letter": "d", "text": "Das Absuchen eines Areals von genau 30 000 m² Fläche."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 145, "kategorie": "Einsatztaktik Fläche", "frage": "Wie verhalten Sie sich, wenn Sie bei einem Sucheinsatz auf Rehwild treffen?", "optionen": [{"letter": "a", "text": "Ich binde den Hund an einen Baum und warte auf den Rückzug der Rehe."}, {"letter": "b", "text": "Ich schicke den Hund in Richtung der Rehe, um diese zu vertreiben."}, {"letter": "c", "text": "Ich bitte die Försterin, das Wild durch einen Warnschuss zu vertreiben."}, {"letter": "d", "text": "Ich lasse den Hund kontrolliert weitersuchen und informiere die Einsatzleitung und anderen Suchteams."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 146, "kategorie": "Einsatztaktik Fläche", "frage": "Sie treffen bei einem Sucheinsatz auf Schwarzwild. Wie verhalten Sie sich?", "optionen": [{"letter": "a", "text": "Ich binde den Hund an einen Baum und vertreibe das Schwarzwild mit Hilfe meiner Trillerpfeife."}, {"letter": "b", "text": "Ich schicke den Hund in Richtung Schwarzwild, um dieses zu vertreiben."}, {"letter": "c", "text": "Ich leine meinen Hund an, begebe mich mit diesem aus dem Gefahrenbereich und informiere die Ein- satzleitung."}, {"letter": "d", "text": "Ich lasse den Hund kontrolliert weitersuchen und informiere die Einsatzleitung."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 147, "kategorie": "Einsatztaktik Fläche", "frage": "Bei welcher Einsatzsituation kann es empfehlenswert sein, zuerst eine Parzellen suche durch- zuführen?", "optionen": [{"letter": "a", "text": "Wenn eine joggende Person vermisst wird."}, {"letter": "b", "text": "Wenn eine Person vermisst wird, die Pilze gesammelt hat."}, {"letter": "c", "text": "Wenn eine Person mit Kinderwagen vermisst wird."}, {"letter": "d", "text": "Wenn eine stark gehbehinderte Person gesucht wird."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 148, "kategorie": "Einsatztaktik Fläche", "frage": "Welchen Vorteil bietet die Wegesuche bei einem Rettungshundeeinsatz?", "optionen": [{"letter": "a", "text": "Der Weg ist auf der topografischen Karte gut erkennbar."}, {"letter": "b", "text": "Der Weg ermöglicht eine eindeutige Vorgabe der Such- und Laufrichtung."}, {"letter": "c", "text": "Der Hund kann auf dem Weg schneller laufen und suchen."}, {"letter": "d", "text": "Der Hund kann aufgrund der Witterung besser suchen."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 149, "kategorie": "Einsatztaktik Fläche", "frage": "Welchen Vorteil bietet die Parzellensuche bei einem Rettungshundeeinsatz?", "optionen": [{"letter": "a", "text": "Die Parzellensuche bietet ein günstiges Verhältnis von Zuverlässigkeit und Zeitaufwand."}, {"letter": "b", "text": "Eine Parzellensuche bietet eine gute und stabile Funkverbindung."}, {"letter": "c", "text": "Jedes Suchteam hat ein eigenes zugewiesenes Suchgebiet."}, {"letter": "d", "text": "Eine Parzelle ist auf der topografischen Karte gut erkennbar."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 150, "kategorie": "Einsatztaktik Fläche", "frage": "Welchen Nachteil hat eine Suchkette bei einem Rettungshundeeinsatz?", "optionen": [{"letter": "a", "text": "Das Suchgelände wird zu schnell abgesucht."}, {"letter": "b", "text": "Bei einer Suchkette ist die Zusammenarbeit mit Rettungshundestaffeln anderer Hilfsorganisationen grundsätzlich nicht möglich."}, {"letter": "c", "text": "Eine Suchkette ist langsam und personalintensiv."}, {"letter": "d", "text": "In einer Suchkette ist keine gute Funkverbindung im BOS-Bereich herstellbar."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 151, "kategorie": "Einsatztaktik Fläche", "frage": "Wann ist ein Primäreinsatz für Rettungshundeteams gegeben?", "optionen": [{"letter": "a", "text": "Wenn ein schnelles Absuchen des Suchgebietes gut möglich ist."}, {"letter": "b", "text": "Wenn für die vermisste Person akute Lebensgefahr besteht."}, {"letter": "c", "text": "Wenn es der erste Einsatz der Rettungshundestaffel im Kalenderjahr ist."}, {"letter": "d", "text": "Wenn die vermisste Person seit einer Woche gesucht wird."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 152, "kategorie": "Einsatztaktik Fläche", "frage": "Wann ist ein Sekundäreinsatz für Rettungshunde gegeben?", "optionen": [{"letter": "a", "text": "Wenn ein schnelles Absuchen des Suchgebietes gut möglich ist."}, {"letter": "b", "text": "Wenn für die vermisste Person akute Lebensgefahr besteht."}, {"letter": "c", "text": "Wenn ein Suchgebiet von einem zweiten Hundeteam abgesucht wird."}, {"letter": "d", "text": "Wenn die vermisste Person seit einer Woche gesucht wird."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 153, "kategorie": "Einsatztaktik Fläche", "frage": "Ist eine Einsatznachbereitung sinnvoll?", "optionen": [{"letter": "a", "text": "Nein, dies ist nicht erforderlich, da jeder Einsatz anders durchgeführt wird."}, {"letter": "b", "text": "Ja, sie ist sinnvoll, um neue Erkenntnisse zur Vorbereitung für zukünftige Einsätze zu gewinnen."}, {"letter": "c", "text": "Ja, sie ist jedoch nur sinnvoll, wenn alle Einsatzbeteiligten dazu Zeit haben."}, {"letter": "d", "text": "Ja, sie sollte auf jeden Fall durchgeführt werden und für die Öffentlichkeitsarbeit mit der örtlichen Presse aufbereitet werden."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 154, "kategorie": "Einsatztaktik Fläche", "frage": "Was wird als Grundlinie des Flächensuchgebietes bezeichnet?", "optionen": [{"letter": "a", "text": "Die gedachte vordere Querlinie zur Suchrichtung im Gelände, ab der die Suche des Teams zu begin- nen hat."}, {"letter": "b", "text": "Die Linie, in der alle Hundeführer bei einer Suchkette stehen."}, {"letter": "c", "text": "Die Linie, an der sich die Einsatzfahrzeuge aufstellen."}, {"letter": "d", "text": "Die topografisch tiefste Linie des Suchgebietes."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 155, "kategorie": "Einsatztaktik Fläche", "frage": "Was wird als „letzter Sichtpunkt“ oder PLS (point last seen) bezeichnet?", "optionen": [{"letter": "a", "text": "Die Stelle im Gelände, an der das Rettungshundeteam bei der Suche im Wald aus dem Blickfeld des Einsatzleiters verschwindet."}, {"letter": "b", "text": "Die Stelle, wo der Hund bei der Suche aus dem Blickfeld des Hundeführers verschwindet."}, {"letter": "c", "text": "Die Stelle, wo die vermisste Person von Zeugen zuletzt gesehen wurde."}, {"letter": "d", "text": "Die Stelle, wo die vermisste Person ihren Wohnort hat."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 156, "kategorie": "Einsatztaktik Fläche", "frage": "Sie suchen nach einer suizidgefährdeten Person. Worauf müssen Sie achten?", "optionen": [{"letter": "a", "text": "Dass mein Hund nicht außer Sicht sucht und immer in meiner Nähe bleibt."}, {"letter": "b", "text": "Dass ich bei Suchbeginn spezielle Schutzhandschuhe anziehe."}, {"letter": "c", "text": "Ich achte dabei auf den Eigenschutz."}, {"letter": "d", "text": "Bei einer solchen Einsatzlage gehe ich nur mit Polizeischutz in den Einsatz."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 157, "kategorie": "Einsatztaktik Fläche", "frage": "Mit welcher Farbe ist die Weste der Einsatzabschnittsleitung gekennzeichnet?", "optionen": [{"letter": "a", "text": "Die Westenfarbe hängt davon ab, in welchem Bundesland ich bin."}, {"letter": "b", "text": "Die Weste hat die Farbe Lila."}, {"letter": "c", "text": "Die Farbe der Weste ist für die Rettungshundestaffel irrelevant."}, {"letter": "d", "text": "Die Weste hat die Farbe Gelb."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 158, "kategorie": "Orientierung im Gelände", "frage": "Welchem Zweck dient ein Koordinatengitter auf einer Karte?", "optionen": [{"letter": "a", "text": "Zur genauen Einteilung der Fläche in einzelne Suchgebiete."}, {"letter": "b", "text": "Zur genauen Bestimmung einer beliebigen Position."}, {"letter": "c", "text": "Zur genauen Bestimmung von Höhenangaben auf der Karte."}, {"letter": "d", "text": "Zur quadratischen Abgrenzung von Suchgebieten."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 159, "kategorie": "Orientierung im Gelände", "frage": "Wie wird eine Kompasszahl zu einem sichtbaren Geländepunkt ermittelt? Den Geländepunkt anvisieren und dann …", "optionen": [{"letter": "a", "text": "mich solange drehen, bis die Magnetnadel auf „N“ (Norden) eingespielt ist. Die gesuchte Kompass- zahl an der „N“ (Norden) Markierung ablesen."}, {"letter": "b", "text": "die Teilscheibe drehen, bis die Magnetnadel auf „N“ (Norden) eingespielt ist. Die gesuchte Kompass- zahl an der Ablesemarke ablesen."}, {"letter": "c", "text": "die Teilscheibe drehen bis „N“ (Norden) mit der Ablesemarke übereinstimmt. Die gesuchte Kompass- zahl an der Ablesemarke ablesen."}, {"letter": "d", "text": "mich solange drehen, bis die Magnetnadel auf „N“ (Norden) eingespielt ist. Die gesuchte Kompass- zahl an der Ablesemarke ablesen."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 160, "kategorie": "Orientierung im Gelände", "frage": "In welchem UTM-Band liegt überwiegend die Bundesrepublik Deutschland?", "optionen": [{"letter": "a", "text": "Im UTM-Band „A“"}, {"letter": "b", "text": "Im UTM-Band „X“"}, {"letter": "c", "text": "Im UTM-Band „B“"}, {"letter": "d", "text": "Im UTM-Band „U“"}], "richtig": ["d"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 161, "kategorie": "Orientierung im Gelände", "frage": "Wie heißen die Schnittflächen von UTM-Zonen und –Bändern?", "optionen": [{"letter": "a", "text": "Bandfläche"}, {"letter": "b", "text": "Zonenfläche"}, {"letter": "c", "text": "Zonenfelder"}, {"letter": "d", "text": "Schnittmenge"}], "richtig": ["c"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 162, "kategorie": "Orientierung im Gelände", "frage": "Wie lautet der Merksatz, um UTMREF-Koordinaten in der richtigen Reihenfolge anzugeben?", "optionen": [{"letter": "a", "text": "„Ran an den Baum, rauf auf den Baum“"}, {"letter": "b", "text": "„Rauf auf den Baum, ran an das Obst“"}, {"letter": "c", "text": "„Dran, Drauf, Drüber“"}, {"letter": "d", "text": "„An den Wurzeln fängt der Baum an zu wachsen“"}], "richtig": ["a"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 163, "kategorie": "Orientierung im Gelände", "frage": "Auf wie viele Meter ist eine 8-stellige UTM-Koordinate genau?", "optionen": [{"letter": "a", "text": "1 Meter"}, {"letter": "b", "text": "50 Meter"}, {"letter": "c", "text": "10 Meter"}, {"letter": "d", "text": "100 Meter"}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 164, "kategorie": "Orientierung im Gelände", "frage": "Aus welchen Angaben besteht eine vollständige UTM-Koordinate?", "optionen": [{"letter": "a", "text": "Zone / Band / 10 km Quadrat / Ostwert / Nordwert"}, {"letter": "b", "text": "Zone / Band / 100 km Quadrat / Ostwert / Nordwert"}, {"letter": "c", "text": "Zone / Band / 10 km Quadrat / Westwert / Südwert"}, {"letter": "d", "text": "Zone / Band / 100 km Quadrat / Westwert / Südwert"}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 165, "kategorie": "Orientierung im Gelände", "frage": "Was ist ein Planzeiger?", "optionen": [{"letter": "a", "text": "Ein Hilfsmittel zum genauen Anzeigen der Höhe."}, {"letter": "b", "text": "Ein Hilfsmittel zum genauen Ablesen der Richtung."}, {"letter": "c", "text": "Ein Hilfsmittel zum genauen Ablesen von Koordinaten."}, {"letter": "d", "text": "Ein Hilfsmittel zum genauen Anzeigen der Nordrichtung."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 166, "kategorie": "Orientierung im Gelände", "frage": "Wie erkennt man zuverlässig auf einer topografischen Karte eine Steigung?", "optionen": [{"letter": "a", "text": "Höhenlinien in engem Abstand."}, {"letter": "b", "text": "Höhenlinien in weitem Abstand."}, {"letter": "c", "text": "Durch Höhenpfeile auf der Karte."}, {"letter": "d", "text": "Durch farblich markierte Geländebereiche."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 167, "kategorie": "Orientierung im Gelände", "frage": "In welcher Reihenfolge werden die UTM-Koordinaten angegeben?", "optionen": [{"letter": "a", "text": "Westwert dann Nordwert"}, {"letter": "b", "text": "Nordwert dann Westwert"}, {"letter": "c", "text": "Nordwert dann Ostwert"}, {"letter": "d", "text": "Ostwert dann Nordwert"}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 168, "kategorie": "Orientierung im Gelände", "frage": "Wie ist die Erde auf topografischen Karten mit UTM Gitter eingeteilt?", "optionen": [{"letter": "a", "text": "Als Längsachse mit Längengraden."}, {"letter": "b", "text": "Als Merkator-Projektion."}, {"letter": "c", "text": "Als Zylinder mit Breitengrade."}, {"letter": "d", "text": "Als Quadrat mit Höhen- und Tiefengraden."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 169, "kategorie": "Orientierung im Gelände", "frage": "Welche der nachfolgenden Aussagen ist richtig?", "optionen": [{"letter": "a", "text": "Magnetischer Nordpol und geografischer Nordpol sind identisch."}, {"letter": "b", "text": "Höhenlinien sind immer grün dargestellt."}, {"letter": "c", "text": "Kartenzeichen sind nicht maßstabsgerecht wiedergegeben."}, {"letter": "d", "text": "Geografischer Südpol und magnetischer Westpol sind identisch."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 170, "kategorie": "Orientierung im Gelände", "frage": "Wofür steht GPS?", "optionen": [{"letter": "a", "text": "Grid Positioning System"}, {"letter": "b", "text": "Global Positioning System"}, {"letter": "c", "text": "Graduale Positionsserie"}, {"letter": "d", "text": "Gauß-Projektionssystem"}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 171, "kategorie": "Orientierung im Gelände", "frage": "Welche Bedingungen sind für den Betrieb von GPS Geräten ideal?", "optionen": [{"letter": "a", "text": "Auf einer Anhöhe, mit der Antenne aufrecht in der Hand oder Brusttasche, möglichst wenig Hinder- nisse Richtung Himmel (Baumkronen)"}, {"letter": "b", "text": "Im Tal, unter dichten Laubbäumen"}, {"letter": "c", "text": "Ist egal, GPS funktioniert immer"}, {"letter": "d", "text": "Auf befestigten Wegen, ab vom Weg kann meine Position nicht angezeigt werden"}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 172, "kategorie": "Orientierung im Gelände", "frage": "Wofür sollen GPS Handgeräte im Einsatz nicht eingesetzt werden?", "optionen": [{"letter": "a", "text": "Zum zusätzlichen Suchen von Geocaches."}, {"letter": "b", "text": "Zum genauen Übermitteln des Fundortes."}, {"letter": "c", "text": "Zum Übertragen des Suchgebietes an den/die Hundeführer:in."}, {"letter": "d", "text": "Zum sicheren Absuchen des Suchgebietes, auch bei Nacht."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 173, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Wie lassen Sie Ihren Hund im Trümmereinsatz arbeiten? (Grobsuche)", "optionen": [{"letter": "a", "text": "Ich lasse ihn von der Mitte aus zum Rand suchen."}, {"letter": "b", "text": "Ich lasse ihn vom Rand in Richtung Schadensmittelpunkt suchen."}, {"letter": "c", "text": "Nach SAR Norm – immer von rechts nach links."}, {"letter": "d", "text": "So wie der Hund es gerade anbietet."}], "richtig": ["b"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 174, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Wozu dient die Phase der Erkundung im Rahmen eines Trümmereinsatzes?", "optionen": [{"letter": "a", "text": "Beschaffung möglichst sicherer Informationen über Anzahl und Aufenthalt betroffener Personen."}, {"letter": "b", "text": "Beschaffung möglichst vieler Informationen über das territoriale Gebiet und seine geowissenschaftli- che Eigenschaften."}, {"letter": "c", "text": "Beschaffung möglichst sicherer Informationen über die Art und Anzahl der angeforderten H elfer."}, {"letter": "d", "text": "Beschaffung möglichst vieler Informationen über die Leistungsfähigkeit der mitgeführten Ortungsaus- rüstung."}], "richtig": ["a"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 175, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Was sind die Vorteile der technischen Ortung?", "optionen": [{"letter": "a", "text": "Zeitlich sorgfältige Rüst- und Vorbereitungszeiten im Einsatz."}, {"letter": "b", "text": "Die Bedienung der Technik ausschließlich durch geschultes Personal."}, {"letter": "c", "text": "Die Gefährdungslage der Helfer beim Auslegen von Sensoren."}, {"letter": "d", "text": "Das kleine Ladevolumen, die Nutzung im Dauereinsatz und die Möglichkeit zu Sprachkontakt."}], "richtig": ["d"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 176, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Was sind die Vorteile der biologischen Ortung?", "optionen": [{"letter": "a", "text": "Die biologische Ortung ist tagesformunabhängig. Erholungspausen sind nicht erforderlich."}, {"letter": "b", "text": "Die biologische Ortung kann auch bei Feuer und Chemikalien eingesetzt werden."}, {"letter": "c", "text": "Die biologische Ortung ermöglicht ein schnelles Absuchen der Trümmerlage  mit einer geringen Be- lastung der Trümmerstruktur."}, {"letter": "d", "text": "Das Ladevolumen, die Nutzung im Dauereinsatz."}], "richtig": ["c"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 177, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Worauf braucht man beim Betreten der Trümmer nicht zu achten?", "optionen": [{"letter": "a", "text": "Sich keinesfalls allein auf die Trümmer begeben."}, {"letter": "b", "text": "Beim Herauslösen von Trümmerteilen Vorsicht bewahren."}, {"letter": "c", "text": "Schwingungen vermeiden."}, {"letter": "d", "text": "Beachtung der Tageszeit und Jahreszeit."}], "richtig": ["d"], "erklaerung": "", "isFree": true, "mehrfach": false}, {"id": 178, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Welche Besonderheit ist beim Vordringen in die Trümmer zu beachten?", "optionen": [{"letter": "a", "text": "Die vorhandenen Hohlräume und Öffnungen nutzen."}, {"letter": "b", "text": "Dem Hund unmittelbar auf den Trümmerkegel folgen."}, {"letter": "c", "text": "Der Hund muss eine Kenndecke tragen, um für alle erkennbar zu sein."}, {"letter": "d", "text": "Die Tageszeit ist zu beachten, da sie Auswirkungen auf die Belastbarkeit der Trümmer hat."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 179, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Was ist zuerst zu veranlassen, wenn ausströmendes Gas vermutet wird?", "optionen": [{"letter": "a", "text": "Den Rettungshund sofort in Sicherheit bringen."}, {"letter": "b", "text": "Die Benutzung von offenem Feuer, elektrischen Anlagen und anderen Zündquellen sofort untersagen."}, {"letter": "c", "text": "Die Gaskonzentration ist sofort zu messen."}, {"letter": "d", "text": "Fenster und Türen sind umgehend zu öffnen."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 180, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Welche Maßnahme eignet sich nicht zum Vordringen in die Trümmer eingestürzter Gebäude?", "optionen": [{"letter": "a", "text": "Die Trümmer möglichst nicht bewegen oder entfernen."}, {"letter": "b", "text": "Vom unbeschädigten oder wenig beschädigten Teil des Gebäudes aus durch Wand - und Decken- bruch vordringen."}, {"letter": "c", "text": "Vorhandene Hohlräume und Öffnungen beim Vordringen ausnutzen."}, {"letter": "d", "text": "Möglichst schnell die Trümmer wegräumen, als den zeitlichen Aufwand von Wand - und Deckendurch- brüchen zu betreiben."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 181, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Welcher der folgenden Faktoren hat keinen Einfluss auf die Geruchsverteilung in Trümmerkegeln?", "optionen": [{"letter": "a", "text": "Thermik."}, {"letter": "b", "text": "Windverwirbelungen."}, {"letter": "c", "text": "Bergwind."}, {"letter": "d", "text": "Wind- und Geruchskanal."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 182, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Sie arbeiten im Einsatz ohne Helfer auf einem Trümmergebiet. Ihr Hund zeigt eine vermeintliche Fundstelle an. Wie verhalten Sie sich?", "optionen": [{"letter": "a", "text": "Ich lege meinen Hund ab. Melde den Fund der Einsatzleitung und warte auf Hilfe."}, {"letter": "b", "text": "Eine solche Situation ist nicht denkbar, da ich nicht alleine arbeite."}, {"letter": "c", "text": "Ich markiere die Fundstelle mit einem Fähnchen / Spray und suche danach weiter."}, {"letter": "d", "text": "Ich rufe mit Funk nach Hilfe und beginne sofort mit der „Rettung“."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 183, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "In der Schadensklassifizierung an zerstörten Gebäuden gibt es den Begriff „Randtrümmer“. Was wird darunter verstanden?", "optionen": [{"letter": "a", "text": "Trümmer, die im Verlauf der Suche am Rande, d.h. zufällig, mit abgesucht werden."}, {"letter": "b", "text": "Trümmer, die einen scharf gezackten Rand aufweisen."}, {"letter": "c", "text": "Trümmer, die am Rande eines Trümmerkegels liegen."}, {"letter": "d", "text": "Den Rand von eingestürzten Wänden in einem zerstörten Haus."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 184, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Worauf müssen Sie beim Einsatz in Trümmern besonders achten?", "optionen": [{"letter": "a", "text": "Es ist auf die Tages- bzw. Nachtzeit zu achten."}, {"letter": "b", "text": "Dass Anwohner durch die Rettungsmaßnahmen nicht gestört werden."}, {"letter": "c", "text": "Dass die Rettungsmaßnahmen für Betroffene erst eingeleitet werden, wenn alle vermissten Personen gefunden wurden."}, {"letter": "d", "text": "Es ist auf die Standsicherheit der Trümmer zu achten und im Besonderen muss man sich aus „Trüm- merschattenbereichen“ fernhalten."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 185, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Was versteht man in der Schadensklassifizierung an zerstörten Gebäuden unter dem Begriff „Rutschfläche“?", "optionen": [{"letter": "a", "text": "Ein schräg abwärts angelegtes Brett, das zum schnellen Abtransport von Trümmerteilen dient."}, {"letter": "b", "text": "Ein spezielles Gerät, das bei der Ausbildung der Hunde zum Trümmersuchhund benötigt wird."}, {"letter": "c", "text": "Die Flächen in Gebäuden, die durch Feuchtigkeit zur Rutschfläche werden."}, {"letter": "d", "text": "Schräg abgestürzte Deckenelemente, die auf einer Seite noch aufliegen und auf denen die Trümmer der höher liegenden Räume abgerutscht sind."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 186, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Wie hoch kann die Überlebenswahrscheinlichkeit in einem „ausgefüllten Raum“ für mögliche Opfer sein?", "optionen": [{"letter": "a", "text": "Die Überlebenswahrscheinlichkeit ist sehr hoch, da das Wasser die Wände stabilisiert."}, {"letter": "b", "text": "Die Überlebenswahrscheinlichkeit ist praktisch null, da vermutlich alle Opfer erstickt sind."}, {"letter": "c", "text": "In einem ausgefüllten Raum können sich keine lebenden Personen befinden, da er ja „ausgefüllt“ ist."}, {"letter": "d", "text": "Die Überlebenswahrscheinlichkeit ist sehr hoch, da der menschliche Körper durch das Wasser nach oben getrieben wird."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 187, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Bei Überbeanspruchung der Struktur eines Gebäudes durch Explosion oder Erdbeben stürzt ein Gebäude in sich zusammen. Es wird in der Trümmerlandschaft eine neue, durch Trümmer- teile gebildete Struktur hervorgebracht. Wie bewerten Sie diese neue Struktur?", "optionen": [{"letter": "a", "text": "Die Struktur ist extrem stabil, weil sie sich selbst gebildet hat."}, {"letter": "b", "text": "Die Struktur ist absolut instabil."}, {"letter": "c", "text": "Die Struktur ist extrem labil, weil sie sich ständig selbst verändert."}, {"letter": "d", "text": "Die Struktur ist stabil, aber trügerisch, weil es noch nach Stunden zu „Setzvorgängen“ kommen kann."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 188, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Eine „Schichtung“ besteht aus mehreren übereinander liegenden Rutschflächen. Wo sind Ih- rer Meinung nach Opfer zu erwarten?", "optionen": [{"letter": "a", "text": "An der oberen Kante der Schichtung, weil alle Trümmerteile nach unten gerutscht sind."}, {"letter": "b", "text": "An der unteren Kante und zwischen den Rutschflächen am unteren Ende, weil mögliche Opfer mit den Trümmern gerutscht sind."}, {"letter": "c", "text": "Aus dieser Feststellung können keine Vermutungen gezogen werden."}, {"letter": "d", "text": "Nur außerhalb der Schichtung, weil alle Opfer herausgeschleudert werden."}], "richtig": ["b"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 189, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Welche Bauweise kann nach einem Zusammenbruch ihrer Struktur durch eine Explosion oder ein Erdbeben für verschüttete Opfer noch einen gewissen Schutz bieten?", "optionen": [{"letter": "a", "text": "Häuser in Lehmbauweise, da diese durch ihr geringeres Gewicht die Opfer nicht so  schnell erdrü- cken."}, {"letter": "b", "text": "Häuser aus Ziegelmauerwerk bieten einen hohen Schutz, weil sie in kleine Trümmer zerfallen."}, {"letter": "c", "text": "Häuser in Stahlbeton-/Skelettbauweise bieten nach dem Zusammenbruch noch viele Hohlräume durch große Trümmerteile, die oft noch durch Stahl verbunden sind."}, {"letter": "d", "text": "Fertighäuser, weil diese in ihre Fertigbauteile zerfallen."}], "richtig": ["c"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 190, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Die UN hat in ihrer Arbeitsgruppe INSARAG ein einheitliches System zur Kennzeichnung von Schadenstellen entwickelt. Was kann aus dieser Kennzeichnung ersehen werden?", "optionen": [{"letter": "a", "text": "Eingesetzte Einheiten bzw. Einsatzeinheiten, Gefahren, vermisste Personen, gerettete Personen, Tote und Einsatzende."}, {"letter": "b", "text": "Ort, Zeit, Wetterlage, durchgeführte Maßnahmen und der zuständige Einsatzleiter."}, {"letter": "c", "text": "Ruhe- und Einsatzzeiten der Einsatzkräfte, vorgefundene Lage und Maßnahmen die noch getroffen werden müssen."}, {"letter": "d", "text": "Gerettete Personen, Telefonnummern der Einsatzleitung, eingesetzte Kräfte und Material."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 191, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Wann spricht man von einem teilzerstörten / teils zusammengebrochenen Gebäude?", "optionen": [{"letter": "a", "text": "Wenn einzelne Teile des Gebäudes beschädigt wurden, das Gebäude aber in seiner äußeren Form noch erhalten ist."}, {"letter": "b", "text": "Wenn durch Vandalismus im Gebäude die Einrichtungsgegenstände zerstört wurden."}, {"letter": "c", "text": "Wenn das Gebäude nicht mehr erkennbar ist und einen geschlossenen Trümmerkegel bildet."}, {"letter": "d", "text": "Wenn Teile des Gebäudes eingestürzt sind und einen Trümmerkegel bilden, andere Teile des Gebäudes jedoch in ihrer Struktur noch erhalten sind."}], "richtig": ["d"], "erklaerung": "", "isFree": false, "mehrfach": false}, {"id": 192, "kategorie": "Einsatztaktik Trümmer/Trümmerkunde", "frage": "Wann spricht man von einem total zerstörten / total zusammengebrochenen Gebäude?", "optionen": [{"letter": "a", "text": "Wenn das Gebäude nicht mehr erkennbar ist und einen geschlossenen Trümmerkegel bildet."}, {"letter": "b", "text": "Wenn einzelne Teile des Gebäudes beschädigt wurden, das Gebäude aber in seiner äußeren Form noch erhalten ist."}, {"letter": "c", "text": "Wenn durch eine äußere Einwirkung (Explosion, Erdbeben) über 60% der Dachziegel fehlen."}, {"letter": "d", "text": "Wenn Teile des Gebäudes eingestürzt sind und einen Trümmerkegel bilden, andere Teile des Gebäu- des jedoch in ihrer Struktur noch erhalten sind."}], "richtig": ["a"], "erklaerung": "", "isFree": false, "mehrfach": false}];
+
+const CATEGORIES = [...new Set(QUESTIONS.map(q => q.kategorie))];
+
+const DISC_CONFIG = {
+  alle: {
+    label: 'Alle Sparten',
+    sub: 'Fläche + Trümmer (alle Kategorien)',
+    excluded: [],
+    dist: {
+      'Erste Hilfe': 5, 'Erste Hilfe am Hund': 3, 'Kynologie': 3,
+      'Unfallverhütung / Sicherheit im Einsatz': 3, 'Sprechfunk': 3,
+      'Einsatztaktik Fläche': 2, 'Orientierung im Gelände': 2,
+      'Einsatztaktik Trümmer/Trümmerkunde': 4,
+    },
+  },
+  flaeche: {
+    label: 'Flächensuche',
+    sub: 'Ohne Trümmer/Trümmerkunde-Fragen',
+    excluded: ['Einsatztaktik Trümmer/Trümmerkunde'],
+    dist: {
+      'Erste Hilfe': 5, 'Erste Hilfe am Hund': 3, 'Kynologie': 3,
+      'Unfallverhütung / Sicherheit im Einsatz': 3, 'Sprechfunk': 3,
+      'Einsatztaktik Fläche': 4, 'Orientierung im Gelände': 4,
+    },
+  },
+  truemmer: {
+    label: 'Trümmer',
+    sub: 'Ohne Fläche- und Orientierungsfragen',
+    excluded: ['Einsatztaktik Fläche', 'Orientierung im Gelände'],
+    dist: {
+      'Erste Hilfe': 5, 'Erste Hilfe am Hund': 3, 'Kynologie': 3,
+      'Unfallverhütung / Sicherheit im Einsatz': 3, 'Sprechfunk': 3,
+      'Einsatztaktik Trümmer/Trümmerkunde': 8,
+    },
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LICENSE VERIFICATION
+// ═══════════════════════════════════════════════════════════════════════════
+const _SECRET = 'RHTT-v1::Rettungshunde-Theorie::change-before-release';
+const _ALPHA  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+// Pure-JS SHA-256 — works on file://, WhatsApp in-app browser, iOS WKWebView
+function _sha256(data) {
+  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  let h0=0x6a09e667,h1=0xbb67ae85,h2=0x3c6ef372,h3=0xa54ff53a,
+      h4=0x510e527f,h5=0x9b05688c,h6=0x1f83d9ab,h7=0x5be0cd19;
+  const b=[...data,0x80];
+  while(b.length%64!==56)b.push(0);
+  const L=data.length*8;
+  for(let i=7;i>=0;i--)b.push((L/Math.pow(2,i*8))&0xff);
+  for(let i=0;i<b.length;i+=64){
+    const w=[];
+    for(let j=0;j<16;j++)w[j]=(b[i+j*4]<<24)|(b[i+j*4+1]<<16)|(b[i+j*4+2]<<8)|b[i+j*4+3];
+    for(let j=16;j<64;j++){
+      const s0=((w[j-15]>>>7)|(w[j-15]<<25))^((w[j-15]>>>18)|(w[j-15]<<14))^(w[j-15]>>>3);
+      const s1=((w[j-2]>>>17)|(w[j-2]<<15))^((w[j-2]>>>19)|(w[j-2]<<13))^(w[j-2]>>>10);
+      w[j]=(w[j-16]+s0+w[j-7]+s1)|0;
+    }
+    let a=h0,b2=h1,c=h2,d=h3,e=h4,f=h5,g=h6,h=h7;
+    for(let j=0;j<64;j++){
+      const S1=((e>>>6)|(e<<26))^((e>>>11)|(e<<21))^((e>>>25)|(e<<7));
+      const ch=(e&f)^(~e&g);
+      const t1=(h+S1+ch+K[j]+w[j])|0;
+      const S0=((a>>>2)|(a<<30))^((a>>>13)|(a<<19))^((a>>>22)|(a<<10));
+      const maj=(a&b2)^(a&c)^(b2&c);
+      const t2=(S0+maj)|0;
+      h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b2;b2=a;a=(t1+t2)|0;
+    }
+    h0=(h0+a)|0;h1=(h1+b2)|0;h2=(h2+c)|0;h3=(h3+d)|0;
+    h4=(h4+e)|0;h5=(h5+f)|0;h6=(h6+g)|0;h7=(h7+h)|0;
+  }
+  const r=[];
+  for(const x of[h0,h1,h2,h3,h4,h5,h6,h7])r.push((x>>>24)&0xff,(x>>>16)&0xff,(x>>>8)&0xff,x&0xff);
+  return r;
+}
+
+function _hmac(keyBytes, dataBytes) {
+  const B=64;
+  let k=keyBytes.length>B?_sha256(keyBytes):[...keyBytes];
+  while(k.length<B)k.push(0);
+  return _sha256([...k.map(x=>x^0x5c),..._sha256([...k.map(x=>x^0x36),...dataBytes])]);
+}
+
+function _b32decode(s) {
+  let buf = 0, bits = 0;
+  const out = [];
+  for (const ch of s) {
+    const v = _ALPHA.indexOf(ch);
+    if (v < 0) return null;
+    buf = (buf << 5) | v;
+    bits += 5;
+    if (bits >= 8) { bits -= 8; out.push((buf >> bits) & 0xFF); }
+  }
+  return out;
+}
+
+function _cleanCode(raw) {
+  return raw.toUpperCase().split('').map(c => {
+    if (c === '0') return 'O';
+    if (c === '1') return 'I';
+    if (c === '9') return '';
+    return c;
+  }).filter(c => _ALPHA.includes(c)).join('');
+}
+
+// Synchronous — no Web Crypto API needed
+function verifyCode(raw) {
+  const cleaned = _cleanCode(raw);
+  const bytes = _b32decode(cleaned);
+  if (!bytes || bytes.length < 6) return false;
+  const serial = bytes.slice(0, 2);
+  const mac    = bytes.slice(2, 6);
+  const keyBytes = Array.from(new TextEncoder().encode(_SECRET));
+  const expected = _hmac(keyBytes, serial);
+  for (let i = 0; i < 4; i++) { if (mac[i] !== expected[i]) return false; }
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STORAGE
+// ═══════════════════════════════════════════════════════════════════════════
+const PROGRESS_KEY = 'rhs_progress_v1';
+const LICENSE_KEY  = 'rhs_license_v1';
+const DISC_KEY     = 'rhs_discipline_v1';
+
+function getProgress() {
+  try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); }
+  catch { return {}; }
+}
+function setProgress(p) { localStorage.setItem(PROGRESS_KEY, JSON.stringify(p)); }
+
+function recordAnswer(id, correct) {
+  const p = getProgress();
+  const e = p[id] || { seen: 0, correct: 0, wrong: 0, lastResult: null };
+  e.seen++;
+  correct ? (e.correct++, e.lastResult = 1) : (e.wrong++, e.lastResult = 0);
+  p[id] = e;
+  setProgress(p);
+}
+
+function resetProgress() { localStorage.removeItem(PROGRESS_KEY); }
+
+function getOverallStats(excludedCats) {
+  const p = getProgress();
+  let correct = 0, wrong = 0, seen = 0;
+  const pool = QUESTIONS.filter(q => !excludedCats.includes(q.kategorie));
+  for (const q of pool) {
+    if (p[q.id]) { seen++; correct += p[q.id].correct; wrong += p[q.id].wrong; }
+  }
+  return { seen, correct, wrong, total: pool.length };
+}
+
+// Discipline
+function getDisc() { return localStorage.getItem(DISC_KEY) || null; }
+function setDisc(d) { localStorage.setItem(DISC_KEY, d); }
+function discConfig() { return DISC_CONFIG[getDisc() || 'alle'] || DISC_CONFIG.alle; }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROUTER
+// ═══════════════════════════════════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function goHome() {
+  stopExamTimer();
+  showScreen('screen-home');
+  renderHome();
+}
+
+function logout() {
+  if (confirm('Lizenz-Code entfernen und App sperren?')) {
+    localStorage.removeItem(LICENSE_KEY);
+    showScreen('screen-license');
+    document.getElementById('license-input').value = '';
+    document.getElementById('license-err').textContent = '';
+  }
+}
+
+function showSettingsScreen() {
+  showScreen('screen-settings');
+  renderSettings();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DISCIPLINE MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+let _discPending = null;
+let _discCancelable = false;
+
+function openDiscModal(cancelable) {
+  _discPending = getDisc() || 'alle';
+  _discCancelable = cancelable;
+  document.getElementById('disc-modal-title').textContent = cancelable
+    ? 'Suchhundtyp ändern' : 'Für welche Sparte übst du?';
+  document.getElementById('disc-cancel').style.display = cancelable ? 'block' : 'none';
+  renderDiscOptions();
+  document.getElementById('disc-overlay').classList.add('open');
+}
+
+function closeDiscModal() {
+  document.getElementById('disc-overlay').classList.remove('open');
+}
+
+function renderDiscOptions() {
+  const keys = Object.keys(DISC_CONFIG);
+  let html = '';
+  for (const k of keys) {
+    const c = DISC_CONFIG[k];
+    const sel = _discPending === k;
+    html += `<div class="disc-option${sel ? ' sel' : ''}" onclick="selectDisc('${k}')">
+      <div class="disc-radio"><div class="disc-radio-dot"></div></div>
+      <div>
+        <div class="disc-title">${c.label}</div>
+        <div class="disc-sub">${c.sub}</div>
+      </div>
+    </div>`;
+  }
+  document.getElementById('disc-options').innerHTML = html;
+}
+
+function selectDisc(k) {
+  _discPending = k;
+  renderDiscOptions();
+}
+
+function saveDisc() {
+  setDisc(_discPending);
+  closeDiscModal();
+  goHome();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LICENSE SCREEN
+// ═══════════════════════════════════════════════════════════════════════════
+function submitLicense() {
+  const inp = document.getElementById('license-input');
+  const err = document.getElementById('license-err');
+  const code = inp.value.trim();
+  err.textContent = '';
+  if (!code) { err.textContent = 'Bitte einen Code eingeben.'; return; }
+  const ok = verifyCode(code);
+  if (ok) {
+    localStorage.setItem(LICENSE_KEY, code);
+    if (!getDisc()) { showScreen('screen-home'); renderHome(); openDiscModal(false); }
+    else goHome();
+  } else {
+    err.textContent = 'Ungültiger Code. Bitte erneut versuchen.';
+    inp.focus();
+  }
+}
+
+document.getElementById('license-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitLicense();
+});
+document.getElementById('license-input').addEventListener('input', function() {
+  let v = this.value.toUpperCase().replace(/[^A-Z2-7]/g, '');
+  if (v.length > 5) v = v.slice(0, 5) + '-' + v.slice(5, 10);
+  this.value = v;
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HOME SCREEN
+// ═══════════════════════════════════════════════════════════════════════════
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderHome() {
+  const dc = discConfig();
+  const p = getProgress();
+  const stats = getOverallStats(dc.excluded);
+  const catCount = {}, catSeen = {};
+  const pool = QUESTIONS.filter(q => !dc.excluded.includes(q.kategorie));
+  for (const q of pool) {
+    catCount[q.kategorie] = (catCount[q.kategorie] || 0) + 1;
+    if (p[q.id]) catSeen[q.kategorie] = (catSeen[q.kategorie] || 0) + 1;
+  }
+  const visibleCats = CATEGORIES.filter(c => !dc.excluded.includes(c));
+
+  let html = `<div style="text-align:center;margin-bottom:4px">
+    <button class="disc-badge" onclick="openDiscModal(true)">🔍 ${esc(dc.label)} ✏️</button>
+  </div>`;
+  html += `<div class="section-hdr">Lernmodus</div>`;
+  html += mkTile('♾️', 'Alle Fragen', `${stats.seen}/${stats.total} gesehen`, null);
+  for (const cat of visibleCats) {
+    const seen = catSeen[cat] || 0;
+    html += mkTile('📁', cat, `${seen}/${catCount[cat]} gesehen`, cat);
+  }
+  html += `<div class="section-hdr">Prüfungsmodus</div>
+    <div class="card exam-hero card-clickable" onclick="startExam()">
+      <div class="card-row">
+        <span class="card-icon">📋</span>
+        <div><div class="card-title">GemPPO Prüfung starten</div>
+        <div class="card-sub">25 Fragen · 20 Minuten · 80% zum Bestehen · ${esc(dc.label)}</div></div>
+        <span class="card-arrow">›</span>
+      </div>
+    </div>`;
+  document.getElementById('home-content').innerHTML = html;
+
+  const rate = stats.correct + stats.wrong > 0 ? Math.round(stats.correct / (stats.correct + stats.wrong) * 100) : 0;
+  document.getElementById('home-stats').innerHTML = `
+    <div><div class="stats-val">${stats.seen}</div><div class="stats-label">Gesehen</div></div>
+    <div><div class="stats-val">${stats.correct}</div><div class="stats-label">Richtig</div></div>
+    <div><div class="stats-val">${stats.wrong}</div><div class="stats-label">Falsch</div></div>
+    <div><div class="stats-val">${rate}%</div><div class="stats-label">Quote</div></div>`;
+}
+
+function mkTile(icon, title, sub, cat) {
+  const onclick = cat === null ? 'startLearn(null)' : `startLearn('${cat.replace(/'/g,"\\'")}')`;
+  return `<div class="card card-clickable" onclick="${onclick}">
+    <div class="card-row">
+      <span class="card-icon">${icon}</span>
+      <div><div class="card-title">${esc(title)}</div><div class="card-sub">${esc(sub)}</div></div>
+      <span class="card-arrow">›</span>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SETTINGS SCREEN
+// ═══════════════════════════════════════════════════════════════════════════
+function renderSettings() {
+  const dc = discConfig();
+  let html = `
+    <div class="section-hdr">Suchhundtyp</div>
+    <div class="card card-clickable" onclick="openDiscModal(true)">
+      <div class="card-row">
+        <span class="card-icon">🔍</span>
+        <div><div class="card-title">${esc(dc.label)}</div><div class="card-sub">${esc(dc.sub)}</div></div>
+        <span class="card-arrow">✏️</span>
+      </div>
+    </div>
+    <div class="section-hdr">Lizenz</div>
+    <div class="card card-clickable" onclick="logout()">
+      <div class="card-row">
+        <span class="card-icon">🔑</span>
+        <div><div class="card-title">Lizenz entfernen</div><div class="card-sub">App wird gesperrt</div></div>
+        <span class="card-arrow" style="color:var(--err)">›</span>
+      </div>
+    </div>
+    <div class="section-hdr">Daten</div>
+    <button class="btn btn-sm" style="background:rgba(220,53,69,.2);border:1px solid rgba(220,53,69,.4);color:#ff8a95;margin-bottom:24px;width:auto;padding:10px 20px" onclick="doReset()">🗑️ Fortschritt zurücksetzen</button>`;
+  document.getElementById('settings-content').innerHTML = html;
+}
+
+function logout() {
+  if (confirm('Lizenz-Code entfernen und App sperren?')) {
+    localStorage.removeItem(LICENSE_KEY);
+    showScreen('screen-license');
+    document.getElementById('license-input').value = '';
+    document.getElementById('license-err').textContent = '';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LEARN MODE
+// ═══════════════════════════════════════════════════════════════════════════
+let LS = null;
+
+function weightFor(e) {
+  if (!e) return 3;
+  if (e.lastResult === 0) return 5;
+  const r = e.seen > 0 ? e.wrong / e.seen : 0;
+  if (r >= 0.5) return 3;
+  if (r >= 0.2) return 2;
+  return 1;
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function startLearn(category) {
+  const dc = discConfig();
+  const p = getProgress();
+  let pool = QUESTIONS.filter(q => {
+    if (dc.excluded.includes(q.kategorie)) return false;
+    if (category && q.kategorie !== category) return false;
+    return true;
+  });
+  const seen = new Set();
+  pool = pool.filter(q => { if (seen.has(q.id)) return false; seen.add(q.id); return true; });
+
+  const expanded = [];
+  for (const q of pool) {
+    const w = weightFor(p[q.id]);
+    for (let i = 0; i < w; i++) expanded.push(q);
+  }
+  shuffle(expanded);
+  const ordSeen = new Set();
+  const ordered = expanded.filter(q => { if (ordSeen.has(q.id)) return false; ordSeen.add(q.id); return true; });
+
+  LS = { queue: ordered, retries: {}, done: 0, total: ordered.length, selected: new Set(), revealed: false, lastCorrect: false, MAX_RETRY: 2 };
+  showScreen('screen-learn');
+  renderLearnQ();
+}
+
+function renderLearnQ() {
+  if (!LS || LS.queue.length === 0) { goHome(); return; }
+  const q = LS.queue[0];
+  const isRetry = (LS.retries[q.id] || 0) > 0;
+  const retrying = Object.values(LS.retries).filter(v => v > 0).length;
+  let label = `${LS.done}/${LS.total}`;
+  if (retrying > 0) label += ` · ${retrying} wiederholen`;
+  document.getElementById('learn-progress-label').textContent = label;
+  document.getElementById('learn-retry-chip').style.display = isRetry ? 'inline-block' : 'none';
+  document.getElementById('learn-progress-fill').style.width = (LS.total > 0 ? LS.done / LS.total * 100 : 0) + '%';
+
+  let html = `<div class="card"><p class="question-text">${esc(q.frage)}</p></div>`;
+  for (const opt of q.optionen) {
+    html += `<div class="option" id="opt-${opt.letter}" onclick="toggleLearnOpt('${opt.letter}')">
+      <span class="option-letter">${opt.letter.toUpperCase()}</span>
+      <span class="option-text">${esc(opt.text)}</span>
+    </div>`;
+  }
+  document.getElementById('learn-content').innerHTML = html;
+
+  document.getElementById('learn-check-btn').style.display = 'flex';
+  document.getElementById('learn-check-btn').disabled = true;
+  document.getElementById('learn-next-btn').style.display = 'none';
+  LS.selected = new Set();
+  LS.revealed = false;
+}
+
+function toggleLearnOpt(letter) {
+  if (LS.revealed) return;
+  LS.selected = new Set([letter]);
+  for (const opt of LS.queue[0].optionen) {
+    const el = document.getElementById('opt-' + opt.letter);
+    if (el) el.classList.toggle('selected', LS.selected.has(opt.letter));
+  }
+  document.getElementById('learn-check-btn').disabled = false;
+}
+
+function checkLearnAnswer() {
+  if (!LS || LS.revealed) return;
+  const q = LS.queue[0];
+  const correct = [...LS.selected].sort().join(',') === [...q.richtig].sort().join(',');
+  LS.revealed = true;
+  LS.lastCorrect = correct;
+  recordAnswer(q.id, correct);
+
+  for (const opt of q.optionen) {
+    const el = document.getElementById('opt-' + opt.letter);
+    if (!el) continue;
+    el.classList.add('disabled');
+    if (q.richtig.includes(opt.letter)) el.classList.add('correct');
+    else if (LS.selected.has(opt.letter)) el.classList.add('wrong');
+  }
+
+  const content = document.getElementById('learn-content');
+  if (q.erklaerung) {
+    content.insertAdjacentHTML('beforeend',
+      `<div class="explanation"><div class="explanation-label">Erklärung</div>${esc(q.erklaerung)}</div>`);
+  }
+  const res = correct
+    ? `<div class="card" style="border-color:var(--ok);background:rgba(40,167,69,.1)">✅ Richtig!</div>`
+    : `<div class="card" style="border-color:var(--err);background:rgba(220,53,69,.1)">❌ Falsch — richtig: <strong>${q.richtig.map(l=>l.toUpperCase()).join(', ')}</strong></div>`;
+  content.insertAdjacentHTML('beforeend', res);
+
+  document.getElementById('learn-check-btn').style.display = 'none';
+  const btn = document.getElementById('learn-next-btn');
+  btn.style.display = 'flex';
+  btn.textContent = (LS.queue.length === 1 && correct) ? 'Fertig 🎉' : 'Weiter →';
+}
+
+function nextLearnQuestion() {
+  if (!LS) return;
+  const q = LS.queue.shift();
+  if (LS.lastCorrect) {
+    LS.done++;
+  } else {
+    const tries = (LS.retries[q.id] || 0) + 1;
+    LS.retries[q.id] = tries;
+    if (tries <= LS.MAX_RETRY) {
+      const len = LS.queue.length;
+      const pos = len === 0 ? 0 : Math.floor(len * 2 / 3) + (Date.now() % (Math.floor(len / 3) + 1));
+      LS.queue.splice(Math.min(pos, len), 0, q);
+    } else {
+      LS.done++;
+    }
+  }
+  if (LS.queue.length === 0) { goHome(); return; }
+  renderLearnQ();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXAM MODE
+// ═══════════════════════════════════════════════════════════════════════════
+let ES = null;
+let examTimerInterval = null;
+
+function buildExamQuestions() {
+  const dc = discConfig();
+  const bycat = {};
+  for (const q of QUESTIONS) {
+    if (!dc.excluded.includes(q.kategorie)) {
+      (bycat[q.kategorie] = bycat[q.kategorie] || []).push(q);
+    }
+  }
+  const result = [];
+  for (const [cat, count] of Object.entries(dc.dist)) {
+    const pool = shuffle([...(bycat[cat] || [])]);
+    result.push(...pool.slice(0, count));
+  }
+  return shuffle(result);
+}
+
+function startExam() {
+  ES = {
+    questions: buildExamQuestions(),
+    answers: [],
+    current: 0,
+    secondsLeft: 20 * 60,
+  };
+  ES.answers = ES.questions.map(() => new Set());
+  showScreen('screen-exam');
+  startExamTimer();
+  renderExamQ();
+}
+
+function startExamTimer() {
+  stopExamTimer();
+  examTimerInterval = setInterval(() => {
+    if (!ES) { stopExamTimer(); return; }
+    ES.secondsLeft--;
+    updateTimerDisplay();
+    if (ES.secondsLeft <= 0) { stopExamTimer(); submitExam(); }
+  }, 1000);
+}
+
+function stopExamTimer() {
+  if (examTimerInterval) { clearInterval(examTimerInterval); examTimerInterval = null; }
+}
+
+function updateTimerDisplay() {
+  if (!ES) return;
+  const m = Math.floor(ES.secondsLeft / 60);
+  const s = ES.secondsLeft % 60;
+  const el = document.getElementById('exam-timer');
+  if (el) {
+    el.textContent = `${m}:${String(s).padStart(2,'0')}`;
+    el.classList.toggle('warn', ES.secondsLeft <= 120);
+  }
+}
+
+function renderExamQ() {
+  if (!ES) return;
+  const idx = ES.current;
+  const q = ES.questions[idx];
+  const total = ES.questions.length;
+
+  document.getElementById('exam-q-label').textContent = `Frage ${idx + 1}/${total}`;
+  document.getElementById('exam-progress-fill').style.width = ((idx + 1) / total * 100) + '%';
+  updateTimerDisplay();
+
+  let html = `<div class="card"><p class="question-text">${esc(q.frage)}</p></div>`;
+  for (const opt of q.optionen) {
+    const sel = ES.answers[idx].has(opt.letter);
+    html += `<div class="option${sel ? ' selected' : ''}" id="eopt-${opt.letter}" onclick="toggleExamOpt('${opt.letter}')">
+      <span class="option-letter">${opt.letter.toUpperCase()}</span>
+      <span class="option-text">${esc(opt.text)}</span>
+    </div>`;
+  }
+  document.getElementById('exam-content').innerHTML = html;
+
+  document.getElementById('exam-prev-btn').style.display = idx > 0 ? 'flex' : 'none';
+  const isLast = idx === total - 1;
+  document.getElementById('exam-next-btn').style.display = isLast ? 'none' : 'flex';
+  document.getElementById('exam-submit-btn').style.display = isLast ? 'flex' : 'none';
+}
+
+function toggleExamOpt(letter) {
+  if (!ES) return;
+  const sel = ES.answers[ES.current];
+  if (sel.has(letter)) sel.delete(letter); else { sel.clear(); sel.add(letter); }
+  const q = ES.questions[ES.current];
+  for (const opt of q.optionen) {
+    const el = document.getElementById('eopt-' + opt.letter);
+    if (el) el.classList.toggle('selected', sel.has(opt.letter));
+  }
+}
+
+function examPrev() { if (ES && ES.current > 0) { ES.current--; renderExamQ(); } }
+function examNext() { if (ES && ES.current < ES.questions.length - 1) { ES.current++; renderExamQ(); } }
+
+function confirmQuitExam() {
+  if (confirm('Prüfung abbrechen? Der Fortschritt geht verloren.')) { stopExamTimer(); goHome(); }
+}
+
+function submitExam() {
+  stopExamTimer();
+  if (!ES) return;
+  let correct = 0;
+  const review = [];
+  for (let i = 0; i < ES.questions.length; i++) {
+    const q = ES.questions[i];
+    const ans = [...ES.answers[i]];
+    const isCorrect = ans.sort().join(',') === [...q.richtig].sort().join(',');
+    if (isCorrect) correct++;
+    review.push({ q, ans, isCorrect });
+  }
+  const total = ES.questions.length;
+  const pct = Math.round(correct / total * 100);
+  const pass = pct >= 80;
+  showScreen('screen-result');
+
+  let html = `<div class="card" style="text-align:center;padding:24px;margin-bottom:16px">
+    <div class="result-badge ${pass ? 'pass' : 'fail'}">${pct}%</div>
+    <div class="result-sub">${correct}/${total} Fragen richtig</div>
+    <div style="margin-top:12px;font-size:1.1rem;font-weight:700;color:${pass ? 'var(--ok)' : 'var(--err)'}">${pass ? '✅ Bestanden' : '❌ Nicht bestanden'}</div>
+    <div style="color:var(--muted);font-size:.8rem;margin-top:4px">Mindestpunktzahl: 80% (20/25)</div>
+  </div><div class="section-hdr">Fragen-Übersicht</div>`;
+
+  for (let i = 0; i < review.length; i++) {
+    const { q, ans, isCorrect } = review[i];
+    const ansLetter = ans.length > 0 ? ans.map(l=>l.toUpperCase()).join(', ') : '–';
+    const corrLetter = q.richtig.map(l=>l.toUpperCase()).join(', ');
+    html += `<div class="review-item">
+      <div class="review-header" onclick="toggleReview(${i})">
+        <span class="dot ${isCorrect ? 'dot-ok' : 'dot-err'}"></span>
+        <span style="flex:1;font-size:.85rem">${esc(q.frage.substring(0,80))}${q.frage.length>80?'…':''}</span>
+        <span style="color:var(--muted);font-size:.8rem" id="rev-arrow-${i}">›</span>
+      </div>
+      <div class="review-body" id="rev-body-${i}">
+        <p style="font-size:.85rem;margin-bottom:10px">${esc(q.frage)}</p>`;
+    for (const opt of q.optionen) {
+      const isC = q.richtig.includes(opt.letter), wasSel = ans.includes(opt.letter);
+      const st = isC ? 'border-color:var(--ok);background:rgba(40,167,69,.1)' : wasSel ? 'border-color:var(--err);background:rgba(220,53,69,.1)' : '';
+      html += `<div class="option disabled" style="${st};margin-bottom:6px">
+        <span class="option-letter">${opt.letter.toUpperCase()}</span>
+        <span class="option-text" style="font-size:.82rem">${esc(opt.text)}</span>
+      </div>`;
+    }
+    html += `<div style="font-size:.8rem;color:var(--muted);margin-top:8px">Deine Antwort: <strong>${ansLetter}</strong> · Richtig: <strong>${corrLetter}</strong></div>`;
+    if (q.erklaerung) html += `<div class="explanation" style="margin-top:8px"><div class="explanation-label">Erklärung</div>${esc(q.erklaerung)}</div>`;
+    html += `</div></div>`;
+  }
+  html += `<div style="height:16px"></div><button class="btn btn-grad" onclick="goHome()">← Zurück zum Menü</button><div style="height:24px"></div>`;
+  document.getElementById('result-content').innerHTML = html;
+}
+
+function toggleReview(i) {
+  const body = document.getElementById('rev-body-' + i);
+  const arrow = document.getElementById('rev-arrow-' + i);
+  body.classList.toggle('open');
+  arrow.textContent = body.classList.contains('open') ? '↓' : '›';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STATS SCREEN
+// ═══════════════════════════════════════════════════════════════════════════
+function showStats() {
+  showScreen('screen-stats');
+  const dc = discConfig();
+  const p = getProgress();
+  const stats = getOverallStats(dc.excluded);
+  const rate = stats.correct + stats.wrong > 0 ? Math.round(stats.correct / (stats.correct + stats.wrong) * 100) : 0;
+  const catStats = {};
+  const pool = QUESTIONS.filter(q => !dc.excluded.includes(q.kategorie));
+  for (const q of pool) {
+    if (!catStats[q.kategorie]) catStats[q.kategorie] = { seen:0, correct:0, wrong:0, total:0 };
+    catStats[q.kategorie].total++;
+    if (p[q.id]) { catStats[q.kategorie].seen++; catStats[q.kategorie].correct += p[q.id].correct; catStats[q.kategorie].wrong += p[q.id].wrong; }
+  }
+
+  let html = `<div class="card" style="padding:20px;margin-bottom:16px">
+    <div class="result-badge" style="font-size:2.5rem;color:var(--gold)">${rate}%</div>
+    <div class="result-sub">Gesamtquote · ${stats.seen}/${stats.total} Fragen gesehen<br><small style="color:var(--muted)">${esc(dc.label)}</small></div>
+    <div style="display:flex;justify-content:space-around;margin-top:16px">
+      <div style="text-align:center"><div class="stats-val" style="color:var(--ok)">${stats.correct}</div><div class="stats-label">Richtig gesamt</div></div>
+      <div style="text-align:center"><div class="stats-val" style="color:var(--err)">${stats.wrong}</div><div class="stats-label">Falsch gesamt</div></div>
+    </div></div><div class="section-hdr">Nach Kategorie</div>`;
+
+  for (const [cat, s] of Object.entries(catStats)) {
+    const cr = s.correct + s.wrong > 0 ? Math.round(s.correct / (s.correct + s.wrong) * 100) : 0;
+    const bw = Math.round(s.seen / s.total * 100);
+    html += `<div class="card" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:.85rem;font-weight:600">${esc(cat)}</span>
+        <span style="font-size:.8rem;color:var(--muted)">${s.seen}/${s.total} · ${cr}%</span>
+      </div>
+      <div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${bw}%;background:linear-gradient(90deg,var(--gold),var(--orange));border-radius:3px"></div>
+      </div></div>`;
+  }
+
+  html += `<div class="section-hdr">Daten</div>
+    <button class="btn btn-sm" style="background:rgba(220,53,69,.2);border:1px solid rgba(220,53,69,.4);color:#ff8a95;margin-bottom:24px;width:auto;padding:10px 20px" onclick="doReset()">🗑️ Fortschritt zurücksetzen</button>`;
+  document.getElementById('stats-content').innerHTML = html;
+}
+
+function doReset() {
+  if (confirm('Gesamten Lernfortschritt löschen? Kann nicht rückgängig gemacht werden.')) {
+    resetProgress();
+    showStats();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
+function init() {
+  const saved = localStorage.getItem(LICENSE_KEY);
+  if (saved && verifyCode(saved)) {
+    showScreen('screen-home');
+    renderHome();
+    if (!getDisc()) openDiscModal(false);
+    return;
+  }
+  showScreen('screen-license');
+}
+
+init();
+</script>
+</body>
+</html>
