@@ -150,6 +150,8 @@ a,button,[onclick]{touch-action:manipulation}
 .tour-btn-skip{background:rgba(255,255,255,.08);color:rgba(255,255,255,.6)}
 .tour-btn-next{background:linear-gradient(135deg,var(--gold),var(--orange));color:#1f2733}
 .tour-btn-back{background:rgba(255,255,255,.08);color:var(--text);flex:0.6}
+.tour-check{display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:16px;color:rgba(255,255,255,.65);font-size:.88rem;cursor:pointer;user-select:none}
+.tour-check input{width:17px;height:17px;accent-color:var(--gold);cursor:pointer}
 </style>
 </head>
 <body>
@@ -700,13 +702,23 @@ function _renderTourStep() {
     dots += `<div class="tour-dot${i === _tourStep ? ' active' : ''}"></div>`;
   document.getElementById('tour-dots').innerHTML = dots;
 
-  // buttons
+  // remove old checkbox if present
+  const oldCb = document.getElementById('tour-no-repeat');
+  if (oldCb) oldCb.closest('label') && oldCb.closest('label').remove();
+
+  // checkbox + buttons
   const isLast = _tourStep === total - 1;
   const isFirst = _tourStep === 0;
+
+  const checkHtml = isLast
+    ? `<label class="tour-check"><input type="checkbox" id="tour-no-repeat" checked> Nicht mehr anzeigen</label>`
+    : '';
+  document.getElementById('tour-dots').insertAdjacentHTML('afterend', checkHtml);
+
   let btns = '';
-  if (!isLast) btns += `<button class="tour-btns tour-btn-skip" onclick="closeTour()">Überspringen</button>`;
+  if (!isLast) btns += `<button class="tour-btns tour-btn-skip" onclick="closeTour(false)">Überspringen</button>`;
   if (!isFirst) btns += `<button class="tour-btns tour-btn-back" onclick="tourBack()">←</button>`;
-  btns += `<button class="tour-btn-next" onclick="${isLast ? 'closeTour()' : 'tourNext()'}">
+  btns += `<button class="tour-btn-next" onclick="${isLast ? 'closeTour(true)' : 'tourNext()'}">
     ${isLast ? '✓ Los geht\\'s' : 'Weiter →'}</button>`;
   document.getElementById('tour-btns').innerHTML = btns;
 }
@@ -719,9 +731,12 @@ function tourBack() {
   if (_tourStep > 0) { _tourStep--; _renderTourStep(); }
 }
 
-function closeTour() {
+function closeTour(checkboxMatters) {
   document.getElementById('tour-overlay').classList.remove('active');
-  localStorage.setItem(TOUR_KEY, '1');
+  const cb = document.getElementById('tour-no-repeat');
+  if (!checkboxMatters || (cb && cb.checked)) {
+    localStorage.setItem(TOUR_KEY, '1');
+  }
 }
 
 function maybeShowTour() {
