@@ -1,2 +1,6 @@
+# Kompilat / Build-Artefakte
 waermefluss
 *.o
+# Exportierte Protokolle
+*_protokoll.txt
+waermefluss_protokoll.txt
