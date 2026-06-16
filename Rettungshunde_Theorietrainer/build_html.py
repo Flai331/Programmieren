@@ -135,9 +135,35 @@ body{-webkit-text-size-adjust:100%}
 /* Tap highlight */
 *{-webkit-tap-highlight-color:rgba(246,211,101,.15)}
 a,button,[onclick]{touch-action:manipulation}
+/* ── TOUR ─────────────────────────────────────────────────────────────── */
+#tour-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:center;justify-content:center;padding:20px}
+#tour-overlay.active{display:flex}
+.tour-card{background:var(--card);border-radius:16px;padding:28px 24px 20px;max-width:400px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.08)}
+.tour-icon{font-size:3rem;text-align:center;margin-bottom:16px}
+.tour-title{font-size:1.2rem;font-weight:700;text-align:center;margin-bottom:10px;color:var(--gold)}
+.tour-body{color:rgba(255,255,255,.8);line-height:1.6;text-align:center;font-size:.95rem;margin-bottom:20px}
+.tour-dots{display:flex;justify-content:center;gap:6px;margin-bottom:20px}
+.tour-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.2);transition:background .2s}
+.tour-dot.active{background:var(--gold)}
+.tour-btns{display:flex;gap:10px}
+.tour-btns button{flex:1;padding:12px;border-radius:10px;border:none;font-weight:600;font-size:.95rem;cursor:pointer}
+.tour-btn-skip{background:rgba(255,255,255,.08);color:rgba(255,255,255,.6)}
+.tour-btn-next{background:linear-gradient(135deg,var(--gold),var(--orange));color:#1f2733}
+.tour-btn-back{background:rgba(255,255,255,.08);color:var(--text);flex:0.6}
 </style>
 </head>
 <body>
+
+<!-- ═══ TOUR OVERLAY ═════════════════════════════════════════════════════ -->
+<div id="tour-overlay">
+  <div class="tour-card">
+    <div class="tour-icon" id="tour-icon"></div>
+    <div class="tour-title" id="tour-title"></div>
+    <div class="tour-body" id="tour-body"></div>
+    <div class="tour-dots" id="tour-dots"></div>
+    <div class="tour-btns" id="tour-btns"></div>
+  </div>
+</div>
 
 <!-- ═══ DISCIPLINE PICKER (overlay modal) ════════════════════════════════ -->
 <div id="disc-overlay" class="overlay">
@@ -554,6 +580,8 @@ function renderHome() {
     <div><div class="stats-val">${stats.correct}</div><div class="stats-label">Richtig</div></div>
     <div><div class="stats-val">${stats.wrong}</div><div class="stats-label">Falsch</div></div>
     <div><div class="stats-val">${rate}%</div><div class="stats-label">Quote</div></div>`;
+
+  maybeShowTour();
 }
 
 function mkTile(icon, title, sub, cat) {
@@ -590,6 +618,13 @@ function renderSettings() {
       </div>
     </div>
     <div class="section-hdr">App</div>
+    <div class="card card-clickable" onclick="startTour()">
+      <div class="card-row">
+        <span class="card-icon">🗺️</span>
+        <div><div class="card-title">Tour starten</div><div class="card-sub">App-Funktionen erklärt in 5 Schritten</div></div>
+        <span class="card-arrow">›</span>
+      </div>
+    </div>
     <div class="card card-clickable" onclick="downloadApp()">
       <div class="card-row">
         <span class="card-icon">⬇️</span>
@@ -610,6 +645,87 @@ function downloadApp() {
   a.download = 'RHS_Theorie_Trainer.html';
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOUR
+// ═══════════════════════════════════════════════════════════════════════════
+const TOUR_KEY = 'rhs_tour_done';
+const TOUR_STEPS = [
+  {
+    icon: '🐕',
+    title: 'Willkommen!',
+    body: 'Diese App bereitet dich auf die Rettungshunde-Theorieprüfung vor. Kurze Tour – 5 Schritte.'
+  },
+  {
+    icon: '📖',
+    title: 'Lernmodus',
+    body: 'Übe nach Kategorie oder alle Fragen gemischt. Nach jeder Antwort siehst du sofort ob sie richtig war – inklusive Erklärung. Falsche Fragen kommen automatisch nochmal.'
+  },
+  {
+    icon: '⏱️',
+    title: 'Prüfungsmodus',
+    body: 'Simuliere die echte Prüfung: 25 zufällige Fragen, 20 Minuten Zeit. Auswertung erst am Ende. Bestanden ab 80 % (20 von 25).'
+  },
+  {
+    icon: '🔍',
+    title: 'Suchhundtyp',
+    body: 'Lernst du für Flächensuche, Trümmer oder beides? Wähle deine Sparte – die App blendet fachfremde Fragen aus. Jederzeit änderbar in den Einstellungen.'
+  },
+  {
+    icon: '⬇️',
+    title: 'Offline nutzen',
+    body: 'Einstellungen → „App herunterladen" speichert die komplette App als eine einzige HTML-Datei auf dein Gerät. Danach kein Internet mehr nötig – einfach die Datei öffnen.'
+  }
+];
+
+let _tourStep = 0;
+
+function startTour() {
+  _tourStep = 0;
+  _renderTourStep();
+  document.getElementById('tour-overlay').classList.add('active');
+}
+
+function _renderTourStep() {
+  const s = TOUR_STEPS[_tourStep];
+  const total = TOUR_STEPS.length;
+  document.getElementById('tour-icon').textContent = s.icon;
+  document.getElementById('tour-title').textContent = s.title;
+  document.getElementById('tour-body').textContent = s.body;
+
+  // dots
+  let dots = '';
+  for (let i = 0; i < total; i++)
+    dots += `<div class="tour-dot${i === _tourStep ? ' active' : ''}"></div>`;
+  document.getElementById('tour-dots').innerHTML = dots;
+
+  // buttons
+  const isLast = _tourStep === total - 1;
+  const isFirst = _tourStep === 0;
+  let btns = '';
+  if (!isLast) btns += `<button class="tour-btns tour-btn-skip" onclick="closeTour()">Überspringen</button>`;
+  if (!isFirst) btns += `<button class="tour-btns tour-btn-back" onclick="tourBack()">←</button>`;
+  btns += `<button class="tour-btn-next" onclick="${isLast ? 'closeTour()' : 'tourNext()'}">
+    ${isLast ? '✓ Los geht\\'s' : 'Weiter →'}</button>`;
+  document.getElementById('tour-btns').innerHTML = btns;
+}
+
+function tourNext() {
+  if (_tourStep < TOUR_STEPS.length - 1) { _tourStep++; _renderTourStep(); }
+}
+
+function tourBack() {
+  if (_tourStep > 0) { _tourStep--; _renderTourStep(); }
+}
+
+function closeTour() {
+  document.getElementById('tour-overlay').classList.remove('active');
+  localStorage.setItem(TOUR_KEY, '1');
+}
+
+function maybeShowTour() {
+  if (!localStorage.getItem(TOUR_KEY)) startTour();
 }
 
 function logout() {
