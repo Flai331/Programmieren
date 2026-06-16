@@ -623,17 +623,28 @@ function renderSettings() {
     </div>
     <div class="card card-clickable" onclick="downloadApp()">
       <div class="card-row">
-        <span class="card-icon">⬇️</span>
-        <div><div class="card-title">App herunterladen</div><div class="card-sub">HTML-Datei speichern – funktioniert offline</div></div>
+        <span class="card-icon" id="dl-icon">⬇️</span>
+        <div><div class="card-title" id="dl-title">App herunterladen</div><div class="card-sub" id="dl-sub">HTML-Datei speichern – funktioniert offline</div></div>
         <span class="card-arrow">›</span>
       </div>
     </div>
     <div class="section-hdr">Daten</div>
     <button class="btn btn-sm" style="background:rgba(220,53,69,.2);border:1px solid rgba(220,53,69,.4);color:#ff8a95;margin-bottom:24px;width:auto;padding:10px 20px" onclick="doReset()">🗑️ Fortschritt zurücksetzen</button>`;
   document.getElementById('settings-content').innerHTML = html;
+  if (_isIOS()) {
+    document.getElementById('dl-icon').textContent = '📱';
+    document.getElementById('dl-title').textContent = 'Zum Home-Bildschirm hinzufügen';
+    document.getElementById('dl-sub').textContent = 'Als App-Icon speichern – kein Download nötig';
+  }
+}
+
+function _isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
 function downloadApp() {
+  if (_isIOS()) { _showIOSModal(); return; }
   const html = '<!DOCTYPE html>' + document.documentElement.outerHTML;
   const blob = new Blob([html], {type: 'text/html;charset=utf-8'});
   const a = document.createElement('a');
@@ -641,6 +652,34 @@ function downloadApp() {
   a.download = 'RHS_Theorie_Trainer.html';
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+function _showIOSModal() {
+  const url = location.href.split('?')[0].split('#')[0];
+  const m = document.createElement('div');
+  m.id = 'ios-modal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:300;display:flex;align-items:flex-end;padding:16px';
+  m.innerHTML = `
+    <div style="background:#2c3846;border-radius:16px;padding:24px;width:100%;max-width:420px;margin:0 auto;border:1px solid rgba(255,255,255,.1)">
+      <div style="font-size:2rem;text-align:center;margin-bottom:12px">📱</div>
+      <div style="font-size:1.1rem;font-weight:700;text-align:center;color:#f6d365;margin-bottom:16px">Zum Home-Bildschirm hinzufügen</div>
+      <div style="color:rgba(255,255,255,.8);line-height:1.7;font-size:.93rem">
+        Auf iPhone/iPad kann die HTML-Datei nicht direkt geöffnet werden.<br><br>
+        So speicherst du die App als Icon:<br>
+        <ol style="padding-left:20px;margin-top:8px;margin-bottom:8px">
+          <li>Tippe unten auf das <strong>Teilen-Symbol</strong> <span style="font-size:1.1em">□↑</span></li>
+          <li>Wähle <strong>„Zum Home-Bildschirm"</strong></li>
+          <li>Tippe <strong>„Hinzufügen"</strong></li>
+        </ol>
+        Die App erscheint als Icon und öffnet immer direkt im Safari-Browser – ohne In-App-Browser.
+      </div>
+      <button onclick="document.getElementById('ios-modal').remove()"
+        style="margin-top:20px;width:100%;padding:14px;border-radius:10px;border:none;background:linear-gradient(135deg,#f6d365,#fda085);color:#1f2733;font-weight:700;font-size:1rem;cursor:pointer">
+        Verstanden
+      </button>
+    </div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click', e => { if (e.target === m) m.remove(); });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -679,6 +718,13 @@ let _tourStep = 0;
 
 function startTour() {
   _tourStep = 0;
+  if (_isIOS()) {
+    TOUR_STEPS[TOUR_STEPS.length - 1] = {
+      icon: '📱',
+      title: 'Offline nutzen (iPhone/iPad)',
+      body: 'Tippe auf Teilen □↑ → „Zum Home-Bildschirm" → „Hinzufügen". Die App erscheint als Icon und öffnet immer direkt in Safari – kein Download nötig.'
+    };
+  }
   _renderTourStep();
   document.getElementById('tour-overlay').classList.add('active');
 }
