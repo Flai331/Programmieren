@@ -50,9 +50,13 @@ legt sie für Neuinstallationen ebenfalls an.
 CREATE TABLE srs_cards(
   question_id   INTEGER PRIMARY KEY,
   card_json     TEXT    NOT NULL,        -- card.toMap() als JSON
-  due           TEXT,                    -- card.due ISO8601 (Query-Index)
-  state         INTEGER NOT NULL DEFAULT 0, -- 0 new,1 learning,2 review,3 relearning
-  introduced_at TEXT                     -- erste Einführung; NULL = noch nie gezogen
+  due           TEXT,                    -- card.due ISO8601 UTC (Query-Index)
+  state         INTEGER NOT NULL DEFAULT 1, -- FSRS State.value: 1 learning, 2 review, 3 relearning
+  introduced_at TEXT                     -- Zeitpunkt der ersten Bewertung
+
+-- Hinweis: das fsrs-Package kennt KEINEN "new"-Status. "Neu/noch nie gezogen"
+-- = es existiert KEINE Zeile in srs_cards für diese question_id. Eine Zeile wird
+-- erst bei der ersten Bewertung angelegt.
 );
 CREATE INDEX idx_srs_due ON srs_cards(due);
 
@@ -85,15 +89,16 @@ Verantwortlich: Kartenzustand laden/speichern, Rating anwenden, Tageslimit +
 Tempo berechnen, Queue für heute bauen.
 
 Kernmethoden:
-- `Future<SrsCard> _load(int questionId)` — aus `srs_cards` (JSON → `Card.fromMap`)
-  oder neue `Card.create()` falls nicht vorhanden.
+- `Future<Card> _load(int questionId)` — aus `srs_cards` (JSON → `Card.fromMap`)
+  oder neue `Card(cardId: questionId)` falls keine Zeile existiert.
 - `Future<void> review(int questionId, Rating rating, {int? elapsedMs})` —
-  `scheduler.reviewCard`, persistiert `card.toMap()` + `due`/`state`, setzt
-  `introduced_at` falls erstmals, schreibt `srs_review_log`, ruft zusätzlich
+  `scheduler.reviewCard(card, rating, reviewDuration: elapsedMs)`, persistiert
+  `card.toMap()` + `due` (`card.due`) + `state` (`card.state.value`), setzt
+  `introduced_at` falls Zeile neu, schreibt `srs_review_log`, ruft zusätzlich
   `progress.recordAnswer(questionId, rating != Rating.again)`.
-- `Future<int> dueCount(scope)` — `state != 0 AND due <= now` im Scope.
-- `Future<int> remainingNewCount(scope)` — Fragen im Scope ohne `srs_cards`-Eintrag
-  bzw. `introduced_at IS NULL`.
+- `Future<int> dueCount(scope)` — Zeilen mit `due <= now` im Scope (Existenz =
+  eingeführt).
+- `Future<int> remainingNewCount(scope)` — Fragen im Scope **ohne** `srs_cards`-Zeile.
 - `Future<int> newAllowedToday(scope)` — siehe §6.
 - `Future<List<Question>> buildTodayQueue(scope)` — fällige Wiederholungen
   (nach `due` aufsteigend) + bis zu `newAllowedToday` neue (Reihenfolge: nach
@@ -166,7 +171,8 @@ noch begrenzt). Jede Einführung erhöht `srs_intro_count`; bei neuem Tag Reset.
   - Max. Minuten/Tag (Eingabe/Slider, optional)
   - „Karteikasten zurücksetzen" (Bestätigungsdialog → `resetSrs`)
 - **stats_screen.dart:** kleine Sektion „Karteikasten" — Karten je Zustand
-  (neu / lernend / reif) + „heute fällig". Reine Anzeige.
+  + „heute fällig". Zustands-Mapping: **neu** = keine `srs_cards`-Zeile;
+  **lernend** = `state` 1 oder 3 (learning/relearning); **reif** = `state` 2 (review).
 - **main.dart:** `SrsService` als Provider registrieren.
 
 ## 9. Bewusst NICHT in v1 (YAGNI)
