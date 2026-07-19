@@ -96,7 +96,55 @@ void main() {
     });
   });
 
+  group('guessCorrespondentFromLetterhead (unbekannte Absender)', () {
+    test('erkennt Absenderzeile über dem Adressfeld', () {
+      const text = 'Stadtwerke Musterstadt GmbH · Werkstraße 5 · 12345 Musterstadt\n'
+          'Herrn Klaas Otte\nBeispielweg 1\n12345 Musterstadt';
+      expect(guessCorrespondentFromLetterhead(text),
+          'Stadtwerke Musterstadt GmbH');
+    });
+
+    test('erkennt Kopfzeile mit Organisations-Marker', () {
+      const text = 'DEVK Versicherungen\nRegionaldirektion Köln\n'
+          'Sehr geehrter Herr Otte,';
+      expect(guessCorrespondentFromLetterhead(text), 'DEVK Versicherungen');
+    });
+
+    test('überspringt Anrede-/Empfängerzeilen', () {
+      const text = 'Herrn Klaas Otte\nBeispielweg 1\n\nVolksbank Musterstadt eG\n';
+      expect(guessCorrespondentFromLetterhead(text),
+          'Volksbank Musterstadt eG');
+    });
+
+    test('null bei Text ohne erkennbaren Absender', () {
+      expect(guessCorrespondentFromLetterhead('Hallo,\nwie geht es dir?'),
+          isNull);
+    });
+  });
+
+  group('Mitteilung', () {
+    test('wird als Typ erkannt', () {
+      expect(guessDocType('Wichtige Information zu Ihrem Vertrag entfällt'),
+          isNot('Mitteilung')); // "Vertrag" ist spezifischer und gewinnt
+      expect(guessDocType('Mitteilung über die Anpassung'), 'Mitteilung');
+      expect(guessDocType('Wir informieren Sie über Neuerungen'),
+          'Mitteilung');
+    });
+  });
+
   group('suggestTitle', () {
+    test('Betreffzeile gewinnt', () {
+      const text = 'Musterbank AG\n14.02.2026\n'
+          'Betreff: Änderung der Kontobedingungen\nSehr geehrter Herr Otte';
+      expect(
+        suggestTitle(
+            docType: 'Mitteilung',
+            correspondentName: 'Musterbank',
+            ocrText: text),
+        'Änderung der Kontobedingungen',
+      );
+    });
+
     test('Typ + Absender', () {
       expect(
         suggestTitle(

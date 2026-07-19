@@ -27,6 +27,10 @@ class SuggestionService {
     if (matchedId != null) {
       matched = await repository.getCorrespondent(matchedId);
     }
+    // Unbekannter Absender: aus dem Briefkopf raten. Bestätigt der Nutzer
+    // den Namen, wird er gespeichert und ab dann sicher wiedererkannt.
+    final correspondentName =
+        matched?.name ?? guessCorrespondentFromLetterhead(ocrText);
 
     var docType = guessDocType(ocrText);
     var tagNames = <String>[];
@@ -47,11 +51,11 @@ class SuggestionService {
     return DocumentDraft(
       title: suggestTitle(
         docType: docType,
-        correspondentName: matched?.name,
+        correspondentName: correspondentName,
         ocrText: ocrText,
       ),
       docDate: docDate,
-      correspondentName: matched?.name,
+      correspondentName: correspondentName,
       docType: docType,
       tagNames: tagNames,
       storageLocation: StorageLocations.boxForYear(reference.year),

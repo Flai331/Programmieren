@@ -97,7 +97,21 @@ const List<(String type, List<String> keywords)> _typeRules = [
   ('Arztunterlage', ['arztbrief', 'befund', 'diagnose', 'impfung']),
   ('Urkunde', ['urkunde', 'zeugnis']),
   // Allgemeinstes zuletzt, "beitragsrechnung" etc. matcht hier ebenfalls.
-  ('Rechnung', ['rechnung', 'invoice', 'zu zahlender betrag']),
+  ('Rechnung', [
+    'rechnung',
+    'invoice',
+    'zu zahlender betrag',
+    'zahlbetrag',
+    'gesamtbetrag',
+  ]),
+  ('Mitteilung', [
+    'mitteilung',
+    'wichtige information',
+    'informationen zu ihrem',
+    'änderung ihrer',
+    'anpassung ihrer',
+    'wir informieren sie',
+  ]),
 ];
 
 /// Dokumenttyp anhand von Keywords erraten; `null` wenn nichts passt.
@@ -198,12 +212,83 @@ String? matchKnownCorrespondent(String text, Map<String, String> aliasToId) {
   return bestId;
 }
 
-/// Titelvorschlag: "Typ Absender" oder erste brauchbare Textzeile.
+/// Wortbestandteile, die stark auf einen Firmen-/Behörden-Namen hindeuten.
+final _orgMarkers = RegExp(
+  r'\b(GmbH|AG\b|KG\b|SE\b|e\.\s?V\.|eG\b|mbH|Bank|Sparkasse|Volksbank|'
+  r'Versicherung|Versicherungen|Krankenkasse|Krankenversicherung|Kasse\b|'
+  r'Stadtwerke|Gemeindewerke|Energie|Telekom|Vodafone|Amt\b|Finanzamt|'
+  r'Landratsamt|Behörde|Ministerium|Agentur|Rentenversicherung|Inkasso|'
+  r'Verlag|Verband|Verein|Institut|Praxis|Klinik|Apotheke|Kanzlei|Steuerberat)',
+  caseSensitive: false,
+);
+
+/// Zeilen, die sicher kein Absendername sind.
+final _notASender = RegExp(
+  r'^\d|^(Seite|Datum|Betreff|Sehr geehrte|Guten Tag|An\b|Herrn?\b|Frau\b|'
+  r'Postfach|Telefon|Tel\.|Fax|E-?Mail|www\.|IBAN|BIC)',
+  caseSensitive: false,
+);
+
+/// Rät den Absender eines UNBEKANNTEN Briefs aus dem Briefkopf:
+/// 1. „Absenderzeile" über dem Adressfeld: "Firma · Straße 1 · 12345 Ort"
+/// 2. sonst die erste Kopfzeile mit einem Organisations-Marker (GmbH, Bank …)
+String? guessCorrespondentFromLetterhead(String ocrText) {
+  final lines = ocrText
+      .split('\n')
+      .map((l) => l.trim())
+      .where((l) => l.isNotEmpty)
+      .take(25)
+      .toList();
+
+  // 1. Absenderzeile: kleiner Einzeiler mit Trennzeichen und PLZ.
+  final senderLine = RegExp(r'^(.{3,60}?)\s*[·•|,]\s*.*\b\d{5}\b');
+  for (final line in lines) {
+    final m = senderLine.firstMatch(line);
+    if (m != null) {
+      final name = _cleanOrgName(m[1]!);
+      if (name != null) return name;
+    }
+  }
+
+  // 2. Erste plausible Kopfzeile mit Organisations-Marker.
+  for (final line in lines.take(12)) {
+    if (_notASender.hasMatch(line)) continue;
+    if (line.length < 5 || line.length > 60) continue;
+    if (_orgMarkers.hasMatch(line)) {
+      final name = _cleanOrgName(line);
+      if (name != null) return name;
+    }
+  }
+  return null;
+}
+
+String? _cleanOrgName(String raw) {
+  var name = raw
+      .replaceAll(RegExp(r'\s{2,}'), ' ')
+      .replaceAll(RegExp(r'[·•|]+.*$'), '')
+      .trim()
+      .replaceAll(RegExp(r'[,;:\-–]+$'), '')
+      .trim();
+  if (name.length < 3 || !RegExp(r'[A-Za-zÄÖÜäöüß]{3}').hasMatch(name)) {
+    return null;
+  }
+  return name;
+}
+
+/// Titelvorschlag: Betreffzeile, sonst "Typ Absender", sonst erste
+/// brauchbare Textzeile.
 String suggestTitle({
   String? docType,
   String? correspondentName,
   required String ocrText,
 }) {
+  final betreff = RegExp(r'^Betr(?:eff|\.)?\s*:?\s*(.{4,80})$',
+      caseSensitive: false, multiLine: true);
+  final m = betreff.firstMatch(ocrText);
+  if (m != null) {
+    final subject = m[1]!.trim();
+    if (subject.isNotEmpty) return subject;
+  }
   final parts = [
     if (docType != null && docType.isNotEmpty) docType,
     if (correspondentName != null && correspondentName.isNotEmpty)
