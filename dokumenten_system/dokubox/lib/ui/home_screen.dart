@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_doc_scanner/flutter_doc_scanner.dart';
 import 'package:intl/intl.dart';
 
+import '../ai/ai_extraction_service.dart';
 import '../app_services.dart';
 import '../data/database.dart';
 import '../data/doc_types.dart';
@@ -59,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final pdfPath = await services.scanner
           .renamePdf(outcome.relativePdfPath, docNumber);
       final draft = await services.suggestions.buildDraft(outcome.ocrText);
+      await _refineWithAi(draft, outcome.ocrText);
 
       if (!mounted) return;
       final confirmed = await Navigator.of(context).push<DocumentDraft>(
@@ -100,6 +102,42 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } finally {
       if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  /// Verfeinert den Regel-Entwurf mit dem lokalen KI-Modell (falls
+  /// aktiviert). Zeigt solange einen Hinweis-Dialog; Fehler und Timeouts
+  /// fallen still auf die Regel-Vorschläge zurück.
+  Future<void> _refineWithAi(DocumentDraft draft, String ocrText) async {
+    if (!await services.ai.isReady()) return;
+    if (!mounted) return;
+
+    var dialogOpen = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Expanded(child: Text('KI liest das Dokument …')),
+          ],
+        ),
+      ),
+    ).whenComplete(() => dialogOpen = false);
+
+    try {
+      final known =
+          await services.suggestions.knownCorrespondentName(ocrText);
+      final ai = await services.ai.extract(ocrText);
+      if (ai != null) {
+        applyAiToDraft(draft, ai, preserveCorrespondent: known != null);
+      }
+    } finally {
+      if (mounted && dialogOpen) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
     }
   }
 

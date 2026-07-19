@@ -1,3 +1,4 @@
+import 'ai/ai_extraction_service.dart';
 import 'backup/backup_service.dart';
 import 'data/database.dart';
 import 'data/document_repository.dart';
@@ -13,6 +14,7 @@ class AppServices {
   late final ScanService scanner = ScanService();
   late final NotificationService notifications = NotificationService();
   late final BackupService backup = BackupService(db);
+  late final AiExtractionService ai = AiExtractionService();
 
   AppServices(this.db);
 }

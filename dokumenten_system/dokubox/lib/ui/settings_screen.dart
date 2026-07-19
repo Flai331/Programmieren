@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../ai/ai_extraction_service.dart';
 import '../app_services.dart';
 import '../backup/backup_service.dart';
 import '../lock/lock_gate.dart';
@@ -21,6 +22,9 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _lockEnabled = false;
   bool _busy = false;
+  bool _aiInstalled = false;
+  bool _aiEnabled = false;
+  int? _aiDownloadProgress;
 
   @override
   void initState() {
@@ -28,6 +32,81 @@ class _SettingsScreenState extends State<SettingsScreen> {
     AppLockSettings.isEnabled().then((value) {
       if (mounted) setState(() => _lockEnabled = value);
     });
+    _refreshAiState();
+  }
+
+  Future<void> _refreshAiState() async {
+    final installed = await services.ai.isInstalled();
+    final enabled = await services.ai.isEnabled();
+    if (mounted) {
+      setState(() {
+        _aiInstalled = installed;
+        _aiEnabled = enabled;
+      });
+    }
+  }
+
+  Future<void> _downloadAiModel() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('KI-Modell herunterladen?'),
+        content: const Text(
+            'Das Sprachmodell (Qwen3, ${AiExtractionService.modelSizeLabel}) '
+            'wird einmalig heruntergeladen und läuft danach komplett offline '
+            'auf diesem Gerät. Am besten im WLAN laden.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Herunterladen'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _aiDownloadProgress = 0);
+    try {
+      await services.ai.download(onProgress: (p) {
+        if (mounted) setState(() => _aiDownloadProgress = p);
+      });
+      _snack('KI-Modell installiert – Auslesen läuft ab jetzt mit KI.');
+    } catch (e) {
+      _snack('Download fehlgeschlagen: $e');
+    } finally {
+      if (mounted) setState(() => _aiDownloadProgress = null);
+      await _refreshAiState();
+    }
+  }
+
+  Future<void> _deleteAiModel() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('KI-Modell löschen?'),
+        content: const Text(
+            'Gibt den Speicherplatz wieder frei. Die Vorschläge kommen dann '
+            'wieder nur aus den lokalen Regeln.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Löschen'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await services.ai.delete();
+      await _refreshAiState();
+    }
   }
 
   Future<String?> _askPassword({required String title}) async {
@@ -160,6 +239,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
               setState(() => _lockEnabled = value);
             },
           ),
+          const Divider(),
+          if (!_aiInstalled)
+            ListTile(
+              leading: const Icon(Icons.auto_awesome_outlined),
+              title: const Text('KI-Auslesen aktivieren'),
+              subtitle: Text(_aiDownloadProgress == null
+                  ? 'Lokales Sprachmodell '
+                      '(${AiExtractionService.modelSizeLabel}) einmalig laden — '
+                      'liest Absender, Datum, Typ und Titel. Läuft offline, '
+                      'nichts verlässt das Gerät.'
+                  : 'Wird geladen … $_aiDownloadProgress %'),
+              enabled: _aiDownloadProgress == null && !_busy,
+              onTap: _downloadAiModel,
+            )
+          else ...[
+            SwitchListTile(
+              secondary: const Icon(Icons.auto_awesome),
+              title: const Text('KI-Auslesen'),
+              subtitle: const Text(
+                  'Füllt nach dem Scan Absender, Datum, Typ und Titel per '
+                  'lokalem KI-Modell vor'),
+              value: _aiEnabled,
+              onChanged: (value) async {
+                await services.ai.setEnabled(value);
+                await _refreshAiState();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('KI-Modell löschen'),
+              subtitle:
+                  const Text('Speicherplatz freigeben (Regeln bleiben aktiv)'),
+              onTap: _deleteAiModel,
+            ),
+          ],
+          if (_aiDownloadProgress != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: LinearProgressIndicator(value: _aiDownloadProgress! / 100),
+            ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.backup_outlined),

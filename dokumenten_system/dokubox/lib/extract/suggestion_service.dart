@@ -10,6 +10,22 @@ class SuggestionService {
 
   SuggestionService(this.repository);
 
+  /// Name des BEKANNTEN Korrespondenten im Text, oder `null`.
+  /// (Fürs KI-Merging: gelernte Zuordnungen sollen die KI nicht überschreiben.)
+  Future<String?> knownCorrespondentName(String ocrText) async {
+    final correspondents = await repository.allCorrespondents();
+    final aliasToId = <String, String>{};
+    for (final c in correspondents) {
+      aliasToId[c.name] = c.id;
+      for (final alias in c.aliases.split('\n')) {
+        if (alias.trim().isNotEmpty) aliasToId[alias.trim()] = c.id;
+      }
+    }
+    final id = matchKnownCorrespondent(ocrText, aliasToId);
+    if (id == null) return null;
+    return (await repository.getCorrespondent(id))?.name;
+  }
+
   Future<DocumentDraft> buildDraft(String ocrText, {DateTime? now}) async {
     final reference = now ?? DateTime.now();
 
