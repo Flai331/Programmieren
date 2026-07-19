@@ -95,12 +95,34 @@ class ScanService {
       for (final path in imagePaths) {
         final recognized =
             await recognizer.processImage(InputImage.fromFilePath(path));
-        pages.add(recognized.text);
+        pages.add(_textInReadingOrder(recognized));
       }
     } finally {
       await recognizer.close();
     }
     return pages.join('\n\n');
+  }
+
+  /// ML Kit liefert Textblöcke in Erkennungs-, nicht in Lesereihenfolge.
+  /// Für die Extraktion (Briefkopf oben, Datum zuerst) werden die Blöcke
+  /// nach Position sortiert: oben → unten, bei gleicher Höhe links → rechts.
+  static String _textInReadingOrder(RecognizedText recognized) {
+    final blocks = [...recognized.blocks];
+    blocks.sort((a, b) {
+      final at = a.boundingBox.top;
+      final bt = b.boundingBox.top;
+      // Blöcke auf ähnlicher Höhe (halbe Blockhöhe Toleranz) als eine
+      // "Zeile" behandeln und links vor rechts lesen.
+      final tolerance =
+          ((a.boundingBox.height + b.boundingBox.height) / 4).clamp(8.0, 60.0);
+      if ((at - bt).abs() < tolerance) {
+        return a.boundingBox.left.compareTo(b.boundingBox.left);
+      }
+      return at.compareTo(bt);
+    });
+    return blocks
+        .map((block) => block.lines.map((l) => l.text).join('\n'))
+        .join('\n');
   }
 
   Future<String> _buildPdf(List<String> imagePaths, String docNumber) async {

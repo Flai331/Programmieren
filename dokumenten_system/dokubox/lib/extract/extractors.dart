@@ -69,58 +69,108 @@ DateTime? guessDocDate(String text, {DateTime? now}) {
   return dates.isEmpty ? null : dates.first;
 }
 
-/// Keyword-Regeln für den Dokumenttyp — spezifische Begriffe zuerst.
-const List<(String type, List<String> keywords)> _typeRules = [
-  ('Kontoauszug', ['kontoauszug', 'auszug nr']),
+/// Keyword-Regeln für den Dokumenttyp mit Gewichtung.
+///
+/// `(muster, gewicht)`: Muster ist ein Teilstring oder — für generische
+/// Wörter wie "vertrag", die in fast jedem Brief beiläufig vorkommen —
+/// eine RegExp mit Wortgrenzen. Hohe Gewichte = eindeutige Begriffe.
+/// Bei Punktgleichheit gewinnt der frühere Eintrag (spezifischere Typen
+/// stehen vorn).
+final List<(String type, List<(Pattern, int)> rules)> _typeRules = [
+  ('Kontoauszug', [('kontoauszug', 3), ('auszug nr', 3)]),
   ('Versicherungspolice', [
-    'versicherungsschein',
-    'police',
-    'versicherungspolice',
+    ('versicherungsschein', 3),
+    ('versicherungspolice', 3),
+    (RegExp(r'\bpolice\b'), 2),
   ]),
   ('Gehaltsabrechnung', [
-    'gehaltsabrechnung',
-    'lohnabrechnung',
-    'entgeltabrechnung',
-    'verdienstabrechnung',
+    ('gehaltsabrechnung', 3),
+    ('lohnabrechnung', 3),
+    ('entgeltabrechnung', 3),
+    ('verdienstabrechnung', 3),
   ]),
-  ('Mahnung', ['mahnung', 'zahlungserinnerung']),
-  ('Kündigung', ['kündigung', 'kuendigung', 'vertragsbeendigung']),
+  ('Mahnung', [('mahnung', 3), ('zahlungserinnerung', 3)]),
+  ('Kündigung', [
+    (RegExp(r'\bkündigung\b'), 2),
+    (RegExp(r'\bkuendigung\b'), 2),
+    ('kündigungsbestätigung', 3),
+    ('vertragsbeendigung', 2),
+  ]),
   ('Steuerunterlage', [
-    'steuerbescheid',
-    'einkommensteuer',
-    'lohnsteuerbescheinigung',
-    'finanzamt',
+    ('steuerbescheid', 3),
+    ('einkommensteuer', 2),
+    ('lohnsteuerbescheinigung', 3),
+    ('finanzamt', 2),
   ]),
-  ('Bescheid', ['bescheid']),
-  ('Bescheinigung', ['bescheinigung', 'nachweis über', 'zertifikat']),
-  ('Vertrag', ['vertrag', 'vereinbarung']),
-  ('Arztunterlage', ['arztbrief', 'befund', 'diagnose', 'impfung']),
-  ('Urkunde', ['urkunde', 'zeugnis']),
-  // Allgemeinstes zuletzt, "beitragsrechnung" etc. matcht hier ebenfalls.
+  ('Bescheid', [(RegExp(r'\bbescheid\b'), 2)]),
+  ('Bescheinigung', [
+    ('bescheinigung', 3),
+    ('nachweis über', 2),
+    ('zertifikat', 2),
+  ]),
+  ('Arztunterlage', [
+    ('arztbrief', 3),
+    (RegExp(r'\bbefund\b'), 2),
+    (RegExp(r'\bdiagnose\b'), 2),
+    ('impfung', 2),
+  ]),
+  ('Urkunde', [(RegExp(r'\burkunde\b'), 2), (RegExp(r'\bzeugnis\b'), 2)]),
   ('Rechnung', [
-    'rechnung',
-    'invoice',
-    'zu zahlender betrag',
-    'zahlbetrag',
-    'gesamtbetrag',
+    ('rechnung', 2),
+    ('invoice', 2),
+    ('zu zahlender betrag', 2),
+    ('zahlbetrag', 2),
   ]),
   ('Mitteilung', [
-    'mitteilung',
-    'wichtige information',
-    'informationen zu ihrem',
-    'änderung ihrer',
-    'anpassung ihrer',
-    'wir informieren sie',
+    (RegExp(r'\bmitteilung\b'), 3),
+    ('wichtige information', 2),
+    ('informationen zu ihrem', 2),
+    ('änderung ihrer', 2),
+    ('anpassung ihrer', 2),
+    ('wir informieren sie', 2),
+  ]),
+  // "Vertrag" ist ein notorisches Streuwort ("zu Ihrem Vertrag", …):
+  // niedrig gewichtet und nur als eigenständiges Wort — Komposita wie
+  // "Vertragsnummer" zählen nicht. Ein echter Vertrag gewinnt über
+  // die spezifischen Begriffe.
+  ('Vertrag', [
+    (RegExp(r'\bvertrag\b'), 1),
+    ('vertragsbedingungen', 2),
+    ('mietvertrag', 3),
+    ('kaufvertrag', 3),
+    ('arbeitsvertrag', 3),
+    (RegExp(r'\bvereinbarung\b'), 1),
   ]),
 ];
 
-/// Dokumenttyp anhand von Keywords erraten; `null` wenn nichts passt.
+/// Dokumenttyp per gewichtetem Keyword-Score erraten; `null` wenn nichts
+/// passt. Treffer im Kopfbereich (erste ~400 Zeichen) zählen einen Punkt
+/// extra, weil Überschriften den Typ am zuverlässigsten verraten.
 String? guessDocType(String text) {
   final lower = text.toLowerCase();
-  for (final (type, keywords) in _typeRules) {
-    if (keywords.any(lower.contains)) return type;
+  final head = lower.length > 400 ? lower.substring(0, 400) : lower;
+
+  String? best;
+  var bestScore = 0;
+  for (final (type, rules) in _typeRules) {
+    var score = 0;
+    for (final (pattern, weight) in rules) {
+      final matches = pattern is RegExp
+          ? pattern.hasMatch(lower)
+          : lower.contains(pattern as String);
+      if (matches) {
+        final inHead = pattern is RegExp
+            ? pattern.hasMatch(head)
+            : head.contains(pattern as String);
+        score += weight + (inHead ? 1 : 0);
+      }
+    }
+    if (score > bestScore) {
+      best = type;
+      bestScore = score;
+    }
   }
-  return null;
+  return best;
 }
 
 final _ibanCandidate =
@@ -225,7 +275,8 @@ final _orgMarkers = RegExp(
 /// Zeilen, die sicher kein Absendername sind.
 final _notASender = RegExp(
   r'^\d|^(Seite|Datum|Betreff|Sehr geehrte|Guten Tag|An\b|Herrn?\b|Frau\b|'
-  r'Postfach|Telefon|Tel\.|Fax|E-?Mail|www\.|IBAN|BIC)',
+  r'Postfach)|\bTelefon\b|\bTel\b\.?[.:\s]|\bFax\b|E-?Mail|www\.|@|'
+  r'\bIBAN\b|\bBIC\b|Steuer-?Nr|\bUSt\b|\bHRB\b|\bAmtsgericht\b',
   caseSensitive: false,
 );
 
@@ -240,9 +291,12 @@ String? guessCorrespondentFromLetterhead(String ocrText) {
       .take(25)
       .toList();
 
-  // 1. Absenderzeile: kleiner Einzeiler mit Trennzeichen und PLZ.
-  final senderLine = RegExp(r'^(.{3,60}?)\s*[·•|,]\s*.*\b\d{5}\b');
+  // 1. Absenderzeile: kleiner Einzeiler mit Trennzeichen und PLZ
+  //    ("Firma · Straße 5 · 12345 Ort"). Fußzeilen-Zeilen (Telefon, IBAN …)
+  //    sind ausgeschlossen, damit nicht die Bankverbindung zum Absender wird.
+  final senderLine = RegExp(r'^(.{3,60}?)\s*[·•|,]\s*.*\b\d{5}\b(?!\d)');
   for (final line in lines) {
+    if (_notASender.hasMatch(line)) continue;
     final m = senderLine.firstMatch(line);
     if (m != null) {
       final name = _cleanOrgName(m[1]!);

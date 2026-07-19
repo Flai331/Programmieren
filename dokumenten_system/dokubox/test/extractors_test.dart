@@ -120,15 +120,39 @@ void main() {
       expect(guessCorrespondentFromLetterhead('Hallo,\nwie geht es dir?'),
           isNull);
     });
+
+    test('Fußzeilen (Telefon, IBAN, Amtsgericht) werden nicht zum Absender',
+        () {
+      const text = 'Telefon: 0221 12345 · Servicezeiten · 50667 Köln\n'
+          'IBAN: DE89 3704 0044 0532 0130 00\n'
+          'Amtsgericht Köln, HRB 12345\n'
+          'AOK Rheinland Krankenkasse\n';
+      expect(guessCorrespondentFromLetterhead(text),
+          'AOK Rheinland Krankenkasse');
+    });
   });
 
-  group('Mitteilung', () {
-    test('wird als Typ erkannt', () {
-      expect(guessDocType('Wichtige Information zu Ihrem Vertrag entfällt'),
-          isNot('Mitteilung')); // "Vertrag" ist spezifischer und gewinnt
+  group('Mitteilung vs. Streuwort "Vertrag"', () {
+    test('Mitteilung gewinnt, auch wenn "Vertrag" beiläufig vorkommt', () {
+      expect(
+          guessDocType('Mitteilung\nzur Anpassung Ihres Vertrags zum 01.01.'),
+          'Mitteilung');
+      expect(guessDocType('Wichtige Information zu Ihrem Vertrag'),
+          'Mitteilung');
       expect(guessDocType('Mitteilung über die Anpassung'), 'Mitteilung');
       expect(guessDocType('Wir informieren Sie über Neuerungen'),
           'Mitteilung');
+    });
+
+    test('"Vertragsnummer" allein macht keinen Vertrag', () {
+      expect(guessDocType('Vertragsnummer: 12345\nMitteilung'), 'Mitteilung');
+    });
+
+    test('echter Vertrag wird weiterhin erkannt', () {
+      expect(guessDocType('Mietvertrag\nzwischen Vermieter und Mieter'),
+          'Vertrag');
+      expect(guessDocType('Vertrag über die Lieferung, Vertragsbedingungen'),
+          'Vertrag');
     });
   });
 
