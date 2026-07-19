@@ -1,7 +1,7 @@
 @echo off
 REM ============================================================
 REM  DokuBox - APK bauen (Windows)
-REM  Doppelklick genuegt. Ergebnis: %USERPROFILE%\APK\DokuBox.apk
+REM  Doppelklick genuegt. Ergebnis: Programmieren\APK\DokuBox.apk
 REM ============================================================
 
 REM In den Ordner dieses Skripts wechseln (dokumenten_system\dokubox)
@@ -24,14 +24,16 @@ if errorlevel 1 goto :fehler
 
 echo.
 echo [4/4] APK in den APK-Ordner kopieren ...
-if not exist "%USERPROFILE%\APK" mkdir "%USERPROFILE%\APK"
-copy /Y "build\app\outputs\flutter-apk\app-release.apk" "%USERPROFILE%\APK\DokuBox.apk" >nul
+REM APK-Ordner im Repo (Programmieren\APK), zwei Ebenen ueber diesem Skript
+set "APKORDNER=%~dp0..\..\APK"
+if not exist "%APKORDNER%" mkdir "%APKORDNER%"
+copy /Y "build\app\outputs\flutter-apk\app-release.apk" "%APKORDNER%\DokuBox.apk" >nul
 if errorlevel 1 goto :fehler
 
 echo.
 echo ============================================================
 echo  FERTIG!  Die App liegt hier:
-echo  %USERPROFILE%\APK\DokuBox.apk
+for %%I in ("%APKORDNER%\DokuBox.apk") do echo  %%~fI
 echo  Datei aufs Handy uebertragen und antippen zum Installieren.
 echo ============================================================
 echo.
