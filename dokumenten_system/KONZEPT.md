@@ -176,9 +176,28 @@ Richtwerte für Privatpersonen in Deutschland — in der App als Standard-Friste
 | Ärztliche Unterlagen, Rentennachweise | dauerhaft |
 | Urkunden, Zeugnisse, notarielle Verträge | lebenslang (→ Mappe „Wichtig im Original") |
 
-## 7. Offene Punkte (vor/während Phase 1 zu klären)
+## 7. Marktumfeld & Positionierung (Recherche Juli 2026)
 
-- **App-Name:** „DokuBox" ist Arbeitstitel — Alternativen willkommen.
+Relevant mit Blick auf eine spätere Play-Store-Veröffentlichung.
+
+| App | Ähnlichkeit | Schwäche gegenüber DokuBox |
+|---|---|---|
+| **fileee** (+ fileeeBox) | Direktester Konkurrent: Scannen, Volltextsuche, Tags + physische Box („immer obenauf", Fundstelle per Farbskala) | Cloud-Pflicht (Dokumente auf fremden Servern), Gratis-Limit 10 Dok./Monat, Abo bis 9,99 €/Monat, Play-Store-Bewertung nur ~3,3★ (Kritik: UI, Performance) |
+| **Docutain** | Stärkster „Lokal & privat"-Konkurrent: alles on-device, lokale OCR, Verschlüsselung, Pro einmalig 4,99 € | Reine Digital-Verwaltung — kein Konzept für die physische Ablage der Originale (keine Nummer, keine Box), keine Fristen-/Ausmistlogik |
+| **paperless-ngx** (+ Paperless Mobile / Swift Paperless) | Open-Source-Platzhirsch; aus dessen Community stammt das chronologische Nummern-Prinzip | Erfordert eigenen Server (Docker) oder Managed Hosting (~16 $/Monat) — keine reine Handy-Lösung für Normalnutzer |
+| Reine Scanner-Apps (Adobe Scan, MS Lens, SwiftScan, MyDocs, PapperClass …) | Gutes Scannen | Kaum Verwaltung, meist Cloud-Zwang, keine Originale-Verwaltung |
+
+**Die Nische:** *Docutain-Datenschutz + fileeeBox-Prinzip, ohne Abo und ohne Dokumenten-Limit.* Diese Kombination — 100 % lokal, kein Abo, physische Ablage per Nummer als Kernfeature, Aufbewahrungsfristen mit Jahres-Ausmistliste — bietet aktuell keine App.
+
+**Positionierung im Play Store:**
+- Kernbotschaften: „Deine Dokumente bleiben auf deinem Handy" · „Kein Abo, kein Dokumenten-Limit" · „Nie wieder sortieren — Original in 30 Sekunden wiedergefunden".
+- Das chronologische Nummern-Prinzip ist ein freies, altes Ablagekonzept und darf genutzt werden; **Name und Aufmachung müssen aber klar Abstand zu „fileee"/„fileeeBox" halten** (kein ähnlicher Name, keine Farbskala-Optik).
+- fileees schwache Bewertung (~3,3★) zeigt: Der direkteste Konkurrent hat unzufriedene Nutzer — Qualitätschance.
+
+## 8. Offene Punkte (vor/während Phase 1 zu klären)
+
+- **App-Name:** „DokuBox" ist Arbeitstitel — Alternativen willkommen (Abstand zu „fileee(Box)" beachten, s. Abschnitt 7).
 - **Backup-Erinnerung:** Soll die App z. B. monatlich an den Backup-Export erinnern? (Empfehlung: ja.)
 - **Papierkorb-Verhalten:** Gelöschte Scans X Tage aufbewahren vor endgültigem Löschen? (Empfehlung: 30 Tage.)
 - **iOS:** Zunächst nur Android-APK wie gewohnt; iOS später über TestFlight/„Zum Home-Bildschirm"-Alternative?
+- **Play-Store-Monetarisierung** (falls Veröffentlichung): kostenlos, einmaliger Pro-Kauf (wie Docutain, 4,99 €) oder „Pay what you want"? Kein Abo — das ist Teil der Positionierung.
