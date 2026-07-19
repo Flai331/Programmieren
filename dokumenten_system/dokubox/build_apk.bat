@@ -1,7 +1,8 @@
 @echo off
 REM ============================================================
 REM  DokuBox - APK bauen (Windows)
-REM  Doppelklick genuegt. Ergebnis: Programmieren\APK\DokuBox.apk
+REM  Doppelklick genuegt.
+REM  Ergebnis: C:\Users\klaas\Desktop\Programmieren\APKs\Android\DokuBox.apk
 REM ============================================================
 
 REM In den Ordner dieses Skripts wechseln (dokumenten_system\dokubox)
@@ -24,8 +25,7 @@ if errorlevel 1 goto :fehler
 
 echo.
 echo [4/4] APK in den APK-Ordner kopieren ...
-REM APK-Ordner im Repo (Programmieren\APK), zwei Ebenen ueber diesem Skript
-set "APKORDNER=%~dp0..\..\APK"
+set "APKORDNER=C:\Users\klaas\Desktop\Programmieren\APKs\Android"
 if not exist "%APKORDNER%" mkdir "%APKORDNER%"
 copy /Y "build\app\outputs\flutter-apk\app-release.apk" "%APKORDNER%\DokuBox.apk" >nul
 if errorlevel 1 goto :fehler
