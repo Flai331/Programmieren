@@ -48,33 +48,28 @@ jobs:
         working-directory: dokumenten_system/dokubox
         run: flutter build apk --release --target-platform android-arm64
 
-      - name: APK-Größe prüfen (GitHub-Limit 100 MB)
+      - name: APK umbenennen
         run: |
-          APK=dokumenten_system/dokubox/build/app/outputs/flutter-apk/app-release.apk
-          SIZE=$(stat -c%s "$APK")
-          echo "APK-Größe: $((SIZE / 1024 / 1024)) MB"
-          if [ "$SIZE" -gt 99000000 ]; then
-            echo "::error::APK ist größer als 99 MB und kann nicht ins Repo committet werden."
-            exit 1
-          fi
+          cp dokumenten_system/dokubox/build/app/outputs/flutter-apk/app-release.apk DokuBox.apk
+          ls -lh DokuBox.apk
 
-      - name: APK ins Repo committen
-        run: |
-          mkdir -p APKs/Android
-          cp dokumenten_system/dokubox/build/app/outputs/flutter-apk/app-release.apk APKs/Android/DokuBox.apk
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add APKs/Android/DokuBox.apk
-          if git diff --cached --quiet; then
-            echo "APK unverändert – nichts zu committen."
-            exit 0
-          fi
-          git commit -m "DokuBox.apk automatisch gebaut [skip ci]"
-          git pull --rebase origin "$GITHUB_REF_NAME"
-          git push origin HEAD:"$GITHUB_REF_NAME"
+      # Die APK ist wegen der lokalen KI-Engine ~150 MB groß und passt nicht
+      # ins Git-Repo (100-MB-Limit). Daher als GitHub-Release veröffentlichen
+      # (fester Download-Link, kein Flutter nötig).
+      - name: Als GitHub-Release veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: DokuBox (neueste APK)
+          body: |
+            Automatisch gebaute Android-App (arm64).
+            **Download unten: `DokuBox.apk`** — auf ein Android-Handy laden und antippen.
+            Enthält optionales lokales KI-Auslesen (Modell wird bei Bedarf in der App geladen).
+          files: DokuBox.apk
+          prerelease: true
 
-      - name: APK zusätzlich als Download-Artefakt anhängen
+      - name: APK zusätzlich als Build-Artefakt anhängen
         uses: actions/upload-artifact@v4
         with:
           name: DokuBox-APK
-          path: dokumenten_system/dokubox/build/app/outputs/flutter-apk/app-release.apk
+          path: DokuBox.apk
