@@ -179,9 +179,16 @@ class AiExtractionService {
     return _model!;
   }
 
+  /// Nur der obere Teil des Dokuments wird an die KI gegeben. Absender,
+  /// Datum und Betreff stehen bei Briefen fast immer im Kopf; weniger Text
+  /// = deutlich kürzere Rechenzeit auf dem Handy (der Flaschenhals ist das
+  /// Einlesen des Prompts).
+  static const maxOcrCharsForAi = 1200;
+
   static String buildPrompt(String ocrText) {
-    final text =
-        ocrText.length > 2500 ? ocrText.substring(0, 2500) : ocrText;
+    final text = ocrText.length > maxOcrCharsForAi
+        ? ocrText.substring(0, maxOcrCharsForAi)
+        : ocrText;
     return '''
 Du extrahierst Metadaten aus dem OCR-Text eines eingescannten deutschen Dokuments.
 Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in genau dieser Form, ohne Erklärungen:
@@ -211,7 +218,8 @@ $text
         temperature: 0.1,
         topK: 1,
         isThinking: false,
-        maxOutputTokens: 256,
+        // Das JSON ist kurz — kurze Ausgabe spart Rechenzeit.
+        maxOutputTokens: 128,
       );
       await chat.addQueryChunk(
           Message.text(text: buildPrompt(ocrText), isUser: true));

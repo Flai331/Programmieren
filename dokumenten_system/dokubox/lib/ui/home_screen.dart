@@ -65,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final pdfPath = await services.scanner
           .renamePdf(outcome.relativePdfPath, docNumber);
       final draft = await services.suggestions.buildDraft(outcome.ocrText);
-      await _refineWithAi(draft, outcome.ocrText);
+      await _refineWithAi(draft, outcome.ocrText, outcome.firstPageOcr);
 
       if (!mounted) {
         // Sollte nach dem Overlay-Fix nicht mehr vorkommen; falls doch,
@@ -120,7 +120,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Verfeinert den Regel-Entwurf mit dem lokalen KI-Modell (falls
   /// aktiviert). Zeigt solange einen Hinweis-Dialog; Fehler und Timeouts
   /// fallen still auf die Regel-Vorschläge zurück.
-  Future<void> _refineWithAi(DocumentDraft draft, String ocrText) async {
+  Future<void> _refineWithAi(
+      DocumentDraft draft, String fullOcr, String firstPageOcr) async {
     if (!await services.ai.isReady()) return;
     if (!mounted) return;
 
@@ -140,9 +141,11 @@ class _HomeScreenState extends State<HomeScreen> {
     ).whenComplete(() => dialogOpen = false);
 
     try {
+      // Bekannten Absender aus dem Volltext, aber KI nur auf die erste
+      // Seite ansetzen (schneller; Absender/Datum/Betreff stehen dort).
       final known =
-          await services.suggestions.knownCorrespondentName(ocrText);
-      final ai = await services.ai.extract(ocrText);
+          await services.suggestions.knownCorrespondentName(fullOcr);
+      final ai = await services.ai.extract(firstPageOcr);
       if (ai != null) {
         applyAiToDraft(draft, ai, preserveCorrespondent: known != null);
       }
