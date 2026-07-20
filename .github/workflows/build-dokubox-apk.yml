@@ -1,0 +1,80 @@
+name: DokuBox APK bauen
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/document-digitalization-system-ezb1my
+    paths:
+      - 'dokumenten_system/dokubox/**'
+      - '.github/workflows/build-dokubox-apk.yml'
+
+concurrency:
+  group: dokubox-apk
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repo auschecken
+        uses: actions/checkout@v4
+
+      - name: Java einrichten
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter einrichten
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.6
+          cache: true
+
+      - name: Abhängigkeiten auflösen
+        working-directory: dokumenten_system/dokubox
+        run: flutter pub get
+
+      - name: Tests ausführen
+        working-directory: dokumenten_system/dokubox
+        run: flutter test
+
+      - name: Release-APK bauen (arm64)
+        working-directory: dokumenten_system/dokubox
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: APK-Größe prüfen (GitHub-Limit 100 MB)
+        run: |
+          APK=dokumenten_system/dokubox/build/app/outputs/flutter-apk/app-release.apk
+          SIZE=$(stat -c%s "$APK")
+          echo "APK-Größe: $((SIZE / 1024 / 1024)) MB"
+          if [ "$SIZE" -gt 99000000 ]; then
+            echo "::error::APK ist größer als 99 MB und kann nicht ins Repo committet werden."
+            exit 1
+          fi
+
+      - name: APK ins Repo committen
+        run: |
+          mkdir -p APKs/Android
+          cp dokumenten_system/dokubox/build/app/outputs/flutter-apk/app-release.apk APKs/Android/DokuBox.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add APKs/Android/DokuBox.apk
+          if git diff --cached --quiet; then
+            echo "APK unverändert – nichts zu committen."
+            exit 0
+          fi
+          git commit -m "DokuBox.apk automatisch gebaut [skip ci]"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin HEAD:"$GITHUB_REF_NAME"
+
+      - name: APK zusätzlich als Download-Artefakt anhängen
+        uses: actions/upload-artifact@v4
+        with:
+          name: DokuBox-APK
+          path: dokumenten_system/dokubox/build/app/outputs/flutter-apk/app-release.apk
