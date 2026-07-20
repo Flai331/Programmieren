@@ -8,6 +8,7 @@ import '../data/database.dart';
 import '../data/doc_types.dart';
 import '../data/document_repository.dart';
 import '../extract/extractors.dart';
+import '../lock/lock_gate.dart';
 import 'cleanup_screen.dart';
 import 'confirm_screen.dart';
 import 'document_detail_screen.dart';
@@ -52,6 +53,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _startScan() async {
     if (_scanning) return;
     setState(() => _scanning = true);
+    // Der Scanner ist eine eigene Android-Activity → die App pausiert. Ohne
+    // diese Unterdrückung würde die App-Sperre zuschnappen und den Scan
+    // verwerfen.
+    LockController.suppressAutoLock = true;
     try {
       final outcome = await services.scanner.scan();
       if (outcome == null) return; // Nutzer hat abgebrochen.
@@ -62,7 +67,13 @@ class _HomeScreenState extends State<HomeScreen> {
       final draft = await services.suggestions.buildDraft(outcome.ocrText);
       await _refineWithAi(draft, outcome.ocrText);
 
-      if (!mounted) return;
+      if (!mounted) {
+        // Sollte nach dem Overlay-Fix nicht mehr vorkommen; falls doch,
+        // keine verwaiste PDF/Nummer hinterlassen.
+        await services.scanner.deletePdf(pdfPath);
+        await services.repository.releaseDocNumberIfUnused(docNumber);
+        return;
+      }
       final confirmed = await Navigator.of(context).push<DocumentDraft>(
         MaterialPageRoute(
           builder: (_) => ConfirmScreen(draft: draft, docNumber: docNumber),
@@ -101,6 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     } finally {
+      LockController.suppressAutoLock = false;
       if (mounted) setState(() => _scanning = false);
     }
   }

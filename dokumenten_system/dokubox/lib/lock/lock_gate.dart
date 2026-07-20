@@ -13,8 +13,21 @@ class AppLockSettings {
       (await SharedPreferences.getInstance()).setBool(_key, value);
 }
 
-/// Sperrt die App beim Start und beim Zurückkehren aus dem Hintergrund
-/// mit Biometrie bzw. Geräte-PIN (Systemdialog, kein eigener PIN-Speicher).
+/// Koordiniert die automatische Sperre mit absichtlichen Ausflügen in andere
+/// Apps/Activities (Scanner, Datei-Auswahl, Teilen). Ohne diese Unterdrückung
+/// würde die Sperre beim Öffnen des Scanners zuschnappen und den gerade
+/// laufenden Scan-Vorgang verwerfen.
+class LockController {
+  LockController._();
+
+  /// Wird gesetzt, solange wir bewusst eine andere Activity gestartet haben.
+  static bool suppressAutoLock = false;
+}
+
+/// Legt bei aktiver Sperre ein Vollbild-Overlay ÜBER die gesamte App (inkl.
+/// gerade geöffneter Bildschirme), statt den Inhalt zu ersetzen — so geht kein
+/// laufender Vorgang verloren. Entsperrt per Biometrie/Geräte-PIN
+/// (Systemdialog, kein eigener PIN-Speicher).
 class LockGate extends StatefulWidget {
   final Widget child;
 
@@ -44,10 +57,17 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Beim Wegwechseln sperren, damit die Dokumente in der App-Übersicht
-    // des Systems nicht offen liegen.
-    if (state == AppLifecycleState.paused && !_authInProgress) {
-      _lockIfEnabled();
+    if (state == AppLifecycleState.paused) {
+      // Beim Wegwechseln sperren, damit die Dokumente in der App-Übersicht
+      // des Systems nicht offen liegen — aber NICHT, wenn wir selbst gerade
+      // eine andere Activity gestartet haben (Scanner/Datei-Auswahl/Teilen),
+      // sonst ginge der laufende Vorgang verloren.
+      if (!_authInProgress && !LockController.suppressAutoLock) {
+        _lockIfEnabled();
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      // Der einmalige Ausflug ist vorbei; ab jetzt wieder normal sperren.
+      LockController.suppressAutoLock = false;
     }
   }
 
@@ -73,24 +93,33 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    if (!_locked) return widget.child;
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.lock_outline, size: 64),
-            const SizedBox(height: 16),
-            const Text('DokuBox ist gesperrt'),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: _unlock,
-              icon: const Icon(Icons.fingerprint),
-              label: const Text('Entsperren'),
+    return Stack(
+      children: [
+        widget.child,
+        // Vollbild-Overlay über allem, wenn gesperrt. Der Inhalt darunter
+        // bleibt erhalten (kein Verlust laufender Vorgänge).
+        if (_locked)
+          Positioned.fill(
+            child: Scaffold(
+              body: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.lock_outline, size: 64),
+                    const SizedBox(height: 16),
+                    const Text('DokuBox ist gesperrt'),
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      onPressed: _unlock,
+                      icon: const Icon(Icons.fingerprint),
+                      label: const Text('Entsperren'),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
-        ),
-      ),
+          ),
+      ],
     );
   }
 }
