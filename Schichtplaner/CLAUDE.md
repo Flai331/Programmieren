@@ -20,12 +20,13 @@ Immer aus `app\` heraus:
 - **Windows:** `flutter build windows --release`
   → Output `app\build\windows\x64\runner\Release\`
   → kompletten Ordnerinhalt nach
-  `C:\Users\klaas\Desktop\Programmieren\APKs\Windows\Programmdateien\Schichtplaner`
+  `C:\Users\klaas\Desktop\Programmieren\APKs\Windows\Schichtplaner`
   kopieren (`robocopy <src> <dst> /E`). Läuft die App, vorher
   `Stop-Process -Name schichtplaner -Force`; danach über
   `explorer.exe <exe-pfad>` neu starten (AppData-Virtualisierung — nicht
   direkt starten). Die `.exe` behält ihr altes Datum, der App-Code steckt
-  in `data\app.so`.
+  in `data\app.so` — DAS Datum prüfen, nicht das der exe. Verknüpfung
+  `APKs\Windows\Schichtplaner.lnk` zeigt auf `Schichtplaner\schichtplaner.exe`.
 - **Android:** apk nach
   `C:\Users\klaas\Desktop\Programmieren\APKs\Android` kopieren
   (siehe globale Regel in `..\CLAUDE.md`).
