@@ -393,6 +393,16 @@ class DocumentRepository {
     return (db.select(db.tags)..where((t) => t.id.isIn(ids))).get();
   }
 
+  /// Alle vorhandenen Tag-Namen (für KI-Vorschläge, damit sie bevorzugt
+  /// bestehende Tags wiederverwendet statt Dubletten zu erzeugen).
+  Future<List<String>> allTagNames() async {
+    final tags = await (db.select(db.tags)
+          ..where((t) => t.deletedAt.isNull())
+          ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+        .get();
+    return tags.map((t) => t.name).toList();
+  }
+
   // ----------------------------------------------------------------- intern
 
   Future<void> _writeFtsEntry(String documentId, String docNumber,

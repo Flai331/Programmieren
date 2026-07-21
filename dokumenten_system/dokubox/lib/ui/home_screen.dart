@@ -145,7 +145,8 @@ class _HomeScreenState extends State<HomeScreen> {
       // Seite ansetzen (schneller; Absender/Datum/Betreff stehen dort).
       final known =
           await services.suggestions.knownCorrespondentName(fullOcr);
-      final ai = await services.ai.extract(firstPageOcr);
+      final knownTags = await services.repository.allTagNames();
+      final ai = await services.ai.extract(firstPageOcr, knownTags: knownTags);
       if (ai != null) {
         applyAiToDraft(draft, ai, preserveCorrespondent: known != null);
       }
