@@ -2574,7 +2574,7 @@ class AppPickerScreen extends StatefulWidget {
 
 class _AppPickerScreenState extends State<AppPickerScreen> {
   List<AppInfo>? _apps;
-  late Set<String> _selected = widget.selected.toSet();
+  late final Set<String> _selected = widget.selected.toSet();
 
   @override
   void initState() {
@@ -3199,3 +3199,23 @@ Nach Task 17:
 
 Was die Spec bewusst offen lässt und hier deshalb nicht vorkommt: mehrere Profile,
 mehrere Chips, iOS, Nutzungsstatistiken.
+
+## Korrekturen aus der Umsetzung
+
+Nachträglich eingetragen, damit der Plan zum tatsächlichen Stand passt:
+
+1. **Task 10 und 11 wurden getauscht ausgeführt.** `BlockerService` verweist auf
+   `BlockActivity`; in der Plan-Reihenfolge wäre Task 10 an
+   `Unresolved reference: BlockActivity` gescheitert. `BlockActivity` hängt umgekehrt
+   von nichts aus Task 10 ab, also erst Task 11, dann Task 10. Code und
+   Commit-Nachrichten unverändert.
+2. **`_selected` in `app_picker_screen.dart` ist `late final`.** Ohne `final` meldet
+   der Analyzer `prefer_final_fields`, was dem geforderten „No issues found!"
+   widerspricht. Das Set wird nur über `add`/`remove` verändert, nie neu zugewiesen —
+   die Änderung ist verhaltensneutral. Oben im Plan bereits eingearbeitet.
+3. **`test/widget_test.dart` muss in Task 15 gelöscht werden.** Der von
+   `flutter create` erzeugte Zählertest sucht die Klasse `MyApp`, die es nach dem
+   Ersetzen von `main.dart` nicht mehr gibt. Die Zielzahl von 6 Dart-Tests setzt das
+   Löschen voraus.
+4. **Der Nullability-Hinweis zu `AppInfo.name` griff nicht.** `installed_apps 1.6.0`
+   deklariert das Feld als nicht-nullbares `String`; der Plan-Code blieb unverändert.
