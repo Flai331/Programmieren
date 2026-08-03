@@ -84,6 +84,33 @@ class LockEngine(private val store: LockStore) {
         return s.locked && packageName in s.blockedPackages
     }
 
+    /** Blockliste setzen. Während einer Sperre abgelehnt — sonst wäre sie wertlos. */
+    fun setBlockedPackages(packages: Set<String>): Boolean {
+        val s = store.load()
+        if (s.locked) return false
+        store.save(s.copy(blockedPackages = packages))
+        return true
+    }
+
+    /** Modus und Dauer setzen. Während einer Sperre abgelehnt. */
+    fun setMode(mode: LockMode, durationMinutes: Int): Boolean {
+        val s = store.load()
+        if (s.locked) return false
+        store.save(s.copy(mode = mode, durationMinutes = durationMinutes))
+        return true
+    }
+
+    fun enrollTag(uid: String) {
+        store.save(store.load().copy(tagUid = uid))
+    }
+
+    /** Erzeugt den Notfall-Code, speichert nur dessen Hash und gibt ihn einmalig zurück. */
+    fun generateCode(): String {
+        val code = (1..8).map { CODE_ALPHABET.random() }.joinToString("")
+        store.save(store.load().copy(codeHash = Hashing.sha256(code)))
+        return code
+    }
+
     private fun lock(s: LockState, now: Long): LockState {
         val endsAt = if (s.mode == LockMode.TIMER) now + s.durationMinutes * 60_000L else null
         val next = s.copy(locked = true, endsAt = endsAt)
@@ -105,5 +132,7 @@ class LockEngine(private val store: LockStore) {
     companion object {
         const val MAX_ATTEMPTS = 3
         const val LOCKOUT_MILLIS = 60_000L
+        /** Ohne 0/O und 1/I — der Code wird abgeschrieben. */
+        const val CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     }
 }
