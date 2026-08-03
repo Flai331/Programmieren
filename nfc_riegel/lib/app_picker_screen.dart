@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:installed_apps/installed_apps.dart';
 
+import 'theme.dart';
+
 /// Auswahl der zu sperrenden Apps. Gibt die gewählten Paketnamen zurück.
 class AppPickerScreen extends StatefulWidget {
   const AppPickerScreen({super.key, required this.selected});
@@ -47,17 +49,38 @@ class _AppPickerScreenState extends State<AppPickerScreen> {
               itemCount: apps.length,
               itemBuilder: (context, index) {
                 final app = apps[index];
-                return CheckboxListTile(
-                  title: Text(app.name),
-                  subtitle: Text(app.packageName),
-                  value: _selected.contains(app.packageName),
-                  onChanged: (checked) => setState(() {
-                    if (checked ?? false) {
-                      _selected.add(app.packageName);
-                    } else {
-                      _selected.remove(app.packageName);
-                    }
-                  }),
+                final selected = _selected.contains(app.packageName);
+                return Container(
+                  // Ausgewählte Zeile wird getönt, nicht nur abgehakt — bei
+                  // langen Listen sieht man die Auswahl sonst erst beim Scrollen.
+                  color: selected ? RiegelColors.accentTint : null,
+                  child: CheckboxListTile(
+                    title: Text(
+                      app.name,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: RiegelColors.fg1,
+                      ),
+                    ),
+                    // Paketname bleibt sichtbar: bei doppelten Anzeigenamen ist
+                    // er das einzige Unterscheidungsmerkmal.
+                    subtitle: Text(
+                      app.packageName,
+                      style: const TextStyle(
+                        fontFamily: kMonoFamily,
+                        fontSize: 12,
+                        color: RiegelColors.fg3,
+                      ),
+                    ),
+                    value: selected,
+                    onChanged: (checked) => setState(() {
+                      if (checked ?? false) {
+                        _selected.add(app.packageName);
+                      } else {
+                        _selected.remove(app.packageName);
+                      }
+                    }),
+                  ),
                 );
               },
             ),

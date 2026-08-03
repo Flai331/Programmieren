@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'app_picker_screen.dart';
 import 'lock_status.dart';
 import 'riegel_channel.dart';
+import 'theme.dart';
 
 /// Vier Schritte: Berechtigungen, Apps, Chip, Notfall-Code.
 class SetupWizard extends StatefulWidget {
@@ -163,12 +164,11 @@ class _SetupWizardState extends State<SetupWizard> {
                   'Der Code hebt eine Sperre auf, wenn der Chip nicht zur Hand ist. '
                   'Er wird nur dieses eine Mal angezeigt — aufschreiben.',
                 ),
-                const SizedBox(height: 12),
-                if (_code != null)
-                  SelectableText(
-                    _code!,
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
+                const SizedBox(height: RiegelSpacing.s3),
+                if (_code != null) ...[
+                  _CodePlate(code: _code!),
+                  const SizedBox(height: RiegelSpacing.s3),
+                ],
                 OutlinedButton(
                   onPressed: _generateCode,
                   child: Text(status.hasCode ? 'Neuen Code erzeugen' : 'Code erzeugen'),
@@ -180,4 +180,71 @@ class _SetupWizardState extends State<SetupWizard> {
       ),
     );
   }
+}
+
+/// Der Notfall-Code steht auf gestricheltem Rahmen: die Umrandung signalisiert
+/// „zum Abschreiben", nicht „fertiger Inhalt". Mono mit weitem Buchstabenabstand,
+/// damit sich beim Übertragen keine Zeichen verschlucken.
+class _CodePlate extends StatelessWidget {
+  const _CodePlate({required this.code});
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _DashedBorderPainter(),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(RiegelSpacing.s5),
+        child: Column(
+          children: [
+            SelectableText(
+              code,
+              style: const TextStyle(
+                fontFamily: kMonoFamily,
+                fontSize: 26,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 4.5,
+                color: RiegelColors.accent,
+              ),
+            ),
+            const SizedBox(height: RiegelSpacing.s2),
+            const Text(
+              'Jetzt abschreiben — danach ist er weg',
+              style: TextStyle(fontSize: 12, color: RiegelColors.fg3),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = RiegelColors.borderStrong
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    final rect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      const Radius.circular(RiegelRadii.lg),
+    );
+
+    // Pfad in kurze Striche zerlegen: 6 px Strich, 4 px Lücke.
+    for (final metric in (Path()..addRRect(rect)).computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final end = (distance + 6).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(distance, end), paint);
+        distance = end + 4;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) => false;
 }
