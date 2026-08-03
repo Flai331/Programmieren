@@ -4,6 +4,7 @@ import 'home_screen.dart';
 import 'lock_status.dart';
 import 'riegel_channel.dart';
 import 'setup_wizard.dart';
+import 'theme.dart';
 
 void main() => runApp(const RiegelApp());
 
@@ -14,7 +15,7 @@ class RiegelApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Riegel',
-      theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
+      theme: buildRiegelTheme(),
       home: const _Entry(),
     );
   }
@@ -47,7 +48,10 @@ class _EntryState extends State<_Entry> {
   Widget build(BuildContext context) {
     final status = _status;
     if (status == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        backgroundColor: RiegelColors.bgBase,
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
     return status.setupComplete
         ? const HomeScreen()
