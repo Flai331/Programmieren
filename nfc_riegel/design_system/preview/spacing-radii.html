@@ -1,0 +1,58 @@
+<!-- @dsCard group="Raster" -->
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Riegel — Abstände, Radien, Schatten</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { margin: 0; padding: 32px; background: var(--bg-canvas); }
+  h2 { margin: 0 0 6px; }
+  h3 { margin: 32px 0 12px; }
+  .lede { color: var(--fg-2); margin: 0 0 24px; max-width: 62ch; }
+  .bars { display: flex; flex-direction: column; gap: 8px; }
+  .bar-row { display: flex; align-items: center; gap: 16px; }
+  .bar { height: 14px; background: var(--accent); border-radius: 3px; }
+  .token { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--fg-3); min-width: 110px; }
+  .radii { display: flex; flex-wrap: wrap; gap: 16px; }
+  .radius-box { width: 108px; height: 84px; background: var(--bg-elev-2); border: 1px solid var(--border-default); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; font-family: var(--font-mono); font-size: var(--fs-micro); color: var(--fg-3); }
+  .shadows { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 8px; }
+  .shadow-box { width: 150px; height: 90px; border-radius: var(--radius-lg); background: var(--bg-elev-1); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: var(--fs-micro); color: var(--fg-3); text-align: center; padding: 8px; }
+</style>
+</head>
+<body>
+
+<h2>Abstände</h2>
+<p class="lede">Vielfache von 4. Bildschirmränder liegen bei <code>space-4</code>, Abstand zwischen Karten bei <code>space-4</code>, zwischen Abschnitten bei <code>space-6</code>.</p>
+
+<div class="bars">
+  <div class="bar-row"><span class="token">space-1 · 4</span><div class="bar" style="width: 4px"></div></div>
+  <div class="bar-row"><span class="token">space-2 · 8</span><div class="bar" style="width: 8px"></div></div>
+  <div class="bar-row"><span class="token">space-3 · 12</span><div class="bar" style="width: 12px"></div></div>
+  <div class="bar-row"><span class="token">space-4 · 16</span><div class="bar" style="width: 16px"></div></div>
+  <div class="bar-row"><span class="token">space-6 · 24</span><div class="bar" style="width: 24px"></div></div>
+  <div class="bar-row"><span class="token">space-8 · 32</span><div class="bar" style="width: 32px"></div></div>
+  <div class="bar-row"><span class="token">space-12 · 48</span><div class="bar" style="width: 48px"></div></div>
+  <div class="bar-row"><span class="token">space-16 · 64</span><div class="bar" style="width: 64px"></div></div>
+</div>
+
+<h3>Radien</h3>
+<div class="radii">
+  <div class="radius-box" style="border-radius: var(--radius-sm)">sm · 6</div>
+  <div class="radius-box" style="border-radius: var(--radius-md)">md · 10</div>
+  <div class="radius-box" style="border-radius: var(--radius-lg)">lg · 14</div>
+  <div class="radius-box" style="border-radius: var(--radius-xl)">xl · 18</div>
+  <div class="radius-box" style="border-radius: var(--radius-2xl)">2xl · 24</div>
+  <div class="radius-box" style="border-radius: var(--radius-pill)">pill</div>
+</div>
+
+<h3>Schatten</h3>
+<div class="shadows">
+  <div class="shadow-box" style="box-shadow: var(--shadow-card)">shadow-card<br>Karten</div>
+  <div class="shadow-box" style="box-shadow: var(--shadow-accent)">shadow-accent<br>primärer Button</div>
+  <div class="shadow-box" style="box-shadow: var(--shadow-locked)">shadow-locked<br>Statuskachel gesperrt</div>
+  <div class="shadow-box" style="box-shadow: var(--shadow-glow)">shadow-glow<br>Fokus</div>
+</div>
+
+</body>
+</html>

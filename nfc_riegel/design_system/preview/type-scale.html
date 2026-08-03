@@ -1,0 +1,69 @@
+<!-- @dsCard group="Typografie" -->
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Riegel — Schriftskala</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { margin: 0; padding: 32px; background: var(--bg-canvas); }
+  h2 { margin: 0 0 6px; }
+  .lede { color: var(--fg-2); margin: 0 0 28px; max-width: 62ch; }
+  .row { display: flex; align-items: baseline; gap: 24px; padding: 14px 0; border-bottom: 1px solid var(--border-subtle); }
+  .token { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--fg-3); min-width: 150px; }
+  .note { margin-top: 32px; padding: 18px 20px; border-radius: var(--radius-lg); background: var(--accent-tint); border: 1px solid var(--border-default); color: var(--fg-2); font-size: var(--fs-body-sm); }
+</style>
+</head>
+<body>
+
+<h2>Schriftskala</h2>
+<p class="lede">
+  DM Sans für alles Lesbare, JetBrains Mono für Zahlen, die sich bewegen, und Codes,
+  die abgeschrieben werden.
+</p>
+
+<div class="row">
+  <span class="token">fs-countdown · 48/mono</span>
+  <span class="mono" style="font-size: var(--fs-countdown); font-weight: var(--fw-semibold); color: var(--fg-1)">14:32</span>
+</div>
+<div class="row">
+  <span class="token">fs-display · 34</span>
+  <span style="font-size: var(--fs-display); font-weight: var(--fw-bold); letter-spacing: var(--tracking-tight)">Riegel zu</span>
+</div>
+<div class="row">
+  <span class="token">fs-h1 · 24</span>
+  <span style="font-size: var(--fs-h1); font-weight: var(--fw-bold); letter-spacing: var(--tracking-tight)">Riegel einrichten</span>
+</div>
+<div class="row">
+  <span class="token">fs-h2 · 20</span>
+  <span style="font-size: var(--fs-h2); font-weight: var(--fw-bold)">Gesperrte Apps</span>
+</div>
+<div class="row">
+  <span class="token">fs-h3 · 18</span>
+  <span style="font-size: var(--fs-h3); font-weight: var(--fw-semibold)">Chip anlernen</span>
+</div>
+<div class="row">
+  <span class="token">fs-body-lg · 16</span>
+  <span style="font-size: var(--fs-body-lg)">Chip scannen, um freizugeben</span>
+</div>
+<div class="row">
+  <span class="token">fs-body · 14</span>
+  <span style="font-size: var(--fs-body); color: var(--fg-2)">Der Code hebt eine Sperre auf, wenn der Chip nicht zur Hand ist.</span>
+</div>
+<div class="row">
+  <span class="token">fs-caption · 12</span>
+  <span style="font-size: var(--fs-caption); color: var(--fg-3)">com.instagram.android</span>
+</div>
+<div class="row">
+  <span class="token">tracking-code · mono</span>
+  <span class="mono" style="font-size: var(--fs-h2); letter-spacing: var(--tracking-code); color: var(--accent)">K7M2P9QX</span>
+</div>
+
+<div class="note">
+  Der Countdown läuft in Mono, weil Proportionalziffern die Zeile bei jedem
+  Sekundenwechsel zappeln lassen. Derselbe Grund gilt für den Notfall-Code — dort
+  kommt weiter Buchstabenabstand dazu, weil er von Hand abgeschrieben wird.
+</div>
+
+</body>
+</html>

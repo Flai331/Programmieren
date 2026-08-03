@@ -1,0 +1,57 @@
+<!-- @dsCard group="Farben" -->
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Riegel — Semantische Farben</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { margin: 0; padding: 32px; background: var(--bg-canvas); }
+  h2 { margin: 0 0 6px; }
+  .lede { color: var(--fg-2); margin: 0 0 24px; max-width: 62ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+  .card { padding: 18px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); }
+  .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; margin-right: 8px; vertical-align: -2px; }
+  .name { font-size: var(--fs-body); font-weight: var(--fw-semibold); color: var(--fg-1); }
+  .hex { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--fg-3); margin-top: 6px; }
+  .use { font-size: var(--fs-body-sm); color: var(--fg-2); margin-top: 10px; line-height: 1.45; }
+  .warn { margin-top: 28px; padding: 18px 20px; border-radius: var(--radius-lg); background: var(--locked-tint); border: 1px solid rgba(245,166,91,.35); color: var(--fg-2); font-size: var(--fs-body-sm); max-width: 62ch; }
+</style>
+</head>
+<body>
+
+<h2>Semantische Farben</h2>
+<p class="lede">Sparsam eingesetzt. In dieser App trägt fast alles entweder Eisblau oder Bernstein.</p>
+
+<div class="grid">
+  <div class="card" style="background: var(--success-dim)">
+    <div><span class="dot" style="background: var(--success)"></span><span class="name">success</span></div>
+    <div class="hex">#4ade80</div>
+    <div class="use">Chip erfolgreich angelernt, Sperre beendet</div>
+  </div>
+  <div class="card" style="background: var(--danger-dim)">
+    <div><span class="dot" style="background: var(--danger)"></span><span class="name">danger</span></div>
+    <div class="hex">#ff6b7a</div>
+    <div class="use">Dienst ausgeschaltet, Chip nicht beschreibbar, Code falsch</div>
+  </div>
+  <div class="card" style="background: var(--warning-dim)">
+    <div><span class="dot" style="background: var(--warning)"></span><span class="name">warning</span></div>
+    <div class="hex">#fbbf24</div>
+    <div class="use">Fehlende Berechtigung im Wizard</div>
+  </div>
+  <div class="card" style="background: var(--info-dim)">
+    <div><span class="dot" style="background: var(--info)"></span><span class="name">info</span></div>
+    <div class="hex">#60a5fa</div>
+    <div class="use">Erklärtexte im Wizard</div>
+  </div>
+</div>
+
+<div class="warn">
+  <strong style="color: var(--locked-bright)">Nicht verwechseln:</strong>
+  Bernstein (<code>locked</code>) und Gelb (<code>warning</code>) liegen farblich nah
+  beieinander, meinen aber Verschiedenes. Bernstein heißt „die Sperre läuft, alles in
+  Ordnung". Gelb heißt „dir fehlt eine Berechtigung". Beide nie im selben Screen.
+</div>
+
+</body>
+</html>

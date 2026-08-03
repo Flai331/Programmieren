@@ -1,0 +1,104 @@
+<!-- @dsCard group="Farben" -->
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Riegel — Akzent und Zustandsfarben</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { margin: 0; padding: 32px; background: var(--bg-canvas); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+  .swatch { border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border-default); background: var(--bg-elev-1); }
+  .chip { height: 88px; }
+  .meta { padding: 12px 14px; }
+  .name { font-size: var(--fs-body-sm); font-weight: var(--fw-semibold); color: var(--fg-1); }
+  .hex { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--fg-3); margin-top: 2px; }
+  .use { font-size: var(--fs-micro); color: var(--fg-3); margin-top: 6px; line-height: 1.4; }
+  h2 { margin: 0 0 6px; }
+  .lede { color: var(--fg-2); margin: 0 0 24px; max-width: 62ch; }
+  .section { margin-top: 32px; }
+</style>
+</head>
+<body>
+
+<h2>Akzent und Zustand</h2>
+<p class="lede">
+  Eisblau trägt alles Interaktive und steht zugleich für den Ruhezustand „offen".
+  Bernstein ist ausschließlich dem Zustand „gesperrt" vorbehalten — nie für Buttons,
+  nie für Fehler. Eine Sperre ist gewollt und darf nicht wie ein Defekt aussehen.
+</p>
+
+<div class="grid">
+  <div class="swatch">
+    <div class="chip" style="background: var(--accent)"></div>
+    <div class="meta">
+      <div class="name">accent</div>
+      <div class="hex">#62d9e8</div>
+      <div class="use">Buttons, Links, Fokus, Zustand „offen"</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="chip" style="background: var(--accent-bright)"></div>
+    <div class="meta">
+      <div class="name">accent-bright</div>
+      <div class="hex">#8ae6f2</div>
+      <div class="use">Hover — auf Dark wird aufgehellt, nicht abgedunkelt</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="chip" style="background: var(--accent-dim)"></div>
+    <div class="meta">
+      <div class="name">accent-dim</div>
+      <div class="hex">#3fa3b5</div>
+      <div class="use">Gedrückt</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="chip" style="background: var(--accent-tint-2)"></div>
+    <div class="meta">
+      <div class="name">accent-tint-2</div>
+      <div class="hex">rgba(98,217,232,.20)</div>
+      <div class="use">Ausgewählte Zeile, aktives Segment</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="grid">
+    <div class="swatch">
+      <div class="chip" style="background: var(--locked)"></div>
+      <div class="meta">
+        <div class="name">locked</div>
+        <div class="hex">#f5a65b</div>
+        <div class="use">Zustand „gesperrt" — Statuskachel, Sperrschirm, Benachrichtigung</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background: var(--locked-tint)"></div>
+      <div class="meta">
+        <div class="name">locked-tint</div>
+        <div class="hex">rgba(245,166,91,.14)</div>
+        <div class="use">Fläche hinter dem Sperr-Symbol</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background: var(--gradient-brand)"></div>
+      <div class="meta">
+        <div class="name">gradient-brand</div>
+        <div class="hex">#62d9e8 → #6e8bf5</div>
+        <div class="use">Nur Hero und App-Icon, nie vollflächig</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background: var(--gradient-locked)"></div>
+      <div class="meta">
+        <div class="name">gradient-locked</div>
+        <div class="hex">#f5a65b → #e8735b</div>
+        <div class="use">Rahmen-Glühen des Sperrschirms</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

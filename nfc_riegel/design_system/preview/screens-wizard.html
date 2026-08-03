@@ -1,0 +1,102 @@
+<!-- @dsCard group="Screens" -->
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Riegel — Einrichtung</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { margin: 0; padding: 32px; background: var(--bg-canvas); }
+  h2 { margin: 0 0 6px; }
+  .lede { color: var(--fg-2); margin: 0 0 24px; max-width: 62ch; }
+  .frames { display: flex; flex-wrap: wrap; gap: 28px; }
+
+  .phone { width: 320px; border-radius: 28px; background: var(--bg-base); border: 1px solid var(--border-default); box-shadow: var(--shadow-modal); overflow: hidden; }
+  .appbar { padding: 18px 20px; font-size: var(--fs-h2); font-weight: var(--fw-bold); border-bottom: 1px solid var(--border-subtle); }
+  .body { padding: 16px; }
+
+  .step { display: flex; gap: 14px; padding: 12px 0; }
+  .bullet { width: 26px; height: 26px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: var(--fs-caption); font-weight: var(--fw-semibold); }
+  .done { background: var(--accent); color: var(--fg-on-accent); }
+  .current { background: var(--accent-tint-2); color: var(--accent-bright); border: 1px solid var(--accent); }
+  .todo { background: var(--bg-elev-2); color: var(--fg-4); }
+  .step-title { font-size: var(--fs-body); font-weight: var(--fw-semibold); color: var(--fg-1); }
+  .step.is-todo .step-title { color: var(--fg-4); }
+  .step-body { margin-top: 10px; font-size: var(--fs-body-sm); color: var(--fg-2); line-height: 1.5; }
+
+  .code-plate {
+    margin-top: 14px; padding: 20px; border-radius: var(--radius-lg);
+    background: var(--bg-elev-1); border: 1px dashed var(--border-strong); text-align: center;
+  }
+  .code { font-family: var(--font-mono); font-size: 26px; font-weight: var(--fw-semibold); letter-spacing: var(--tracking-code); color: var(--accent); }
+  .code-hint { font-size: var(--fs-caption); color: var(--fg-3); margin-top: 10px; }
+
+  .btn { margin-top: 14px; padding: 12px 18px; border-radius: var(--radius-md); font-size: var(--fs-body-sm); font-weight: var(--fw-semibold); border: 1px solid transparent; }
+  .btn-outline { background: transparent; border-color: var(--border-strong); color: var(--accent); display: inline-block; }
+  .btn-primary { background: var(--accent); color: var(--fg-on-accent); display: inline-block; }
+  .rule { height: 1px; background: var(--border-subtle); margin: 6px 0 6px 13px; }
+  .note { margin-top: 28px; padding: 18px 20px; border-radius: var(--radius-lg); background: var(--bg-elev-1); border: 1px solid var(--border-default); color: var(--fg-2); font-size: var(--fs-body-sm); max-width: 62ch; }
+</style>
+</head>
+<body>
+
+<h2>Einrichtung</h2>
+<p class="lede">Vier Schritte, einmalig. Erledigte Schritte bleiben sichtbar — der Fortschritt ist die halbe Motivation.</p>
+
+<div class="frames">
+  <div class="phone">
+    <div class="appbar">Riegel einrichten</div>
+    <div class="body">
+      <div class="step"><div class="bullet done">✓</div><div><div class="step-title">Berechtigungen</div></div></div>
+      <div class="rule"></div>
+      <div class="step"><div class="bullet done">✓</div><div><div class="step-title">Apps wählen</div></div></div>
+      <div class="rule"></div>
+      <div class="step">
+        <div class="bullet current">3</div>
+        <div>
+          <div class="step-title">Chip anlernen</div>
+          <div class="step-body">Noch kein Chip angelernt.</div>
+          <div class="btn btn-outline">Chip anlernen</div>
+        </div>
+      </div>
+      <div class="rule"></div>
+      <div class="step is-todo"><div class="bullet todo">4</div><div><div class="step-title">Notfall-Code</div></div></div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="appbar">Riegel einrichten</div>
+    <div class="body">
+      <div class="step"><div class="bullet done">✓</div><div><div class="step-title">Berechtigungen</div></div></div>
+      <div class="rule"></div>
+      <div class="step"><div class="bullet done">✓</div><div><div class="step-title">Apps wählen</div></div></div>
+      <div class="rule"></div>
+      <div class="step"><div class="bullet done">✓</div><div><div class="step-title">Chip anlernen</div></div></div>
+      <div class="rule"></div>
+      <div class="step">
+        <div class="bullet current">4</div>
+        <div>
+          <div class="step-title">Notfall-Code</div>
+          <div class="step-body">
+            Hebt eine Sperre auf, wenn der Chip nicht zur Hand ist. Wird nur dieses eine
+            Mal angezeigt.
+          </div>
+          <div class="code-plate">
+            <div class="code">K7M2P9QX</div>
+            <div class="code-hint">Jetzt abschreiben — danach ist er weg</div>
+          </div>
+          <div class="btn btn-primary">Fertig</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  Der Code steht auf gestricheltem Rahmen statt auf einer vollen Fläche: die Umrandung
+  signalisiert „zum Mitnehmen", nicht „fertiger Inhalt". Buchstabenabstand
+  <code>tracking-code</code>, damit sich beim Abschreiben keine Zeichen verschlucken.
+</div>
+
+</body>
+</html>

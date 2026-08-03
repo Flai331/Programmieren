@@ -1,0 +1,72 @@
+<!-- @dsCard group="Komponenten" -->
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Riegel — Statuskachel</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { margin: 0; padding: 32px; background: var(--bg-canvas); }
+  h2 { margin: 0 0 6px; }
+  .lede { color: var(--fg-2); margin: 0 0 24px; max-width: 62ch; }
+  .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+
+  .status {
+    display: flex; align-items: center; gap: 18px;
+    padding: 22px; border-radius: var(--radius-xl);
+    background: var(--bg-elev-1); border: 1px solid var(--border-default);
+  }
+  .status.is-locked { border-color: rgba(245,166,91,.35); box-shadow: var(--shadow-locked); }
+  .status.is-open   { border-color: rgba(98,217,232,.28); }
+
+  .glyph {
+    width: 56px; height: 56px; flex: none; border-radius: var(--radius-lg);
+    display: flex; align-items: center; justify-content: center; font-size: 26px;
+  }
+  .is-locked .glyph { background: var(--locked-tint); color: var(--locked); }
+  .is-open   .glyph { background: var(--accent-tint); color: var(--accent); }
+
+  .title { font-size: var(--fs-h2); font-weight: var(--fw-bold); letter-spacing: var(--tracking-tight); }
+  .is-locked .title { color: var(--locked-bright); }
+  .is-open   .title { color: var(--fg-1); }
+  .sub { font-size: var(--fs-body-sm); color: var(--fg-2); margin-top: 4px; }
+  .count { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--fg-3); margin-top: 8px; }
+  .note { margin-top: 28px; padding: 18px 20px; border-radius: var(--radius-lg); background: var(--bg-elev-1); border: 1px solid var(--border-default); color: var(--fg-2); font-size: var(--fs-body-sm); }
+</style>
+</head>
+<body>
+
+<h2>Statuskachel</h2>
+<p class="lede">
+  Das erste Element auf dem Hauptscreen. Beantwortet die einzige Frage, mit der man
+  die App öffnet: sperrt sie gerade oder nicht.
+</p>
+
+<div class="pair">
+  <div class="status is-open">
+    <div class="glyph">🔓</div>
+    <div>
+      <div class="title">Riegel offen</div>
+      <div class="sub">Chip scannen, um zu sperren</div>
+      <div class="count">4 Apps vorgemerkt</div>
+    </div>
+  </div>
+
+  <div class="status is-locked">
+    <div class="glyph">🔒</div>
+    <div>
+      <div class="title">Riegel zu</div>
+      <div class="sub">Frei ab 18:40 oder nach erneutem Scan</div>
+      <div class="count">4 Apps gesperrt</div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  Der gesperrte Zustand bekommt Rahmenfarbe und Glühen, der offene nur einen dezent
+  eingefärbten Rahmen. Die Sperre ist der auffällige Zustand — offen ist der Normalfall
+  und muss nicht um Aufmerksamkeit bitten.
+</div>
+
+</body>
+</html>

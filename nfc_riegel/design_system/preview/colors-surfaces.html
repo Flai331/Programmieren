@@ -1,0 +1,75 @@
+<!-- @dsCard group="Farben" -->
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Riegel — Flächen und Text</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { margin: 0; padding: 32px; background: var(--bg-canvas); }
+  h2 { margin: 0 0 6px; }
+  .lede { color: var(--fg-2); margin: 0 0 24px; max-width: 62ch; }
+  .stack { display: flex; flex-direction: column; gap: 2px; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border-default); }
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; }
+  .label { font-size: var(--fs-body-sm); font-weight: var(--fw-medium); }
+  .hex { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--fg-3); }
+  .text-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-top: 32px; }
+  .text-card { padding: 18px; border-radius: var(--radius-lg); background: var(--bg-elev-1); border: 1px solid var(--border-default); }
+  .text-card .sample { font-size: var(--fs-body-lg); font-weight: var(--fw-semibold); }
+  .text-card .name { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--fg-3); margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<h2>Flächen</h2>
+<p class="lede">
+  Sechs Ebenen, alle blaustichig statt neutralgrau. Getrennt werden sie über
+  Hairline-Rahmen, nicht über Schatten — Schatten wirken auf so dunklen Flächen
+  wie Schmutz.
+</p>
+
+<div class="stack">
+  <div class="row" style="background: var(--bg-block)">
+    <span class="label">bg-block</span><span class="hex">#05070c — Sperrschirm</span>
+  </div>
+  <div class="row" style="background: var(--bg-base)">
+    <span class="label">bg-base</span><span class="hex">#080b12 — App-Hintergrund</span>
+  </div>
+  <div class="row" style="background: var(--bg-canvas)">
+    <span class="label">bg-canvas</span><span class="hex">#0d1119 — Screen-Canvas</span>
+  </div>
+  <div class="row" style="background: var(--bg-elev-1)">
+    <span class="label">bg-elev-1</span><span class="hex">#141a24 — Card, Eingabefeld</span>
+  </div>
+  <div class="row" style="background: var(--bg-elev-2)">
+    <span class="label">bg-elev-2</span><span class="hex">#1c2430 — gehovert, Modal</span>
+  </div>
+  <div class="row" style="background: var(--bg-elev-3)">
+    <span class="label">bg-elev-3</span><span class="hex">#26303e — Popover, Menü</span>
+  </div>
+</div>
+
+<h2 style="margin-top: 40px">Text</h2>
+<p class="lede">Vier Stufen. Alles unter <code>fg-3</code> ist nur für Deaktiviertes zulässig.</p>
+
+<div class="text-grid">
+  <div class="text-card">
+    <div class="sample" style="color: var(--fg-1)">Riegel zu</div>
+    <div class="name">fg-1 · #eef2f7</div>
+  </div>
+  <div class="text-card">
+    <div class="sample" style="color: var(--fg-2)">Frei ab 18:40</div>
+    <div class="name">fg-2 · #b6c0ce</div>
+  </div>
+  <div class="text-card">
+    <div class="sample" style="color: var(--fg-3)">Notfall-Code</div>
+    <div class="name">fg-3 · #7c8899</div>
+  </div>
+  <div class="text-card">
+    <div class="sample" style="color: var(--fg-4)">Während Sperre gesperrt</div>
+    <div class="name">fg-4 · #515c6b</div>
+  </div>
+</div>
+
+</body>
+</html>
