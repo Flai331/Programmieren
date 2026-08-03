@@ -14,7 +14,7 @@ class AppPickerScreen extends StatefulWidget {
 
 class _AppPickerScreenState extends State<AppPickerScreen> {
   List<AppInfo>? _apps;
-  late Set<String> _selected = widget.selected.toSet();
+  late final Set<String> _selected = widget.selected.toSet();
 
   @override
   void initState() {
