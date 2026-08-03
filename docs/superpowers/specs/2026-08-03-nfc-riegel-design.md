@@ -110,8 +110,7 @@ Andere Übergänge gibt es nicht. Ein Scan mit fremder UID ändert nichts.
 3. Treffer → `LockState` togglet:
    - **Sperren:** Modus und Dauer aus den Einstellungen übernehmen. Bei Modus B
      `endsAt` setzen und Exact Alarm scharfmachen. Dauerbenachrichtigung „Sperre
-     aktiv" anzeigen. Einmalig `GLOBAL_ACTION_HOME`, falls gerade eine gesperrte App
-     offen ist.
+     aktiv" anzeigen.
    - **Freigeben:** Alarm abbestellen, Benachrichtigung entfernen.
 4. Die Activity zeigt 1,5 s das Ergebnis und schließt sich.
 
@@ -165,7 +164,7 @@ umständlich. Das ist die beabsichtigte Obergrenze des Schutzes.
 | Neustart während Sperre | `BootReceiver` stellt Zustand her, setzt Alarm neu |
 | Timer während Ausschaltzeit abgelaufen | Beim Boot `endsAt` gegen Uhrzeit → sofort freigeben |
 | Chip unlesbar oder fremd | Kurze Meldung, Zustand unverändert |
-| Gesperrte App war beim Sperren offen | Nächstes Fenster-Event greift; zusätzlich einmalig `GLOBAL_ACTION_HOME` |
+| Gesperrte App war beim Sperren offen | Beim Schließen der Scan-Anzeige kehrt das System zur App zurück und löst das Fenster-Ereignis aus — der Sperrschirm erscheint dadurch von selbst |
 | App aus Blockliste deinstalliert | Paketname bleibt in der Liste, läuft ins Leere — kein Fehler |
 | Notfall-Code 3× falsch | 60 s Eingabesperre |
 | Chip beim Anlernen nicht beschreibbar | Setup-Schritt schlägt fehl mit Hinweis auf beschreibbaren Tag (z. B. NTAG21x) |
