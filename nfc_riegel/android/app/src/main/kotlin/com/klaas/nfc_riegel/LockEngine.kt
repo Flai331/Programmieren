@@ -4,6 +4,10 @@ enum class ScanOutcome { LOCKED, UNLOCKED, UNKNOWN_TAG, NO_TAG_ENROLLED }
 
 data class ScanResult(val state: LockState, val outcome: ScanOutcome)
 
+enum class CodeOutcome { UNLOCKED, WRONG, LOCKED_OUT, NOT_SET }
+
+data class CodeResult(val state: LockState, val outcome: CodeOutcome)
+
 /**
  * Alle Zustandsübergänge des Riegels. Kennt nur [LockStore] — keine Android-Klassen,
  * keine Nebenwirkungen. Alarm und Benachrichtigung setzt [LockController] anhand des
@@ -47,6 +51,39 @@ class LockEngine(private val store: LockStore) {
         return if (now >= endsAt) unlock(s) else s
     }
 
+    /** Notfall-Code aus dem Sperrschirm. Drei Fehlversuche sperren die Eingabe 60 s. */
+    fun submitCode(input: String, now: Long): CodeResult {
+        val s = store.load()
+        val hash = s.codeHash ?: return CodeResult(s, CodeOutcome.NOT_SET)
+
+        val lockedUntil = s.codeLockedUntil
+        if (lockedUntil != null && now < lockedUntil) {
+            return CodeResult(s, CodeOutcome.LOCKED_OUT)
+        }
+
+        val normalized = input.trim().uppercase()
+        if (Hashing.sha256(normalized) == hash) {
+            return CodeResult(unlock(s), CodeOutcome.UNLOCKED)
+        }
+
+        val attempts = s.failedAttempts + 1
+        return if (attempts >= MAX_ATTEMPTS) {
+            val next = s.copy(failedAttempts = 0, codeLockedUntil = now + LOCKOUT_MILLIS)
+            store.save(next)
+            CodeResult(next, CodeOutcome.LOCKED_OUT)
+        } else {
+            val next = s.copy(failedAttempts = attempts, codeLockedUntil = null)
+            store.save(next)
+            CodeResult(next, CodeOutcome.WRONG)
+        }
+    }
+
+    /** Vom AccessibilityService bei jedem Fensterwechsel gefragt. */
+    fun isBlocked(packageName: String): Boolean {
+        val s = store.load()
+        return s.locked && packageName in s.blockedPackages
+    }
+
     private fun lock(s: LockState, now: Long): LockState {
         val endsAt = if (s.mode == LockMode.TIMER) now + s.durationMinutes * 60_000L else null
         val next = s.copy(locked = true, endsAt = endsAt)
@@ -63,5 +100,10 @@ class LockEngine(private val store: LockStore) {
         )
         store.save(next)
         return next
+    }
+
+    companion object {
+        const val MAX_ATTEMPTS = 3
+        const val LOCKOUT_MILLIS = 60_000L
     }
 }
