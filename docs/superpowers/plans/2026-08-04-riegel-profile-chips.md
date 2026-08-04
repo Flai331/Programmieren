@@ -146,11 +146,89 @@ data class LockState(
 }
 ```
 
-- [ ] **Step 3: Kompilierung wird jetzt fehlschlagen — das ist erwartet**
+- [ ] **Step 3: `stateMap()` in RiegelChannel auf das neue Modell heben**
 
-`LockEngine`, `SharedPrefsLockStore` und die Tests greifen noch auf die alten Felder zu. Die Aufräumarbeit passiert in Task 2 bis 5. Kein Prüf-Kommando in diesem Task.
+Diese Datei muss sofort mit, sonst kompiliert der Main-Quellsatz nicht mehr — und
+ohne den läuft kein einziger Unit-Test, auch keiner aus einer anderen Datei.
 
-- [ ] **Step 4: Commit**
+In `RiegelChannel.kt` die Methode `stateMap()` ersetzen durch:
+
+```kotlin
+    private fun stateMap(): Map<String, Any?> {
+        val s = controller.engine.state()
+        val lock = s.chipLock
+        return mapOf(
+            "profiles" to s.profiles.map { p ->
+                mapOf(
+                    "id" to p.id,
+                    "name" to p.name,
+                    "blockedPackages" to p.blockedPackages.toList(),
+                    "defaultMode" to p.defaultMode.name,
+                    "durationMinutes" to p.durationMinutes,
+                    "untilAt" to p.untilAt,
+                    "pinCalendarEnd" to p.pinCalendarEnd,
+                )
+            },
+            "tags" to s.tags.map { t ->
+                mapOf(
+                    "uid" to t.uid,
+                    "label" to t.label,
+                    "profileId" to t.profileId,
+                    "isMaster" to t.isMaster,
+                )
+            },
+            "activeLock" to lock?.let {
+                mapOf(
+                    "profileId" to it.profileId,
+                    "mode" to it.mode.name,
+                    "endsAt" to it.endsAt,
+                )
+            },
+            "hasCode" to (s.codeHash != null),
+        )
+    }
+```
+
+- [ ] **Step 4: Chip-Anlernen vorläufig direkt über den Store**
+
+`TagWriteActivity` ruft `enrollTag(uid)` einarmig auf; diese Methode verschwindet in
+Task 4. Bis dahin schreibt die Activity direkt in den Store — das braucht nur die
+Datenklassen aus Step 1. Task 7 stellt sie auf die endgültige Engine-Methode um.
+
+In `TagWriteActivity.kt` im Erfolgszweig von `writeTag` die Zeile mit `enrollTag`
+ersetzen durch:
+
+```kotlin
+                val store = SharedPrefsLockStore(this)
+                val current = store.load()
+                val profileId = current.profiles.firstOrNull()?.id.orEmpty()
+                store.save(
+                    current.copy(
+                        tags = current.tags + TagBinding(
+                            uid = NfcSupport.toHex(tag.id),
+                            label = "Chip ${current.tags.size + 1}",
+                            profileId = profileId,
+                            isMaster = true,
+                        )
+                    )
+                )
+```
+
+- [ ] **Step 5: Main-Quellen kompilieren**
+
+```bash
+android/gradlew.bat -p android compileDebugKotlin
+```
+
+Erwartet: `BUILD SUCCESSFUL`.
+
+**Die Unit-Tests laufen hier noch nicht** — die Testdateien `LockEngineToggleTest`,
+`LockEngineTimerTest`, `LockEngineBlockTest`, `LockEngineCodeTest` und
+`LockEngineSettingsTest` benutzen weiter das alte Modell und werden erst in Task 2
+bis 4 ersetzt. `testDebugUnitTest` scheitert bis dahin beim Übersetzen der
+Testquellen. Das ist erwartet und kein Grund für Reparaturversuche.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 cd "/c/Users/klaas/Desktop/Programmieren"
@@ -326,6 +404,11 @@ android/gradlew.bat -p android testDebugUnitTest --tests "*LockEngineToggleTest*
 
 Erwartet: Kompilierfehler, `Unresolved reference: SWITCHED`.
 
+Hinweis: die Fehlerliste enthält zusätzlich Meldungen aus `LockEngineTimerTest`,
+`LockEngineBlockTest`, `LockEngineCodeTest` und `LockEngineSettingsTest` — die
+benutzen noch das alte Modell und werden in Task 3 und 4 ersetzt. Nur die Meldung
+aus `LockEngineToggleTest` zählt hier.
+
 - [ ] **Step 3: LockEngine-Kopf und Scan-Logik ersetzen**
 
 In `LockEngine.kt` die Zeilen 1 bis 29 (Enums, `ScanResult`, Klassenkopf, `state`, `onTagScanned`) ersetzen durch:
@@ -423,13 +506,17 @@ class LockEngine(private val store: LockStore) {
 
 Am Ende von `LockEngine.kt` die Methoden `lock` und `unlock` ersatzlos löschen — ihre Aufgabe übernehmen `onTagScanned` und `clearLocks`.
 
-- [ ] **Step 5: Test laufen lassen**
+- [ ] **Step 5: Kompilierung der Main-Quellen prüfen**
 
 ```bash
-android/gradlew.bat -p android testDebugUnitTest --tests "*LockEngineToggleTest*"
+android/gradlew.bat -p android compileDebugKotlin
 ```
 
-Erwartet: die 11 Tests dieser Datei laufen. Andere Testdateien sind noch rot — die kommen in Task 3 und 4.
+Erwartet: `BUILD SUCCESSFUL`.
+
+Ausführen lassen sich die Tests noch nicht — die vier übrigen Testdateien nutzen
+weiter das alte Modell. Erster echter Testlauf ist Task 4, Step 4. Prüfung hier:
+Diff gegen den Plantext.
 
 - [ ] **Step 6: Commit**
 
@@ -684,13 +771,17 @@ In `LockEngine.kt` die Methoden `onTimerElapsed`, `restoreAfterBoot` und `isBloc
 
 Im `submitCode` den Aufruf `unlock(s)` ersetzen durch `clearLocks(s)`.
 
-- [ ] **Step 6: Tests laufen lassen**
+- [ ] **Step 6: Kompilierung der Main-Quellen prüfen**
 
 ```bash
-android/gradlew.bat -p android testDebugUnitTest --tests "*LockEngine*"
+android/gradlew.bat -p android compileDebugKotlin
 ```
 
-Erwartet: `LockEngineToggleTest` 11, `LockEngineTimerTest` 8, `LockEngineBlockTest` 5, `LockEngineCodeTest` 7 grün. `LockEngineSettingsTest` ist noch rot — Task 4.
+Erwartet: `BUILD SUCCESSFUL`.
+
+`LockEngineSettingsTest` benutzt weiter das alte Modell und wird erst in Task 4
+ersetzt — bis dahin scheitert das Übersetzen der Testquellen. Prüfung hier: Diff
+gegen den Plantext.
 
 - [ ] **Step 7: Commit**
 
@@ -963,15 +1054,30 @@ In `LockEngine.kt` die Methoden `setBlockedPackages`, `setMode`, `enrollTag` und
         System.currentTimeMillis().toString(36) + (0..999).random().toString(36)
 ```
 
-- [ ] **Step 4: Alle Kotlin-Tests laufen lassen**
+- [ ] **Step 4: Kanal-Zweige der gelöschten Methoden entfernen**
+
+`setBlockedPackages` und `setMode` gibt es in der Engine nicht mehr. In
+`RiegelChannel.kt` die beiden gleichnamigen `when`-Zweige ersatzlos löschen — ihre
+Nachfolger `addProfile`, `updateProfile` und `deleteProfile` kommen in Task 8 dazu.
+Bis dahin antwortet der Kanal auf diese Namen mit `notImplemented`, was für die
+Dart-Seite in Ordnung ist: sie ruft sie erst ab Task 9 überhaupt auf.
+
+Ebenso den Zweig `generateCode` unverändert lassen — `result.success(...)` nimmt
+den jetzt möglichen `null`-Rückgabewert entgegen.
+
+- [ ] **Step 5: Erster vollständiger Testlauf**
+
+Ab hier kompilieren Main- und Testquellen wieder, damit läuft `testDebugUnitTest`
+zum ersten Mal seit Task 1.
 
 ```bash
-android/gradlew.bat -p android testDebugUnitTest --tests "*LockEngine*" --tests "*Hashing*" --tests "*SettingsGuard*" --tests "*NfcSupport*"
+android/gradlew.bat -p android testDebugUnitTest
 ```
 
-Erwartet: `LockEngineSettingsTest` 14 Tests grün, die übrigen wie zuvor.
+Erwartet: `BUILD SUCCESSFUL`. Testzahl: 3 Hashing + 11 Toggle + 8 Timer + 5 Block +
+7 Code + 14 Settings + 5 SettingsGuard + 3 NfcSupport = **56 Tests**.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 cd "/c/Users/klaas/Desktop/Programmieren"
@@ -1346,10 +1452,10 @@ class SharedPrefsLockStore(context: Context) : LockStore {
 - [ ] **Step 6: Tests laufen lassen**
 
 ```bash
-android/gradlew.bat -p android testDebugUnitTest --tests "*LockCodecTest*" --tests "*LockMigrationTest*"
+android/gradlew.bat -p android testDebugUnitTest
 ```
 
-Erwartet: 6 plus 5 Tests grün.
+Erwartet: 6 plus 5 neue Tests, insgesamt **67**.
 
 - [ ] **Step 7: Commit**
 
@@ -1626,7 +1732,11 @@ In `RiegelChannel.kt` die Zweige `setBlockedPackages`, `setMode`, `generateCode`
                 }
 ```
 
-- [ ] **Step 2: stateMap ersetzen**
+- [ ] **Step 2: stateMap prüfen — sollte bereits stimmen**
+
+`stateMap()` wurde schon in Task 1, Step 3 auf das neue Modell gehoben, damit die
+Main-Quellen durchgehend kompilieren. Vergleiche den Ist-Stand mit dem folgenden
+Soll; stimmt er überein, ist dieser Schritt erledigt.
 
 ```kotlin
     private fun stateMap(): Map<String, Any?> {
