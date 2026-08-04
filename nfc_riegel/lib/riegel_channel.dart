@@ -15,25 +15,39 @@ class RiegelChannel {
     return LockStatus.fromMap(map ?? const {});
   }
 
-  Future<bool> setBlockedPackages(List<String> packages) async =>
-      await channel.invokeMethod<bool>(
-        'setBlockedPackages',
-        {'packages': packages},
-      ) ??
-      false;
+  Future<String> addProfile(String name) async =>
+      await channel.invokeMethod<String>('addProfile', {'name': name}) ?? '';
 
-  Future<bool> setMode(LockMode mode, int durationMinutes) async =>
-      await channel.invokeMethod<bool>('setMode', {
-        'mode': mode == LockMode.open ? 'OPEN' : 'TIMER',
-        'durationMinutes': durationMinutes,
+  Future<bool> updateProfile(ProfileInfo profile) async =>
+      await channel.invokeMethod<bool>('updateProfile', {
+        'id': profile.id,
+        'name': profile.name,
+        'blockedPackages': profile.blockedPackages,
+        'defaultMode': modeToNative(profile.mode),
+        'durationMinutes': profile.durationMinutes,
+        'untilAt': profile.untilAt?.millisecondsSinceEpoch,
+        'pinCalendarEnd': profile.pinCalendarEnd,
       }) ??
       false;
 
-  Future<String> generateCode() async =>
-      await channel.invokeMethod<String>('generateCode') ?? '';
+  Future<bool> deleteProfile(String id) async =>
+      await channel.invokeMethod<bool>('deleteProfile', {'id': id}) ?? false;
 
-  Future<void> startTagEnrollment() =>
-      channel.invokeMethod<void>('startTagEnrollment');
+  Future<bool> deleteTag(String uid) async =>
+      await channel.invokeMethod<bool>('deleteTag', {'uid': uid}) ?? false;
+
+  Future<String?> generateCode() async =>
+      channel.invokeMethod<String>('generateCode');
+
+  Future<void> startTagEnrollment({
+    required String label,
+    required String profileId,
+    required bool isMaster,
+  }) => channel.invokeMethod<void>('startTagEnrollment', {
+    'label': label,
+    'profileId': profileId,
+    'isMaster': isMaster,
+  });
 
   Future<bool> isAccessibilityEnabled() async =>
       await channel.invokeMethod<bool>('isAccessibilityEnabled') ?? false;
