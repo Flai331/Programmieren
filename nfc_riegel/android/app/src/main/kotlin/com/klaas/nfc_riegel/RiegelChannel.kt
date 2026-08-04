@@ -19,10 +19,41 @@ class RiegelChannel(private val activity: Activity) {
             when (call.method) {
                 "getState" -> result.success(stateMap())
 
+                "addProfile" -> {
+                    val name = call.argument<String>("name") ?: "Neues Profil"
+                    result.success(controller.engine.addProfile(name).id)
+                }
+
+                "updateProfile" -> {
+                    val profile = Profile(
+                        id = call.argument<String>("id") ?: "",
+                        name = call.argument<String>("name") ?: "",
+                        blockedPackages = call.argument<List<String>>("blockedPackages")
+                            ?.toSet() ?: emptySet(),
+                        defaultMode = runCatching {
+                            LockMode.valueOf(call.argument<String>("defaultMode") ?: "TIMER")
+                        }.getOrDefault(LockMode.TIMER),
+                        durationMinutes = call.argument<Int>("durationMinutes") ?: 60,
+                        untilAt = call.argument<Long>("untilAt"),
+                        pinCalendarEnd = call.argument<Boolean>("pinCalendarEnd") ?: false,
+                    )
+                    result.success(controller.engine.updateProfile(profile))
+                }
+
+                "deleteProfile" ->
+                    result.success(controller.engine.deleteProfile(call.argument<String>("id") ?: ""))
+
+                "deleteTag" ->
+                    result.success(controller.engine.deleteTag(call.argument<String>("uid") ?: ""))
+
                 "generateCode" -> result.success(controller.engine.generateCode())
 
                 "startTagEnrollment" -> {
-                    activity.startActivity(Intent(activity, TagWriteActivity::class.java))
+                    val intent = Intent(activity, TagWriteActivity::class.java)
+                        .putExtra(TagWriteActivity.EXTRA_LABEL, call.argument<String>("label"))
+                        .putExtra(TagWriteActivity.EXTRA_PROFILE_ID, call.argument<String>("profileId"))
+                        .putExtra(TagWriteActivity.EXTRA_IS_MASTER, call.argument<Boolean>("isMaster") ?: false)
+                    activity.startActivity(intent)
                     result.success(true)
                 }
 
