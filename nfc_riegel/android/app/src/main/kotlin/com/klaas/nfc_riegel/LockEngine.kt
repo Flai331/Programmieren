@@ -86,27 +86,21 @@ class LockEngine(private val store: LockStore) {
     }
 
     /**
-     * Vom Alarm gerufen. Gibt frei, wenn die Endzeit erreicht ist — sonst nichts.
+     * Vom Alarm gerufen. Gibt frei, wenn das Ende erreicht ist — sonst nichts.
      * Die Uhrzeit entscheidet, nicht das Feuern des Alarms.
      */
     fun onTimerElapsed(now: Long): LockState {
         val s = store.load()
-        val endsAt = s.endsAt ?: return s
-        if (!s.locked || s.mode != LockMode.TIMER) return s
-        return if (now >= endsAt) unlock(s) else s
+        val lock = s.chipLock ?: return s
+        val endsAt = lock.endsAt ?: return s
+        return if (now >= endsAt) clearLocks(s) else s
     }
 
     /**
-     * Nach dem Neustart. Modus OPEN bleibt gesperrt; im Modus TIMER entscheidet
-     * die Endzeit, ob die Sperre noch gilt.
+     * Nach dem Neustart. OPEN bleibt gesperrt; bei TIMER und UNTIL entscheidet
+     * das gespeicherte Ende.
      */
-    fun restoreAfterBoot(now: Long): LockState {
-        val s = store.load()
-        if (!s.locked) return s
-        if (s.mode != LockMode.TIMER) return s
-        val endsAt = s.endsAt ?: return s
-        return if (now >= endsAt) unlock(s) else s
-    }
+    fun restoreAfterBoot(now: Long): LockState = onTimerElapsed(now)
 
     /** Notfall-Code aus dem Sperrschirm. Drei Fehlversuche sperren die Eingabe 60 s. */
     fun submitCode(input: String, now: Long): CodeResult {
@@ -120,7 +114,7 @@ class LockEngine(private val store: LockStore) {
 
         val normalized = input.trim().uppercase()
         if (Hashing.sha256(normalized) == hash) {
-            return CodeResult(unlock(s), CodeOutcome.UNLOCKED)
+            return CodeResult(clearLocks(s), CodeOutcome.UNLOCKED)
         }
 
         val attempts = s.failedAttempts + 1
@@ -136,9 +130,17 @@ class LockEngine(private val store: LockStore) {
     }
 
     /** Vom AccessibilityService bei jedem Fensterwechsel gefragt. */
-    fun isBlocked(packageName: String): Boolean {
+    fun isBlocked(packageName: String, now: Long): Boolean =
+        packageName in blockedPackages(now)
+
+    /**
+     * Vereinigung aller aktiven Sperren. Aktuell nur die Chipsperre — die
+     * Kalendersperre kommt in einer eigenen Ausbaustufe dazu.
+     */
+    fun blockedPackages(now: Long): Set<String> {
         val s = store.load()
-        return s.locked && packageName in s.blockedPackages
+        val lock = activeChipLock(s, now) ?: return emptySet()
+        return s.profileById(lock.profileId)?.blockedPackages ?: emptySet()
     }
 
     /** Blockliste setzen. Während einer Sperre abgelehnt — sonst wäre sie wertlos. */

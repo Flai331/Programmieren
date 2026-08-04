@@ -1,8 +1,8 @@
 package com.klaas.nfc_riegel
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class LockEngineCodeTest {
@@ -16,8 +16,8 @@ class LockEngineCodeTest {
     ): Pair<LockEngine, FakeLockStore> {
         val store = FakeLockStore(
             LockState(
-                locked = true,
-                mode = LockMode.OPEN,
+                profiles = listOf(Profile("p1", "Arbeit")),
+                chipLock = ChipLock("p1", LockMode.OPEN),
                 codeHash = Hashing.sha256(code),
                 failedAttempts = failedAttempts,
                 codeLockedUntil = codeLockedUntil,
@@ -33,8 +33,8 @@ class LockEngineCodeTest {
         val result = engine.submitCode(code, now)
 
         assertEquals(CodeOutcome.UNLOCKED, result.outcome)
-        assertFalse(result.state.locked)
-        assertFalse(store.current.locked)
+        assertNull(result.state.chipLock)
+        assertNull(store.current.chipLock)
     }
 
     @Test
@@ -44,7 +44,7 @@ class LockEngineCodeTest {
         val result = engine.submitCode("FALSCH12", now)
 
         assertEquals(CodeOutcome.WRONG, result.outcome)
-        assertTrue(result.state.locked)
+        assertNotNull(result.state.chipLock)
         assertEquals(1, result.state.failedAttempts)
     }
 
@@ -66,7 +66,7 @@ class LockEngineCodeTest {
         val result = engine.submitCode(code, now)
 
         assertEquals(CodeOutcome.LOCKED_OUT, result.outcome)
-        assertTrue(result.state.locked)
+        assertNotNull(result.state.chipLock)
     }
 
     @Test
@@ -76,18 +76,24 @@ class LockEngineCodeTest {
         val result = engine.submitCode(code, now)
 
         assertEquals(CodeOutcome.UNLOCKED, result.outcome)
-        assertFalse(result.state.locked)
+        assertNull(result.state.chipLock)
     }
 
     @Test
     fun `ohne hinterlegten Code meldet die Engine NOT_SET`() {
-        val store = FakeLockStore(LockState(locked = true, codeHash = null))
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(Profile("p1", "Arbeit")),
+                chipLock = ChipLock("p1", LockMode.OPEN),
+                codeHash = null,
+            )
+        )
         val engine = LockEngine(store)
 
         val result = engine.submitCode(code, now)
 
         assertEquals(CodeOutcome.NOT_SET, result.outcome)
-        assertTrue(result.state.locked)
+        assertNotNull(result.state.chipLock)
     }
 
     @Test

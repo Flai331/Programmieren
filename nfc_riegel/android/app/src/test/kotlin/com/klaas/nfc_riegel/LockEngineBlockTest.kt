@@ -1,35 +1,51 @@
 package com.klaas.nfc_riegel
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LockEngineBlockTest {
 
-    @Test
-    fun `gesperrte App wird bei aktiver Sperre geblockt`() {
-        val engine = LockEngine(
-            FakeLockStore(LockState(locked = true, blockedPackages = setOf("com.instagram.android")))
-        )
+    private val now = 1_000_000L
+    private val arbeit = Profile("p1", "Arbeit", setOf("com.instagram.android"))
+    private val nacht = Profile("p2", "Nacht", setOf("com.zhiliaoapp.musically"))
 
-        assertTrue(engine.isBlocked("com.instagram.android"))
+    private fun engine(lock: ChipLock?): LockEngine =
+        LockEngine(FakeLockStore(LockState(profiles = listOf(arbeit, nacht), chipLock = lock)))
+
+    @Test
+    fun `App des sperrenden Profils wird geblockt`() {
+        val e = engine(ChipLock("p1", LockMode.OPEN))
+
+        assertTrue(e.isBlocked("com.instagram.android", now))
     }
 
     @Test
-    fun `nicht gelistete App wird nicht geblockt`() {
-        val engine = LockEngine(
-            FakeLockStore(LockState(locked = true, blockedPackages = setOf("com.instagram.android")))
-        )
+    fun `App eines anderen Profils wird nicht geblockt`() {
+        val e = engine(ChipLock("p1", LockMode.OPEN))
 
-        assertFalse(engine.isBlocked("com.android.dialer"))
+        assertFalse(e.isBlocked("com.zhiliaoapp.musically", now))
     }
 
     @Test
-    fun `ohne aktive Sperre wird nichts geblockt`() {
-        val engine = LockEngine(
-            FakeLockStore(LockState(locked = false, blockedPackages = setOf("com.instagram.android")))
-        )
+    fun `ohne Sperre wird nichts geblockt`() {
+        val e = engine(null)
 
-        assertFalse(engine.isBlocked("com.instagram.android"))
+        assertFalse(e.isBlocked("com.instagram.android", now))
+    }
+
+    @Test
+    fun `abgelaufene Sperre blockt nicht mehr`() {
+        val e = engine(ChipLock("p1", LockMode.TIMER, now - 1))
+
+        assertFalse(e.isBlocked("com.instagram.android", now))
+    }
+
+    @Test
+    fun `blockedPackages liefert die Vereinigung der aktiven Sperren`() {
+        val e = engine(ChipLock("p1", LockMode.OPEN))
+
+        assertEquals(setOf("com.instagram.android"), e.blockedPackages(now))
     }
 }

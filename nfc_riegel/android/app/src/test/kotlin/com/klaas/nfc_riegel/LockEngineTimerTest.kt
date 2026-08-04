@@ -1,88 +1,89 @@
 package com.klaas.nfc_riegel
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LockEngineTimerTest {
 
     private val now = 1_000_000L
+    private val profil = Profile(id = "p1", name = "Arbeit")
+
+    private fun engine(lock: ChipLock?): Pair<LockEngine, FakeLockStore> {
+        val store = FakeLockStore(LockState(profiles = listOf(profil), chipLock = lock))
+        return LockEngine(store) to store
+    }
 
     @Test
     fun `abgelaufener Timer gibt frei`() {
-        val store = FakeLockStore(
-            LockState(locked = true, mode = LockMode.TIMER, endsAt = now - 1)
-        )
-        val engine = LockEngine(store)
+        val (e, store) = engine(ChipLock("p1", LockMode.TIMER, now - 1))
 
-        val state = engine.onTimerElapsed(now)
+        e.onTimerElapsed(now)
 
-        assertFalse(state.locked)
-        assertNull(state.endsAt)
-        assertFalse(store.current.locked)
+        assertNull(store.current.chipLock)
     }
 
     @Test
-    fun `noch laufender Timer gibt nicht frei`() {
-        val store = FakeLockStore(
-            LockState(locked = true, mode = LockMode.TIMER, endsAt = now + 60_000)
-        )
-        val engine = LockEngine(store)
+    fun `laufender Timer bleibt bestehen`() {
+        val (e, store) = engine(ChipLock("p1", LockMode.TIMER, now + 60_000))
 
-        val state = engine.onTimerElapsed(now)
+        e.onTimerElapsed(now)
 
-        assertTrue(state.locked)
-        assertEquals(now + 60_000, state.endsAt)
+        assertNotNull(store.current.chipLock)
     }
 
     @Test
-    fun `Boot mit abgelaufenem Timer gibt frei`() {
-        val store = FakeLockStore(
-            LockState(locked = true, mode = LockMode.TIMER, endsAt = now - 10_000)
-        )
-        val engine = LockEngine(store)
+    fun `abgelaufener UNTIL-Zeitpunkt gibt frei`() {
+        val (e, store) = engine(ChipLock("p1", LockMode.UNTIL, now - 1))
 
-        val state = engine.restoreAfterBoot(now)
+        e.onTimerElapsed(now)
 
-        assertFalse(state.locked)
+        assertNull(store.current.chipLock)
     }
 
     @Test
-    fun `Boot mit laufendem Timer bleibt gesperrt`() {
-        val store = FakeLockStore(
-            LockState(locked = true, mode = LockMode.TIMER, endsAt = now + 10_000)
-        )
-        val engine = LockEngine(store)
+    fun `kuenftiger UNTIL-Zeitpunkt bleibt bestehen`() {
+        val (e, store) = engine(ChipLock("p1", LockMode.UNTIL, now + 10_000))
 
-        val state = engine.restoreAfterBoot(now)
+        e.onTimerElapsed(now)
 
-        assertTrue(state.locked)
-        assertEquals(now + 10_000, state.endsAt)
+        assertNotNull(store.current.chipLock)
+    }
+
+    @Test
+    fun `Modus OPEN wird vom Ablauf nicht beruehrt`() {
+        val (e, store) = engine(ChipLock("p1", LockMode.OPEN))
+
+        e.onTimerElapsed(now)
+
+        assertNotNull(store.current.chipLock)
+    }
+
+    @Test
+    fun `Boot mit abgelaufenem Ende gibt frei`() {
+        val (e, store) = engine(ChipLock("p1", LockMode.TIMER, now - 10_000))
+
+        e.restoreAfterBoot(now)
+
+        assertNull(store.current.chipLock)
+    }
+
+    @Test
+    fun `Boot mit laufendem Ende bleibt gesperrt`() {
+        val (e, store) = engine(ChipLock("p1", LockMode.UNTIL, now + 10_000))
+
+        e.restoreAfterBoot(now)
+
+        assertEquals(now + 10_000, store.current.chipLock!!.endsAt)
     }
 
     @Test
     fun `Boot im Modus OPEN bleibt gesperrt`() {
-        val store = FakeLockStore(
-            LockState(locked = true, mode = LockMode.OPEN, endsAt = null)
-        )
-        val engine = LockEngine(store)
+        val (e, store) = engine(ChipLock("p1", LockMode.OPEN))
 
-        val state = engine.restoreAfterBoot(now)
+        e.restoreAfterBoot(now)
 
-        assertTrue(state.locked)
-    }
-
-    @Test
-    fun `Timer-Ablauf im Modus OPEN aendert nichts`() {
-        val store = FakeLockStore(
-            LockState(locked = true, mode = LockMode.OPEN, endsAt = null)
-        )
-        val engine = LockEngine(store)
-
-        val state = engine.onTimerElapsed(now)
-
-        assertTrue(state.locked)
+        assertNotNull(store.current.chipLock)
     }
 }
