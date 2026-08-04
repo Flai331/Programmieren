@@ -19,17 +19,6 @@ class RiegelChannel(private val activity: Activity) {
             when (call.method) {
                 "getState" -> result.success(stateMap())
 
-                "setBlockedPackages" -> {
-                    val packages = call.argument<List<String>>("packages")?.toSet() ?: emptySet()
-                    result.success(controller.engine.setBlockedPackages(packages))
-                }
-
-                "setMode" -> {
-                    val mode = if (call.argument<String>("mode") == "OPEN") LockMode.OPEN else LockMode.TIMER
-                    val minutes = call.argument<Int>("durationMinutes") ?: 60
-                    result.success(controller.engine.setMode(mode, minutes))
-                }
-
                 "generateCode" -> result.success(controller.engine.generateCode())
 
                 "startTagEnrollment" -> {
