@@ -35,6 +35,24 @@ Die JUnit-XMLs liegen unter `build/app/test-results/testDebugUnitTest/`.
 
 **Ausgangslage:** 39 Kotlin-Tests, 6 Dart-Tests, alle grün.
 
+### Warum Task 1 bis 5 nicht prüfbar sind
+
+Dieser Plan baut `LockState` um, statt etwas anzubauen. Die entfernten Felder
+(`locked`, `mode`, `endsAt`, `durationMinutes`, `blockedPackages`, `tagUid`) werden
+von acht Main-Dateien und fünf Testdateien benutzt. `testDebugUnitTest` übersetzt
+beide Quellsätze vollständig mit — es genügt also nicht, dass die gerade bearbeitete
+Datei stimmt.
+
+Die Abhängigkeitskette lässt sich nicht umsortieren: `SharedPrefsLockStore` braucht
+`LockCodec` und `LockMigration` aus Task 5, `LockEngine` ist über Task 2 bis 4
+aufgeteilt, die übrigen Aufrufer hängen an der fertigen Engine. Erst am Ende von
+Task 6 sind alle dreizehn Dateien auf dem neuen Modell.
+
+**Daraus folgt: Task 1 bis 5 haben kein Prüf-Kommando.** Wer dort kompiliert, sieht
+Fehler, die planmäßig noch offen sind, und repariert womöglich Code, der im nächsten
+Task ohnehin ersetzt wird. Verifikation dieser Tasks ist ausschließlich der Diff
+gegen den Plantext. Die erste ausführbare Prüfung ist Task 6, Step 7.
+
 ---
 
 ## Dateistruktur
@@ -214,19 +232,10 @@ ersetzen durch:
                 )
 ```
 
-- [ ] **Step 5: Main-Quellen kompilieren**
+- [ ] **Step 5: Keine Ausführung — Prüfung per Diff**
 
-```bash
-android/gradlew.bat -p android compileDebugKotlin
-```
-
-Erwartet: `BUILD SUCCESSFUL`.
-
-**Die Unit-Tests laufen hier noch nicht** — die Testdateien `LockEngineToggleTest`,
-`LockEngineTimerTest`, `LockEngineBlockTest`, `LockEngineCodeTest` und
-`LockEngineSettingsTest` benutzen weiter das alte Modell und werden erst in Task 2
-bis 4 ersetzt. `testDebugUnitTest` scheitert bis dahin beim Übersetzen der
-Testquellen. Das ist erwartet und kein Grund für Reparaturversuche.
+**In diesem Task wird nicht kompiliert und nicht getestet.** Siehe den Abschnitt
+„Warum Task 1 bis 5 nicht prüfbar sind" oben. Prüfung: Diff gegen den Plantext.
 
 - [ ] **Step 6: Commit**
 
@@ -506,17 +515,9 @@ class LockEngine(private val store: LockStore) {
 
 Am Ende von `LockEngine.kt` die Methoden `lock` und `unlock` ersatzlos löschen — ihre Aufgabe übernehmen `onTagScanned` und `clearLocks`.
 
-- [ ] **Step 5: Kompilierung der Main-Quellen prüfen**
+- [ ] **Step 5: Keine Ausführung — Prüfung per Diff**
 
-```bash
-android/gradlew.bat -p android compileDebugKotlin
-```
-
-Erwartet: `BUILD SUCCESSFUL`.
-
-Ausführen lassen sich die Tests noch nicht — die vier übrigen Testdateien nutzen
-weiter das alte Modell. Erster echter Testlauf ist Task 4, Step 4. Prüfung hier:
-Diff gegen den Plantext.
+Kein Kompilieren, kein Testlauf. Prüfung: Diff gegen den Plantext.
 
 - [ ] **Step 6: Commit**
 
@@ -771,17 +772,12 @@ In `LockEngine.kt` die Methoden `onTimerElapsed`, `restoreAfterBoot` und `isBloc
 
 Im `submitCode` den Aufruf `unlock(s)` ersetzen durch `clearLocks(s)`.
 
-- [ ] **Step 6: Kompilierung der Main-Quellen prüfen**
+- [ ] **Step 6: Keine Ausführung — Prüfung per Diff**
 
-```bash
-android/gradlew.bat -p android compileDebugKotlin
-```
-
-Erwartet: `BUILD SUCCESSFUL`.
-
-`LockEngineSettingsTest` benutzt weiter das alte Modell und wird erst in Task 4
-ersetzt — bis dahin scheitert das Übersetzen der Testquellen. Prüfung hier: Diff
-gegen den Plantext.
+Kein Kompilieren, kein Testlauf. Prüfung: Diff gegen den Plantext. Besonders
+achten: in `LockEngineCodeTest.kt` bleiben alle sieben Testfälle erhalten, geändert
+werden nur die Zusicherungen. Unbenutzt gewordene Importe von `assertFalse` und
+`assertTrue` entfernen.
 
 - [ ] **Step 7: Commit**
 
@@ -1065,17 +1061,10 @@ Dart-Seite in Ordnung ist: sie ruft sie erst ab Task 9 überhaupt auf.
 Ebenso den Zweig `generateCode` unverändert lassen — `result.success(...)` nimmt
 den jetzt möglichen `null`-Rückgabewert entgegen.
 
-- [ ] **Step 5: Erster vollständiger Testlauf**
+- [ ] **Step 5: Keine Ausführung — Prüfung per Diff**
 
-Ab hier kompilieren Main- und Testquellen wieder, damit läuft `testDebugUnitTest`
-zum ersten Mal seit Task 1.
-
-```bash
-android/gradlew.bat -p android testDebugUnitTest
-```
-
-Erwartet: `BUILD SUCCESSFUL`. Testzahl: 3 Hashing + 11 Toggle + 8 Timer + 5 Block +
-7 Code + 14 Settings + 5 SettingsGuard + 3 NfcSupport = **56 Tests**.
+Kein Kompilieren, kein Testlauf. `SharedPrefsLockStore` und die sechs Android-Dateien
+sind noch offen. Prüfung: Diff gegen den Plantext.
 
 - [ ] **Step 6: Commit**
 
@@ -1449,13 +1438,10 @@ class SharedPrefsLockStore(context: Context) : LockStore {
 }
 ```
 
-- [ ] **Step 6: Tests laufen lassen**
+- [ ] **Step 6: Keine Ausführung — Prüfung per Diff**
 
-```bash
-android/gradlew.bat -p android testDebugUnitTest
-```
-
-Erwartet: 6 plus 5 neue Tests, insgesamt **67**.
+Kein Kompilieren, kein Testlauf — die sechs Android-Dateien aus Task 6 sind noch
+offen. Prüfung: Diff gegen den Plantext.
 
 - [ ] **Step 7: Commit**
 
@@ -1477,6 +1463,7 @@ Alles, was noch die alten Felder benutzt.
 - Modify: `android/app/src/main/kotlin/com/klaas/nfc_riegel/BlockerService.kt`
 - Modify: `android/app/src/main/kotlin/com/klaas/nfc_riegel/BlockActivity.kt`
 - Modify: `android/app/src/main/kotlin/com/klaas/nfc_riegel/NfcToggleActivity.kt`
+- Modify: `android/app/src/main/kotlin/com/klaas/nfc_riegel/UninstallAdmin.kt`
 
 - [ ] **Step 1: LockController anpassen**
 
@@ -1602,7 +1589,19 @@ In `NfcToggleActivity.kt` den `when`-Block der Meldungen ersetzen durch:
         }
 ```
 
-- [ ] **Step 6: Kompilieren und alle Kotlin-Tests laufen lassen**
+- [ ] **Step 6: UninstallAdmin anpassen**
+
+Die letzte Datei, die noch `state.locked` liest.
+
+In `UninstallAdmin.kt` die Bedingung ersetzen:
+
+```kotlin
+        return if (state.chipLock != null) {
+```
+
+- [ ] **Step 7: Kompilieren und alle Kotlin-Tests laufen lassen**
+
+Ab hier ist der Umbau vollständig — erste ausführbare Prüfung des ganzen Plans.
 
 ```bash
 android/gradlew.bat -p android compileDebugKotlin
@@ -1611,7 +1610,10 @@ android/gradlew.bat -p android testDebugUnitTest
 
 Erwartet: `BUILD SUCCESSFUL`. Testzahl: 3 Hashing + 11 Toggle + 8 Timer + 5 Block + 7 Code + 14 Settings + 5 SettingsGuard + 3 NfcSupport + 6 Codec + 5 Migration = **67 Tests**.
 
-- [ ] **Step 7: Commit**
+Schlägt das Kompilieren fehl, fehlt genau hier die Ursache — nicht in einem der
+vorherigen Tasks. Die Fehlermeldung nennt Datei und Zeile.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 cd "/c/Users/klaas/Desktop/Programmieren"
