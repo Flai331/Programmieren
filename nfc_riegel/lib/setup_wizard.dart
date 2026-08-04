@@ -45,26 +45,41 @@ class _SetupWizardState extends State<SetupWizard> {
     if (mounted) setState(() => _status = status);
   }
 
-  /// Nach dem Anlernen wartet der Wizard darauf, dass die native Seite die UID meldet.
+  /// Nach dem Anlernen wartet der Wizard darauf, dass die native Seite den Chip meldet.
   void _startTagPolling() {
     _poll?.cancel();
     _poll = Timer.periodic(const Duration(seconds: 1), (timer) async {
       final status = await widget.channel.getState();
       if (!mounted) return;
       setState(() => _status = status);
-      if (status.hasTag) timer.cancel();
+      if (status.tags.isNotEmpty) timer.cancel();
     });
   }
 
+  /// Die App-Auswahl des Wizards gilt dem ersten Profil — mehr gibt es zu
+  /// diesem Zeitpunkt noch nicht.
   Future<void> _pickApps() async {
+    final profiles = _status?.profiles ?? const <ProfileInfo>[];
+    if (profiles.isEmpty) return;
+    final first = profiles.first;
     final picked = await Navigator.push<List<String>>(
       context,
       MaterialPageRoute(
-        builder: (_) => AppPickerScreen(selected: _status?.blockedPackages ?? []),
+        builder: (_) => AppPickerScreen(selected: first.blockedPackages),
       ),
     );
     if (picked != null) {
-      await widget.channel.setBlockedPackages(picked);
+      await widget.channel.updateProfile(
+        ProfileInfo(
+          id: first.id,
+          name: first.name,
+          blockedPackages: picked,
+          mode: first.mode,
+          durationMinutes: first.durationMinutes,
+          untilAt: first.untilAt,
+          pinCalendarEnd: first.pinCalendarEnd,
+        ),
+      );
       await _refresh();
     }
   }
@@ -72,7 +87,7 @@ class _SetupWizardState extends State<SetupWizard> {
   Future<void> _generateCode() async {
     final code = await widget.channel.generateCode();
     await _refresh();
-    if (mounted) setState(() => _code = code);
+    if (mounted && code != null) setState(() => _code = code);
   }
 
   @override
@@ -81,6 +96,10 @@ class _SetupWizardState extends State<SetupWizard> {
     if (status == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+
+    final blockedCount = status.profiles.isEmpty
+        ? 0
+        : status.profiles.first.blockedPackages.length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Riegel einrichten')),
@@ -130,7 +149,7 @@ class _SetupWizardState extends State<SetupWizard> {
             content: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${status.blockedPackages.length} Apps ausgewählt'),
+                Text('$blockedCount Apps ausgewählt'),
                 const SizedBox(height: 12),
                 OutlinedButton(onPressed: _pickApps, child: const Text('Apps auswählen')),
               ],
@@ -142,14 +161,27 @@ class _SetupWizardState extends State<SetupWizard> {
             content: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(status.hasTag ? 'Chip ist angelernt.' : 'Noch kein Chip angelernt.'),
+                Text(
+                  status.tags.isNotEmpty
+                      ? 'Chip ist angelernt.'
+                      : 'Noch kein Chip angelernt.',
+                ),
                 const SizedBox(height: 12),
                 OutlinedButton(
                   onPressed: () async {
-                    await widget.channel.startTagEnrollment();
+                    final profileId = status.profiles.isEmpty
+                        ? ''
+                        : status.profiles.first.id;
+                    await widget.channel.startTagEnrollment(
+                      label: 'Chip 1',
+                      profileId: profileId,
+                      isMaster: true,
+                    );
                     _startTagPolling();
                   },
-                  child: Text(status.hasTag ? 'Anderen Chip anlernen' : 'Chip anlernen'),
+                  child: Text(
+                    status.tags.isEmpty ? 'Chip anlernen' : 'Weiteren Chip anlernen',
+                  ),
                 ),
               ],
             ),
