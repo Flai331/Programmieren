@@ -37,6 +37,10 @@ class TagWriteActivity : Activity() {
     private var adapter: NfcAdapter? = null
     private lateinit var status: TextView
 
+    private val label: String get() = intent.getStringExtra(EXTRA_LABEL) ?: "Chip"
+    private val profileId: String get() = intent.getStringExtra(EXTRA_PROFILE_ID).orEmpty()
+    private val isMaster: Boolean get() = intent.getBooleanExtra(EXTRA_IS_MASTER, false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         adapter = NfcAdapter.getDefaultAdapter(this)
@@ -127,27 +131,27 @@ class TagWriteActivity : Activity() {
 
         written.fold(
             onSuccess = {
-                val store = SharedPrefsLockStore(this)
-                val current = store.load()
-                val profileId = current.profiles.firstOrNull()?.id.orEmpty()
-                store.save(
-                    current.copy(
-                        tags = current.tags + TagBinding(
-                            uid = NfcSupport.toHex(tag.id),
-                            label = "Chip ${current.tags.size + 1}",
-                            profileId = profileId,
-                            isMaster = true,
-                        )
-                    )
-                )
-                Toast.makeText(this, "Chip angelernt", Toast.LENGTH_SHORT).show()
-                setResult(RESULT_OK)
-                finish()
+                val stored = LockEngine(SharedPrefsLockStore(this))
+                    .enrollTag(NfcSupport.toHex(tag.id), label, profileId, isMaster)
+                if (stored) {
+                    Toast.makeText(this, "Chip angelernt", Toast.LENGTH_SHORT).show()
+                    setResult(RESULT_OK)
+                    finish()
+                } else {
+                    status.setTextColor(TagWriteColors.DANGER)
+                    status.text = "Während einer Sperre nicht möglich"
+                }
             },
             onFailure = { error ->
                 status.setTextColor(TagWriteColors.DANGER)
                 status.text = "Fehlgeschlagen: ${error.message ?: "unbekannt"}"
             },
         )
+    }
+
+    companion object {
+        const val EXTRA_LABEL = "label"
+        const val EXTRA_PROFILE_ID = "profileId"
+        const val EXTRA_IS_MASTER = "isMaster"
     }
 }
