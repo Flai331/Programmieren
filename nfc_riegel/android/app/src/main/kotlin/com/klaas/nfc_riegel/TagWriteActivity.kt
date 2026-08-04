@@ -127,7 +127,19 @@ class TagWriteActivity : Activity() {
 
         written.fold(
             onSuccess = {
-                LockEngine(SharedPrefsLockStore(this)).enrollTag(NfcSupport.toHex(tag.id))
+                val store = SharedPrefsLockStore(this)
+                val current = store.load()
+                val profileId = current.profiles.firstOrNull()?.id.orEmpty()
+                store.save(
+                    current.copy(
+                        tags = current.tags + TagBinding(
+                            uid = NfcSupport.toHex(tag.id),
+                            label = "Chip ${current.tags.size + 1}",
+                            profileId = profileId,
+                            isMaster = true,
+                        )
+                    )
+                )
                 Toast.makeText(this, "Chip angelernt", Toast.LENGTH_SHORT).show()
                 setResult(RESULT_OK)
                 finish()

@@ -64,13 +64,34 @@ class RiegelChannel(private val activity: Activity) {
 
     private fun stateMap(): Map<String, Any?> {
         val s = controller.engine.state()
+        val lock = s.chipLock
         return mapOf(
-            "locked" to s.locked,
-            "mode" to s.mode.name,
-            "endsAt" to s.endsAt,
-            "durationMinutes" to s.durationMinutes,
-            "blockedPackages" to s.blockedPackages.toList(),
-            "hasTag" to (s.tagUid != null),
+            "profiles" to s.profiles.map { p ->
+                mapOf(
+                    "id" to p.id,
+                    "name" to p.name,
+                    "blockedPackages" to p.blockedPackages.toList(),
+                    "defaultMode" to p.defaultMode.name,
+                    "durationMinutes" to p.durationMinutes,
+                    "untilAt" to p.untilAt,
+                    "pinCalendarEnd" to p.pinCalendarEnd,
+                )
+            },
+            "tags" to s.tags.map { t ->
+                mapOf(
+                    "uid" to t.uid,
+                    "label" to t.label,
+                    "profileId" to t.profileId,
+                    "isMaster" to t.isMaster,
+                )
+            },
+            "activeLock" to lock?.let {
+                mapOf(
+                    "profileId" to it.profileId,
+                    "mode" to it.mode.name,
+                    "endsAt" to it.endsAt,
+                )
+            },
             "hasCode" to (s.codeHash != null),
         )
     }

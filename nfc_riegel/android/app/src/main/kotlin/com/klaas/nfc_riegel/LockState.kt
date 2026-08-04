@@ -1,22 +1,26 @@
 package com.klaas.nfc_riegel
 
-/** Modus A = OPEN (bis erneuter Scan), Modus B = TIMER (bis Ablauf oder Scan). */
-enum class LockMode { OPEN, TIMER }
+/**
+ * OPEN = bis erneuter Scan, TIMER = für eine Dauer, UNTIL = bis zu einem
+ * absoluten Zeitpunkt. TIMER und UNTIL enden beide auch durch erneuten Scan.
+ */
+enum class LockMode { OPEN, TIMER, UNTIL }
 
 /**
  * Vollständiger Zustand des Riegels. Reine Daten, keine Android-Abhängigkeit —
  * damit die Logik in [LockEngine] ohne Emulator testbar bleibt.
  */
 data class LockState(
-    val locked: Boolean = false,
-    val mode: LockMode = LockMode.TIMER,
-    /** Ende der Sperre in Millis (Wall Clock). Nur gesetzt, wenn locked && mode == TIMER. */
-    val endsAt: Long? = null,
-    val durationMinutes: Int = 60,
-    val blockedPackages: Set<String> = emptySet(),
-    val tagUid: String? = null,
+    val profiles: List<Profile> = emptyList(),
+    val tags: List<TagBinding> = emptyList(),
+    val chipLock: ChipLock? = null,
     val codeHash: String? = null,
     val failedAttempts: Int = 0,
     /** Bis wann die Code-Eingabe gesperrt ist (Millis) oder null. */
     val codeLockedUntil: Long? = null,
-)
+) {
+    fun profileById(id: String): Profile? = profiles.firstOrNull { it.id == id }
+
+    fun tagByUid(uid: String): TagBinding? =
+        tags.firstOrNull { it.uid.equals(uid, ignoreCase = true) }
+}
