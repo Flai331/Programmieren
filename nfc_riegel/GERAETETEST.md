@@ -40,3 +40,30 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
 - [ ] Neustart, nachdem der Timer währenddessen ablief → frei beim Hochfahren
 - [ ] Notfall-Code eingeben → Sperre endet
 - [ ] Code 3× falsch → Meldung „Zu viele Versuche", 60 s warten
+
+## v2 — Profile, mehrere Chips, Sperre bis Zeitpunkt
+
+### Migration
+- [ ] Update über eine bestehende v1-Installation: Profil „Standard" ist da, der alte Chip erscheint als Generalschlüssel
+- [ ] Eine beim Update laufende Sperre besteht weiter
+
+### Profile
+- [ ] Zweites Profil anlegen, benennen, eigene Apps wählen
+- [ ] Profil löschen — zugeordnete Chips zeigen danach auf das erste verbleibende
+- [ ] Letztes Profil lässt sich nicht löschen
+- [ ] Während „Arbeit" sperrt: „Arbeit" nicht bearbeitbar, „Nacht" schon
+
+### Mehrere Chips
+- [ ] Zweiten Chip anlernen, Label und Profil vergeben
+- [ ] Chip A sperrt Profil A, erneuter Scan von A gibt frei
+- [ ] Chip B während laufender A-Sperre: wechselt auf Profil B
+- [ ] Generalschlüssel beendet die laufende Sperre
+- [ ] Generalschlüssel bei freiem Riegel: sperrt sein eigenes Profil
+- [ ] Chip löschen, danach Scan: „Fremder Chip"
+
+### Sperre bis Zeitpunkt
+- [ ] Profil auf „Bis Termin" stellen, Zeitpunkt in 5 Minuten wählen, sperren
+- [ ] Sperrschirm zählt herunter, Sperre endet zum Zeitpunkt
+- [ ] Erneuter Scan beendet vorzeitig
+- [ ] Zeitpunkt in der Vergangenheit: Meldung, keine Sperre
+- [ ] Neustart während einer UNTIL-Sperre: Sperre besteht weiter
