@@ -15,12 +15,27 @@ void main() {
       switch (call.method) {
         case 'getState':
           return {
-            'locked': locked,
-            'mode': 'TIMER',
-            'endsAt': locked ? DateTime.now().millisecondsSinceEpoch + 60000 : null,
-            'durationMinutes': 60,
-            'blockedPackages': ['com.instagram.android'],
-            'hasTag': true,
+            'profiles': [
+              {
+                'id': 'p1',
+                'name': 'Arbeit',
+                'blockedPackages': ['com.instagram.android'],
+                'defaultMode': 'TIMER',
+                'durationMinutes': 60,
+                'untilAt': null,
+                'pinCalendarEnd': false,
+              },
+            ],
+            'tags': [
+              {'uid': '04AA', 'label': 'Schreibtisch', 'profileId': 'p1', 'isMaster': true},
+            ],
+            'activeLock': locked
+                ? {
+                    'profileId': 'p1',
+                    'mode': 'TIMER',
+                    'endsAt': DateTime.now().millisecondsSinceEpoch + 60000,
+                  }
+                : null,
             'hasCode': true,
           };
         case 'isAccessibilityEnabled':
@@ -43,7 +58,7 @@ void main() {
     expect(find.text('Riegel offen'), findsOneWidget);
   });
 
-  testWidgets('zeigt Gesperrt-Status', (tester) async {
+  testWidgets('zeigt Gesperrt-Status mit Profilnamen', (tester) async {
     stub(locked: true, accessibility: true);
 
     await tester.pumpWidget(
@@ -52,6 +67,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Riegel zu'), findsOneWidget);
+    expect(find.textContaining('Arbeit'), findsWidgets);
   });
 
   testWidgets('warnt, wenn der Dienst aus ist', (tester) async {

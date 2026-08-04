@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
-import 'app_picker_screen.dart';
 import 'lock_status.dart';
+import 'profile_screen.dart';
 import 'riegel_channel.dart';
+import 'tags_screen.dart';
 import 'theme.dart';
 
-/// Status, Modus-Einstellung und Blockliste.
+/// Status, Profile und Chips.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.channel = const RiegelChannel()});
 
@@ -36,21 +37,28 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _pickApps(LockStatus status) async {
-    final picked = await Navigator.push<List<String>>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AppPickerScreen(selected: status.blockedPackages),
-      ),
-    );
-    if (picked != null) {
-      await widget.channel.setBlockedPackages(picked);
-      await _refresh();
-    }
+  Future<void> _addProfile() async {
+    await widget.channel.addProfile('Neues Profil');
+    await _refresh();
   }
 
-  Future<void> _setMode(LockMode mode, int minutes) async {
-    await widget.channel.setMode(mode, minutes);
+  Future<void> _editProfile(ProfileInfo profile) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProfileScreen(profile: profile, channel: widget.channel),
+      ),
+    );
+    await _refresh();
+  }
+
+  Future<void> _openTags(LockStatus status) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TagsScreen(status: status, channel: widget.channel),
+      ),
+    );
     await _refresh();
   }
 
@@ -79,23 +87,39 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
             _StatusTile(status: status),
             const SizedBox(height: RiegelSpacing.s6),
-            _ModeSection(
-              status: status,
-              onModeChanged: (mode) => _setMode(mode, status.durationMinutes),
-              onDurationChanged: (minutes) => _setMode(LockMode.timer, minutes),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'PROFILE',
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+                TextButton(onPressed: _addProfile, child: const Text('Neu')),
+              ],
             ),
-            const SizedBox(height: RiegelSpacing.s6),
-            _AppsRow(
-              status: status,
-              onTap: status.locked ? null : () => _pickApps(status),
+            const SizedBox(height: RiegelSpacing.s2),
+            for (final profile in status.profiles) ...[
+              _ProfileRow(
+                profile: profile,
+                locked: status.isProfileLocked(profile.id),
+                onTap: () => _editProfile(profile),
+              ),
+              const SizedBox(height: RiegelSpacing.s2),
+            ],
+            const SizedBox(height: RiegelSpacing.s4),
+            _NavRow(
+              title: 'Chips',
+              subtitle: '${status.tags.length} angelernt',
+              enabled: !status.locked,
+              onTap: () => _openTags(status),
             ),
-            if (status.locked) ...[
+            if (status.tags.isEmpty) ...[
               const SizedBox(height: RiegelSpacing.s3),
               Text(
-                'Einstellungen sind während einer Sperre gesperrt.',
+                'Kein Chip angelernt — nur der Notfall-Code öffnet.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: RiegelColors.fg4,
+                  color: RiegelColors.danger,
                 ),
               ),
             ],
@@ -221,124 +245,71 @@ class _StatusTile extends StatelessWidget {
   }
 
   String _subtitle(LockStatus status) {
-    if (!status.locked) return 'Chip scannen, um zu sperren';
+    final profile = status.activeProfile;
+    if (profile == null) return 'Chip scannen, um zu sperren';
     final endsAt = status.endsAt;
-    if (status.mode == LockMode.timer && endsAt != null) {
+    if (endsAt != null) {
       final h = endsAt.hour.toString().padLeft(2, '0');
       final m = endsAt.minute.toString().padLeft(2, '0');
-      return 'Frei ab $h:$m oder nach erneutem Scan';
+      return '${profile.name} — frei ab $h:$m oder nach Scan';
     }
-    return 'Frei nach erneutem Scan';
+    return '${profile.name} — frei nach erneutem Scan';
   }
 }
 
-class _ModeSection extends StatelessWidget {
-  const _ModeSection({
-    required this.status,
-    required this.onModeChanged,
-    required this.onDurationChanged,
+class _ProfileRow extends StatelessWidget {
+  const _ProfileRow({
+    required this.profile,
+    required this.locked,
+    required this.onTap,
   });
 
-  final LockStatus status;
-  final ValueChanged<LockMode> onModeChanged;
-  final ValueChanged<int> onDurationChanged;
+  final ProfileInfo profile;
+  final bool locked;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final locked = status.locked;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'MODUS',
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: locked ? RiegelColors.fg4 : RiegelColors.fg3,
-          ),
-        ),
-        const SizedBox(height: RiegelSpacing.s2),
-        SizedBox(
-          width: double.infinity,
-          child: SegmentedButton<LockMode>(
-            segments: const [
-              ButtonSegment(
-                value: LockMode.open,
-                label: Text('Bis Scan'),
-                icon: Icon(Icons.all_inclusive, size: 18),
-              ),
-              ButtonSegment(
-                value: LockMode.timer,
-                label: Text('Auf Zeit'),
-                icon: Icon(Icons.timer_outlined, size: 18),
-              ),
-            ],
-            selected: {status.mode},
-            showSelectedIcon: false,
-            onSelectionChanged: locked
-                ? null
-                : (selection) => onModeChanged(selection.first),
-          ),
-        ),
-        if (status.mode == LockMode.timer) ...[
-          const SizedBox(height: RiegelSpacing.s2),
-          Slider(
-            value: status.durationMinutes.toDouble(),
-            min: 15,
-            max: 480,
-            divisions: 31,
-            onChanged: locked
-                ? null
-                : (value) => onDurationChanged(value.round()),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: RiegelSpacing.s1),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Sperrdauer',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: locked ? RiegelColors.fg4 : RiegelColors.fg3,
-                  ),
-                ),
-                Text(
-                  '${status.durationMinutes} min',
-                  style: TextStyle(
-                    fontFamily: kMonoFamily,
-                    fontSize: 12,
-                    color: locked ? RiegelColors.fg4 : RiegelColors.fg1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
+    final modeLabel = switch (profile.mode) {
+      LockMode.open => 'bis Scan',
+      LockMode.timer => '${profile.durationMinutes} min',
+      LockMode.until => 'bis Zeitpunkt',
+    };
+    return _NavRow(
+      title: profile.name,
+      subtitle: '${profile.blockedPackages.length} Apps · $modeLabel',
+      enabled: !locked,
+      onTap: onTap,
+      trailingText: locked ? 'sperrt' : null,
     );
   }
 }
 
-class _AppsRow extends StatelessWidget {
-  const _AppsRow({required this.status, required this.onTap});
+class _NavRow extends StatelessWidget {
+  const _NavRow({
+    required this.title,
+    required this.subtitle,
+    required this.enabled,
+    required this.onTap,
+    this.trailingText,
+  });
 
-  final LockStatus status;
-  final VoidCallback? onTap;
+  final String title;
+  final String subtitle;
+  final bool enabled;
+  final VoidCallback onTap;
+  final String? trailingText;
 
   @override
   Widget build(BuildContext context) {
-    final locked = status.locked;
-    final count = status.blockedPackages.length;
     return Material(
       color: RiegelColors.bgElev1,
       borderRadius: BorderRadius.circular(RiegelRadii.lg),
       child: InkWell(
-        onTap: onTap,
+        onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(RiegelRadii.lg),
         child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: RiegelSpacing.s4,
-            vertical: RiegelSpacing.s4,
-          ),
+          padding: const EdgeInsets.all(RiegelSpacing.s4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(RiegelRadii.lg),
             border: Border.all(color: RiegelColors.borderDefault),
@@ -350,15 +321,15 @@ class _AppsRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Gesperrte Apps',
+                      title,
                       style: TextStyle(
                         fontSize: 14,
-                        color: locked ? RiegelColors.fg4 : RiegelColors.fg1,
+                        color: enabled ? RiegelColors.fg1 : RiegelColors.fg4,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      locked ? '$count gesperrt' : '$count ausgewählt',
+                      subtitle,
                       style: const TextStyle(
                         fontSize: 12,
                         color: RiegelColors.fg3,
@@ -367,10 +338,19 @@ class _AppsRow extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                color: locked ? RiegelColors.fg4 : RiegelColors.fg3,
-              ),
+              if (trailingText != null)
+                Text(
+                  trailingText!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: RiegelColors.locked,
+                  ),
+                )
+              else
+                Icon(
+                  Icons.chevron_right,
+                  color: enabled ? RiegelColors.fg3 : RiegelColors.fg4,
+                ),
             ],
           ),
         ),
