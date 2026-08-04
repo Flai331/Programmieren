@@ -1,6 +1,19 @@
 package com.klaas.nfc_riegel
 
-enum class ScanOutcome { LOCKED, UNLOCKED, UNKNOWN_TAG, NO_TAG_ENROLLED }
+enum class ScanOutcome {
+    LOCKED,
+    UNLOCKED,
+    /** Anderer Chip hat übernommen: alte Sperre beendet, neue gestartet. */
+    SWITCHED,
+    /** Generalschlüssel hat alle Sperren beendet. */
+    MASTER_CLEARED,
+    UNKNOWN_TAG,
+    NO_TAG_ENROLLED,
+    /** Chip zeigt auf ein Profil, das es nicht mehr gibt. */
+    NO_PROFILE,
+    /** UNTIL-Zeitpunkt liegt in der Vergangenheit. */
+    UNTIL_IN_PAST,
+}
 
 data class ScanResult(val state: LockState, val outcome: ScanOutcome)
 
@@ -17,15 +30,59 @@ class LockEngine(private val store: LockStore) {
 
     fun state(): LockState = store.load()
 
-    /** Chip gescannt: sperrt oder gibt frei. Fremde UID lässt den Zustand unberührt. */
+    /**
+     * Chip gescannt. Ein normaler Chip schaltet nur sein eigenes Profil; ein
+     * Generalschlüssel beendet jede laufende Sperre.
+     */
     fun onTagScanned(uid: String, now: Long): ScanResult {
         val s = store.load()
-        val enrolled = s.tagUid ?: return ScanResult(s, ScanOutcome.NO_TAG_ENROLLED)
-        if (!uid.equals(enrolled, ignoreCase = true)) {
-            return ScanResult(s, ScanOutcome.UNKNOWN_TAG)
+        if (s.tags.isEmpty()) return ScanResult(s, ScanOutcome.NO_TAG_ENROLLED)
+        val tag = s.tagByUid(uid) ?: return ScanResult(s, ScanOutcome.UNKNOWN_TAG)
+
+        val active = activeChipLock(s, now)
+
+        if (tag.isMaster && active != null) {
+            return ScanResult(clearLocks(s), ScanOutcome.MASTER_CLEARED)
         }
-        return if (s.locked) ScanResult(unlock(s), ScanOutcome.UNLOCKED)
-        else ScanResult(lock(s, now), ScanOutcome.LOCKED)
+
+        val profile = s.profileById(tag.profileId)
+            ?: return ScanResult(s, ScanOutcome.NO_PROFILE)
+
+        if (active != null && active.profileId == profile.id) {
+            return ScanResult(clearLocks(s), ScanOutcome.UNLOCKED)
+        }
+
+        val endsAt = when (profile.defaultMode) {
+            LockMode.OPEN -> null
+            LockMode.TIMER -> now + profile.durationMinutes * 60_000L
+            LockMode.UNTIL -> {
+                val until = profile.untilAt
+                if (until == null || until <= now) {
+                    return ScanResult(s, ScanOutcome.UNTIL_IN_PAST)
+                }
+                until
+            }
+        }
+
+        val next = s.copy(chipLock = ChipLock(profile.id, profile.defaultMode, endsAt))
+        store.save(next)
+        return ScanResult(
+            next,
+            if (active != null) ScanOutcome.SWITCHED else ScanOutcome.LOCKED,
+        )
+    }
+
+    /** Die Chipsperre, sofern sie jetzt noch gilt. Abgelaufene zählen nicht. */
+    private fun activeChipLock(s: LockState, now: Long): ChipLock? {
+        val lock = s.chipLock ?: return null
+        val endsAt = lock.endsAt ?: return lock
+        return if (now >= endsAt) null else lock
+    }
+
+    private fun clearLocks(s: LockState): LockState {
+        val next = s.copy(chipLock = null, failedAttempts = 0, codeLockedUntil = null)
+        store.save(next)
+        return next
     }
 
     /**
@@ -109,24 +166,6 @@ class LockEngine(private val store: LockStore) {
         val code = (1..8).map { CODE_ALPHABET.random() }.joinToString("")
         store.save(store.load().copy(codeHash = Hashing.sha256(code)))
         return code
-    }
-
-    private fun lock(s: LockState, now: Long): LockState {
-        val endsAt = if (s.mode == LockMode.TIMER) now + s.durationMinutes * 60_000L else null
-        val next = s.copy(locked = true, endsAt = endsAt)
-        store.save(next)
-        return next
-    }
-
-    private fun unlock(s: LockState): LockState {
-        val next = s.copy(
-            locked = false,
-            endsAt = null,
-            failedAttempts = 0,
-            codeLockedUntil = null,
-        )
-        store.save(next)
-        return next
     }
 
     companion object {

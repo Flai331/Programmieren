@@ -1,87 +1,143 @@
 package com.klaas.nfc_riegel
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LockEngineToggleTest {
 
     private val now = 1_000_000L
-    private val uid = "04A2B3C4D5"
 
-    private fun engineWith(state: LockState): Pair<LockEngine, FakeLockStore> {
-        val store = FakeLockStore(state)
+    private val arbeit = Profile(
+        id = "p1",
+        name = "Arbeit",
+        blockedPackages = setOf("com.instagram.android"),
+        defaultMode = LockMode.TIMER,
+        durationMinutes = 30,
+    )
+    private val nacht = Profile(
+        id = "p2",
+        name = "Nacht",
+        blockedPackages = setOf("com.zhiliaoapp.musically"),
+        defaultMode = LockMode.OPEN,
+    )
+
+    private val chipArbeit = TagBinding("04AA", "Schreibtisch", "p1")
+    private val chipNacht = TagBinding("04BB", "Bett", "p2")
+    private val general = TagBinding("04CC", "Schlüsselbund", "p1", isMaster = true)
+
+    private fun engine(
+        chipLock: ChipLock? = null,
+        tags: List<TagBinding> = listOf(chipArbeit, chipNacht, general),
+    ): Pair<LockEngine, FakeLockStore> {
+        val store = FakeLockStore(
+            LockState(profiles = listOf(arbeit, nacht), tags = tags, chipLock = chipLock)
+        )
         return LockEngine(store) to store
     }
 
     @Test
-    fun `Scan im Modus TIMER sperrt und setzt endsAt`() {
-        val (engine, store) = engineWith(
-            LockState(tagUid = uid, mode = LockMode.TIMER, durationMinutes = 30)
-        )
+    fun `unbekannte UID aendert nichts`() {
+        val (e, store) = engine()
 
-        val result = engine.onTagScanned(uid, now)
-
-        assertEquals(ScanOutcome.LOCKED, result.outcome)
-        assertTrue(result.state.locked)
-        assertEquals(now + 30 * 60_000L, result.state.endsAt)
-        assertTrue(store.current.locked)
-    }
-
-    @Test
-    fun `Scan im Modus OPEN sperrt ohne endsAt`() {
-        val (engine, _) = engineWith(LockState(tagUid = uid, mode = LockMode.OPEN))
-
-        val result = engine.onTagScanned(uid, now)
-
-        assertEquals(ScanOutcome.LOCKED, result.outcome)
-        assertTrue(result.state.locked)
-        assertNull(result.state.endsAt)
-    }
-
-    @Test
-    fun `Scan waehrend Sperre gibt frei`() {
-        val (engine, store) = engineWith(
-            LockState(tagUid = uid, locked = true, mode = LockMode.TIMER, endsAt = now + 5000)
-        )
-
-        val result = engine.onTagScanned(uid, now)
-
-        assertEquals(ScanOutcome.UNLOCKED, result.outcome)
-        assertFalse(result.state.locked)
-        assertNull(result.state.endsAt)
-        assertFalse(store.current.locked)
-    }
-
-    @Test
-    fun `fremde UID aendert nichts`() {
-        val (engine, store) = engineWith(LockState(tagUid = uid))
-
-        val result = engine.onTagScanned("DEADBEEF", now)
+        val result = e.onTagScanned("DEADBEEF", now)
 
         assertEquals(ScanOutcome.UNKNOWN_TAG, result.outcome)
-        assertFalse(result.state.locked)
-        assertFalse(store.current.locked)
+        assertNull(store.current.chipLock)
     }
 
     @Test
-    fun `ohne angelernten Chip passiert nichts`() {
-        val (engine, _) = engineWith(LockState(tagUid = null))
+    fun `ohne angelernte Chips meldet die Engine NO_TAG_ENROLLED`() {
+        val (e, _) = engine(tags = emptyList())
 
-        val result = engine.onTagScanned(uid, now)
+        val result = e.onTagScanned("04AA", now)
 
         assertEquals(ScanOutcome.NO_TAG_ENROLLED, result.outcome)
-        assertFalse(result.state.locked)
+    }
+
+    @Test
+    fun `Chip sperrt mit dem Modus seines Profils`() {
+        val (e, store) = engine()
+
+        val result = e.onTagScanned("04AA", now)
+
+        assertEquals(ScanOutcome.LOCKED, result.outcome)
+        val lock = store.current.chipLock
+        assertNotNull(lock)
+        assertEquals("p1", lock!!.profileId)
+        assertEquals(LockMode.TIMER, lock.mode)
+        assertEquals(now + 30 * 60_000L, lock.endsAt)
+    }
+
+    @Test
+    fun `Profil im Modus OPEN sperrt ohne Ende`() {
+        val (e, store) = engine()
+
+        e.onTagScanned("04BB", now)
+
+        assertEquals(LockMode.OPEN, store.current.chipLock!!.mode)
+        assertNull(store.current.chipLock!!.endsAt)
+    }
+
+    @Test
+    fun `derselbe Chip gibt wieder frei`() {
+        val (e, store) = engine(chipLock = ChipLock("p1", LockMode.TIMER, now + 5000))
+
+        val result = e.onTagScanned("04AA", now)
+
+        assertEquals(ScanOutcome.UNLOCKED, result.outcome)
+        assertNull(store.current.chipLock)
+    }
+
+    @Test
+    fun `anderer Chip uebernimmt mit seinem Profil`() {
+        val (e, store) = engine(chipLock = ChipLock("p1", LockMode.TIMER, now + 5000))
+
+        val result = e.onTagScanned("04BB", now)
+
+        assertEquals(ScanOutcome.SWITCHED, result.outcome)
+        assertEquals("p2", store.current.chipLock!!.profileId)
+        assertEquals(LockMode.OPEN, store.current.chipLock!!.mode)
+    }
+
+    @Test
+    fun `Generalschluessel beendet eine laufende Sperre`() {
+        val (e, store) = engine(chipLock = ChipLock("p2", LockMode.OPEN))
+
+        val result = e.onTagScanned("04CC", now)
+
+        assertEquals(ScanOutcome.MASTER_CLEARED, result.outcome)
+        assertNull(store.current.chipLock)
+    }
+
+    @Test
+    fun `Generalschluessel sperrt mit eigenem Profil wenn nichts laeuft`() {
+        val (e, store) = engine()
+
+        val result = e.onTagScanned("04CC", now)
+
+        assertEquals(ScanOutcome.LOCKED, result.outcome)
+        assertEquals("p1", store.current.chipLock!!.profileId)
     }
 
     @Test
     fun `UID-Vergleich ignoriert Gross- und Kleinschreibung`() {
-        val (engine, _) = engineWith(LockState(tagUid = uid))
+        val (e, _) = engine()
 
-        val result = engine.onTagScanned(uid.lowercase(), now)
+        assertEquals(ScanOutcome.LOCKED, e.onTagScanned("04aa", now).outcome)
+    }
 
-        assertEquals(ScanOutcome.LOCKED, result.outcome)
+    @Test
+    fun `Chip mit geloeschtem Profil sperrt nicht`() {
+        val store = FakeLockStore(
+            LockState(profiles = listOf(nacht), tags = listOf(chipArbeit))
+        )
+        val e = LockEngine(store)
+
+        val result = e.onTagScanned("04AA", now)
+
+        assertEquals(ScanOutcome.NO_PROFILE, result.outcome)
+        assertNull(store.current.chipLock)
     }
 }
