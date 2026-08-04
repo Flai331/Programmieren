@@ -189,21 +189,22 @@ class BlockActivity : Activity() {
 
     private fun refresh() {
         val state = controller.engine.state()
-        if (!state.locked) {
+        val lock = state.chipLock
+        if (lock == null) {
             finish()
             return
         }
-        val endsAt = state.endsAt
-        if (state.mode == LockMode.TIMER && endsAt != null) {
+        val profileName = state.profileById(lock.profileId)?.name ?: "Riegel"
+        val endsAt = lock.endsAt
+        if (endsAt != null) {
             val remaining = ((endsAt - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
             countdown.visibility = View.VISIBLE
             countdown.text = "%02d:%02d".format(remaining / 60, remaining % 60)
             hint.text = "oder Chip scannen"
-            modeCaption.text = "Modus: auf Zeit"
         } else {
             countdown.visibility = View.GONE
             hint.text = "Chip scannen, um freizugeben"
-            modeCaption.text = "Modus: bis erneuter Scan"
         }
+        modeCaption.text = "Profil: $profileName"
     }
 }

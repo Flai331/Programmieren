@@ -22,15 +22,22 @@ object LockNotification {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         ensureChannel(manager)
 
-        val text = when {
-            state.mode == LockMode.TIMER && state.endsAt != null ->
-                "Frei ab ${SimpleDateFormat("HH:mm", Locale.GERMANY).format(Date(state.endsAt))} " +
-                    "oder nach erneutem Scan"
-            else -> "Chip scannen, um freizugeben"
+        val lock = state.chipLock ?: return
+        val profile = state.profileById(lock.profileId)
+        val endsAt = lock.endsAt
+
+        val text = if (endsAt != null) {
+            "Frei ab ${SimpleDateFormat("HH:mm", Locale.GERMANY).format(Date(endsAt))} " +
+                "oder nach erneutem Scan"
+        } else {
+            "Chip scannen, um freizugeben"
         }
 
         val notification = Notification.Builder(context, CHANNEL_ID)
-            .setContentTitle("Riegel aktiv — ${state.blockedPackages.size} Apps gesperrt")
+            .setContentTitle(
+                "Riegel aktiv — ${profile?.name ?: "Unbekannt"}, " +
+                    "${profile?.blockedPackages?.size ?: 0} Apps gesperrt"
+            )
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setOngoing(true)

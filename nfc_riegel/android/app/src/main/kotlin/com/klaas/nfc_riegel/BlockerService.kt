@@ -29,10 +29,11 @@ class BlockerService : AccessibilityService() {
         val pkg = event?.packageName?.toString() ?: return
         if (pkg == packageName) return
 
-        val state = engine.state()
-        if (!state.locked) return
+        val now = System.currentTimeMillis()
+        val blocked = engine.blockedPackages(now)
+        if (blocked.isEmpty()) return
 
-        if (pkg in state.blockedPackages) {
+        if (pkg in blocked) {
             showBlockScreen()
             return
         }

@@ -31,11 +31,18 @@ class NfcToggleActivity : Activity() {
         val uid = NfcSupport.toHex(tag.id)
         val result = LockController(this).scan(uid)
 
+        val profileName = result.state.chipLock
+            ?.let { lock -> result.state.profileById(lock.profileId)?.name }
+
         val message = when (result.outcome) {
-            ScanOutcome.LOCKED -> "Riegel zu — ${result.state.blockedPackages.size} Apps gesperrt"
+            ScanOutcome.LOCKED -> "Riegel zu — $profileName"
+            ScanOutcome.SWITCHED -> "Gewechselt auf $profileName"
             ScanOutcome.UNLOCKED -> "Riegel offen"
+            ScanOutcome.MASTER_CLEARED -> "Alle Sperren beendet"
             ScanOutcome.UNKNOWN_TAG -> "Fremder Chip"
             ScanOutcome.NO_TAG_ENROLLED -> "Erst in der App einen Chip anlernen"
+            ScanOutcome.NO_PROFILE -> "Profil dieses Chips existiert nicht mehr"
+            ScanOutcome.UNTIL_IN_PAST -> "Zeitpunkt liegt in der Vergangenheit"
         }
         toastAndFinish(message)
     }
