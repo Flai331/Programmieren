@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Zugangsdaten — Vorlage liegt als lib/secrets.template.dart im Repo
+lib/secrets.dart
