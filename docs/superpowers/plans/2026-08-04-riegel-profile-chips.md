@@ -300,6 +300,28 @@ class LockEngineToggleTest {
     }
 
     @Test
+    fun `UNTIL-Zeitpunkt in der Vergangenheit sperrt nicht`() {
+        val abend = Profile(
+            id = "p3",
+            name = "Abend",
+            defaultMode = LockMode.UNTIL,
+            untilAt = now - 1,
+        )
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(abend),
+                tags = listOf(TagBinding("04DD", "Sofa", "p3")),
+            )
+        )
+        val e = LockEngine(store)
+
+        val result = e.onTagScanned("04DD", now)
+
+        assertEquals(ScanOutcome.UNTIL_IN_PAST, result.outcome)
+        assertNull(store.current.chipLock)
+    }
+
+    @Test
     fun `unbekannte UID aendert nichts`() {
         val (e, store) = engine()
 
