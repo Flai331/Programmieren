@@ -98,4 +98,54 @@ class LockCodecTest {
         assertEquals(ChipLock("p1"), LockCodec.decodeChipLock("p1"))
         assertNull(LockCodec.decodeLegacyTimeLock("p1"))
     }
+
+    @Test
+    fun `Terminfenster ueberstehen Kodieren und Dekodieren`() {
+        val fenster = listOf(
+            CalendarWindow("e1", "Konzept schreiben", 1_000L, 2_000L, "p1"),
+            CalendarWindow("e2", "Sport", 3_000L, 4_000L, "p2"),
+        )
+
+        val zurueck = LockCodec.decodeWindows(LockCodec.encodeWindows(fenster))
+
+        assertEquals(fenster, zurueck)
+    }
+
+    @Test
+    fun `leere Fensterliste ergibt leeren String und zurueck`() {
+        assertEquals("", LockCodec.encodeWindows(emptyList()))
+        assertTrue(LockCodec.decodeWindows("").isEmpty())
+    }
+
+    @Test
+    fun `Kalendereinstellungen ueberstehen Kodieren und Dekodieren`() {
+        val einstellungen = CalendarSettings(
+            enabled = true,
+            calendarProfiles = mapOf("cal1" to "p1", "cal2" to "p2"),
+            keywordMarker = "[Fokus]",
+            keywordProfileId = "p2",
+            cachedWindows = listOf(CalendarWindow("e1", "Termin", 1_000L, 2_000L, "p1")),
+            windowsFetchedAt = 5_000L,
+            pinnedEnds = mapOf("e1" to 2_000L),
+            suppressedUntil = 9_000L,
+        )
+
+        val zurueck = LockCodec.decodeCalendar(LockCodec.encodeCalendar(einstellungen))
+
+        assertEquals(einstellungen, zurueck)
+    }
+
+    @Test
+    fun `Kalendereinstellungen ohne Angaben ergeben die Vorgaben`() {
+        val zurueck = LockCodec.decodeCalendar("")
+
+        assertEquals(CalendarSettings(), zurueck)
+    }
+
+    @Test
+    fun `Termintitel mit Sonderzeichen ueberlebt den Rundlauf`() {
+        val fenster = listOf(CalendarWindow("e1", "Team-Meeting: Q4 (wichtig!)", 1L, 2L, "p1"))
+
+        assertEquals(fenster, LockCodec.decodeWindows(LockCodec.encodeWindows(fenster)))
+    }
 }

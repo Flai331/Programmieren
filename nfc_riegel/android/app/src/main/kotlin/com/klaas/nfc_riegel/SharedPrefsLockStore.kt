@@ -34,6 +34,7 @@ class SharedPrefsLockStore(context: Context) : LockStore {
             codeHash = prefs.getString(KEY_CODE_HASH, null),
             failedAttempts = prefs.getInt(KEY_ATTEMPTS, 0),
             codeLockedUntil = prefs.getLong(KEY_CODE_LOCKED_UNTIL, -1L).takeIf { it > 0 },
+            calendar = LockCodec.decodeCalendar(prefs.getString(KEY_CALENDAR, "") ?: ""),
         )
     }
 
@@ -46,6 +47,7 @@ class SharedPrefsLockStore(context: Context) : LockStore {
             .putString(KEY_CODE_HASH, state.codeHash)
             .putInt(KEY_ATTEMPTS, state.failedAttempts)
             .putLong(KEY_CODE_LOCKED_UNTIL, state.codeLockedUntil ?: -1L)
+            .putString(KEY_CALENDAR, LockCodec.encodeCalendar(state.calendar))
             .apply()
     }
 
@@ -68,5 +70,6 @@ class SharedPrefsLockStore(context: Context) : LockStore {
         const val KEY_CODE_HASH = "codeHash"
         const val KEY_ATTEMPTS = "failedAttempts"
         const val KEY_CODE_LOCKED_UNTIL = "codeLockedUntil"
+        const val KEY_CALENDAR = "calendar"
     }
 }

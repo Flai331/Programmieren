@@ -10,6 +10,7 @@ object LockCodec {
     private const val RECORD = ''
     private const val FIELD = ''
     private const val ITEM = ''
+    private const val PAIR = ''
 
     fun encodeProfiles(profiles: List<Profile>): String =
         profiles.joinToString(RECORD.toString()) { p ->
@@ -101,5 +102,76 @@ object LockCodec {
                 endsAt = f[2].toLongOrNull() ?: return@mapNotNull null,
             )
         }
+    }
+
+    fun encodeWindows(windows: List<CalendarWindow>): String =
+        windows.joinToString(RECORD.toString()) { w ->
+            listOf(
+                w.eventId,
+                w.title,
+                w.startsAt.toString(),
+                w.endsAt.toString(),
+                w.profileId,
+            ).joinToString(FIELD.toString())
+        }
+
+    fun decodeWindows(raw: String): List<CalendarWindow> {
+        if (raw.isEmpty()) return emptyList()
+        return raw.split(RECORD).mapNotNull { record ->
+            val f = record.split(FIELD)
+            if (f.size != 5) return@mapNotNull null
+            CalendarWindow(
+                eventId = f[0],
+                title = f[1],
+                startsAt = f[2].toLongOrNull() ?: return@mapNotNull null,
+                endsAt = f[3].toLongOrNull() ?: return@mapNotNull null,
+                profileId = f[4],
+            )
+        }
+    }
+
+    private fun encodeMap(map: Map<String, String>): String =
+        map.entries.joinToString(ITEM.toString()) { "${it.key}$PAIR${it.value}" }
+
+    private fun decodeMap(raw: String): Map<String, String> {
+        if (raw.isEmpty()) return emptyMap()
+        return raw.split(ITEM).mapNotNull { paar ->
+            val teile = paar.split(PAIR)
+            if (teile.size != 2) null else teile[0] to teile[1]
+        }.toMap()
+    }
+
+    /**
+     * Die Fensterliste steckt als eigenes Feld mit RECORD- und FIELD-Trennern in
+     * einem FIELD-getrennten Datensatz. Das geht nur, weil die äußere Aufteilung
+     * mit `limit` arbeitet und das Fensterfeld zuletzt steht.
+     */
+    fun encodeCalendar(c: CalendarSettings): String = listOf(
+        if (c.enabled) "1" else "0",
+        encodeMap(c.calendarProfiles),
+        c.keywordMarker,
+        c.keywordProfileId ?: "",
+        c.windowsFetchedAt.toString(),
+        encodeMap(c.pinnedEnds.mapValues { it.value.toString() }),
+        c.suppressedUntil?.toString() ?: "",
+        encodeWindows(c.cachedWindows),
+    ).joinToString(FIELD.toString())
+
+    fun decodeCalendar(raw: String): CalendarSettings {
+        if (raw.isEmpty()) return CalendarSettings()
+        val f = raw.split(FIELD, limit = 8)
+        if (f.size != 8) return CalendarSettings()
+        return CalendarSettings(
+            enabled = f[0] == "1",
+            calendarProfiles = decodeMap(f[1]),
+            keywordMarker = f[2],
+            keywordProfileId = f[3].takeIf { it.isNotEmpty() },
+            windowsFetchedAt = f[4].toLongOrNull() ?: 0L,
+            pinnedEnds = decodeMap(f[5]).mapNotNull { (k, v) ->
+                v.toLongOrNull()?.let { k to it }
+            }.toMap(),
+            suppressedUntil = f[6].toLongOrNull(),
+            cachedWindows = decodeWindows(f[7]),
+        )
     }
 }
