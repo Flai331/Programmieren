@@ -67,3 +67,12 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
 - [ ] Erneuter Scan beendet vorzeitig
 - [ ] Zeitpunkt in der Vergangenheit: Meldung, keine Sperre
 - [ ] Neustart während einer UNTIL-Sperre: Sperre besteht weiter
+
+## Fehlermeldesystem
+
+- [ ] Käfer-Symbol oben rechts öffnet den Melde-Dialog
+- [ ] Bericht mit Beschreibung abschicken → Erfolgsmeldung
+- [ ] Eintrag erscheint in der Notion-Datenbank „🐛 Fehlerberichte Riegel"
+- [ ] Im Eintrag stehen unter Protokoll: Sperre, Profile, Chips, Bedienungshilfe, Benachrichtigungen, Android-Version
+- [ ] Im Eintrag stehen **keine** Tag-UIDs und kein Code-Hash
+- [ ] Flugmodus an, Bericht abschicken → E-Mail-App öffnet sich als Rückfall
