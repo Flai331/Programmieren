@@ -31,14 +31,16 @@ class LockController(private val context: Context) {
     }
 
     private fun applyEffects(state: LockState) {
-        val lock = state.chipLock
-        if (lock != null) {
-            val endsAt = lock.endsAt
-            if (endsAt != null) LockScheduler.schedule(context, endsAt)
-            else LockScheduler.cancel(context)
-            LockNotification.show(context, state)
+        val naechstesEnde = state.timeLocks.minOfOrNull { it.endsAt }
+        if (naechstesEnde != null) {
+            LockScheduler.schedule(context, naechstesEnde)
         } else {
             LockScheduler.cancel(context)
+        }
+
+        if (state.chipLock != null || state.timeLocks.isNotEmpty()) {
+            LockNotification.show(context, state)
+        } else {
             LockNotification.hide(context)
         }
     }
