@@ -132,7 +132,13 @@ class TagWriteActivity : Activity() {
         written.fold(
             onSuccess = {
                 val stored = LockEngine(SharedPrefsLockStore(this))
-                    .enrollTag(NfcSupport.toHex(tag.id), label, profileId, isMaster)
+                    .enrollTag(
+                        NfcSupport.toHex(tag.id),
+                        label,
+                        profileId,
+                        isMaster,
+                        System.currentTimeMillis(),
+                    )
                 if (stored) {
                     Toast.makeText(this, "Chip angelernt", Toast.LENGTH_SHORT).show()
                     setResult(RESULT_OK)

@@ -38,16 +38,29 @@ class RiegelChannel(private val activity: Activity) {
                         untilAt = call.argument<Long>("untilAt"),
                         pinCalendarEnd = call.argument<Boolean>("pinCalendarEnd") ?: false,
                     )
-                    result.success(controller.engine.updateProfile(profile))
+                    result.success(
+                        controller.engine.updateProfile(profile, System.currentTimeMillis())
+                    )
                 }
 
                 "deleteProfile" ->
-                    result.success(controller.engine.deleteProfile(call.argument<String>("id") ?: ""))
+                    result.success(
+                        controller.engine.deleteProfile(
+                            call.argument<String>("id") ?: "",
+                            System.currentTimeMillis(),
+                        )
+                    )
 
                 "deleteTag" ->
-                    result.success(controller.engine.deleteTag(call.argument<String>("uid") ?: ""))
+                    result.success(
+                        controller.engine.deleteTag(
+                            call.argument<String>("uid") ?: "",
+                            System.currentTimeMillis(),
+                        )
+                    )
 
-                "generateCode" -> result.success(controller.engine.generateCode())
+                "generateCode" ->
+                    result.success(controller.engine.generateCode(System.currentTimeMillis()))
 
                 "startTagEnrollment" -> {
                     val intent = Intent(activity, TagWriteActivity::class.java)

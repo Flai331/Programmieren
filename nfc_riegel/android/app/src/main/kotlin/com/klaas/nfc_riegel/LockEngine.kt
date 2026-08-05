@@ -258,11 +258,12 @@ class LockEngine(private val store: LockStore) {
 
     /**
      * Speichert ein geändertes Profil. Abgelehnt, solange genau dieses Profil
-     * sperrt — andere Profile bleiben bearbeitbar.
+     * sperrt — gleich ob über die Chipsperre oder eine Zeitsperre. Andere Profile
+     * bleiben bearbeitbar.
      */
-    fun updateProfile(profile: Profile): Boolean {
+    fun updateProfile(profile: Profile, now: Long): Boolean {
         val s = store.load()
-        if (s.chipLock?.profileId == profile.id) return false
+        if (profile.id in lockedProfileIds(s, now)) return false
         if (s.profileById(profile.id) == null) return false
         store.save(s.copy(profiles = s.profiles.map { if (it.id == profile.id) profile else it }))
         return true
@@ -272,10 +273,10 @@ class LockEngine(private val store: LockStore) {
      * Löscht ein Profil. Das letzte bleibt bestehen, ein sperrendes ebenfalls.
      * Zugeordnete Chips ziehen auf das erste verbleibende Profil.
      */
-    fun deleteProfile(id: String): Boolean {
+    fun deleteProfile(id: String, now: Long): Boolean {
         val s = store.load()
         if (s.profiles.size <= 1) return false
-        if (s.chipLock?.profileId == id) return false
+        if (id in lockedProfileIds(s, now)) return false
         val remaining = s.profiles.filterNot { it.id == id }
         val fallback = remaining.first().id
         store.save(
@@ -288,12 +289,18 @@ class LockEngine(private val store: LockStore) {
     }
 
     /**
-     * Chip anlernen oder einen bekannten aktualisieren. Während einer Sperre
+     * Chip anlernen oder einen bekannten aktualisieren. Während jeder Sperre
      * abgelehnt — sonst läge man sich mitten in der Sperre einen neuen Schlüssel an.
      */
-    fun enrollTag(uid: String, label: String, profileId: String, isMaster: Boolean): Boolean {
+    fun enrollTag(
+        uid: String,
+        label: String,
+        profileId: String,
+        isMaster: Boolean,
+        now: Long,
+    ): Boolean {
         val s = store.load()
-        if (s.chipLock != null) return false
+        if (lockedProfileIds(s, now).isNotEmpty()) return false
         val binding = TagBinding(uid, label, profileId, isMaster)
         val existing = s.tagByUid(uid)
         val tags = if (existing == null) s.tags + binding
@@ -302,21 +309,21 @@ class LockEngine(private val store: LockStore) {
         return true
     }
 
-    fun deleteTag(uid: String): Boolean {
+    fun deleteTag(uid: String, now: Long): Boolean {
         val s = store.load()
-        if (s.chipLock != null) return false
+        if (lockedProfileIds(s, now).isNotEmpty()) return false
         store.save(s.copy(tags = s.tags.filterNot { it.uid.equals(uid, ignoreCase = true) }))
         return true
     }
 
     /**
      * Erzeugt den Notfall-Code, speichert nur dessen Hash und gibt ihn einmalig
-     * zurück. Während einer Sperre nicht möglich — sonst wäre der Notausgang
-     * jederzeit neu ausstellbar.
+     * zurück. Während jeder Sperre abgelehnt — sonst wäre der Notausgang jederzeit
+     * neu ausstellbar.
      */
-    fun generateCode(): String? {
+    fun generateCode(now: Long): String? {
         val s = store.load()
-        if (s.chipLock != null) return null
+        if (lockedProfileIds(s, now).isNotEmpty()) return null
         val code = (1..8).map { CODE_ALPHABET.random() }.joinToString("")
         store.save(s.copy(codeHash = Hashing.sha256(code)))
         return code
