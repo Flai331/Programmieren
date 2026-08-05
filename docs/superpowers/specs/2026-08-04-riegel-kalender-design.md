@@ -103,8 +103,16 @@ Drei Auslöser, zusammen decken sie alles ab:
 3. **App-Start** — einmal einlesen und neu planen, als Netz für alles, was die
    ersten beiden verpasst haben.
 
-Ein regelmäßiges Abfragen im Hintergrund gibt es nicht: es kostet Akku und ist
-gegenüber dem Alarm kein Gewinn.
+**Korrektur 2026-08-05.** Diese drei reichen nicht. Der Alarm hängt an der nächsten
+Fenstergrenze — gibt es zehn Tage lang keinen passenden Termin, gibt es auch keine
+Grenze und keinen Alarm. Der ContentObserver lebt nur, solange der Prozess lebt.
+Der Zwischenspeicher altert in dieser Zeit weg, und der Termin am Dienstag sperrt
+nicht.
+
+Der Alarm wird deshalb auf `min(nächste Fenstergrenze, jetzt + 12 h)` gesetzt und
+liest bei jedem Feuern neu ein. Das ist kein regelmäßiges Abfragen im Sinne von
+„alle paar Minuten nachsehen", sondern eine Obergrenze dafür, wie alt der
+Zwischenspeicher werden darf: höchstens zwei Aufwachvorgänge am Tag.
 
 ## Datenmodell — Ergänzungen
 
