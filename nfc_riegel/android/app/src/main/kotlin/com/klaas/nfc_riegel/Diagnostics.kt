@@ -14,20 +14,20 @@ import java.util.Locale
 object Diagnostics {
 
     fun summarize(state: LockState, now: Long): Map<String, String> {
-        val lock = state.chipLock?.takeIf { l ->
-            val endsAt = l.endsAt
-            endsAt == null || now < endsAt
+        val zeilen = mutableListOf<String>()
+
+        state.chipLock?.let { lock ->
+            val name = state.profileById(lock.profileId)?.name ?: "unbekanntes Profil"
+            zeilen += "Chip · $name"
         }
 
-        val lockLine = if (lock == null) {
-            "offen"
-        } else {
+        state.timeLocks.filter { now < it.endsAt }.forEach { lock ->
             val name = state.profileById(lock.profileId)?.name ?: "unbekanntes Profil"
-            val ende = lock.endsAt?.let {
-                " bis " + SimpleDateFormat("dd.MM. HH:mm", Locale.GERMANY).format(Date(it))
-            } ?: ""
-            "gesperrt · $name · ${lock.mode.name}$ende"
+            val ende = SimpleDateFormat("dd.MM. HH:mm", Locale.GERMANY).format(Date(lock.endsAt))
+            zeilen += "Zeit · $name · ${lock.mode.name} bis $ende"
         }
+
+        val lockLine = if (zeilen.isEmpty()) "offen" else "gesperrt · " + zeilen.joinToString(" + ")
 
         val profiles = if (state.profiles.isEmpty()) "keine"
         else state.profiles.joinToString(" | ") { p ->

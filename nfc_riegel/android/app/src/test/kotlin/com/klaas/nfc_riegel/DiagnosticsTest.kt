@@ -27,26 +27,15 @@ class DiagnosticsTest {
     }
 
     @Test
-    fun `laufende Sperre nennt Profil und Ende`() {
+    fun `Chipsperre nennt das Profil`() {
         val state = LockState(
             profiles = listOf(arbeit),
-            chipLock = ChipLock("p1", LockMode.TIMER, now + 60_000),
+            chipLock = ChipLock("p1", LockMode.OPEN),
         )
 
         val lines = Diagnostics.summarize(state, now)
 
         assertTrue(lines["Sperre"]!!.contains("Arbeit"))
-        assertTrue(lines["Sperre"]!!.contains("TIMER"))
-    }
-
-    @Test
-    fun `abgelaufene Sperre gilt als offen`() {
-        val state = LockState(
-            profiles = listOf(arbeit),
-            chipLock = ChipLock("p1", LockMode.TIMER, now - 1),
-        )
-
-        assertEquals("offen", Diagnostics.summarize(state, now)["Sperre"])
     }
 
     @Test
@@ -106,5 +95,47 @@ class DiagnosticsTest {
 
         assertTrue(!text.contains("04AABBCC"))
         assertTrue(!text.contains("geheimerhash"))
+    }
+
+    @Test
+    fun `laufende Zeitsperre steht im Bericht`() {
+        val bericht = Diagnostics.summarize(
+            LockState(
+                profiles = listOf(Profile(id = "p1", name = "Arbeit")),
+                timeLocks = listOf(TimeLock("p1", LockMode.TIMER, now + 60_000)),
+            ),
+            now,
+        )
+        assertTrue(bericht["Sperre"]!!.contains("Arbeit"))
+        assertTrue(bericht["Sperre"]!!.contains("TIMER"))
+    }
+
+    @Test
+    fun `abgelaufene Zeitsperre gilt als offen`() {
+        val bericht = Diagnostics.summarize(
+            LockState(
+                profiles = listOf(Profile(id = "p1", name = "Arbeit")),
+                timeLocks = listOf(TimeLock("p1", LockMode.TIMER, now - 1)),
+            ),
+            now,
+        )
+        assertEquals("offen", bericht["Sperre"])
+    }
+
+    @Test
+    fun `Chip- und Zeitsperre stehen beide im Bericht`() {
+        val bericht = Diagnostics.summarize(
+            LockState(
+                profiles = listOf(
+                    Profile(id = "p1", name = "Arbeit"),
+                    Profile(id = "p2", name = "Nacht"),
+                ),
+                chipLock = ChipLock("p1", LockMode.OPEN),
+                timeLocks = listOf(TimeLock("p2", LockMode.UNTIL, now + 60_000)),
+            ),
+            now,
+        )
+        assertTrue(bericht["Sperre"]!!.contains("Arbeit"))
+        assertTrue(bericht["Sperre"]!!.contains("Nacht"))
     }
 }
