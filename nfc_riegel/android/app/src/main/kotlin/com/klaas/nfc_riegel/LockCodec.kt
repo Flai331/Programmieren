@@ -56,20 +56,31 @@ object LockCodec {
         }
     }
 
-    fun encodeChipLock(lock: ChipLock?): String =
-        if (lock == null) ""
-        else listOf(lock.profileId, lock.mode.name, lock.endsAt?.toString() ?: "")
-            .joinToString(FIELD.toString())
+    /** v3: nur noch die Profil-Kennung. Eine Chipsperre hat weder Modus noch Ende. */
+    fun encodeChipLock(lock: ChipLock?): String = lock?.profileId ?: ""
 
+    /**
+     * Liest v3 (ein Feld) und v2 (drei Felder: Kennung, Modus, Ende). Aus einem
+     * v2-Datensatz bleibt nur `OPEN` eine Chipsperre; `TIMER` und `UNTIL` holt
+     * [decodeLegacyTimeLock] ab.
+     */
     fun decodeChipLock(raw: String): ChipLock? {
         if (raw.isEmpty()) return null
         val f = raw.split(FIELD)
+        if (f.size == 1) return ChipLock(f[0])
         if (f.size != 3) return null
-        return ChipLock(
-            profileId = f[0],
-            mode = runCatching { LockMode.valueOf(f[1]) }.getOrNull() ?: return null,
-            endsAt = f[2].toLongOrNull(),
-        )
+        return if (f[1] == LockMode.OPEN.name) ChipLock(f[0]) else null
+    }
+
+    /** Die Zeitsperre, die in einem v2-Datensatz steckt — oder null. */
+    fun decodeLegacyTimeLock(raw: String): TimeLock? {
+        if (raw.isEmpty()) return null
+        val f = raw.split(FIELD)
+        if (f.size != 3) return null
+        val mode = runCatching { LockMode.valueOf(f[1]) }.getOrNull() ?: return null
+        if (mode == LockMode.OPEN) return null
+        val endsAt = f[2].toLongOrNull() ?: return null
+        return TimeLock(f[0], mode, endsAt)
     }
 
     fun encodeTimeLocks(locks: List<TimeLock>): String =

@@ -18,11 +18,19 @@ class SharedPrefsLockStore(context: Context) : LockStore {
             save(migrated)
             return migrated
         }
+        val rohChipLock = prefs.getString(KEY_CHIP_LOCK, "") ?: ""
+        val zeitsperren = LockCodec.decodeTimeLocks(prefs.getString(KEY_TIME_LOCKS, "") ?: "")
+        // Aus v2 kann im chipLock-Feld noch eine TIMER- oder UNTIL-Sperre stecken.
+        // Abgelaufene wird verworfen; sie hat ohnehin keine Wirkung mehr.
+        val ausV2 = LockCodec.decodeLegacyTimeLock(rohChipLock)
+            ?.takeIf { System.currentTimeMillis() < it.endsAt }
+            ?.takeIf { alt -> zeitsperren.none { it.profileId == alt.profileId } }
+
         return LockState(
             profiles = LockCodec.decodeProfiles(prefs.getString(KEY_PROFILES, "") ?: ""),
             tags = LockCodec.decodeTags(prefs.getString(KEY_TAGS, "") ?: ""),
-            chipLock = LockCodec.decodeChipLock(prefs.getString(KEY_CHIP_LOCK, "") ?: ""),
-            timeLocks = LockCodec.decodeTimeLocks(prefs.getString(KEY_TIME_LOCKS, "") ?: ""),
+            chipLock = LockCodec.decodeChipLock(rohChipLock),
+            timeLocks = if (ausV2 == null) zeitsperren else zeitsperren + ausV2,
             codeHash = prefs.getString(KEY_CODE_HASH, null),
             failedAttempts = prefs.getInt(KEY_ATTEMPTS, 0),
             codeLockedUntil = prefs.getLong(KEY_CODE_LOCKED_UNTIL, -1L).takeIf { it > 0 },

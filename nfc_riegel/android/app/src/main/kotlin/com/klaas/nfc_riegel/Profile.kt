@@ -29,8 +29,7 @@ data class TagBinding(
 /** Die eine aktive Chipsperre. Höchstens eine gleichzeitig. */
 data class ChipLock(
     val profileId: String,
-    val mode: LockMode,
-    /** Bei TIMER und UNTIL gesetzt, bei OPEN null. */
+    val mode: LockMode = LockMode.OPEN,
     val endsAt: Long? = null,
 )
 

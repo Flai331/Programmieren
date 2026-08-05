@@ -59,17 +59,30 @@ class LockMigrationTest {
     }
 
     @Test
-    fun `laufende Sperre wird uebernommen`() {
+    fun `laufende TIMER-Sperre wird zur Zeitsperre`() {
         val state = LockMigration.fromV1(
             locked = true, mode = LockMode.TIMER, endsAt = 1_700_000_000_000,
             durationMinutes = 60, blockedPackages = setOf("com.a"),
             tagUid = "04AA", codeHash = null,
         )
 
-        val lock = state.chipLock!!
+        assertNull(state.chipLock)
+        val lock = state.timeLocks.single()
         assertEquals(state.profiles.first().id, lock.profileId)
         assertEquals(LockMode.TIMER, lock.mode)
         assertEquals(1_700_000_000_000, lock.endsAt)
+    }
+
+    @Test
+    fun `laufende OPEN-Sperre bleibt eine Chipsperre`() {
+        val state = LockMigration.fromV1(
+            locked = true, mode = LockMode.OPEN, endsAt = null,
+            durationMinutes = 60, blockedPackages = setOf("com.a"),
+            tagUid = "04AA", codeHash = null,
+        )
+
+        assertEquals(state.profiles.first().id, state.chipLock!!.profileId)
+        assertTrue(state.timeLocks.isEmpty())
     }
 
     @Test

@@ -28,10 +28,18 @@ object LockMigration {
         val tags = if (tagUid.isNullOrEmpty()) emptyList()
         else listOf(TagBinding(tagUid, "Chip 1", LEGACY_PROFILE_ID, isMaster = true))
 
+        val chipLock = if (locked && mode == LockMode.OPEN) ChipLock(LEGACY_PROFILE_ID) else null
+        val timeLocks = if (locked && mode != LockMode.OPEN && endsAt != null) {
+            listOf(TimeLock(LEGACY_PROFILE_ID, mode, endsAt))
+        } else {
+            emptyList()
+        }
+
         return LockState(
             profiles = listOf(profile),
             tags = tags,
-            chipLock = if (locked) ChipLock(LEGACY_PROFILE_ID, mode, endsAt) else null,
+            chipLock = chipLock,
+            timeLocks = timeLocks,
             codeHash = codeHash,
         )
     }

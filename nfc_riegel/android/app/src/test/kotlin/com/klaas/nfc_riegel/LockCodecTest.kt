@@ -1,6 +1,7 @@
 package com.klaas.nfc_riegel
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,8 +37,8 @@ class LockCodecTest {
     }
 
     @Test
-    fun `Chipsperre ueberstehen Kodieren und Dekodieren`() {
-        val lock = ChipLock("p1", LockMode.UNTIL, 1_700_000_000_000)
+    fun `Chipsperre uebersteht Kodieren und Dekodieren`() {
+        val lock = ChipLock("p1")
 
         assertEquals(lock, LockCodec.decodeChipLock(LockCodec.encodeChipLock(lock)))
     }
@@ -73,5 +74,28 @@ class LockCodecTest {
     fun `Zeitsperre ohne Endzeitpunkt wird verworfen`() {
         val kaputt = "p1" + '' + "TIMER" + '' + "keineZahl"
         assertEquals(emptyList<TimeLock>(), LockCodec.decodeTimeLocks(kaputt))
+    }
+
+    @Test
+    fun `v2-Datensatz mit OPEN bleibt eine Chipsperre`() {
+        val alt = "p1" + '' + "OPEN" + '' + ""
+        assertEquals(ChipLock("p1"), LockCodec.decodeChipLock(alt))
+        assertNull(LockCodec.decodeLegacyTimeLock(alt))
+    }
+
+    @Test
+    fun `v2-Datensatz mit TIMER wird zur Zeitsperre`() {
+        val alt = "p1" + '' + "TIMER" + '' + "1700000000000"
+        assertNull(LockCodec.decodeChipLock(alt))
+        assertEquals(
+            TimeLock("p1", LockMode.TIMER, 1_700_000_000_000),
+            LockCodec.decodeLegacyTimeLock(alt),
+        )
+    }
+
+    @Test
+    fun `v3-Datensatz besteht nur aus der Profil-Kennung`() {
+        assertEquals(ChipLock("p1"), LockCodec.decodeChipLock("p1"))
+        assertNull(LockCodec.decodeLegacyTimeLock("p1"))
     }
 }
