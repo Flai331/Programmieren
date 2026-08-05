@@ -76,3 +76,29 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
 - [ ] Im Eintrag stehen unter Protokoll: Sperre, Profile, Chips, Bedienungshilfe, Benachrichtigungen, Android-Version
 - [ ] Im Eintrag stehen **keine** Tag-UIDs und kein Code-Hash
 - [ ] Flugmodus an, Bericht abschicken → E-Mail-App öffnet sich als Rückfall
+
+## Zeitsperren ohne Chip
+
+- [ ] Profil auf `TIMER` mit 5 Minuten stellen, „Sperren" drücken, Dialog bestätigen
+- [ ] Gesperrte App öffnen — Sperrschirm erscheint
+- [ ] Normalen Chip dieses Profils scannen — Sperre bleibt bestehen, Meldung
+      „Zeitsperre läuft"
+- [ ] Chip eines anderen `OPEN`-Profils scannen — beide Sperren gelten gleichzeitig
+- [ ] Generalschlüssel scannen — beide Sperren enden
+- [ ] Erneut sperren, „Verlängern" drücken — Ende rückt nach hinten, nie nach vorn
+- [ ] Profil auf `UNTIL` mit einem Zeitpunkt in der Vergangenheit stellen,
+      „Sperren" drücken — Meldung statt Sperre
+- [ ] Während laufender Zeitsperre: Profil öffnen — nicht bearbeitbar
+- [ ] Während laufender Zeitsperre: Chips öffnen — nicht erreichbar
+- [ ] Handy neu starten, während eine Zeitsperre läuft — Sperre gilt weiter,
+      Benachrichtigung wieder da
+- [ ] Timer ablaufen lassen — Sperre endet von selbst, Benachrichtigung verschwindet
+- [ ] Ohne angelernten Generalschlüssel sperren — Dialog warnt in Rot
+- [ ] Update über eine laufende v2-`UNTIL`-Sperre — sie läuft nach dem Update weiter
+
+## Benachrichtigungsberechtigung
+
+- [ ] App entfernen und neu installieren, beim ersten Start erscheint die Abfrage
+      nach Benachrichtigungen
+- [ ] Abfrage ablehnen, dann sperren — Sperre wirkt, nur die Benachrichtigung fehlt
+- [ ] Fehlerbericht senden — im Zustandsblock steht „Benachrichtigungen: VERWEIGERT"
