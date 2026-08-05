@@ -2821,3 +2821,16 @@ Spec und setzt diese Umsetzung voraus.
   Umgesetzt mit `'\u0002'`.
 - **Umgebung:** Gradle braucht `JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"`;
   die System-Standard-JVM ist Java 8 und Gradle bricht sonst sofort ab.
+- **Task 4, Schritt 1+2 — Profile in `LockEngineToggleTest` vertauscht.** Der Plan
+  sagt „`arbeit` (id `p1`, `OPEN`), `nacht` (id `p2`)". Tatsächlich ist `arbeit`
+  (p1) `TIMER` mit 30 Minuten und `nacht` (p2) `OPEN`. Alle neuen Tests wurden
+  entsprechend umgehängt: Chipsperren-Fälle laufen über `chipNacht`/`04BB`/`p2`,
+  Zeitsperren-Fälle über `chipArbeit`/`04AA`/`p1`.
+- **Task 4, Schritt 2 — drei statt zwei bestehende Tests betroffen.** Der Plan nennt
+  nur die beiden Tests um Zeile 107 und 117. Zusätzlich brachen
+  `Chip sperrt mit dem Modus seines Profils` (Chipsperre wird zur Zeitsperre, jetzt
+  umbenannt in `Chip mit TIMER-Profil startet eine Zeitsperre statt einer Chipsperre`)
+  und `Generalschluessel sperrt mit eigenem Profil wenn nichts laeuft` (der
+  Generalschlüssel zeigt auf das TIMER-Profil `p1`). Außerdem ging der Plan-Fix für
+  `derselbe Chip gibt wieder frei` nicht auf: Freigeben per Scan gibt es nur noch bei
+  `OPEN`-Profilen, der Test scannt daher jetzt `04BB` (Profil `p2`).

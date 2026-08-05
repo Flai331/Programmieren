@@ -7,6 +7,10 @@ enum class ScanOutcome {
     SWITCHED,
     /** Generalschlüssel hat alle Sperren beendet. */
     MASTER_CLEARED,
+    /** Zeitsperre lief bereits, ihr Ende wurde nach hinten geschoben. */
+    EXTENDED,
+    /** Zeitsperre läuft — nur ein Generalschlüssel öffnet sie vorzeitig. */
+    TIME_LOCK_RUNNING,
     UNKNOWN_TAG,
     NO_TAG_ENROLLED,
     /** Chip zeigt auf ein Profil, das es nicht mehr gibt. */
@@ -45,45 +49,47 @@ class LockEngine(private val store: LockStore) {
     fun state(): LockState = store.load()
 
     /**
-     * Chip gescannt. Ein normaler Chip schaltet nur sein eigenes Profil; ein
-     * Generalschlüssel beendet jede laufende Sperre.
+     * Chip gescannt. Der Modus des Profils entscheidet, welche Spur entsteht:
+     * `OPEN` ergibt eine Chipsperre, `TIMER` und `UNTIL` eine Zeitsperre. Ein
+     * normaler Chip beendet nur seine eigene Chipsperre; an Zeitsperren kommt
+     * allein der Generalschlüssel.
      */
     fun onTagScanned(uid: String, now: Long): ScanResult {
         val s = store.load()
         if (s.tags.isEmpty()) return ScanResult(s, ScanOutcome.NO_TAG_ENROLLED)
         val tag = s.tagByUid(uid) ?: return ScanResult(s, ScanOutcome.UNKNOWN_TAG)
 
-        val active = activeChipLock(s, now)
-
-        if (tag.isMaster && active != null) {
-            return ScanResult(clearLocks(s), ScanOutcome.MASTER_CLEARED)
+        if (tag.isMaster && lockedProfileIds(s, now).isNotEmpty()) {
+            return ScanResult(clearAll(s), ScanOutcome.MASTER_CLEARED)
         }
 
         val profile = s.profileById(tag.profileId)
             ?: return ScanResult(s, ScanOutcome.NO_PROFILE)
 
+        if (profile.defaultMode != LockMode.OPEN) {
+            val result = startTimeLock(profile.id, now, allowExtend = false)
+            return ScanResult(result.state, result.outcome.asScanOutcome())
+        }
+
+        val active = activeChipLock(s, now)
         if (active != null && active.profileId == profile.id) {
-            return ScanResult(clearLocks(s), ScanOutcome.UNLOCKED)
+            return ScanResult(clearChipLock(s), ScanOutcome.UNLOCKED)
         }
 
-        val endsAt = when (profile.defaultMode) {
-            LockMode.OPEN -> null
-            LockMode.TIMER -> now + profile.durationMinutes * 60_000L
-            LockMode.UNTIL -> {
-                val until = profile.untilAt
-                if (until == null || until <= now) {
-                    return ScanResult(s, ScanOutcome.UNTIL_IN_PAST)
-                }
-                until
-            }
-        }
-
-        val next = s.copy(chipLock = ChipLock(profile.id, profile.defaultMode, endsAt))
+        val next = s.copy(chipLock = ChipLock(profile.id, LockMode.OPEN))
         store.save(next)
         return ScanResult(
             next,
             if (active != null) ScanOutcome.SWITCHED else ScanOutcome.LOCKED,
         )
+    }
+
+    private fun StartOutcome.asScanOutcome(): ScanOutcome = when (this) {
+        StartOutcome.STARTED -> ScanOutcome.LOCKED
+        StartOutcome.EXTENDED -> ScanOutcome.EXTENDED
+        StartOutcome.ALREADY_RUNNING -> ScanOutcome.TIME_LOCK_RUNNING
+        StartOutcome.UNTIL_IN_PAST -> ScanOutcome.UNTIL_IN_PAST
+        StartOutcome.WRONG_MODE, StartOutcome.NO_PROFILE -> ScanOutcome.NO_PROFILE
     }
 
     /**
@@ -144,8 +150,27 @@ class LockEngine(private val store: LockStore) {
     /** Sperrt gerade irgendetwas? Grundlage aller Einstellungswächter. */
     fun hasActiveLock(now: Long): Boolean = lockedProfileIds(store.load(), now).isNotEmpty()
 
-    private fun clearLocks(s: LockState): LockState {
-        val next = s.copy(chipLock = null, failedAttempts = 0, codeLockedUntil = null)
+    /**
+     * Beendet alles: Chipsperre und sämtliche Zeitsperren. Nur der Generalschlüssel
+     * und der Notfall-Code kommen hier hin.
+     */
+    private fun clearAll(s: LockState): LockState {
+        val next = s.copy(
+            chipLock = null,
+            timeLocks = emptyList(),
+            failedAttempts = 0,
+            codeLockedUntil = null,
+        )
+        store.save(next)
+        return next
+    }
+
+    /**
+     * Beendet nur die Chipsperre. Zeitsperren bleiben stehen — ein normaler Chip
+     * kommt an sie nicht heran.
+     */
+    private fun clearChipLock(s: LockState): LockState {
+        val next = s.copy(chipLock = null)
         store.save(next)
         return next
     }
@@ -194,7 +219,7 @@ class LockEngine(private val store: LockStore) {
 
         val normalized = input.trim().uppercase()
         if (Hashing.sha256(normalized) == hash) {
-            return CodeResult(clearLocks(s), CodeOutcome.UNLOCKED)
+            return CodeResult(clearAll(s), CodeOutcome.UNLOCKED)
         }
 
         val attempts = s.failedAttempts + 1

@@ -1,7 +1,6 @@
 package com.klaas.nfc_riegel
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -79,15 +78,15 @@ class LockEngineToggleTest {
     }
 
     @Test
-    fun `Chip sperrt mit dem Modus seines Profils`() {
+    fun `Chip mit TIMER-Profil startet eine Zeitsperre statt einer Chipsperre`() {
         val (e, store) = engine()
 
         val result = e.onTagScanned("04AA", now)
 
         assertEquals(ScanOutcome.LOCKED, result.outcome)
-        val lock = store.current.chipLock
-        assertNotNull(lock)
-        assertEquals("p1", lock!!.profileId)
+        assertNull(store.current.chipLock)
+        val lock = store.current.timeLocks.single()
+        assertEquals("p1", lock.profileId)
         assertEquals(LockMode.TIMER, lock.mode)
         assertEquals(now + 30 * 60_000L, lock.endsAt)
     }
@@ -104,9 +103,9 @@ class LockEngineToggleTest {
 
     @Test
     fun `derselbe Chip gibt wieder frei`() {
-        val (e, store) = engine(chipLock = ChipLock("p1", LockMode.TIMER, now + 5000))
+        val (e, store) = engine(chipLock = ChipLock("p2", LockMode.OPEN))
 
-        val result = e.onTagScanned("04AA", now)
+        val result = e.onTagScanned("04BB", now)
 
         assertEquals(ScanOutcome.UNLOCKED, result.outcome)
         assertNull(store.current.chipLock)
@@ -114,7 +113,7 @@ class LockEngineToggleTest {
 
     @Test
     fun `anderer Chip uebernimmt mit seinem Profil`() {
-        val (e, store) = engine(chipLock = ChipLock("p1", LockMode.TIMER, now + 5000))
+        val (e, store) = engine(chipLock = ChipLock("p1", LockMode.OPEN))
 
         val result = e.onTagScanned("04BB", now)
 
@@ -140,7 +139,7 @@ class LockEngineToggleTest {
         val result = e.onTagScanned("04CC", now)
 
         assertEquals(ScanOutcome.LOCKED, result.outcome)
-        assertEquals("p1", store.current.chipLock!!.profileId)
+        assertEquals("p1", store.current.timeLocks.single().profileId)
     }
 
     @Test
@@ -161,5 +160,85 @@ class LockEngineToggleTest {
 
         assertEquals(ScanOutcome.NO_PROFILE, result.outcome)
         assertNull(store.current.chipLock)
+    }
+
+    @Test
+    fun `normaler Chip beendet eine Zeitsperre nicht`() {
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(arbeit, nacht),
+                tags = listOf(chipNacht),
+                timeLocks = listOf(TimeLock("p1", LockMode.TIMER, now + 60_000)),
+            )
+        )
+        val e = LockEngine(store)
+
+        e.onTagScanned("04BB", now)
+
+        assertEquals(1, store.current.timeLocks.size)
+        assertEquals(now + 60_000, store.current.timeLocks.single().endsAt)
+    }
+
+    @Test
+    fun `Chip mit OPEN-Profil sperrt zusaetzlich zur laufenden Zeitsperre`() {
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(arbeit, nacht),
+                tags = listOf(chipNacht),
+                timeLocks = listOf(TimeLock("p1", LockMode.TIMER, now + 60_000)),
+            )
+        )
+        val e = LockEngine(store)
+
+        assertEquals(ScanOutcome.LOCKED, e.onTagScanned("04BB", now).outcome)
+        assertEquals("p2", store.current.chipLock!!.profileId)
+        assertEquals(1, store.current.timeLocks.size)
+    }
+
+    @Test
+    fun `erneuter Scan beendet die eigene Zeitsperre nicht und verlaengert sie nicht`() {
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(arbeit, nacht),
+                tags = listOf(chipArbeit),
+                timeLocks = listOf(TimeLock("p1", LockMode.TIMER, now + 10_000)),
+            )
+        )
+        val e = LockEngine(store)
+
+        assertEquals(ScanOutcome.TIME_LOCK_RUNNING, e.onTagScanned("04AA", now).outcome)
+        assertEquals(now + 10_000, store.current.timeLocks.single().endsAt)
+    }
+
+    @Test
+    fun `Generalschluessel beendet Chip- und Zeitsperre gemeinsam`() {
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(arbeit, nacht),
+                tags = listOf(general),
+                chipLock = ChipLock("p2", LockMode.OPEN),
+                timeLocks = listOf(TimeLock("p1", LockMode.TIMER, now + 60_000)),
+            )
+        )
+        val e = LockEngine(store)
+
+        assertEquals(ScanOutcome.MASTER_CLEARED, e.onTagScanned("04CC", now).outcome)
+        assertNull(store.current.chipLock)
+        assertEquals(emptyList<TimeLock>(), store.current.timeLocks)
+    }
+
+    @Test
+    fun `Generalschluessel beendet auch eine reine Zeitsperre`() {
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(arbeit, nacht),
+                tags = listOf(general),
+                timeLocks = listOf(TimeLock("p2", LockMode.UNTIL, now + 60_000)),
+            )
+        )
+        val e = LockEngine(store)
+
+        assertEquals(ScanOutcome.MASTER_CLEARED, e.onTagScanned("04CC", now).outcome)
+        assertEquals(emptyList<TimeLock>(), store.current.timeLocks)
     }
 }

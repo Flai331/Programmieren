@@ -30,15 +30,21 @@ class NfcToggleActivity : Activity() {
 
         val uid = NfcSupport.toHex(tag.id)
         val result = LockController(this).scan(uid)
+        val state = result.state
+        val now = System.currentTimeMillis()
 
-        val profileName = result.state.chipLock
-            ?.let { lock -> result.state.profileById(lock.profileId)?.name }
+        // Ein Scan kann eine Chipsperre oder eine Zeitsperre erzeugt haben.
+        val profileId = state.chipLock?.profileId
+            ?: state.timeLocks.filter { now < it.endsAt }.maxByOrNull { it.endsAt }?.profileId
+        val profileName = profileId?.let { state.profileById(it)?.name } ?: "Riegel"
 
         val message = when (result.outcome) {
             ScanOutcome.LOCKED -> "Riegel zu — $profileName"
             ScanOutcome.SWITCHED -> "Gewechselt auf $profileName"
             ScanOutcome.UNLOCKED -> "Riegel offen"
             ScanOutcome.MASTER_CLEARED -> "Alle Sperren beendet"
+            ScanOutcome.EXTENDED -> "Sperre verlängert — $profileName"
+            ScanOutcome.TIME_LOCK_RUNNING -> "Zeitsperre läuft — nur ein Generalschlüssel öffnet"
             ScanOutcome.UNKNOWN_TAG -> "Fremder Chip"
             ScanOutcome.NO_TAG_ENROLLED -> "Erst in der App einen Chip anlernen"
             ScanOutcome.NO_PROFILE -> "Profil dieses Chips existiert nicht mehr"
