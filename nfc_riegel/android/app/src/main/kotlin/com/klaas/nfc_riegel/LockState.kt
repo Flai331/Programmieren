@@ -1,8 +1,9 @@
 package com.klaas.nfc_riegel
 
 /**
- * OPEN = bis erneuter Scan, TIMER = für eine Dauer, UNTIL = bis zu einem
- * absoluten Zeitpunkt. TIMER und UNTIL enden beide auch durch erneuten Scan.
+ * OPEN = Chipsperre bis erneuter Scan. TIMER = Zeitsperre für eine Dauer,
+ * UNTIL = Zeitsperre bis zu einem absoluten Zeitpunkt. Zeitsperren enden
+ * vorzeitig nur durch Generalschlüssel oder Notfall-Code.
  */
 enum class LockMode { OPEN, TIMER, UNTIL }
 
@@ -15,6 +16,7 @@ data class LockState(
     val tags: List<TagBinding> = emptyList(),
     val chipLock: ChipLock? = null,
     val timeLocks: List<TimeLock> = emptyList(),
+    val calendar: CalendarSettings = CalendarSettings(),
     val codeHash: String? = null,
     val failedAttempts: Int = 0,
     /** Bis wann die Code-Eingabe gesperrt ist (Millis) oder null. */
