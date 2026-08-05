@@ -86,4 +86,23 @@ class LockEngineTimerTest {
 
         assertNotNull(store.current.chipLock)
     }
+
+    @Test
+    fun `abgelaufene Zeitsperren werden abgeraeumt, laufende bleiben`() {
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(profil),
+                timeLocks = listOf(
+                    TimeLock("p1", LockMode.TIMER, now - 1),
+                    TimeLock("p2", LockMode.UNTIL, now + 60_000),
+                ),
+            )
+        )
+        val e = LockEngine(store)
+
+        e.onTimerElapsed(now)
+
+        assertEquals(1, store.current.timeLocks.size)
+        assertEquals(now + 60_000, store.current.timeLocks.single().endsAt)
+    }
 }

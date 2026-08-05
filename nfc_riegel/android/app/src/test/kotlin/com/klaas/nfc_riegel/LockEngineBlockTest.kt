@@ -48,4 +48,57 @@ class LockEngineBlockTest {
 
         assertEquals(setOf("com.instagram.android"), e.blockedPackages(now))
     }
+
+    private fun engineMitZeitsperren(vararg locks: TimeLock): LockEngine =
+        LockEngine(
+            FakeLockStore(
+                LockState(profiles = listOf(arbeit, nacht), timeLocks = locks.toList())
+            )
+        )
+
+    @Test
+    fun `laufende Zeitsperre sperrt die Pakete ihres Profils`() {
+        val e = engineMitZeitsperren(TimeLock("p1", LockMode.TIMER, now + 60_000))
+        assertEquals(arbeit.blockedPackages, e.blockedPackages(now))
+    }
+
+    @Test
+    fun `abgelaufene Zeitsperre sperrt nicht mehr`() {
+        val e = engineMitZeitsperren(TimeLock("p1", LockMode.TIMER, now - 1))
+        assertEquals(emptySet<String>(), e.blockedPackages(now))
+    }
+
+    @Test
+    fun `zwei Zeitsperren sperren die Vereinigung`() {
+        val e = engineMitZeitsperren(
+            TimeLock("p1", LockMode.TIMER, now + 60_000),
+            TimeLock("p2", LockMode.UNTIL, now + 90_000),
+        )
+        assertEquals(arbeit.blockedPackages + nacht.blockedPackages, e.blockedPackages(now))
+    }
+
+    @Test
+    fun `Chipsperre und Zeitsperre sperren gemeinsam`() {
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(arbeit, nacht),
+                chipLock = ChipLock("p1", LockMode.OPEN),
+                timeLocks = listOf(TimeLock("p2", LockMode.TIMER, now + 60_000)),
+            )
+        )
+        val e = LockEngine(store)
+        assertEquals(arbeit.blockedPackages + nacht.blockedPackages, e.blockedPackages(now))
+    }
+
+    @Test
+    fun `hasActiveLock erkennt eine laufende Zeitsperre`() {
+        val e = engineMitZeitsperren(TimeLock("p1", LockMode.TIMER, now + 60_000))
+        assertTrue(e.hasActiveLock(now))
+    }
+
+    @Test
+    fun `hasActiveLock ist falsch wenn alles abgelaufen ist`() {
+        val e = engineMitZeitsperren(TimeLock("p1", LockMode.TIMER, now - 1))
+        assertFalse(e.hasActiveLock(now))
+    }
 }

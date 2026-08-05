@@ -79,6 +79,19 @@ class LockEngine(private val store: LockStore) {
         return if (now >= endsAt) null else lock
     }
 
+    /** Zeitsperren, die jetzt noch gelten. Abgelaufene zählen nicht. */
+    private fun activeTimeLocks(s: LockState, now: Long): List<TimeLock> =
+        s.timeLocks.filter { now < it.endsAt }
+
+    /** Profile, die gerade sperren — über die Chipsperre oder eine Zeitsperre. */
+    private fun lockedProfileIds(s: LockState, now: Long): Set<String> = buildSet {
+        activeChipLock(s, now)?.let { add(it.profileId) }
+        activeTimeLocks(s, now).forEach { add(it.profileId) }
+    }
+
+    /** Sperrt gerade irgendetwas? Grundlage aller Einstellungswächter. */
+    fun hasActiveLock(now: Long): Boolean = lockedProfileIds(store.load(), now).isNotEmpty()
+
     private fun clearLocks(s: LockState): LockState {
         val next = s.copy(chipLock = null, failedAttempts = 0, codeLockedUntil = null)
         store.save(next)
@@ -86,14 +99,29 @@ class LockEngine(private val store: LockStore) {
     }
 
     /**
-     * Vom Alarm gerufen. Gibt frei, wenn das Ende erreicht ist — sonst nichts.
+     * Vom Alarm gerufen. Räumt jede abgelaufene Sperre ab — auch mehrere zugleich.
      * Die Uhrzeit entscheidet, nicht das Feuern des Alarms.
      */
     fun onTimerElapsed(now: Long): LockState {
         val s = store.load()
-        val lock = s.chipLock ?: return s
-        val endsAt = lock.endsAt ?: return s
-        return if (now >= endsAt) clearLocks(s) else s
+        val verbleibend = s.timeLocks.filter { now < it.endsAt }
+        val chipEnde = s.chipLock?.endsAt
+        val chipAbgelaufen = chipEnde != null && now >= chipEnde
+
+        if (verbleibend.size == s.timeLocks.size && !chipAbgelaufen) return s
+
+        val next = if (chipAbgelaufen) {
+            s.copy(
+                chipLock = null,
+                timeLocks = verbleibend,
+                failedAttempts = 0,
+                codeLockedUntil = null,
+            )
+        } else {
+            s.copy(timeLocks = verbleibend)
+        }
+        store.save(next)
+        return next
     }
 
     /**
@@ -134,13 +162,13 @@ class LockEngine(private val store: LockStore) {
         packageName in blockedPackages(now)
 
     /**
-     * Vereinigung aller aktiven Sperren. Aktuell nur die Chipsperre — die
-     * Kalendersperre kommt in einer eigenen Ausbaustufe dazu.
+     * Vereinigung aller aktiven Sperren: Chipsperre und Zeitsperren. Ein Paket ist
+     * gesperrt, sobald irgendeine davon es enthält.
      */
     fun blockedPackages(now: Long): Set<String> {
         val s = store.load()
-        val lock = activeChipLock(s, now) ?: return emptySet()
-        return s.profileById(lock.profileId)?.blockedPackages ?: emptySet()
+        return lockedProfileIds(s, now)
+            .flatMapTo(mutableSetOf()) { s.profileById(it)?.blockedPackages ?: emptySet() }
     }
 
     /** Legt ein Profil an und gibt es zurück. Immer erlaubt. */
