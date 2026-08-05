@@ -30,6 +30,15 @@ class LockController(private val context: Context) {
         return result
     }
 
+    fun startTimeLock(
+        profileId: String,
+        now: Long = System.currentTimeMillis(),
+    ): StartOutcome {
+        val result = engine.startTimeLock(profileId, now)
+        applyEffects(result.state)
+        return result.outcome
+    }
+
     private fun applyEffects(state: LockState) {
         val naechstesEnde = state.timeLocks.minOfOrNull { it.endsAt }
         if (naechstesEnde != null) {

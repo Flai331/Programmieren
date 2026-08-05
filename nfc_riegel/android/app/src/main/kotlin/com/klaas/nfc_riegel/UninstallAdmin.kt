@@ -6,8 +6,8 @@ import android.content.Intent
 
 class UninstallAdmin : DeviceAdminReceiver() {
     override fun onDisableRequested(context: Context, intent: Intent): CharSequence {
-        val state = LockEngine(SharedPrefsLockStore(context)).state()
-        return if (state.chipLock != null) {
+        val engine = LockEngine(SharedPrefsLockStore(context))
+        return if (engine.hasActiveLock(System.currentTimeMillis())) {
             "Der Riegel sperrt gerade. Deaktivieren hebt den Deinstallationsschutz auf."
         } else {
             "Deinstallationsschutz wird aufgehoben."

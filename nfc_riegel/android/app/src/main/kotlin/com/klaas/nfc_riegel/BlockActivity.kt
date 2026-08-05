@@ -189,18 +189,40 @@ class BlockActivity : Activity() {
 
     private fun refresh() {
         val state = controller.engine.state()
-        val lock = state.chipLock
-        if (lock == null) {
+        val now = System.currentTimeMillis()
+        val laufende = state.timeLocks.filter { now < it.endsAt }
+        val gesperrteProfile = buildSet {
+            state.chipLock?.let { add(it.profileId) }
+            laufende.forEach { add(it.profileId) }
+        }
+        if (gesperrteProfile.isEmpty()) {
             finish()
             return
         }
-        val profileName = state.profileById(lock.profileId)?.name ?: "Riegel"
-        val endsAt = lock.endsAt
-        if (endsAt != null) {
-            val remaining = ((endsAt - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
+
+        val profileName = gesperrteProfile
+            .mapNotNull { state.profileById(it)?.name }
+            .joinToString(", ")
+            .ifEmpty { "Riegel" }
+
+        // Die am spätesten endende Zeitsperre zählt: eine frühere sagt nichts,
+        // solange eine spätere noch greift.
+        val spaetestesEnde = laufende.maxOfOrNull { it.endsAt }
+        if (spaetestesEnde != null) {
+            val remaining = ((spaetestesEnde - now) / 1000).coerceAtLeast(0)
             countdown.visibility = View.VISIBLE
-            countdown.text = "%02d:%02d".format(remaining / 60, remaining % 60)
-            hint.text = "oder Chip scannen"
+            // Eine UNTIL-Sperre läuft über Nacht. „720:00" wäre keine Auskunft,
+            // deshalb ab einer Stunde mit Stundenfeld.
+            countdown.text = if (remaining >= 3600) {
+                "%d:%02d:%02d".format(remaining / 3600, (remaining % 3600) / 60, remaining % 60)
+            } else {
+                "%02d:%02d".format(remaining / 60, remaining % 60)
+            }
+            hint.text = if (state.chipLock != null) {
+                "Chip scannen oder warten"
+            } else {
+                "Vorher öffnet nur ein Generalschlüssel"
+            }
         } else {
             countdown.visibility = View.GONE
             hint.text = "Chip scannen, um freizugeben"

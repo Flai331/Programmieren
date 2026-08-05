@@ -104,6 +104,13 @@ class RiegelChannel(private val activity: Activity) {
                     result.success(map)
                 }
 
+                "startTimeLock" -> {
+                    val outcome = controller.startTimeLock(
+                        call.argument<String>("profileId") ?: "",
+                    )
+                    result.success(outcome.name)
+                }
+
                 else -> result.notImplemented()
             }
         }
@@ -111,7 +118,7 @@ class RiegelChannel(private val activity: Activity) {
 
     private fun stateMap(): Map<String, Any?> {
         val s = controller.engine.state()
-        val lock = s.chipLock
+        val now = System.currentTimeMillis()
         return mapOf(
             "profiles" to s.profiles.map { p ->
                 mapOf(
@@ -132,13 +139,15 @@ class RiegelChannel(private val activity: Activity) {
                     "isMaster" to t.isMaster,
                 )
             },
-            "activeLock" to lock?.let {
+            "chipLock" to s.chipLock?.let { mapOf("profileId" to it.profileId) },
+            "timeLocks" to s.timeLocks.filter { now < it.endsAt }.map { l ->
                 mapOf(
-                    "profileId" to it.profileId,
-                    "mode" to it.mode.name,
-                    "endsAt" to it.endsAt,
+                    "profileId" to l.profileId,
+                    "mode" to l.mode.name,
+                    "endsAt" to l.endsAt,
                 )
             },
+            "hasMasterTag" to s.tags.any { it.isMaster },
             "hasCode" to (s.codeHash != null),
         )
     }
