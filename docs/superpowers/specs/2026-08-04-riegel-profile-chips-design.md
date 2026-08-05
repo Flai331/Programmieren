@@ -15,6 +15,14 @@ Drei Erweiterungen der bestehenden App:
 Die Kalendereinbindung ist bewusst **nicht** Teil dieser Spec. Sie steht in
 `2026-08-04-riegel-kalender-design.md` und setzt diese hier voraus.
 
+> **Teilweise abgelöst am 2026-08-05.** Die Abschnitte „Sperr-Modi",
+> „Scan-Verhalten" und „Einstellungssperre" beschreiben den umgesetzten Stand von
+> v2, nicht mehr den angestrebten. `TIMER` und `UNTIL` waren dort Endebedingungen
+> einer Chipsperre und ließen sich durch erneuten Scan abkürzen; sie sind jetzt
+> eigenständige Zeitsperren. Maßgeblich ist
+> `2026-08-05-riegel-zeitsperren-design.md`. Datenmodell, Migration und Oberfläche
+> aus dieser Spec gelten unverändert weiter.
+
 ## Datenmodell
 
 ### Profil

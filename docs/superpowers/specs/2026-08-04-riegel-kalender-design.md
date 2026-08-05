@@ -2,7 +2,11 @@
 
 Datum: 2026-08-04
 Projekt: `Programmieren\nfc_riegel`
-Setzt voraus: `2026-08-04-riegel-profile-chips-design.md`
+Setzt voraus: `2026-08-04-riegel-profile-chips-design.md`,
+`2026-08-05-riegel-zeitsperren-design.md`
+
+Nachtrag 2026-08-05: an das Zwei-Spuren-Modell der Zeitsperren-Spec angeglichen.
+Betroffen sind „Sperrlogik" und „Datenmodell — Ergänzungen".
 
 ## Zweck
 
@@ -54,11 +58,17 @@ Das ist Zwischenspeicher, keine Wahrheit — die Wahrheit steht im Kalender.
 
 ## Sperrlogik
 
-**Zwei getrennte Spuren.** Die Chipsperre aus der Profil-Spec und die Kalendersperre
-laufen unabhängig nebeneinander. Gesperrt ist die Vereinigung.
+Die Kalendersperre ist eine **Zeitsperre** im Sinne der Zeitsperren-Spec: sie
+startet ohne Chip und lässt sich vor ihrem Ende nur mit Generalschlüssel oder
+Notfall-Code öffnen. Von `TIMER` und `UNTIL` unterscheidet sie sich allein darin,
+woher Start und Ende stammen — aus dem Kalender statt aus dem Profil.
 
-- Ein normaler Chip beendet **nur** seine eigene Sperre, nie die Kalendersperre
-- Ein **Generalschlüssel** beendet alles, auch die Kalendersperre
+Drei Quellen laufen unabhängig nebeneinander, gesperrt ist ihre Vereinigung:
+`chipLock`, `timeLocks` und die aus den Fenstern gerechneten Kalendersperren.
+
+- Ein normaler Chip beendet **nur** die Chipsperre seines eigenen Profils — weder
+  eine Zeit- noch eine Kalendersperre
+- Ein **Generalschlüssel** beendet alles
 - Der **Notfall-Code** beendet ebenfalls alles
 
 Beendet ein Generalschlüssel oder der Code eine Kalendersperre, wird
@@ -98,7 +108,7 @@ gegenüber dem Alarm kein Gewinn.
 
 ## Datenmodell — Ergänzungen
 
-Zum Zustand aus der Profil-Spec kommen:
+Zum Zustand aus der Profil- und der Zeitsperren-Spec kommen:
 
 | Feld | Typ | Bedeutung |
 |---|---|---|
