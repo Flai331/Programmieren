@@ -76,7 +76,7 @@ class LockEngine(private val store: LockStore) {
             return ScanResult(clearChipLock(s), ScanOutcome.UNLOCKED)
         }
 
-        val next = s.copy(chipLock = ChipLock(profile.id, LockMode.OPEN))
+        val next = s.copy(chipLock = ChipLock(profile.id))
         store.save(next)
         return ScanResult(
             next,
@@ -130,12 +130,8 @@ class LockEngine(private val store: LockStore) {
         return StartResult(next, if (laufend != null) StartOutcome.EXTENDED else StartOutcome.STARTED)
     }
 
-    /** Die Chipsperre, sofern sie jetzt noch gilt. Abgelaufene zählen nicht. */
-    private fun activeChipLock(s: LockState, now: Long): ChipLock? {
-        val lock = s.chipLock ?: return null
-        val endsAt = lock.endsAt ?: return lock
-        return if (now >= endsAt) null else lock
-    }
+    /** Die Chipsperre. Sie läuft nicht ab — nur ein Scan oder der Code beendet sie. */
+    private fun activeChipLock(s: LockState, now: Long): ChipLock? = s.chipLock
 
     /** Zeitsperren, die jetzt noch gelten. Abgelaufene zählen nicht. */
     private fun activeTimeLocks(s: LockState, now: Long): List<TimeLock> =
@@ -176,27 +172,14 @@ class LockEngine(private val store: LockStore) {
     }
 
     /**
-     * Vom Alarm gerufen. Räumt jede abgelaufene Sperre ab — auch mehrere zugleich.
-     * Die Uhrzeit entscheidet, nicht das Feuern des Alarms.
+     * Vom Alarm gerufen. Räumt jede abgelaufene Zeitsperre ab — auch mehrere
+     * zugleich. Die Uhrzeit entscheidet, nicht das Feuern des Alarms.
      */
     fun onTimerElapsed(now: Long): LockState {
         val s = store.load()
         val verbleibend = s.timeLocks.filter { now < it.endsAt }
-        val chipEnde = s.chipLock?.endsAt
-        val chipAbgelaufen = chipEnde != null && now >= chipEnde
-
-        if (verbleibend.size == s.timeLocks.size && !chipAbgelaufen) return s
-
-        val next = if (chipAbgelaufen) {
-            s.copy(
-                chipLock = null,
-                timeLocks = verbleibend,
-                failedAttempts = 0,
-                codeLockedUntil = null,
-            )
-        } else {
-            s.copy(timeLocks = verbleibend)
-        }
+        if (verbleibend.size == s.timeLocks.size) return s
+        val next = s.copy(timeLocks = verbleibend)
         store.save(next)
         return next
     }

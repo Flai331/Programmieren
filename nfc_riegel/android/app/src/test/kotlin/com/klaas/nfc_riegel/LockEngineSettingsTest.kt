@@ -59,7 +59,7 @@ class LockEngineSettingsTest {
 
     @Test
     fun `sperrendes Profil ist nicht bearbeitbar`() {
-        val (e, store) = engine(ChipLock("p1", LockMode.OPEN))
+        val (e, store) = engine(ChipLock("p1"))
 
         val ok = e.updateProfile(arbeit.copy(name = "Fokus"), now)
 
@@ -69,7 +69,7 @@ class LockEngineSettingsTest {
 
     @Test
     fun `anderes Profil bleibt waehrend einer Sperre bearbeitbar`() {
-        val (e, store) = engine(ChipLock("p1", LockMode.OPEN))
+        val (e, store) = engine(ChipLock("p1"))
 
         val ok = e.updateProfile(nacht.copy(name = "Schlaf"), now)
 
@@ -99,7 +99,7 @@ class LockEngineSettingsTest {
 
     @Test
     fun `sperrendes Profil laesst sich nicht loeschen`() {
-        val (e, store) = engine(ChipLock("p1", LockMode.OPEN))
+        val (e, store) = engine(ChipLock("p1"))
 
         assertFalse(e.deleteProfile("p1", now))
         assertNotNull(store.current.profileById("p1"))
@@ -129,7 +129,7 @@ class LockEngineSettingsTest {
 
     @Test
     fun `Chips sind waehrend einer Sperre gesperrt`() {
-        val (e, store) = engine(ChipLock("p2", LockMode.OPEN))
+        val (e, store) = engine(ChipLock("p2"))
 
         assertFalse(e.enrollTag("04BB", "Bett", "p1", isMaster = false, now = now))
         assertFalse(e.deleteTag("04AA", now))
@@ -157,7 +157,7 @@ class LockEngineSettingsTest {
 
     @Test
     fun `Code laesst sich waehrend einer Sperre nicht neu erzeugen`() {
-        val (e, _) = engine(ChipLock("p1", LockMode.OPEN))
+        val (e, _) = engine(ChipLock("p1"))
 
         assertNull(e.generateCode(now))
     }

@@ -17,7 +17,7 @@ class LockEngineCodeTest {
         val store = FakeLockStore(
             LockState(
                 profiles = listOf(Profile("p1", "Arbeit")),
-                chipLock = ChipLock("p1", LockMode.OPEN),
+                chipLock = ChipLock("p1"),
                 codeHash = Hashing.sha256(code),
                 failedAttempts = failedAttempts,
                 codeLockedUntil = codeLockedUntil,
@@ -84,7 +84,7 @@ class LockEngineCodeTest {
         val store = FakeLockStore(
             LockState(
                 profiles = listOf(Profile("p1", "Arbeit")),
-                chipLock = ChipLock("p1", LockMode.OPEN),
+                chipLock = ChipLock("p1"),
                 codeHash = null,
             )
         )

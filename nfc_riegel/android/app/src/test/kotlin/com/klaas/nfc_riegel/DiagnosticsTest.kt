@@ -30,7 +30,7 @@ class DiagnosticsTest {
     fun `Chipsperre nennt das Profil`() {
         val state = LockState(
             profiles = listOf(arbeit),
-            chipLock = ChipLock("p1", LockMode.OPEN),
+            chipLock = ChipLock("p1"),
         )
 
         val lines = Diagnostics.summarize(state, now)
@@ -130,7 +130,7 @@ class DiagnosticsTest {
                     Profile(id = "p1", name = "Arbeit"),
                     Profile(id = "p2", name = "Nacht"),
                 ),
-                chipLock = ChipLock("p1", LockMode.OPEN),
+                chipLock = ChipLock("p1"),
                 timeLocks = listOf(TimeLock("p2", LockMode.UNTIL, now + 60_000)),
             ),
             now,

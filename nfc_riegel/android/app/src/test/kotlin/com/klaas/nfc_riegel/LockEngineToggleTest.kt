@@ -92,18 +92,17 @@ class LockEngineToggleTest {
     }
 
     @Test
-    fun `Profil im Modus OPEN sperrt ohne Ende`() {
+    fun `Profil im Modus OPEN erzeugt eine Chipsperre`() {
         val (e, store) = engine()
 
         e.onTagScanned("04BB", now)
 
-        assertEquals(LockMode.OPEN, store.current.chipLock!!.mode)
-        assertNull(store.current.chipLock!!.endsAt)
+        assertEquals("p2", store.current.chipLock!!.profileId)
     }
 
     @Test
     fun `derselbe Chip gibt wieder frei`() {
-        val (e, store) = engine(chipLock = ChipLock("p2", LockMode.OPEN))
+        val (e, store) = engine(chipLock = ChipLock("p2"))
 
         val result = e.onTagScanned("04BB", now)
 
@@ -113,18 +112,17 @@ class LockEngineToggleTest {
 
     @Test
     fun `anderer Chip uebernimmt mit seinem Profil`() {
-        val (e, store) = engine(chipLock = ChipLock("p1", LockMode.OPEN))
+        val (e, store) = engine(chipLock = ChipLock("p1"))
 
         val result = e.onTagScanned("04BB", now)
 
         assertEquals(ScanOutcome.SWITCHED, result.outcome)
         assertEquals("p2", store.current.chipLock!!.profileId)
-        assertEquals(LockMode.OPEN, store.current.chipLock!!.mode)
     }
 
     @Test
     fun `Generalschluessel beendet eine laufende Sperre`() {
-        val (e, store) = engine(chipLock = ChipLock("p2", LockMode.OPEN))
+        val (e, store) = engine(chipLock = ChipLock("p2"))
 
         val result = e.onTagScanned("04CC", now)
 
@@ -216,7 +214,7 @@ class LockEngineToggleTest {
             LockState(
                 profiles = listOf(arbeit, nacht),
                 tags = listOf(general),
-                chipLock = ChipLock("p2", LockMode.OPEN),
+                chipLock = ChipLock("p2"),
                 timeLocks = listOf(TimeLock("p1", LockMode.TIMER, now + 60_000)),
             )
         )

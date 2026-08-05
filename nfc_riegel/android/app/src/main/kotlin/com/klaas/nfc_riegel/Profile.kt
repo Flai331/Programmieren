@@ -26,12 +26,12 @@ data class TagBinding(
     val isMaster: Boolean = false,
 )
 
-/** Die eine aktive Chipsperre. Höchstens eine gleichzeitig. */
-data class ChipLock(
-    val profileId: String,
-    val mode: LockMode = LockMode.OPEN,
-    val endsAt: Long? = null,
-)
+/**
+ * Die eine aktive Chipsperre. Höchstens eine gleichzeitig, immer unbefristet:
+ * sie endet allein durch einen erneuten Scan, einen Generalschlüssel oder den
+ * Notfall-Code. Alles Zeitgebundene steckt in [TimeLock].
+ */
+data class ChipLock(val profileId: String)
 
 /**
  * Eine Zeitsperre. Startet ohne Chip — über die Schaltfläche, durch einen Scan
