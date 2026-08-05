@@ -1,5 +1,8 @@
 package com.klaas.nfc_riegel
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 
@@ -9,5 +12,24 @@ class MainActivity : FlutterActivity() {
         // Zustand nach App-Start begradigen: abgelaufener Timer wird sofort aufgelöst.
         LockController(this).expire()
         RiegelChannel(this).register(flutterEngine.dartExecutor.binaryMessenger)
+        requestNotificationPermission()
+    }
+
+    /**
+     * Seit Android 13 muss POST_NOTIFICATIONS zur Laufzeit erteilt werden. Ohne sie
+     * bleibt die Benachrichtigung während einer Sperre stumm, ohne dass irgendwo
+     * ein Fehler auftaucht. Ablehnen ist erlaubt — die Sperre wirkt trotzdem, man
+     * sieht sie nur nicht mehr im Schirm.
+     */
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) return
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+    }
+
+    private companion object {
+        const val REQUEST_NOTIFICATIONS = 1001
     }
 }
