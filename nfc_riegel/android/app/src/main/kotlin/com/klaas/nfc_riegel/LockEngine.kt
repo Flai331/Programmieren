@@ -21,6 +21,20 @@ enum class CodeOutcome { UNLOCKED, WRONG, LOCKED_OUT, NOT_SET }
 
 data class CodeResult(val state: LockState, val outcome: CodeOutcome)
 
+enum class StartOutcome {
+    STARTED,
+    /** Lief bereits, das neue Ende liegt später. */
+    EXTENDED,
+    /** Lief bereits, das neue Ende liegt nicht später — Zustand unverändert. */
+    ALREADY_RUNNING,
+    /** OPEN gibt es nur als Chipsperre. */
+    WRONG_MODE,
+    UNTIL_IN_PAST,
+    NO_PROFILE,
+}
+
+data class StartResult(val state: LockState, val outcome: StartOutcome)
+
 /**
  * Alle Zustandsübergänge des Riegels. Kennt nur [LockStore] — keine Android-Klassen,
  * keine Nebenwirkungen. Alarm und Benachrichtigung setzt [LockController] anhand des
@@ -70,6 +84,44 @@ class LockEngine(private val store: LockStore) {
             next,
             if (active != null) ScanOutcome.SWITCHED else ScanOutcome.LOCKED,
         )
+    }
+
+    /**
+     * Startet eine Zeitsperre — aus der Oberfläche oder durch einen Scan. Strenger
+     * stellen ist immer erlaubt, verkürzen nie: ein späteres Ende überschreibt,
+     * ein früheres lässt die laufende Sperre in Ruhe.
+     *
+     * [allowExtend] steht nur der Schaltfläche zu. Beim Scan ist es `false`, damit
+     * ein versehentlich vorbeigeführter Chip eine Sperre nicht verdoppelt.
+     */
+    fun startTimeLock(profileId: String, now: Long, allowExtend: Boolean = true): StartResult {
+        val s = store.load()
+        val profile = s.profileById(profileId)
+            ?: return StartResult(s, StartOutcome.NO_PROFILE)
+
+        val endsAt = when (profile.defaultMode) {
+            LockMode.OPEN -> return StartResult(s, StartOutcome.WRONG_MODE)
+            LockMode.TIMER -> now + profile.durationMinutes * 60_000L
+            LockMode.UNTIL -> {
+                val until = profile.untilAt
+                if (until == null || until <= now) {
+                    return StartResult(s, StartOutcome.UNTIL_IN_PAST)
+                }
+                until
+            }
+        }
+
+        val laufend = s.timeLocks.firstOrNull { it.profileId == profileId && now < it.endsAt }
+        if (laufend != null && (!allowExtend || endsAt <= laufend.endsAt)) {
+            return StartResult(s, StartOutcome.ALREADY_RUNNING)
+        }
+
+        val andere = s.timeLocks.filter { it.profileId != profileId }
+        val next = s.copy(
+            timeLocks = andere + TimeLock(profileId, profile.defaultMode, endsAt),
+        )
+        store.save(next)
+        return StartResult(next, if (laufend != null) StartOutcome.EXTENDED else StartOutcome.STARTED)
     }
 
     /** Die Chipsperre, sofern sie jetzt noch gilt. Abgelaufene zählen nicht. */
