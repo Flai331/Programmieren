@@ -2633,7 +2633,79 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/lib nfc_riegel/t
 
 ---
 
-### Task 12: Gerätetest, Bauen, Ablegen
+### Task 12: `POST_NOTIFICATIONS` zur Laufzeit anfragen
+
+Die Berechtigung steht seit v1 im Manifest, wird aber nie angefragt. Seit Android 13
+ist sie eine Laufzeit-Berechtigung — ohne Anfrage verschwindet die Sperr-Benachrichtigung
+lautlos. Auf dem Testgerät (SDK 33) fällt es nur deshalb nicht auf, weil sie dort von
+Hand erteilt wurde.
+
+**Files:**
+- Modify: `nfc_riegel/android/app/src/main/kotlin/com/klaas/nfc_riegel/MainActivity.kt`
+
+Ohne eigene Tests: `FlutterActivity` und `requestPermissions` laufen in reinem JUnit
+nicht. Die Prüfung erfolgt von Hand über die Liste in Task 13.
+
+- [ ] **Schritt 1: `MainActivity` ersetzen**
+
+```kotlin
+package com.klaas.nfc_riegel
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+
+class MainActivity : FlutterActivity() {
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        // Zustand nach App-Start begradigen: abgelaufener Timer wird sofort aufgelöst.
+        LockController(this).expire()
+        RiegelChannel(this).register(flutterEngine.dartExecutor.binaryMessenger)
+        requestNotificationPermission()
+    }
+
+    /**
+     * Seit Android 13 muss POST_NOTIFICATIONS zur Laufzeit erteilt werden. Ohne sie
+     * bleibt die Benachrichtigung während einer Sperre stumm, ohne dass irgendwo
+     * ein Fehler auftaucht. Ablehnen ist erlaubt — die Sperre wirkt trotzdem, man
+     * sieht sie nur nicht mehr im Schirm.
+     */
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) return
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+    }
+
+    private companion object {
+        const val REQUEST_NOTIFICATIONS = 1001
+    }
+}
+```
+
+Kein `onRequestPermissionsResult`: die Antwort ändert nichts am Ablauf, und der
+Fehlerbericht liest den tatsächlichen Stand ohnehin über `getDiagnostics`.
+
+- [ ] **Schritt 2: Übersetzen**
+
+```bash
+cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && android/gradlew.bat -p android :app:testDebugUnitTest
+```
+
+Erwartet: alle grün, 0 Fehlschläge.
+
+- [ ] **Schritt 3: Commit**
+
+```bash
+cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src && git commit -m "fix: Benachrichtigungsberechtigung zur Laufzeit anfragen"
+```
+
+---
+
+### Task 13: Gerätetest, Bauen, Ablegen
 
 **Files:**
 - Modify: `nfc_riegel/GERAETETEST.md`
@@ -2663,6 +2735,13 @@ An `GERAETETEST.md` anhängen:
 - [ ] Timer ablaufen lassen — Sperre endet von selbst, Benachrichtigung verschwindet
 - [ ] Ohne angelernten Generalschlüssel sperren — Dialog warnt in Rot
 - [ ] Update über eine laufende v2-`UNTIL`-Sperre — sie läuft nach dem Update weiter
+
+## Benachrichtigungsberechtigung
+
+- [ ] App entfernen und neu installieren, beim ersten Start erscheint die Abfrage
+      nach Benachrichtigungen
+- [ ] Abfrage ablehnen, dann sperren — Sperre wirkt, nur die Benachrichtigung fehlt
+- [ ] Fehlerbericht senden — im Zustandsblock steht „Benachrichtigungen: VERWEIGERT"
 ```
 
 - [ ] **Schritt 2: Build-Nummer erhöhen**
@@ -2721,7 +2800,12 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel && git commit -m
 | Sperrschirm nennt Profil und Ende | 7 |
 | Migration v1 und v2 | 8 |
 | `ChipLock` ohne Modus und Ende | 9 |
-| Gerätetest-Prüfliste | 12 |
+| Gerätetest-Prüfliste | 13 |
+
+**Nicht aus der Spec, aber im selben Durchgang erledigt:** Task 12 fragt
+`POST_NOTIFICATIONS` zur Laufzeit an. Die Berechtigung stand seit v1 im Manifest,
+wurde aber nie angefragt — seit Android 13 bleibt die Benachrichtigung dadurch
+stumm, ohne dass ein Fehler auftaucht.
 
 **Offen und bewusst nicht in diesem Plan:** die Kalendersperre. Sie hat eine eigene
 Spec und setzt diese Umsetzung voraus.
