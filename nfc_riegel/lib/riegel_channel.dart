@@ -18,6 +18,14 @@ class RiegelChannel {
   Future<String> addProfile(String name) async =>
       await channel.invokeMethod<String>('addProfile', {'name': name}) ?? '';
 
+  /// Startet eine Zeitsperre ohne Chip. Liefert den nativen Ausgang als Text,
+  /// z.B. `STARTED`, `EXTENDED`, `ALREADY_RUNNING`, `UNTIL_IN_PAST`.
+  Future<String> startTimeLock(String profileId) async =>
+      await channel.invokeMethod<String>('startTimeLock', {
+        'profileId': profileId,
+      }) ??
+      'NO_PROFILE';
+
   Future<bool> updateProfile(ProfileInfo profile) async =>
       await channel.invokeMethod<bool>('updateProfile', {
         'id': profile.id,

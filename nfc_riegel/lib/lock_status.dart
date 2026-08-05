@@ -67,27 +67,51 @@ class TagInfo {
   );
 }
 
+/// Eine laufende Zeitsperre. Endet vorzeitig nur durch Generalschlüssel oder Code.
+class TimeLockInfo {
+  const TimeLockInfo({
+    required this.profileId,
+    required this.mode,
+    required this.endsAt,
+  });
+
+  final String profileId;
+  final LockMode mode;
+  final DateTime endsAt;
+
+  factory TimeLockInfo.fromMap(Map<dynamic, dynamic> map) => TimeLockInfo(
+    profileId: map['profileId'] as String? ?? '',
+    mode: _modeFrom(map['mode'] as String?),
+    endsAt: DateTime.fromMillisecondsSinceEpoch(map['endsAt'] as int? ?? 0),
+  );
+}
+
 /// Dart-Spiegel des nativen Zustands. Nur Lesen — geändert wird nativ.
 class LockStatus {
   const LockStatus({
     required this.profiles,
     required this.tags,
-    required this.activeProfileId,
-    required this.activeMode,
-    required this.endsAt,
+    required this.chipLockProfileId,
+    required this.timeLocks,
+    required this.hasMasterTag,
     required this.hasCode,
   });
 
   final List<ProfileInfo> profiles;
   final List<TagInfo> tags;
-  final String? activeProfileId;
-  final LockMode? activeMode;
-  final DateTime? endsAt;
+
+  /// Profil der Chipsperre, oder null. Sie hat kein Ende.
+  final String? chipLockProfileId;
+
+  /// Laufende Zeitsperren. Die native Seite filtert abgelaufene bereits heraus.
+  final List<TimeLockInfo> timeLocks;
+
+  /// Ob überhaupt ein Generalschlüssel angelernt ist — sonst öffnet nur der Code.
+  final bool hasMasterTag;
   final bool hasCode;
 
   factory LockStatus.fromMap(Map<dynamic, dynamic> map) {
-    final lock = map['activeLock'] as Map<dynamic, dynamic>?;
-    final endsAtMillis = lock?['endsAt'] as int?;
+    final chipLock = map['chipLock'] as Map<dynamic, dynamic>?;
     return LockStatus(
       profiles: (map['profiles'] as List<dynamic>? ?? [])
           .map((e) => ProfileInfo.fromMap(e as Map<dynamic, dynamic>))
@@ -95,26 +119,41 @@ class LockStatus {
       tags: (map['tags'] as List<dynamic>? ?? [])
           .map((e) => TagInfo.fromMap(e as Map<dynamic, dynamic>))
           .toList(),
-      activeProfileId: lock?['profileId'] as String?,
-      activeMode: lock == null ? null : _modeFrom(lock['mode'] as String?),
-      endsAt: endsAtMillis == null
-          ? null
-          : DateTime.fromMillisecondsSinceEpoch(endsAtMillis),
+      chipLockProfileId: chipLock?['profileId'] as String?,
+      timeLocks: (map['timeLocks'] as List<dynamic>? ?? [])
+          .map((e) => TimeLockInfo.fromMap(e as Map<dynamic, dynamic>))
+          .toList(),
+      hasMasterTag: map['hasMasterTag'] as bool? ?? false,
       hasCode: map['hasCode'] as bool? ?? false,
     );
   }
 
-  bool get locked => activeProfileId != null;
+  bool get locked => chipLockProfileId != null || timeLocks.isNotEmpty;
 
-  ProfileInfo? get activeProfile {
-    for (final p in profiles) {
-      if (p.id == activeProfileId) return p;
+  /// Alle Profile, die gerade sperren — über beide Spuren.
+  Set<String> get lockedProfileIds => {
+    if (chipLockProfileId != null) chipLockProfileId!,
+    ...timeLocks.map((l) => l.profileId),
+  };
+
+  bool isProfileLocked(String profileId) => lockedProfileIds.contains(profileId);
+
+  TimeLockInfo? timeLockFor(String profileId) {
+    for (final lock in timeLocks) {
+      if (lock.profileId == profileId) return lock;
     }
     return null;
   }
 
-  /// Ein Profil ist nur dann gesperrt, wenn genau es gerade sperrt.
-  bool isProfileLocked(String profileId) => activeProfileId == profileId;
+  /// Wann die erste Sperre fällt. Null, wenn nur die Chipsperre läuft.
+  DateTime? get earliestEnd {
+    if (timeLocks.isEmpty) return null;
+    var earliest = timeLocks.first.endsAt;
+    for (final lock in timeLocks) {
+      if (lock.endsAt.isBefore(earliest)) earliest = lock.endsAt;
+    }
+    return earliest;
+  }
 
   /// Ohne Chip, Code und mindestens eine App ist die Einrichtung unvollständig.
   bool get setupComplete =>
