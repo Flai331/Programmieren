@@ -28,15 +28,31 @@ Kalenderfunktion sichtbar deaktiviert statt still wirkungslos.
 
 ## Auslöser
 
-Zwei Regeln, beide gleichzeitig aktiv:
+**Erweitert am 2026-08-05.** Zwei Regelarten, beide gleichzeitig aktiv:
 
-1. **Ausgewählte Kalender** — jeder Termin darin sperrt. Pro Kalender wird ein
-   Profil zugeordnet.
-2. **Stichwort im Titel** — Termine, deren Titel den Marker enthält (Vorgabe
-   `[Riegel]`), sperren auch aus nicht ausgewählten Kalendern. Sie nutzen ein
-   festgelegtes Standardprofil.
+**1. Kalenderregel.** Jedem Kalender des Geräts lässt sich ein Profil zuordnen,
+dazu die Trefferart:
 
-Trifft beides zu, gewinnt die Kalenderzuordnung — sie ist die spezifischere Angabe.
+| Trefferart | Wirkung |
+|---|---|
+| `ALL` | Jeder Termin des Kalenders sperrt |
+| `KEYWORD` | Nur Termine, deren Titel den Marker enthält |
+
+Kalender ohne Zuordnung sperren nicht. `KEYWORD` ist für Kalender gedacht, die
+ohnehin voll sind — der Arbeitskalender mit dreißig Terminen am Tag, von denen
+nur die markierten sperren sollen.
+
+**2. Stichwortregel.** Unabhängig davon sperren Termine, deren Titel den Marker
+enthält (Vorgabe `[Riegel]`), mit einem eigenen Profil. Sie sucht standardmäßig in
+**allen** Kalendern; über eine Kalenderauswahl lässt sie sich eingrenzen. Leere
+Auswahl heißt: überall.
+
+**Rangfolge.** Greift die Kalenderregel, gewinnt sie — sie ist die spezifischere
+Angabe. Greift sie nicht (Kalender auf `KEYWORD`, Titel ohne Marker), darf die
+Stichwortregel es noch versuchen. Trifft keine, sperrt der Termin nicht.
+
+Beide Regeln nutzen denselben Marker. Zwei verschiedene Stichwörter wären ein
+zweiter Merksatz ohne zweiten Nutzen.
 
 Ganztägige Termine werden ignoriert. Ein Ganztagstermin würde 24 Stunden sperren,
 was praktisch immer ein Versehen wäre; wer das will, legt einen Termin mit Uhrzeit

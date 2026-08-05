@@ -84,17 +84,42 @@ data class CalendarWindow(
     val profileId: String,
 )
 
+/** Welche Termine eines Kalenders sperren. */
+enum class CalendarMatch {
+    /** Jeder Termin des Kalenders. */
+    ALL,
+
+    /** Nur Termine, deren Titel den Stichwortmarker enthält. */
+    KEYWORD,
+}
+
+/**
+ * Regel für einen Kalender des Geräts. Kalender ohne Regel sperren nicht — es
+ * gibt bewusst kein „aus" als eigenen Wert, das Fehlen der Regel ist das Aus.
+ */
+data class CalendarRule(
+    val profileId: String,
+    val match: CalendarMatch = CalendarMatch.ALL,
+)
+
 /**
  * Alles, was der Nutzer an der Kalenderfunktion einstellt, plus der
- * Zwischenspeicher. Eigene Klasse statt sieben Felder in [LockState] — sie
+ * Zwischenspeicher. Eigene Klasse statt neun Felder in [LockState] — sie
  * gehören zusammen und werden gemeinsam geschrieben.
  */
 data class CalendarSettings(
     val enabled: Boolean = false,
-    /** Kalender-ID des Geräts → Profil-ID. */
-    val calendarProfiles: Map<String, String> = emptyMap(),
+    /** Kalender-ID des Geräts → Regel. Nicht enthaltene Kalender sperren nicht. */
+    val calendarRules: Map<String, CalendarRule> = emptyMap(),
     val keywordMarker: String = "[Riegel]",
+    /** Profil für Treffer der eigenständigen Stichwortregel. */
     val keywordProfileId: String? = null,
+    /**
+     * In welchen Kalendern die eigenständige Stichwortregel sucht.
+     * **Leer heißt: in allen.** Das ist die Vorgabe und der häufige Fall — wer
+     * einen Marker vergibt, will ihn meist überall wirken lassen.
+     */
+    val keywordCalendarIds: Set<String> = emptySet(),
     val cachedWindows: List<CalendarWindow> = emptyList(),
     val windowsFetchedAt: Long = 0L,
     /** eventId → festgenageltes Ende, siehe [Profile.pinCalendarEnd]. */
@@ -107,6 +132,16 @@ data class CalendarSettings(
     val suppressedUntil: Long? = null,
 )
 ```
+
+**Zwei Regelarten nebeneinander.** Ein Kalender kann auf „alle Termine" oder „nur
+Stichwort" stehen und bringt sein eigenes Profil mit. Unabhängig davon sucht die
+Stichwortregel in den Kalendern aus `keywordCalendarIds` (leer = alle) und
+benutzt `keywordProfileId`. Welche gewinnt, legt Task 4 fest.
+
+> **Hinweis für die Umsetzung:** `CalendarWindow.kt` und das Feld in `LockState`
+> existieren aus einem früheren Anlauf bereits, dort aber noch mit
+> `calendarProfiles: Map<String, String>` statt `calendarRules`. Schreibe die
+> Datei auf den oben gezeigten Zielinhalt — nicht danebenlegen, nicht ergänzen.
 
 - [ ] **Schritt 2: `LockState` erweitern**
 
@@ -179,9 +214,13 @@ Ans Ende von `LockCodecTest.kt`, vor die schließende Klammer:
     fun `Kalendereinstellungen ueberstehen Kodieren und Dekodieren`() {
         val einstellungen = CalendarSettings(
             enabled = true,
-            calendarProfiles = mapOf("cal1" to "p1", "cal2" to "p2"),
+            calendarRules = mapOf(
+                "cal1" to CalendarRule("p1", CalendarMatch.ALL),
+                "cal2" to CalendarRule("p2", CalendarMatch.KEYWORD),
+            ),
             keywordMarker = "[Fokus]",
             keywordProfileId = "p2",
+            keywordCalendarIds = setOf("cal3", "cal4"),
             cachedWindows = listOf(CalendarWindow("e1", "Termin", 1_000L, 2_000L, "p1")),
             windowsFetchedAt = 5_000L,
             pinnedEnds = mapOf("e1" to 2_000L),
@@ -191,6 +230,26 @@ Ans Ende von `LockCodecTest.kt`, vor die schließende Klammer:
         val zurueck = LockCodec.decodeCalendar(LockCodec.encodeCalendar(einstellungen))
 
         assertEquals(einstellungen, zurueck)
+    }
+
+    @Test
+    fun `leere Stichwort-Kalenderliste bleibt leer`() {
+        val einstellungen = CalendarSettings(enabled = true, keywordCalendarIds = emptySet())
+
+        val zurueck = LockCodec.decodeCalendar(LockCodec.encodeCalendar(einstellungen))
+
+        assertTrue(zurueck.keywordCalendarIds.isEmpty())
+    }
+
+    @Test
+    fun `unbekannte Trefferart faellt auf ALL zurueck`() {
+        val roh = LockCodec.encodeCalendar(
+            CalendarSettings(calendarRules = mapOf("cal1" to CalendarRule("p1")))
+        ).replace("ALL", "QUATSCH")
+
+        val zurueck = LockCodec.decodeCalendar(roh)
+
+        assertEquals(CalendarMatch.ALL, zurueck.calendarRules.getValue("cal1").match)
     }
 
     @Test
@@ -265,15 +324,38 @@ und ans Ende des `object`:
     }
 
     /**
+     * Eine Kalenderregel als `id PAIR profilId PAIR trefferart`, Regeln durch
+     * ITEM getrennt.
+     */
+    private fun encodeRules(rules: Map<String, CalendarRule>): String =
+        rules.entries.joinToString(ITEM.toString()) { (id, regel) ->
+            "$id$PAIR${regel.profileId}$PAIR${regel.match.name}"
+        }
+
+    private fun decodeRules(raw: String): Map<String, CalendarRule> {
+        if (raw.isEmpty()) return emptyMap()
+        return raw.split(ITEM).mapNotNull { eintrag ->
+            val teile = eintrag.split(PAIR)
+            if (teile.size != 3) return@mapNotNull null
+            teile[0] to CalendarRule(
+                profileId = teile[1],
+                match = runCatching { CalendarMatch.valueOf(teile[2]) }
+                    .getOrDefault(CalendarMatch.ALL),
+            )
+        }.toMap()
+    }
+
+    /**
      * Die Fensterliste steckt als eigenes Feld mit RECORD-Trennern in einem
-     * FIELD-getrennten Datensatz. Das geht nur, weil die äußere Aufteilung mit
-     * `limit` arbeitet und das Fensterfeld zuletzt steht.
+     * FIELD-getrennten Datensatz. Das geht nur, weil sie zuletzt steht — RECORD
+     * kommt in keinem der Felder davor vor.
      */
     fun encodeCalendar(c: CalendarSettings): String = listOf(
         if (c.enabled) "1" else "0",
-        encodeMap(c.calendarProfiles),
+        encodeRules(c.calendarRules),
         c.keywordMarker,
         c.keywordProfileId ?: "",
+        c.keywordCalendarIds.joinToString(ITEM.toString()),
         c.windowsFetchedAt.toString(),
         encodeMap(c.pinnedEnds.mapValues { it.value.toString() }),
         c.suppressedUntil?.toString() ?: "",
@@ -283,18 +365,20 @@ und ans Ende des `object`:
     fun decodeCalendar(raw: String): CalendarSettings {
         if (raw.isEmpty()) return CalendarSettings()
         val f = raw.split(FIELD)
-        if (f.size != 8) return CalendarSettings()
+        if (f.size != 9) return CalendarSettings()
         return CalendarSettings(
             enabled = f[0] == "1",
-            calendarProfiles = decodeMap(f[1]),
+            calendarRules = decodeRules(f[1]),
             keywordMarker = f[2],
             keywordProfileId = f[3].takeIf { it.isNotEmpty() },
-            windowsFetchedAt = f[4].toLongOrNull() ?: 0L,
-            pinnedEnds = decodeMap(f[5]).mapNotNull { (k, v) ->
+            keywordCalendarIds = if (f[4].isEmpty()) emptySet()
+            else f[4].split(ITEM).toSet(),
+            windowsFetchedAt = f[5].toLongOrNull() ?: 0L,
+            pinnedEnds = decodeMap(f[6]).mapNotNull { (k, v) ->
                 v.toLongOrNull()?.let { k to it }
             }.toMap(),
-            suppressedUntil = f[6].toLongOrNull(),
-            cachedWindows = decodeWindows(f[7]),
+            suppressedUntil = f[7].toLongOrNull(),
+            cachedWindows = decodeWindows(f[8]),
         )
     }
 ```
@@ -655,44 +739,102 @@ Ans Ende von `CalendarPlannerTest.kt`, vor die schließende Klammer:
     }
 
     @Test
-    fun `Kalenderzuordnung schlaegt das Stichwort`() {
+    fun `Kalender auf ALL sperrt mit jedem Termin`() {
         val c = CalendarSettings(
             enabled = true,
-            calendarProfiles = mapOf("cal1" to "p1"),
+            calendarRules = mapOf("cal1" to CalendarRule("p1", CalendarMatch.ALL)),
+        )
+
+        assertEquals("p1", CalendarPlanner.profileForEvent(c, "cal1", "Zahnarzt"))
+    }
+
+    @Test
+    fun `Kalender auf KEYWORD sperrt nur bei Treffer`() {
+        val c = CalendarSettings(
+            enabled = true,
+            calendarRules = mapOf("cal1" to CalendarRule("p1", CalendarMatch.KEYWORD)),
+            keywordMarker = "[Riegel]",
+        )
+
+        assertEquals("p1", CalendarPlanner.profileForEvent(c, "cal1", "[Riegel] Konzept"))
+        assertNull(CalendarPlanner.profileForEvent(c, "cal1", "Zahnarzt"))
+    }
+
+    @Test
+    fun `Kalenderregel schlaegt die Stichwortregel`() {
+        val c = CalendarSettings(
+            enabled = true,
+            calendarRules = mapOf("cal1" to CalendarRule("p1", CalendarMatch.ALL)),
             keywordMarker = "[Riegel]",
             keywordProfileId = "p9",
         )
 
-        val profil = CalendarPlanner.profileForEvent(c, calendarId = "cal1", title = "[Riegel] Sport")
-
-        assertEquals("p1", profil)
+        assertEquals("p1", CalendarPlanner.profileForEvent(c, "cal1", "[Riegel] Sport"))
     }
 
     @Test
-    fun `Stichwort greift in nicht ausgewaehlten Kalendern`() {
+    fun `Kalender auf KEYWORD ohne Treffer faellt auf die Stichwortregel zurueck`() {
+        // cal1 sucht nach [Arbeit], die eigenständige Regel nach demselben Marker
+        // in allen Kalendern — hier greift sie nicht, weil der Titel nichts trifft.
         val c = CalendarSettings(
             enabled = true,
-            calendarProfiles = mapOf("cal1" to "p1"),
+            calendarRules = mapOf("cal1" to CalendarRule("p1", CalendarMatch.KEYWORD)),
+            keywordMarker = "[Riegel]",
             keywordProfileId = "p9",
         )
 
-        val profil = CalendarPlanner.profileForEvent(c, calendarId = "cal2", title = "[Riegel] Sport")
-
-        assertEquals("p9", profil)
+        assertNull(CalendarPlanner.profileForEvent(c, "cal1", "Zahnarzt"))
     }
 
     @Test
-    fun `Termin ohne Zuordnung und ohne Stichwort sperrt nicht`() {
+    fun `Stichwortregel greift ohne Kalenderauswahl ueberall`() {
+        val c = CalendarSettings(
+            enabled = true,
+            calendarRules = mapOf("cal1" to CalendarRule("p1")),
+            keywordMarker = "[Riegel]",
+            keywordProfileId = "p9",
+            keywordCalendarIds = emptySet(),
+        )
+
+        assertEquals("p9", CalendarPlanner.profileForEvent(c, "cal2", "[Riegel] Sport"))
+    }
+
+    @Test
+    fun `Stichwortregel sucht nur in den ausgewaehlten Kalendern`() {
+        val c = CalendarSettings(
+            enabled = true,
+            keywordMarker = "[Riegel]",
+            keywordProfileId = "p9",
+            keywordCalendarIds = setOf("cal2"),
+        )
+
+        assertEquals("p9", CalendarPlanner.profileForEvent(c, "cal2", "[Riegel] Sport"))
+        assertNull(CalendarPlanner.profileForEvent(c, "cal3", "[Riegel] Sport"))
+    }
+
+    @Test
+    fun `Termin ohne Regel und ohne Stichwort sperrt nicht`() {
         val c = CalendarSettings(enabled = true, keywordProfileId = "p9")
 
-        assertNull(CalendarPlanner.profileForEvent(c, calendarId = "cal2", title = "Zahnarzt"))
+        assertNull(CalendarPlanner.profileForEvent(c, "cal2", "Zahnarzt"))
     }
 
     @Test
     fun `Stichwort ohne hinterlegtes Profil sperrt nicht`() {
         val c = CalendarSettings(enabled = true, keywordProfileId = null)
 
-        assertNull(CalendarPlanner.profileForEvent(c, calendarId = "cal2", title = "[Riegel] Sport"))
+        assertNull(CalendarPlanner.profileForEvent(c, "cal2", "[Riegel] Sport"))
+    }
+
+    @Test
+    fun `leerer Marker trifft nie`() {
+        val c = CalendarSettings(
+            enabled = true,
+            keywordMarker = "",
+            keywordProfileId = "p9",
+        )
+
+        assertNull(CalendarPlanner.profileForEvent(c, "cal2", "Irgendein Termin"))
     }
 ```
 
@@ -724,16 +866,33 @@ Ans Ende des `object`:
     }
 
     /**
-     * Welches Profil ein Termin bekommt. Die Kalenderzuordnung ist die
-     * spezifischere Angabe und schlägt das Stichwort. Trifft weder noch, sperrt
-     * der Termin nicht.
+     * Welches Profil ein Termin bekommt. Zwei Regelarten in fester Rangfolge:
+     *
+     * 1. Die Regel des Kalenders, in dem der Termin steht — die spezifischere
+     *    Angabe. Steht sie auf [CalendarMatch.ALL], gilt sie für jeden Termin;
+     *    auf [CalendarMatch.KEYWORD] nur bei Treffer im Titel.
+     * 2. Die eigenständige Stichwortregel, sofern der Kalender in
+     *    [CalendarSettings.keywordCalendarIds] steht oder diese Menge leer ist.
+     *
+     * Trifft weder noch, sperrt der Termin nicht.
      */
     fun profileForEvent(c: CalendarSettings, calendarId: String, title: String): String? {
-        c.calendarProfiles[calendarId]?.let { return it }
-        if (c.keywordMarker.isNotEmpty() && title.contains(c.keywordMarker)) {
-            return c.keywordProfileId
+        val trifftMarker = c.keywordMarker.isNotEmpty() && title.contains(c.keywordMarker)
+
+        val regel = c.calendarRules[calendarId]
+        if (regel != null) {
+            when (regel.match) {
+                CalendarMatch.ALL -> return regel.profileId
+                // Kein Treffer heißt nicht „fertig": die eigenständige Regel darf
+                // es noch versuchen. Nur wenn die Kalenderregel greift, hat sie
+                // Vorrang.
+                CalendarMatch.KEYWORD -> if (trifftMarker) return regel.profileId
+            }
         }
-        return null
+
+        if (!trifftMarker) return null
+        val imSuchbereich = c.keywordCalendarIds.isEmpty() || calendarId in c.keywordCalendarIds
+        return if (imSuchbereich) c.keywordProfileId else null
     }
 ```
 
@@ -932,13 +1091,18 @@ class LockEngineCalendarTest {
 
         e.updateCalendarSettings(
             enabled = true,
-            calendarProfiles = mapOf("cal1" to "p1"),
+            calendarRules = mapOf("cal1" to CalendarRule("p1", CalendarMatch.KEYWORD)),
             keywordMarker = "[Fokus]",
             keywordProfileId = "p2",
+            keywordCalendarIds = setOf("cal2"),
         )
 
         assertEquals("[Fokus]", store.current.calendar.keywordMarker)
-        assertEquals(mapOf("cal1" to "p1"), store.current.calendar.calendarProfiles)
+        assertEquals(
+            mapOf("cal1" to CalendarRule("p1", CalendarMatch.KEYWORD)),
+            store.current.calendar.calendarRules,
+        )
+        assertEquals(setOf("cal2"), store.current.calendar.keywordCalendarIds)
         assertEquals(1, store.current.calendar.cachedWindows.size)
     }
 }
@@ -1065,17 +1229,19 @@ Ans Ende der Klasse `LockEngine`, vor das `companion object`:
      */
     fun updateCalendarSettings(
         enabled: Boolean,
-        calendarProfiles: Map<String, String>,
+        calendarRules: Map<String, CalendarRule>,
         keywordMarker: String,
         keywordProfileId: String?,
+        keywordCalendarIds: Set<String>,
     ): LockState {
         val s = store.load()
         val next = s.copy(
             calendar = s.calendar.copy(
                 enabled = enabled,
-                calendarProfiles = calendarProfiles,
+                calendarRules = calendarRules,
                 keywordMarker = keywordMarker,
                 keywordProfileId = keywordProfileId,
+                keywordCalendarIds = keywordCalendarIds,
             ),
         )
         store.save(next)
@@ -1471,7 +1637,7 @@ Ans Ende von `DiagnosticsTest.kt`, vor die schließende Klammer:
             profiles = listOf(Profile("p1", "Arbeit")),
             calendar = CalendarSettings(
                 enabled = true,
-                calendarProfiles = mapOf("cal1" to "p1"),
+                calendarRules = mapOf("cal1" to CalendarRule("p1", CalendarMatch.KEYWORD)),
                 cachedWindows = listOf(
                     CalendarWindow("e1", "Konzept", jetzt - 1, jetzt + 60_000, "p1"),
                 ),
@@ -1482,6 +1648,7 @@ Ans Ende von `DiagnosticsTest.kt`, vor die schließende Klammer:
 
         assertTrue(bericht.getValue("Kalender").contains("an"))
         assertTrue(bericht.getValue("Kalender").contains("1 Kalender"))
+        assertTrue(bericht.getValue("Kalender").contains("1 nur Stichwort"))
         assertTrue(bericht.getValue("Kalender").contains("1 Termin"))
     }
 
@@ -1538,9 +1705,13 @@ und als private Funktion im `object`:
 
         val laufend = CalendarPlanner.activeWindows(c, now).size
         val grenze = CalendarPlanner.nextBoundary(c, now)
+        val nurStichwort = c.calendarRules.values.count { it.match == CalendarMatch.KEYWORD }
+        val stichwortBereich =
+            if (c.keywordCalendarIds.isEmpty()) "alle" else "${c.keywordCalendarIds.size}"
         val teile = mutableListOf(
             "an",
-            "${c.calendarProfiles.size} Kalender zugeordnet",
+            "${c.calendarRules.size} Kalender zugeordnet ($nurStichwort nur Stichwort)",
+            "Stichwortregel in $stichwortBereich Kalendern",
             "${c.cachedWindows.size} Termine im Speicher",
             "$laufend Termin(e) sperren gerade",
         )
@@ -1575,9 +1746,18 @@ In der Methode, die den Zustand als Map liefert (`getState`), hinter `timeLocks`
 ```kotlin
                         "calendar" to mapOf(
                             "enabled" to zustand.calendar.enabled,
-                            "calendarProfiles" to zustand.calendar.calendarProfiles,
+                            // Als Karte von Kalender-ID auf eine kleine Karte —
+                            // der MethodChannel überträgt keine eigenen Typen.
+                            "calendarRules" to zustand.calendar.calendarRules
+                                .mapValues { (_, regel) ->
+                                    mapOf(
+                                        "profileId" to regel.profileId,
+                                        "match" to regel.match.name,
+                                    )
+                                },
                             "keywordMarker" to zustand.calendar.keywordMarker,
                             "keywordProfileId" to zustand.calendar.keywordProfileId,
+                            "keywordCalendarIds" to zustand.calendar.keywordCalendarIds.toList(),
                             "permissionGranted" to CalendarPermission.granted(activity),
                             "windows" to zustand.calendar.cachedWindows
                                 .sortedBy { it.startsAt }
@@ -1629,14 +1809,25 @@ Im `when` über `call.method`, vor den `else`-Zweig:
                 }
 
                 "setCalendarSettings" -> {
-                    @Suppress("UNCHECKED_CAST")
-                    val zuordnung = call.argument<Map<String, String>>("calendarProfiles")
+                    val roh = call.argument<Map<String, Map<String, String>>>("calendarRules")
                         ?: emptyMap()
+                    val regeln = roh.mapValues { (_, eintrag) ->
+                        CalendarRule(
+                            profileId = eintrag["profileId"] ?: "",
+                            match = runCatching {
+                                CalendarMatch.valueOf(eintrag["match"] ?: "ALL")
+                            }.getOrDefault(CalendarMatch.ALL),
+                        )
+                    }.filterValues { it.profileId.isNotEmpty() }
+
                     controller.engine.updateCalendarSettings(
                         enabled = call.argument<Boolean>("enabled") ?: false,
-                        calendarProfiles = zuordnung,
+                        calendarRules = regeln,
                         keywordMarker = call.argument<String>("keywordMarker") ?: "[Riegel]",
                         keywordProfileId = call.argument<String>("keywordProfileId"),
+                        keywordCalendarIds =
+                            call.argument<List<String>>("keywordCalendarIds")?.toSet()
+                                ?: emptySet(),
                     )
                     controller.refreshCalendar()
                     result.success(true)
@@ -1679,9 +1870,13 @@ Ans Ende von `test/lock_status_test.dart`, in die bestehende `main()`-Funktion:
       'timeLocks': <dynamic>[],
       'calendar': {
         'enabled': true,
-        'calendarProfiles': {'cal1': 'p1'},
+        'calendarRules': {
+          'cal1': {'profileId': 'p1', 'match': 'ALL'},
+          'cal2': {'profileId': 'p2', 'match': 'KEYWORD'},
+        },
         'keywordMarker': '[Fokus]',
         'keywordProfileId': 'p2',
+        'keywordCalendarIds': ['cal3'],
         'permissionGranted': true,
         'windows': <dynamic>[],
         'activeWindows': <dynamic>[],
@@ -1689,9 +1884,23 @@ Ans Ende von `test/lock_status_test.dart`, in die bestehende `main()`-Funktion:
     });
 
     expect(status.calendar.enabled, isTrue);
-    expect(status.calendar.calendarProfiles, {'cal1': 'p1'});
+    expect(status.calendar.calendarRules['cal1']!.profileId, 'p1');
+    expect(status.calendar.calendarRules['cal1']!.match, CalendarMatch.all);
+    expect(status.calendar.calendarRules['cal2']!.match, CalendarMatch.keyword);
     expect(status.calendar.keywordMarker, '[Fokus]');
+    expect(status.calendar.keywordCalendarIds, {'cal3'});
     expect(status.calendar.permissionGranted, isTrue);
+  });
+
+  test('leere Stichwort-Kalenderliste heisst alle', () {
+    final status = LockStatus.fromMap({
+      'profiles': <dynamic>[],
+      'tags': <dynamic>[],
+      'timeLocks': <dynamic>[],
+      'calendar': {'enabled': true},
+    });
+
+    expect(status.calendar.keywordCalendarIds, isEmpty);
   });
 
   test('fehlender Kalenderblock ergibt die Vorgaben', () {
@@ -1787,22 +1996,55 @@ class DeviceCalendarInfo {
   );
 }
 
+/// Welche Termine eines Kalenders sperren.
+enum CalendarMatch { all, keyword }
+
+CalendarMatch _matchFrom(String? raw) =>
+    raw == 'KEYWORD' ? CalendarMatch.keyword : CalendarMatch.all;
+
+String matchToNative(CalendarMatch m) =>
+    m == CalendarMatch.keyword ? 'KEYWORD' : 'ALL';
+
+/// Regel für einen Kalender des Geräts.
+class CalendarRuleInfo {
+  const CalendarRuleInfo({required this.profileId, required this.match});
+
+  final String profileId;
+  final CalendarMatch match;
+
+  factory CalendarRuleInfo.fromMap(Map<dynamic, dynamic> map) => CalendarRuleInfo(
+    profileId: map['profileId'] as String? ?? '',
+    match: _matchFrom(map['match'] as String?),
+  );
+
+  Map<String, String> toMap() => {
+    'profileId': profileId,
+    'match': matchToNative(match),
+  };
+}
+
 /// Kalenderteil des Zustands.
 class CalendarInfo {
   const CalendarInfo({
     required this.enabled,
-    required this.calendarProfiles,
+    required this.calendarRules,
     required this.keywordMarker,
     required this.keywordProfileId,
+    required this.keywordCalendarIds,
     required this.permissionGranted,
     required this.windows,
     required this.activeWindows,
   });
 
   final bool enabled;
-  final Map<String, String> calendarProfiles;
+
+  /// Kalender-ID → Regel. Nicht enthaltene Kalender sperren nicht.
+  final Map<String, CalendarRuleInfo> calendarRules;
   final String keywordMarker;
   final String? keywordProfileId;
+
+  /// In welchen Kalendern die eigenständige Stichwortregel sucht. Leer = alle.
+  final Set<String> keywordCalendarIds;
   final bool permissionGranted;
 
   /// Die nächsten drei Termine, für die Vorschau.
@@ -1813,9 +2055,10 @@ class CalendarInfo {
 
   static const empty = CalendarInfo(
     enabled: false,
-    calendarProfiles: {},
+    calendarRules: {},
     keywordMarker: '[Riegel]',
     keywordProfileId: null,
+    keywordCalendarIds: {},
     permissionGranted: false,
     windows: [],
     activeWindows: [],
@@ -1823,11 +2066,16 @@ class CalendarInfo {
 
   factory CalendarInfo.fromMap(Map<dynamic, dynamic> map) => CalendarInfo(
     enabled: map['enabled'] as bool? ?? false,
-    calendarProfiles:
-        (map['calendarProfiles'] as Map<dynamic, dynamic>? ?? {})
-            .map((k, v) => MapEntry(k as String, v as String)),
+    calendarRules: (map['calendarRules'] as Map<dynamic, dynamic>? ?? {}).map(
+      (k, v) => MapEntry(
+        k as String,
+        CalendarRuleInfo.fromMap(v as Map<dynamic, dynamic>),
+      ),
+    ),
     keywordMarker: map['keywordMarker'] as String? ?? '[Riegel]',
     keywordProfileId: map['keywordProfileId'] as String?,
+    keywordCalendarIds:
+        (map['keywordCalendarIds'] as List<dynamic>? ?? []).cast<String>().toSet(),
     permissionGranted: map['permissionGranted'] as bool? ?? false,
     windows: (map['windows'] as List<dynamic>? ?? [])
         .map((e) => CalendarWindowInfo.fromMap(e as Map<dynamic, dynamic>))
@@ -1878,15 +2126,17 @@ und die beiden Getter ersetzen:
 
   Future<void> setCalendarSettings({
     required bool enabled,
-    required Map<String, String> calendarProfiles,
+    required Map<String, CalendarRuleInfo> calendarRules,
     required String keywordMarker,
     String? keywordProfileId,
+    Set<String> keywordCalendarIds = const {},
   }) async {
     await _channel.invokeMethod<bool>('setCalendarSettings', {
       'enabled': enabled,
-      'calendarProfiles': calendarProfiles,
+      'calendarRules': calendarRules.map((k, v) => MapEntry(k, v.toMap())),
       'keywordMarker': keywordMarker,
       'keywordProfileId': keywordProfileId,
+      'keywordCalendarIds': keywordCalendarIds.toList(),
     });
   }
 
@@ -1920,78 +2170,166 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/lib nfc_riegel/t
 
 - [ ] **Schritt 1: Die fehlschlagenden Tests schreiben**
 
+Die Attrappe folgt dem Muster aus `home_screen_test.dart`: ein Mock-`MethodChannel`,
+der in `RiegelChannel(channel)` gesteckt wird. **Eine Klasse `FakeRiegelChannel`
+gibt es nicht** — `RiegelChannel` nimmt den Kanal als Konstruktorargument.
+
 ```dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nfc_riegel/calendar_screen.dart';
 import 'package:nfc_riegel/lock_status.dart';
-
-LockStatus _status({
-  bool enabled = false,
-  bool permission = true,
-  List<CalendarWindowInfo> windows = const [],
-}) => LockStatus.fromMap({
-  'profiles': [
-    {'id': 'p1', 'name': 'Arbeit', 'blockedPackages': <dynamic>[], 'defaultMode': 'TIMER'},
-  ],
-  'tags': <dynamic>[],
-  'timeLocks': <dynamic>[],
-  'calendar': {
-    'enabled': enabled,
-    'permissionGranted': permission,
-    'calendarProfiles': <dynamic, dynamic>{},
-    'keywordMarker': '[Riegel]',
-    'windows': windows
-        .map((w) => {
-              'eventId': w.eventId,
-              'title': w.title,
-              'startsAt': w.startsAt.millisecondsSinceEpoch,
-              'endsAt': w.endsAt.millisecondsSinceEpoch,
-              'profileId': w.profileId,
-            })
-        .toList(),
-    'activeWindows': <dynamic>[],
-  },
-});
+import 'package:nfc_riegel/riegel_channel.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  const channel = MethodChannel('test/riegel');
+
+  /// Zuletzt an `setCalendarSettings` übergebene Argumente.
+  Map<dynamic, dynamic>? gespeichert;
+
+  void stub({List<Map<String, String>> kalender = const []}) {
+    gespeichert = null;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case 'deviceCalendars':
+          return kalender;
+        case 'setCalendarSettings':
+          gespeichert = call.arguments as Map<dynamic, dynamic>;
+          return true;
+        case 'requestCalendarPermission':
+          return true;
+        case 'refreshCalendar':
+          return true;
+      }
+      return null;
+    });
+  }
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
+
+  LockStatus status({
+    bool enabled = false,
+    bool permission = true,
+    Map<String, dynamic> rules = const {},
+    List<Map<String, dynamic>> windows = const [],
+  }) => LockStatus.fromMap({
+    'profiles': [
+      {
+        'id': 'p1',
+        'name': 'Arbeit',
+        'blockedPackages': <dynamic>[],
+        'defaultMode': 'TIMER',
+        'durationMinutes': 60,
+        'pinCalendarEnd': false,
+      },
+    ],
+    'tags': <dynamic>[],
+    'timeLocks': <dynamic>[],
+    'calendar': {
+      'enabled': enabled,
+      'permissionGranted': permission,
+      'calendarRules': rules,
+      'keywordMarker': '[Riegel]',
+      'keywordCalendarIds': <dynamic>[],
+      'windows': windows,
+      'activeWindows': <dynamic>[],
+    },
+  });
+
+  Widget screen(LockStatus s) => MaterialApp(
+    home: CalendarScreen(status: s, channel: RiegelChannel(channel)),
+  );
+
   testWidgets('ohne Berechtigung erscheint der Hinweis', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: CalendarScreen(status: _status(permission: false)),
-    ));
+    stub();
+    await tester.pumpWidget(screen(status(permission: false)));
 
     expect(find.textContaining('Berechtigung'), findsOneWidget);
   });
 
   testWidgets('ausgeschaltet bleibt die Kalenderliste verborgen', (tester) async {
-    await tester.pumpWidget(MaterialApp(home: CalendarScreen(status: _status())));
+    stub();
+    await tester.pumpWidget(screen(status()));
 
     expect(find.text('KALENDER DES GERÄTS'), findsNothing);
   });
 
-  testWidgets('eingeschaltet zeigt Stichwortfeld und Kalenderliste', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(home: CalendarScreen(status: _status(enabled: true))),
-    );
+  testWidgets('eingeschaltet zeigt Kalenderliste und Stichwortabschnitt', (tester) async {
+    stub(kalender: [
+      {'id': 'cal1', 'name': 'Privat', 'account': 'ich@example.com'},
+    ]);
+    await tester.pumpWidget(screen(status(enabled: true)));
     await tester.pumpAndSettle();
 
     expect(find.text('KALENDER DES GERÄTS'), findsOneWidget);
-    expect(find.textContaining('Stichwort'), findsOneWidget);
+    expect(find.text('Privat'), findsOneWidget);
+    expect(find.text('STICHWORTREGEL'), findsOneWidget);
+  });
+
+  testWidgets('zugeordneter Kalender zeigt die Wahl der Trefferart', (tester) async {
+    stub(kalender: [
+      {'id': 'cal1', 'name': 'Arbeit', 'account': 'ich@example.com'},
+    ]);
+    await tester.pumpWidget(screen(status(
+      enabled: true,
+      rules: {
+        'cal1': {'profileId': 'p1', 'match': 'ALL'},
+      },
+    )));
+    await tester.pumpAndSettle();
+
+    expect(find.text('alle Termine'), findsOneWidget);
+    expect(find.text('nur Stichwort'), findsOneWidget);
+  });
+
+  testWidgets('nicht zugeordneter Kalender zeigt keine Trefferart', (tester) async {
+    stub(kalender: [
+      {'id': 'cal1', 'name': 'Arbeit', 'account': 'ich@example.com'},
+    ]);
+    await tester.pumpWidget(screen(status(enabled: true)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('alle Termine'), findsNothing);
+  });
+
+  testWidgets('Umschalten auf nur Stichwort wird gespeichert', (tester) async {
+    stub(kalender: [
+      {'id': 'cal1', 'name': 'Arbeit', 'account': 'ich@example.com'},
+    ]);
+    await tester.pumpWidget(screen(status(
+      enabled: true,
+      rules: {
+        'cal1': {'profileId': 'p1', 'match': 'ALL'},
+      },
+    )));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('nur Stichwort'));
+    await tester.pumpAndSettle();
+
+    final regeln = gespeichert!['calendarRules'] as Map<dynamic, dynamic>;
+    expect((regeln['cal1'] as Map<dynamic, dynamic>)['match'], 'KEYWORD');
   });
 
   testWidgets('Vorschau nennt die naechsten Termine', (tester) async {
+    stub();
     final jetzt = DateTime.now();
-    final fenster = CalendarWindowInfo(
-      eventId: 'e1',
-      title: 'Konzept schreiben',
-      startsAt: jetzt.add(const Duration(hours: 1)),
-      endsAt: jetzt.add(const Duration(hours: 2)),
-      profileId: 'p1',
-    );
-
-    await tester.pumpWidget(MaterialApp(
-      home: CalendarScreen(status: _status(enabled: true, windows: [fenster])),
-    ));
+    await tester.pumpWidget(screen(status(enabled: true, windows: [
+      {
+        'eventId': 'e1',
+        'title': 'Konzept schreiben',
+        'startsAt': jetzt.add(const Duration(hours: 1)).millisecondsSinceEpoch,
+        'endsAt': jetzt.add(const Duration(hours: 2)).millisecondsSinceEpoch,
+        'profileId': 'p1',
+      },
+    ])));
     await tester.pumpAndSettle();
 
     expect(find.text('Konzept schreiben'), findsOneWidget);
@@ -2028,21 +2366,26 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-  late CalendarInfo _calendar = widget.status.calendar;
-  late Map<String, String> _zuordnung = Map.of(_calendar.calendarProfiles);
-  late final TextEditingController _stichwort =
-      TextEditingController(text: _calendar.keywordMarker);
+  late bool _an = widget.status.calendar.enabled;
+  late bool _berechtigt = widget.status.calendar.permissionGranted;
+  late final Map<String, CalendarRuleInfo> _regeln =
+      Map.of(widget.status.calendar.calendarRules);
+  late String? _stichwortProfil = widget.status.calendar.keywordProfileId;
+  late final Set<String> _stichwortKalender =
+      Set.of(widget.status.calendar.keywordCalendarIds);
+  late final TextEditingController _marker =
+      TextEditingController(text: widget.status.calendar.keywordMarker);
   List<DeviceCalendarInfo> _geraeteKalender = const [];
 
   @override
   void initState() {
     super.initState();
-    if (_calendar.enabled && _calendar.permissionGranted) _ladeKalender();
+    if (_an && _berechtigt) _ladeKalender();
   }
 
   @override
   void dispose() {
-    _stichwort.dispose();
+    _marker.dispose();
     super.dispose();
   }
 
@@ -2052,40 +2395,35 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _schalte(bool an) async {
-    if (an && !_calendar.permissionGranted) {
+    if (an && !_berechtigt) {
       final erteilt = await widget.channel.requestCalendarPermission();
       if (!erteilt) return;
+      if (mounted) setState(() => _berechtigt = true);
     }
-    setState(() => _calendar = CalendarInfo(
-          enabled: an,
-          calendarProfiles: _zuordnung,
-          keywordMarker: _stichwort.text,
-          keywordProfileId: _calendar.keywordProfileId,
-          permissionGranted: true,
-          windows: _calendar.windows,
-          activeWindows: _calendar.activeWindows,
-        ));
+    setState(() => _an = an);
     await _speichere();
     if (an) await _ladeKalender();
   }
 
   Future<void> _speichere() async {
     await widget.channel.setCalendarSettings(
-      enabled: _calendar.enabled,
-      calendarProfiles: _zuordnung,
-      keywordMarker: _stichwort.text,
-      keywordProfileId: _calendar.keywordProfileId,
+      enabled: _an,
+      calendarRules: _regeln,
+      keywordMarker: _marker.text,
+      keywordProfileId: _stichwortProfil,
+      keywordCalendarIds: _stichwortKalender,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final beschriftung = Theme.of(context).textTheme.labelSmall;
     return Scaffold(
       appBar: AppBar(title: const Text('Kalender')),
       body: ListView(
         padding: const EdgeInsets.all(RiegelSpacing.s4),
         children: [
-          if (!_calendar.permissionGranted)
+          if (!_berechtigt)
             Padding(
               padding: const EdgeInsets.only(bottom: RiegelSpacing.s4),
               child: Text(
@@ -2098,47 +2436,103 @@ class _CalendarScreenState extends State<CalendarScreen> {
           SwitchListTile(
             title: const Text('Termine sperren'),
             subtitle: const Text('Läuft ein passender Termin, sperrt sein Profil'),
-            value: _calendar.enabled,
+            value: _an,
             onChanged: _schalte,
           ),
-          if (_calendar.enabled) ...[
+          if (_an) ...[
             const SizedBox(height: RiegelSpacing.s4),
-            Text('KALENDER DES GERÄTS',
-                style: Theme.of(context).textTheme.labelSmall),
+            Text('KALENDER DES GERÄTS', style: beschriftung),
             const SizedBox(height: RiegelSpacing.s2),
+            if (_geraeteKalender.isEmpty)
+              const Text('Kein Kalender auf diesem Gerät gefunden.'),
             for (final kalender in _geraeteKalender)
               _KalenderZeile(
                 kalender: kalender,
                 profile: widget.status.profiles,
-                gewaehlt: _zuordnung[kalender.id],
-                onChanged: (profilId) async {
+                regel: _regeln[kalender.id],
+                onProfil: (profilId) async {
                   setState(() {
                     if (profilId == null) {
-                      _zuordnung.remove(kalender.id);
+                      _regeln.remove(kalender.id);
                     } else {
-                      _zuordnung[kalender.id] = profilId;
+                      _regeln[kalender.id] = CalendarRuleInfo(
+                        profileId: profilId,
+                        match: _regeln[kalender.id]?.match ?? CalendarMatch.all,
+                      );
+                    }
+                  });
+                  await _speichere();
+                },
+                onTrefferart: (art) async {
+                  final vorhanden = _regeln[kalender.id];
+                  if (vorhanden == null) return;
+                  setState(() {
+                    _regeln[kalender.id] = CalendarRuleInfo(
+                      profileId: vorhanden.profileId,
+                      match: art,
+                    );
+                  });
+                  await _speichere();
+                },
+              ),
+            const SizedBox(height: RiegelSpacing.s5),
+            Text('STICHWORTREGEL', style: beschriftung),
+            const SizedBox(height: RiegelSpacing.s2),
+            const Text(
+              'Greift zusätzlich, unabhängig von den Regeln oben.',
+              style: TextStyle(fontSize: 12, color: RiegelColors.fg3),
+            ),
+            const SizedBox(height: RiegelSpacing.s3),
+            TextField(
+              controller: _marker,
+              decoration: const InputDecoration(
+                labelText: 'Stichwort im Termintitel',
+              ),
+              onSubmitted: (_) => _speichere(),
+            ),
+            const SizedBox(height: RiegelSpacing.s3),
+            DropdownButtonFormField<String?>(
+              initialValue: _stichwortProfil,
+              decoration: const InputDecoration(labelText: 'Profil für Treffer'),
+              items: [
+                const DropdownMenuItem<String?>(value: null, child: Text('aus')),
+                for (final p in widget.status.profiles)
+                  DropdownMenuItem<String?>(value: p.id, child: Text(p.name)),
+              ],
+              onChanged: (wert) async {
+                setState(() => _stichwortProfil = wert);
+                await _speichere();
+              },
+            ),
+            const SizedBox(height: RiegelSpacing.s3),
+            const Text(
+              'In welchen Kalendern gesucht wird. Nichts angekreuzt heißt: in allen.',
+              style: TextStyle(fontSize: 12, color: RiegelColors.fg3),
+            ),
+            for (final kalender in _geraeteKalender)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: Text(kalender.name),
+                value: _stichwortKalender.contains(kalender.id),
+                onChanged: (an) async {
+                  setState(() {
+                    if (an == true) {
+                      _stichwortKalender.add(kalender.id);
+                    } else {
+                      _stichwortKalender.remove(kalender.id);
                     }
                   });
                   await _speichere();
                 },
               ),
             const SizedBox(height: RiegelSpacing.s5),
-            TextField(
-              controller: _stichwort,
-              decoration: const InputDecoration(
-                labelText: 'Stichwort im Termintitel',
-                helperText: 'Termine mit diesem Text sperren auch aus anderen Kalendern',
-              ),
-              onSubmitted: (_) => _speichere(),
-            ),
-            const SizedBox(height: RiegelSpacing.s5),
-            Text('NÄCHSTE TERMINE',
-                style: Theme.of(context).textTheme.labelSmall),
+            Text('NÄCHSTE TERMINE', style: beschriftung),
             const SizedBox(height: RiegelSpacing.s2),
-            if (_calendar.windows.isEmpty)
+            if (widget.status.calendar.windows.isEmpty)
               const Text('Kein passender Termin in den nächsten 48 Stunden.')
             else
-              for (final fenster in _calendar.windows)
+              for (final fenster in widget.status.calendar.windows)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(fenster.title),
@@ -2157,35 +2551,66 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 }
 
+/// Ein Kalender mit seiner Regel: welches Profil, und ob alle Termine oder nur
+/// die mit Stichwort. Die Trefferart erscheint erst, wenn ein Profil gewählt ist —
+/// vorher hat sie nichts, worauf sie sich beziehen könnte.
 class _KalenderZeile extends StatelessWidget {
   const _KalenderZeile({
     required this.kalender,
     required this.profile,
-    required this.gewaehlt,
-    required this.onChanged,
+    required this.regel,
+    required this.onProfil,
+    required this.onTrefferart,
   });
 
   final DeviceCalendarInfo kalender;
   final List<ProfileInfo> profile;
-  final String? gewaehlt;
-  final ValueChanged<String?> onChanged;
+  final CalendarRuleInfo? regel;
+  final ValueChanged<String?> onProfil;
+  final ValueChanged<CalendarMatch> onTrefferart;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(kalender.name),
-      subtitle: Text(kalender.account),
-      trailing: DropdownButton<String?>(
-        value: gewaehlt,
-        hint: const Text('aus'),
-        items: [
-          const DropdownMenuItem<String?>(value: null, child: Text('aus')),
-          for (final p in profile)
-            DropdownMenuItem<String?>(value: p.id, child: Text(p.name)),
-        ],
-        onChanged: onChanged,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(kalender.name),
+          subtitle: Text(kalender.account),
+          trailing: DropdownButton<String?>(
+            value: regel?.profileId,
+            hint: const Text('aus'),
+            items: [
+              const DropdownMenuItem<String?>(value: null, child: Text('aus')),
+              for (final p in profile)
+                DropdownMenuItem<String?>(value: p.id, child: Text(p.name)),
+            ],
+            onChanged: onProfil,
+          ),
+        ),
+        if (regel != null)
+          Padding(
+            padding: const EdgeInsets.only(
+              left: RiegelSpacing.s4,
+              bottom: RiegelSpacing.s3,
+            ),
+            child: SegmentedButton<CalendarMatch>(
+              segments: const [
+                ButtonSegment(
+                  value: CalendarMatch.all,
+                  label: Text('alle Termine'),
+                ),
+                ButtonSegment(
+                  value: CalendarMatch.keyword,
+                  label: Text('nur Stichwort'),
+                ),
+              ],
+              selected: {regel!.match},
+              onSelectionChanged: (auswahl) => onTrefferart(auswahl.first),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -2200,7 +2625,7 @@ In `home_screen.dart` den Import ergänzen und hinter der Chips-Zeile eine weite
             _NavRow(
               title: 'Kalender',
               subtitle: status.calendar.enabled
-                  ? '${status.calendar.calendarProfiles.length} Kalender zugeordnet'
+                  ? '${status.calendar.calendarRules.length} Kalender zugeordnet'
                   : 'aus',
               enabled: !status.locked,
               onTap: () async {
@@ -2243,20 +2668,43 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/lib nfc_riegel/t
 
 - [ ] **Schritt 1: Den fehlschlagenden Test schreiben**
 
-Ans Ende von `test/home_screen_test.dart`, in die bestehende `main()`:
+`home_screen_test.dart` benutzt **keinen** `FakeRiegelChannel`, sondern einen
+Mock-`MethodChannel` über die dortige Hilfsfunktion `stub(...)`, die den
+`getState`-Rückgabewert zusammensetzt. Ergänze diese Funktion zuerst um einen
+Kalenderteil:
+
+```dart
+  void stub({
+    required bool accessibility,
+    String defaultMode = 'TIMER',
+    Map<String, dynamic>? chipLock,
+    List<Map<String, dynamic>> timeLocks = const [],
+    bool hasMasterTag = true,
+    bool hasCode = true,
+    Map<String, dynamic>? calendar,
+  }) {
+```
+
+und im zurückgegebenen `getState`-Wert hinter `'hasCode': hasCode,`:
+
+```dart
+            'calendar': calendar,
+```
+
+Dann ans Ende der bestehenden `main()` den Test:
 
 ```dart
   testWidgets('laufender Termin steht in der Statuskachel', (tester) async {
     final jetzt = DateTime.now();
-    final status = LockStatus.fromMap({
-      'profiles': [
-        {'id': 'p1', 'name': 'Arbeit', 'blockedPackages': ['com.a'], 'defaultMode': 'TIMER'},
-      ],
-      'tags': <dynamic>[],
-      'timeLocks': <dynamic>[],
-      'calendar': {
+    stub(
+      accessibility: true,
+      calendar: {
         'enabled': true,
         'permissionGranted': true,
+        'calendarRules': <dynamic, dynamic>{},
+        'keywordMarker': '[Riegel]',
+        'keywordCalendarIds': <dynamic>[],
+        'windows': <dynamic>[],
         'activeWindows': [
           {
             'eventId': 'e1',
@@ -2267,10 +2715,10 @@ Ans Ende von `test/home_screen_test.dart`, in die bestehende `main()`:
           },
         ],
       },
-    });
+    );
 
     await tester.pumpWidget(
-      MaterialApp(home: HomeScreen(channel: FakeRiegelChannel(status))),
+      MaterialApp(home: HomeScreen(channel: RiegelChannel(channel))),
     );
     await tester.pumpAndSettle();
 
@@ -2278,7 +2726,9 @@ Ans Ende von `test/home_screen_test.dart`, in die bestehende `main()`:
   });
 ```
 
-Nutzt den in dieser Datei bereits vorhandenen `FakeRiegelChannel`. Falls er anders heißt, den vorhandenen verwenden — nicht neu anlegen.
+Der Kalenderteil ist `null`, wenn `stub` ihn nicht bekommt — alle bestehenden
+Tests laufen dann unverändert weiter, weil `LockStatus.fromMap` bei fehlendem
+`calendar` auf `CalendarInfo.empty` fällt.
 
 - [ ] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
 
@@ -2372,12 +2822,27 @@ Ans Ende von `GERAETETEST.md`:
 - [ ] Kalenderfunktion einschalten — Berechtigungsabfrage erscheint
 - [ ] Abfrage ablehnen — Hinweis erscheint, Funktion bleibt aus
 - [ ] Abfrage erlauben — Kalender des Geräts erscheinen in der Liste
-- [ ] Einem Kalender ein Profil zuordnen
+- [ ] Einem Kalender ein Profil zuordnen, Trefferart „alle Termine"
 - [ ] Termin in diesem Kalender anlegen, der in 2 Minuten beginnt und 5 Minuten dauert
 - [ ] Bei Terminbeginn sperren die Apps des Profils
 - [ ] Bei Terminende geben sie wieder frei
-- [ ] Termin mit `[Riegel]` im Titel in einem **nicht** zugeordneten Kalender sperrt ebenfalls
 - [ ] Ganztägiger Termin sperrt nicht
+
+### Trefferart je Kalender
+
+- [ ] Denselben Kalender auf „nur Stichwort" umstellen
+- [ ] Termin **ohne** Stichwort im Titel sperrt jetzt **nicht** mehr
+- [ ] Termin **mit** `[Riegel]` im Titel sperrt weiterhin, mit dem Profil des Kalenders
+
+### Eigenständige Stichwortregel
+
+- [ ] Stichwortregel ein Profil zuweisen, keinen Kalender ankreuzen
+- [ ] Termin mit `[Riegel]` im Titel in einem **nicht** zugeordneten Kalender sperrt
+- [ ] Jetzt nur einen bestimmten Kalender ankreuzen
+- [ ] Termin mit `[Riegel]` in **diesem** Kalender sperrt
+- [ ] Termin mit `[Riegel]` in einem **anderen** Kalender sperrt nicht mehr
+- [ ] Kalender auf „alle Termine" gestellt und Stichwortregel aktiv: der Termin
+      sperrt mit dem Profil des **Kalenders**, nicht dem der Stichwortregel
 - [ ] Laufenden Termin im Kalender verschieben — Sperre verschiebt sich mit
 - [ ] Laufenden Termin löschen — Sperre endet
 - [ ] Bei `pinCalendarEnd` im Profil: laufenden Termin löschen — Sperre bleibt bis zum
@@ -2446,7 +2911,9 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel && git commit -m
 | `READ_CALENDAR` zur Laufzeit, sichtbar deaktiviert ohne sie | 7, 13 |
 | Auslöser: ausgewählte Kalender | 4, 13 |
 | Auslöser: Stichwort im Titel | 4, 13 |
-| Kalenderzuordnung schlägt Stichwort | 4 |
+| **Kalender wahlweise „alle Termine" oder „nur Stichwort"** | 1, 2, 4, 11, 12, 13 |
+| **Stichwortregel auf bestimmte Kalender begrenzbar** | 1, 2, 4, 11, 12, 13 |
+| Kalenderregel schlägt Stichwortregel | 4 |
 | Ganztägige Termine ignoriert | 6 |
 | Terminfenster, 48 Stunden Vorausschau | 1, 9 |
 | Zwei Spuren, Vereinigung | 5 |
@@ -2472,13 +2939,13 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel && git commit -m
 | nach Task | Kotlin | Dart |
 |---|---|---|
 | Ausgangslage | 113 | 15 |
-| 2 | 118 | 15 |
-| 3 | 134 | 15 |
-| 4 | 144 | 15 |
-| 5 | 156 | 15 |
-| 10 | 159 | 15 |
-| 12 | 159 | 18 |
-| 13 | 159 | 22 |
-| 14 | 159 | 23 |
+| 2 | 120 | 15 |
+| 3 | 136 | 15 |
+| 4 | 151 | 15 |
+| 5 | 163 | 15 |
+| 10 | 166 | 15 |
+| 12 | 166 | 19 |
+| 13 | 166 | 26 |
+| 14 | 166 | 27 |
 
 Weicht eine Zahl ab, **nicht** die Zahl anpassen, sondern nachsehen, welcher Test fehlt oder zu viel ist.
