@@ -14,6 +14,7 @@ data class LockState(
     val profiles: List<Profile> = emptyList(),
     val tags: List<TagBinding> = emptyList(),
     val chipLock: ChipLock? = null,
+    val timeLocks: List<TimeLock> = emptyList(),
     val codeHash: String? = null,
     val failedAttempts: Int = 0,
     /** Bis wann die Code-Eingabe gesperrt ist (Millis) oder null. */

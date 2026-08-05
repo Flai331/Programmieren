@@ -33,3 +33,15 @@ data class ChipLock(
     /** Bei TIMER und UNTIL gesetzt, bei OPEN null. */
     val endsAt: Long? = null,
 )
+
+/**
+ * Eine Zeitsperre. Startet ohne Chip — über die Schaltfläche, durch einen Scan
+ * oder später durch einen Termin — und endet vorzeitig nur durch einen
+ * Generalschlüssel oder den Notfall-Code. Höchstens eine je Profil.
+ */
+data class TimeLock(
+    val profileId: String,
+    /** TIMER oder UNTIL, nie OPEN. */
+    val mode: LockMode,
+    val endsAt: Long,
+)

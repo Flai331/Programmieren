@@ -71,4 +71,24 @@ object LockCodec {
             endsAt = f[2].toLongOrNull(),
         )
     }
+
+    fun encodeTimeLocks(locks: List<TimeLock>): String =
+        locks.joinToString(RECORD.toString()) { l ->
+            listOf(l.profileId, l.mode.name, l.endsAt.toString())
+                .joinToString(FIELD.toString())
+        }
+
+    fun decodeTimeLocks(raw: String): List<TimeLock> {
+        if (raw.isEmpty()) return emptyList()
+        return raw.split(RECORD).mapNotNull { record ->
+            val f = record.split(FIELD)
+            if (f.size != 3) return@mapNotNull null
+            TimeLock(
+                profileId = f[0],
+                mode = runCatching { LockMode.valueOf(f[1]) }.getOrNull()
+                    ?: return@mapNotNull null,
+                endsAt = f[2].toLongOrNull() ?: return@mapNotNull null,
+            )
+        }
+    }
 }

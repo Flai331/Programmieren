@@ -2809,3 +2809,15 @@ stumm, ohne dass ein Fehler auftaucht.
 
 **Offen und bewusst nicht in diesem Plan:** die Kalendersperre. Sie hat eine eigene
 Spec und setzt diese Umsetzung voraus.
+
+---
+
+## Korrektionen aus der Umsetzung
+
+- **Task 1, Schritt 1 / Task 8, Schritt 1 — falsches Trennzeichen in den Testliteralen.**
+  Der Plan verwendet `'\u001F'`. `LockCodec` nutzt tatsächlich `RECORD = '\u0001'`,
+  `FIELD = '\u0002'`, `ITEM = '\u0003'`. Mit `'\u001F'` prüfte der Codec-Test nur
+  zufällig richtig, die v2-Migrationstests in Task 8 wären fehlgeschlagen.
+  Umgesetzt mit `'\u0002'`.
+- **Umgebung:** Gradle braucht `JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"`;
+  die System-Standard-JVM ist Java 8 und Gradle bricht sonst sofort ab.

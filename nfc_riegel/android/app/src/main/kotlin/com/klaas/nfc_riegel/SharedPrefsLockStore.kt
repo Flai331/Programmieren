@@ -22,6 +22,7 @@ class SharedPrefsLockStore(context: Context) : LockStore {
             profiles = LockCodec.decodeProfiles(prefs.getString(KEY_PROFILES, "") ?: ""),
             tags = LockCodec.decodeTags(prefs.getString(KEY_TAGS, "") ?: ""),
             chipLock = LockCodec.decodeChipLock(prefs.getString(KEY_CHIP_LOCK, "") ?: ""),
+            timeLocks = LockCodec.decodeTimeLocks(prefs.getString(KEY_TIME_LOCKS, "") ?: ""),
             codeHash = prefs.getString(KEY_CODE_HASH, null),
             failedAttempts = prefs.getInt(KEY_ATTEMPTS, 0),
             codeLockedUntil = prefs.getLong(KEY_CODE_LOCKED_UNTIL, -1L).takeIf { it > 0 },
@@ -33,6 +34,7 @@ class SharedPrefsLockStore(context: Context) : LockStore {
             .putString(KEY_PROFILES, LockCodec.encodeProfiles(state.profiles))
             .putString(KEY_TAGS, LockCodec.encodeTags(state.tags))
             .putString(KEY_CHIP_LOCK, LockCodec.encodeChipLock(state.chipLock))
+            .putString(KEY_TIME_LOCKS, LockCodec.encodeTimeLocks(state.timeLocks))
             .putString(KEY_CODE_HASH, state.codeHash)
             .putInt(KEY_ATTEMPTS, state.failedAttempts)
             .putLong(KEY_CODE_LOCKED_UNTIL, state.codeLockedUntil ?: -1L)
@@ -54,6 +56,7 @@ class SharedPrefsLockStore(context: Context) : LockStore {
         const val KEY_PROFILES = "profiles"
         const val KEY_TAGS = "tags"
         const val KEY_CHIP_LOCK = "chipLock"
+        const val KEY_TIME_LOCKS = "timeLocks"
         const val KEY_CODE_HASH = "codeHash"
         const val KEY_ATTEMPTS = "failedAttempts"
         const val KEY_CODE_LOCKED_UNTIL = "codeLockedUntil"

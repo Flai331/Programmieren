@@ -51,4 +51,27 @@ class LockCodecTest {
     fun `kaputte Eingabe ergibt leere Liste statt Absturz`() {
         assertTrue(LockCodec.decodeProfiles("völliger Unsinn").isEmpty())
     }
+
+    @Test
+    fun `Zeitsperren ueberstehen Hin- und Rueckwandlung`() {
+        val locks = listOf(
+            TimeLock("p1", LockMode.TIMER, 1_700_000_000_000),
+            TimeLock("p2", LockMode.UNTIL, 1_700_000_600_000),
+        )
+        assertEquals(locks, LockCodec.decodeTimeLocks(LockCodec.encodeTimeLocks(locks)))
+    }
+
+    @Test
+    fun `leere Zeitsperrenliste bleibt leer`() {
+        assertEquals(
+            emptyList<TimeLock>(),
+            LockCodec.decodeTimeLocks(LockCodec.encodeTimeLocks(emptyList())),
+        )
+    }
+
+    @Test
+    fun `Zeitsperre ohne Endzeitpunkt wird verworfen`() {
+        val kaputt = "p1" + '' + "TIMER" + '' + "keineZahl"
+        assertEquals(emptyList<TimeLock>(), LockCodec.decodeTimeLocks(kaputt))
+    }
 }
