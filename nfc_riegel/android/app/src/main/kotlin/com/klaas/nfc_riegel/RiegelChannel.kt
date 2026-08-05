@@ -5,6 +5,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
@@ -77,6 +78,19 @@ class RiegelChannel(private val activity: Activity) {
                     result.success(true)
                 }
 
+                "getDiagnostics" -> {
+                    val map = Diagnostics.summarize(
+                        controller.engine.state(),
+                        System.currentTimeMillis(),
+                    ).toMutableMap()
+                    map["Bedienungshilfe"] = if (isAccessibilityEnabled()) "an" else "AUS"
+                    map["Geräteadministrator"] =
+                        if (devicePolicyManager().isAdminActive(adminComponent())) "an" else "aus"
+                    map["Benachrichtigungen"] = notificationPermissionState()
+                    map["Android"] = "SDK ${Build.VERSION.SDK_INT} (${Build.VERSION.RELEASE})"
+                    result.success(map)
+                }
+
                 else -> result.notImplemented()
             }
         }
@@ -132,6 +146,22 @@ class RiegelChannel(private val activity: Activity) {
                 it.equals(service.flattenToShortString(), ignoreCase = true)
         }
     }
+
+    /**
+     * Seit Android 13 ist POST_NOTIFICATIONS eine Laufzeit-Berechtigung. Fehlt sie,
+     * verschwindet die Sperr-Benachrichtigung lautlos — im Bericht muss das stehen.
+     */
+    private fun notificationPermissionState(): String =
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            "nicht nötig"
+        } else if (
+            activity.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            "erlaubt"
+        } else {
+            "VERWEIGERT"
+        }
 
     companion object {
         const val CHANNEL = "com.klaas.nfc_riegel/riegel"
