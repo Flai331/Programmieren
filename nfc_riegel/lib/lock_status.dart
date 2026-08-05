@@ -132,7 +132,7 @@ class LockStatus {
 
   /// Alle Profile, die gerade sperren — über beide Spuren.
   Set<String> get lockedProfileIds => {
-    if (chipLockProfileId != null) chipLockProfileId!,
+    ?chipLockProfileId,
     ...timeLocks.map((l) => l.profileId),
   };
 

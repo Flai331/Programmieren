@@ -9,7 +9,19 @@ void main() {
 
   const channel = MethodChannel('test/riegel');
 
-  void stub({required bool locked, required bool accessibility}) {
+  /// Zuletzt an `startTimeLock` übergebenes Profil — so lässt sich prüfen, ob
+  /// der Knopf wirklich bis zur nativen Seite durchschlägt.
+  String? gestartetesProfil;
+
+  void stub({
+    required bool accessibility,
+    String defaultMode = 'TIMER',
+    Map<String, dynamic>? chipLock,
+    List<Map<String, dynamic>> timeLocks = const [],
+    bool hasMasterTag = true,
+    bool hasCode = true,
+  }) {
+    gestartetesProfil = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
       switch (call.method) {
@@ -20,64 +32,116 @@ void main() {
                 'id': 'p1',
                 'name': 'Arbeit',
                 'blockedPackages': ['com.instagram.android'],
-                'defaultMode': 'TIMER',
+                'defaultMode': defaultMode,
                 'durationMinutes': 60,
                 'untilAt': null,
                 'pinCalendarEnd': false,
               },
             ],
             'tags': [
-              {'uid': '04AA', 'label': 'Schreibtisch', 'profileId': 'p1', 'isMaster': true},
+              {
+                'uid': '04AA',
+                'label': 'Schreibtisch',
+                'profileId': 'p1',
+                'isMaster': hasMasterTag,
+              },
             ],
-            'activeLock': locked
-                ? {
-                    'profileId': 'p1',
-                    'mode': 'TIMER',
-                    'endsAt': DateTime.now().millisecondsSinceEpoch + 60000,
-                  }
-                : null,
-            'hasCode': true,
+            'chipLock': chipLock,
+            'timeLocks': timeLocks,
+            'hasMasterTag': hasMasterTag,
+            'hasCode': hasCode,
           };
         case 'isAccessibilityEnabled':
           return accessibility;
         case 'isAdminActive':
           return true;
+        case 'startTimeLock':
+          gestartetesProfil = call.arguments['profileId'] as String?;
+          return 'STARTED';
       }
       return null;
     });
   }
 
-  testWidgets('zeigt Frei-Status', (tester) async {
-    stub(locked: false, accessibility: true);
+  List<Map<String, dynamic>> laufendeSperre() => [
+    {
+      'profileId': 'p1',
+      'mode': 'TIMER',
+      'endsAt': DateTime.now().millisecondsSinceEpoch + 60000,
+    },
+  ];
 
+  Future<void> zeige(WidgetTester tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: HomeScreen(channel: RiegelChannel(channel))),
     );
     await tester.pumpAndSettle();
+  }
+
+  testWidgets('zeigt Frei-Status', (tester) async {
+    stub(accessibility: true);
+    await zeige(tester);
 
     expect(find.text('Riegel offen'), findsOneWidget);
   });
 
   testWidgets('zeigt Gesperrt-Status mit Profilnamen', (tester) async {
-    stub(locked: true, accessibility: true);
-
-    await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen(channel: RiegelChannel(channel))),
-    );
-    await tester.pumpAndSettle();
+    stub(accessibility: true, timeLocks: laufendeSperre());
+    await zeige(tester);
 
     expect(find.text('Riegel zu'), findsOneWidget);
     expect(find.textContaining('Arbeit'), findsWidgets);
   });
 
   testWidgets('warnt, wenn der Dienst aus ist', (tester) async {
-    stub(locked: false, accessibility: false);
-
-    await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen(channel: RiegelChannel(channel))),
-    );
-    await tester.pumpAndSettle();
+    stub(accessibility: false);
+    await zeige(tester);
 
     expect(find.text('Sperre nicht wirksam'), findsOneWidget);
+  });
+
+  testWidgets('TIMER-Profil zeigt Sperren-Knopf', (tester) async {
+    stub(accessibility: true, defaultMode: 'TIMER');
+    await zeige(tester);
+
+    expect(find.text('Sperren'), findsOneWidget);
+  });
+
+  testWidgets('OPEN-Profil zeigt keinen Sperren-Knopf', (tester) async {
+    stub(accessibility: true, defaultMode: 'OPEN');
+    await zeige(tester);
+
+    expect(find.text('Sperren'), findsNothing);
+  });
+
+  testWidgets('laufende Zeitsperre bietet Verlaengern an', (tester) async {
+    stub(accessibility: true, timeLocks: laufendeSperre());
+    await zeige(tester);
+
+    expect(find.text('Verlängern'), findsOneWidget);
+  });
+
+  testWidgets('Bestaetigung warnt ohne Generalschluessel', (tester) async {
+    stub(accessibility: true, hasMasterTag: false);
+    await zeige(tester);
+
+    await tester.tap(find.text('Sperren'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Kein Generalschlüssel'), findsOneWidget);
+  });
+
+  testWidgets('Bestaetigen startet die Zeitsperre', (tester) async {
+    stub(accessibility: true);
+    await zeige(tester);
+
+    await tester.tap(find.text('Sperren'));
+    await tester.pumpAndSettle();
+    // „Sperren" steht jetzt zweimal auf dem Schirm: in der Profilzeile und im
+    // Dialog. Der zuletzt gefundene liegt im Dialog.
+    await tester.tap(find.text('Sperren').last);
+    await tester.pumpAndSettle();
+
+    expect(gestartetesProfil, 'p1');
   });
 }

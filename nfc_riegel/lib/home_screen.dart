@@ -53,6 +53,85 @@ class _HomeScreenState extends State<HomeScreen> {
     await _refresh();
   }
 
+  /// Startet oder verlängert eine Zeitsperre. Vorher ein Dialog, der beim Namen
+  /// nennt, worauf man sich einlässt — die Sperre lässt sich nicht zurücknehmen.
+  Future<void> _startTimeLock(ProfileInfo profile, LockStatus status) async {
+    final laufend = status.timeLockFor(profile.id);
+    final ende = profile.mode == LockMode.until
+        ? profile.untilAt
+        : DateTime.now().add(Duration(minutes: profile.durationMinutes));
+
+    if (ende == null || ende.isBefore(DateTime.now())) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Der Zeitpunkt liegt in der Vergangenheit.')),
+      );
+      return;
+    }
+
+    final bestaetigt = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(laufend == null ? 'Sperren?' : 'Verlängern?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Sperrt ${profile.name} bis ${_uhrzeit(ende)}.\n'
+              'Vorher öffnet nur ein Generalschlüssel oder der Notfall-Code.',
+            ),
+            if (!status.hasMasterTag) ...[
+              const SizedBox(height: RiegelSpacing.s3),
+              const Text(
+                'Kein Generalschlüssel angelernt — dann öffnet nur der Notfall-Code.',
+                style: TextStyle(color: RiegelColors.danger),
+              ),
+            ],
+            if (!status.hasCode) ...[
+              const SizedBox(height: RiegelSpacing.s3),
+              const Text(
+                'Kein Notfall-Code gesetzt.',
+                style: TextStyle(color: RiegelColors.danger),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(laufend == null ? 'Sperren' : 'Verlängern'),
+          ),
+        ],
+      ),
+    );
+
+    if (bestaetigt != true) return;
+
+    final outcome = await widget.channel.startTimeLock(profile.id);
+    if (!mounted) return;
+    if (outcome == 'UNTIL_IN_PAST') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Der Zeitpunkt liegt in der Vergangenheit.')),
+      );
+    } else if (outcome == 'ALREADY_RUNNING') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Läuft bereits und endet nicht früher.')),
+      );
+    }
+    await _refresh();
+  }
+
+  String _uhrzeit(DateTime moment) {
+    final h = moment.hour.toString().padLeft(2, '0');
+    final m = moment.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
   /// Vor dem Öffnen des Dialogs den aktuellen Sperrzustand anhängen — sonst
   /// steht im Bericht nur, dass etwas nicht ging, aber nicht bei welcher
   /// Einstellung.
@@ -124,7 +203,9 @@ class _HomeScreenState extends State<HomeScreen> {
               _ProfileRow(
                 profile: profile,
                 locked: status.isProfileLocked(profile.id),
+                timeLock: status.timeLockFor(profile.id),
                 onTap: () => _editProfile(profile),
+                onLock: () => _startTimeLock(profile, status),
               ),
               const SizedBox(height: RiegelSpacing.s2),
             ],
@@ -267,15 +348,27 @@ class _StatusTile extends StatelessWidget {
   }
 
   String _subtitle(LockStatus status) {
-    final profile = status.activeProfile;
-    if (profile == null) return 'Chip scannen, um zu sperren';
-    final endsAt = status.endsAt;
-    if (endsAt != null) {
-      final h = endsAt.hour.toString().padLeft(2, '0');
-      final m = endsAt.minute.toString().padLeft(2, '0');
-      return '${profile.name} — frei ab $h:$m oder nach Scan';
+    if (!status.locked) return 'Chip scannen oder Profil sperren';
+
+    final ende = status.earliestEnd;
+    final anzahl = status.lockedProfileIds.length;
+    if (ende == null) {
+      final profil = status.profiles
+          .where((p) => status.isProfileLocked(p.id))
+          .map((p) => p.name)
+          .join(', ');
+      return '$profil — frei nach erneutem Scan';
     }
-    return '${profile.name} — frei nach erneutem Scan';
+
+    final h = ende.hour.toString().padLeft(2, '0');
+    final m = ende.minute.toString().padLeft(2, '0');
+    if (anzahl > 1) return '$anzahl Sperren — frei ab $h:$m';
+
+    final profil = status.profiles
+        .where((p) => status.isProfileLocked(p.id))
+        .map((p) => p.name)
+        .join(', ');
+    return '$profil — frei ab $h:$m';
   }
 }
 
@@ -283,12 +376,16 @@ class _ProfileRow extends StatelessWidget {
   const _ProfileRow({
     required this.profile,
     required this.locked,
+    required this.timeLock,
     required this.onTap,
+    required this.onLock,
   });
 
   final ProfileInfo profile;
   final bool locked;
+  final TimeLockInfo? timeLock;
   final VoidCallback onTap;
+  final VoidCallback onLock;
 
   @override
   Widget build(BuildContext context) {
@@ -297,14 +394,36 @@ class _ProfileRow extends StatelessWidget {
       LockMode.timer => '${profile.durationMinutes} min',
       LockMode.until => 'bis Zeitpunkt',
     };
+    final zeitsperre = timeLock;
+    final subtitle = zeitsperre == null
+        ? '${profile.blockedPackages.length} Apps · $modeLabel'
+        : '${profile.blockedPackages.length} Apps · frei ab '
+              '${zeitsperre.endsAt.hour.toString().padLeft(2, '0')}:'
+              '${zeitsperre.endsAt.minute.toString().padLeft(2, '0')}';
+
     return _NavRow(
       title: profile.name,
-      subtitle: '${profile.blockedPackages.length} Apps · $modeLabel',
+      subtitle: subtitle,
       enabled: !locked,
       onTap: onTap,
-      trailingText: locked ? 'sperrt' : null,
+      trailingText: locked && profile.mode == LockMode.open ? 'sperrt' : null,
+      // OPEN-Profile lassen sich nur mit dem Chip sperren — dort wäre eine
+      // Schaltfläche nur ein Knopf, der nichts kann.
+      action: profile.mode == LockMode.open
+          ? null
+          : _RowAction(
+              label: zeitsperre == null ? 'Sperren' : 'Verlängern',
+              onPressed: onLock,
+            ),
     );
   }
+}
+
+class _RowAction {
+  const _RowAction({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
 }
 
 class _NavRow extends StatelessWidget {
@@ -314,6 +433,7 @@ class _NavRow extends StatelessWidget {
     required this.enabled,
     required this.onTap,
     this.trailingText,
+    this.action,
   });
 
   final String title;
@@ -321,6 +441,7 @@ class _NavRow extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
   final String? trailingText;
+  final _RowAction? action;
 
   @override
   Widget build(BuildContext context) {
@@ -360,6 +481,11 @@ class _NavRow extends StatelessWidget {
                   ],
                 ),
               ),
+              if (action != null)
+                TextButton(
+                  onPressed: action!.onPressed,
+                  child: Text(action!.label),
+                ),
               if (trailingText != null)
                 Text(
                   trailingText!,
