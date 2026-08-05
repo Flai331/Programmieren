@@ -59,4 +59,12 @@ class RiegelChannel {
       await channel.invokeMethod<bool>('isAdminActive') ?? false;
 
   Future<void> requestAdmin() => channel.invokeMethod<void>('requestAdmin');
+
+  /// Zustand für Fehlerberichte. Enthält keine Tag-UIDs und keinen Code-Hash.
+  Future<Map<String, String>> getDiagnostics() async {
+    final map =
+        await channel.invokeMethod<Map<dynamic, dynamic>>('getDiagnostics');
+    return (map ?? const {})
+        .map((key, value) => MapEntry(key.toString(), value.toString()));
+  }
 }

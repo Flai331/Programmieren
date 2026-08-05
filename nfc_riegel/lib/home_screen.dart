@@ -1,3 +1,4 @@
+import 'package:feedback/feedback.dart';
 import 'package:flutter/material.dart';
 
 import 'lock_status.dart';
@@ -52,6 +53,18 @@ class _HomeScreenState extends State<HomeScreen> {
     await _refresh();
   }
 
+  /// Vor dem Öffnen des Dialogs den aktuellen Sperrzustand anhängen — sonst
+  /// steht im Bericht nur, dass etwas nicht ging, aber nicht bei welcher
+  /// Einstellung.
+  Future<void> _reportProblem() async {
+    final diagnostics = await widget.channel.getDiagnostics();
+    for (final entry in diagnostics.entries) {
+      FeedbackService.setSnapshot(entry.key, entry.value);
+    }
+    if (!mounted) return;
+    await FeedbackService.showReportDialog(context);
+  }
+
   Future<void> _openTags(LockStatus status) async {
     await Navigator.push(
       context,
@@ -73,7 +86,16 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Riegel')),
+      appBar: AppBar(
+        title: const Text('Riegel'),
+        actions: [
+          IconButton(
+            tooltip: 'Fehler melden',
+            icon: const Icon(Icons.bug_report_outlined),
+            onPressed: _reportProblem,
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
