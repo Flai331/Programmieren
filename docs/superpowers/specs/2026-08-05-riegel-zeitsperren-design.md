@@ -78,6 +78,13 @@ Verlängern ja, verkürzen nein. Strenger stellen darf man sich jederzeit — da
 der einzige Weg, der die Sperre nicht untergräbt. Ein zweiter Druck auf „Sperren"
 kann eine laufende Sperre also niemals verkürzen.
 
+**Verlängern gibt es nur über die Schaltfläche, nicht über den Chip.** Ein Chip
+kommt beim Einstecken des Handys auch mal versehentlich vorbei; würde jeder Scan
+verlängern, ließe sich eine Sperre unbeabsichtigt verdoppeln. Ein Scan bei bereits
+laufender Zeitsperre desselben Profils ergibt daher `ALREADY_RUNNING` und ändert
+nichts. Technisch: `startTimeLock(profileId, now, allowExtend)` — die Schaltfläche
+übergibt `true`, der Scan `false`.
+
 `TIMER` rechnet `endsAt = now + durationMinutes × 60000`. Beim Verlängern zählt
 das Ergebnis, nicht die Dauer: ein 30-Minuten-Timer, 20 Minuten nach dem Start
 erneut gedrückt, endet 50 statt 30 Minuten nach dem ersten Start.
@@ -92,7 +99,8 @@ Generalschlüssel, nichts läuft                   → verhält sich wie ein nor
 Chip mit OPEN-Profil, keine Chipsperre           → Chipsperre startet
 Chip mit OPEN-Profil, Chipsperre desselben Profils → gibt frei
 Chip mit OPEN-Profil, Chipsperre anderen Profils → übernimmt: alte endet, neue beginnt
-Chip mit TIMER/UNTIL-Profil                      → startTimeLock, Ergebnis wie oben
+Chip mit TIMER/UNTIL-Profil, keine Zeitsperre    → Zeitsperre startet
+Chip mit TIMER/UNTIL-Profil, Zeitsperre läuft    → nichts, kein Verlängern
 ```
 
 Ein Chip mit `TIMER`- oder `UNTIL`-Profil ist damit ein reiner **Startknopf**. Er
