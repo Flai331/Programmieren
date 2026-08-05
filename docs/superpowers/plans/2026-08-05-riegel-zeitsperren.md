@@ -2834,3 +2834,44 @@ Spec und setzt diese Umsetzung voraus.
   Generalschlüssel zeigt auf das TIMER-Profil `p1`). Außerdem ging der Plan-Fix für
   `derselbe Chip gibt wieder frei` nicht auf: Freigeben per Scan gibt es nur noch bei
   `OPEN`-Profilen, der Test scannt daher jetzt `04BB` (Profil `p2`).
+- **Task 7, Schritt 7 — `NfcToggleActivity` war schon fertig.** Die Zielfassung stand
+  bereits im Baum: Task 4 hatte sie mitziehen müssen, weil das `when` über
+  `ScanOutcome` erschöpfend sein muss und dort zwei Werte hinzukamen. Schritt 7 ist
+  ein Leerlauf.
+- **Task 7, Schritt 1+3 — zwei bestehende `DiagnosticsTest`-Tests brechen.** Der Plan
+  nennt nur die drei neuen Tests. Tatsächlich schreiben zwei vorhandene das alte
+  Verhalten fest und scheitern an der neuen `summarize`-Fassung:
+  `laufende Sperre nennt Profil und Ende` baute `ChipLock("p1", LockMode.TIMER, …)`
+  und erwartete „TIMER" im Text — eine Chipsperre hat im Bericht keinen Modus mehr;
+  umbenannt in `Chipsperre nennt das Profil`, prüft jetzt nur den Profilnamen.
+  `abgelaufene Sperre gilt als offen` prüfte den Ablauf einer Chipsperre — die läuft
+  nicht mehr ab; gelöscht, Nachfolger ist der neue Test
+  `abgelaufene Zeitsperre gilt als offen`. `DiagnosticsTest` hat danach 10 Tests,
+  nicht die vom Plan implizierten 11.
+- **Task 7 in zwei Commits umgesetzt**, weil sie sechs Dateien und zwei verschiedene
+  Arten von Arbeit umfasst: `feat: Diagnosebericht kennt beide Sperrspuren` (Bericht
+  samt Tests) und `feat: Android-Raender kennen beide Sperrspuren` (Kanal, Controller,
+  Sperrschirm, Deinstallationsschutz).
+- **Task 8, Schritt 1 — ein bestehender `LockCodecTest`-Test bricht.** Der Plan nennt
+  ihn nicht: `Chipsperre ueberstehen Kodieren und Dekodieren` baute
+  `ChipLock("p1", LockMode.UNTIL, 1_700_000_000_000)` und erwartete Modus und Ende
+  nach dem Rundlauf zurück. Das v3-Format schreibt nur noch die Profil-Kennung und
+  kann das nicht mehr liefern. Auf `ChipLock("p1")` umgestellt und in
+  `Chipsperre uebersteht Kodieren und Dekodieren` umbenannt.
+- **Task 9, Schritt 4 — die inhaltlich betroffenen Tests im Einzelnen.** Der Plan
+  nennt nur Muster. Konkret waren neben den rein mechanischen Streichungen des
+  `LockMode.OPEN`-Arguments drei Stellen inhaltlich zu ändern:
+  `LockEngineBlockTest.abgelaufene Sperre blockt nicht mehr` →
+  `abgelaufene Zeitsperre blockt nicht mehr` über `engineMitZeitsperren`;
+  `LockEngineToggleTest.Profil im Modus OPEN sperrt ohne Ende` →
+  `Profil im Modus OPEN erzeugt eine Chipsperre`, prüft statt `mode`/`endsAt` jetzt
+  die `profileId`; und in `anderer Chip uebernimmt mit seinem Profil` entfiel die
+  Zusicherung auf `chipLock!!.mode`.
+- **Task 10/11 — der Plan-Code löst einen Analyzer-Hinweis aus.** `lockedProfileIds`
+  in der Fassung `{ if (chipLockProfileId != null) chipLockProfileId!, … }` meldet
+  `use_null_aware_elements`. `flutter analyze` hätte damit nach Task 11 nicht
+  „No issues found!" gemeldet, was Schritt 7 aber verlangt. In Task 11 auf die
+  null-aware-Element-Schreibweise `?chipLockProfileId` umgestellt.
+- **Tatsächliche Testzahlen dieses Durchgangs:** vor Task 6 107 Kotlin-Tests, nach
+  Task 9 113 (Task 7 netto +2, Task 8 netto +4); Tasks 6, 9 und 12 ändern die Zahl
+  nicht. Dart: vor Task 10 8 Tests, nach Task 11 15.
