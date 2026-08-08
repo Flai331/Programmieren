@@ -102,3 +102,46 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
       nach Benachrichtigungen
 - [ ] Abfrage ablehnen, dann sperren — Sperre wirkt, nur die Benachrichtigung fehlt
 - [ ] Fehlerbericht senden — im Zustandsblock steht „Benachrichtigungen: VERWEIGERT"
+
+## Kalender
+
+- [ ] Kalenderfunktion einschalten — Berechtigungsabfrage erscheint
+- [ ] Abfrage ablehnen — Hinweis erscheint, Funktion bleibt aus
+- [ ] Abfrage erlauben — Kalender des Geräts erscheinen in der Liste
+- [ ] Einem Kalender ein Profil zuordnen, Trefferart „alle Termine"
+- [ ] Termin in diesem Kalender anlegen, der in 2 Minuten beginnt und 5 Minuten dauert
+- [ ] Bei Terminbeginn sperren die Apps des Profils
+- [ ] Sperrschirm zeigt den Termintitel und „frei ab HH:MM"
+- [ ] Bei Terminende geben sie wieder frei
+- [ ] Ganztägiger Termin sperrt nicht
+
+### Trefferart je Kalender
+
+- [ ] Denselben Kalender auf „nur Stichwort" umstellen
+- [ ] Termin **ohne** Stichwort im Titel sperrt jetzt **nicht** mehr
+- [ ] Termin **mit** `[Riegel]` im Titel sperrt weiterhin, mit dem Profil des Kalenders
+
+### Eigenständige Stichwortregel
+
+- [ ] Stichwortregel ein Profil zuweisen, keinen Kalender ankreuzen
+- [ ] Termin mit `[Riegel]` im Titel in einem **nicht** zugeordneten Kalender sperrt
+- [ ] Jetzt nur einen bestimmten Kalender ankreuzen
+- [ ] Termin mit `[Riegel]` in **diesem** Kalender sperrt
+- [ ] Termin mit `[Riegel]` in einem **anderen** Kalender sperrt nicht mehr
+- [ ] Kalender auf „alle Termine" gestellt und Stichwortregel aktiv: der Termin
+      sperrt mit dem Profil des **Kalenders**, nicht dem der Stichwortregel
+
+### Zusammenspiel mit den anderen Sperren
+
+- [ ] Laufenden Termin im Kalender verschieben — Sperre verschiebt sich mit
+- [ ] Laufenden Termin löschen — Sperre endet
+- [ ] Bei `pinCalendarEnd` im Profil: laufenden Termin löschen — Sperre bleibt bis zum
+      ursprünglichen Ende
+- [ ] Normalen Chip während einer Kalendersperre scannen — sperrt weiter
+- [ ] Generalschlüssel während einer Kalendersperre — gibt frei, und der Termin
+      sperrt bis zu seinem Ende nicht erneut
+- [ ] Nächster Termin sperrt danach wieder normal
+- [ ] Notfall-Code während einer Kalendersperre — gibt ebenfalls frei
+- [ ] Kalenderberechtigung in den Systemeinstellungen entziehen — Warnung erscheint
+- [ ] Handy neu starten während einer Kalendersperre — sperrt danach weiter
+- [ ] Fehlerbericht senden — Zeile „Kalender" steht drin, **ohne** Termintitel

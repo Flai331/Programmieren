@@ -2812,7 +2812,7 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel && git commit -m
 - Modify: `nfc_riegel/lib/build_info.dart`
 - Modify: `nfc_riegel/pubspec.yaml`
 
-- [ ] **Schritt 1: Prüfliste ergänzen**
+- [x] **Schritt 1: Prüfliste ergänzen**
 
 Ans Ende von `GERAETETEST.md`:
 
@@ -2857,7 +2857,7 @@ Ans Ende von `GERAETETEST.md`:
 - [ ] Fehlerbericht senden — Zeile „Kalender" steht drin, **ohne** Termintitel
 ```
 
-- [ ] **Schritt 2: Build-Nummer auf 4**
+- [x] **Schritt 2: Build-Nummer auf 4**
 
 `lib/build_info.dart`:
 
@@ -2871,15 +2871,15 @@ const int kBuildNumber = 4;
 version: 1.0.0+4
 ```
 
-- [ ] **Schritt 3: Alles prüfen**
+- [x] **Schritt 3: Alles prüfen**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && flutter analyze && flutter test && export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" && ./android/gradlew.bat -p android :app:testDebugUnitTest
 ```
 
-Erwartet: sauber, 23 Dart-Tests, 159 Kotlin-Tests, 0 Fehlschläge.
+Erwartet: sauber, 27 Dart-Tests, 166 Kotlin-Tests, 0 Fehlschläge.
 
-- [ ] **Schritt 4: Bauen und ablegen**
+- [x] **Schritt 4: Bauen und ablegen**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && flutter build apk --release && cp build/app/outputs/flutter-apk/app-release.apk "C:/Users/klaas/Desktop/Programmieren/APKs/Android/Riegel.apk" && md5sum build/app/outputs/flutter-apk/app-release.apk "C:/Users/klaas/Desktop/Programmieren/APKs/Android/Riegel.apk"
@@ -2887,7 +2887,7 @@ cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && flutter build apk --rele
 
 Erwartet: beide Prüfsummen gleich.
 
-- [ ] **Schritt 5: `versionCode` gegenprüfen**
+- [x] **Schritt 5: `versionCode` gegenprüfen**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && "$LOCALAPPDATA/Android/Sdk/build-tools/36.1.0/aapt2.exe" dump badging "APKs/Android/Riegel.apk" | head -1
@@ -2895,7 +2895,7 @@ cd "C:/Users/klaas/Desktop/Programmieren" && "$LOCALAPPDATA/Android/Sdk/build-to
 
 Erwartet: `versionCode='4'`, und in der Berechtigungsliste taucht `READ_CALENDAR` auf.
 
-- [ ] **Schritt 6: Commit**
+- [x] **Schritt 6: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel && git commit -m "docs: Geraetetest um Kalender ergaenzt, Build 4"
