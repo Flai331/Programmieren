@@ -1858,7 +1858,7 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src 
 - Modify: `nfc_riegel/lib/riegel_channel.dart`
 - Test: `nfc_riegel/test/lock_status_test.dart`
 
-- [ ] **Schritt 1: Die fehlschlagenden Tests schreiben**
+- [x] **Schritt 1: Die fehlschlagenden Tests schreiben**
 
 Ans Ende von `test/lock_status_test.dart`, in die bestehende `main()`-Funktion:
 
@@ -1939,7 +1939,7 @@ Ans Ende von `test/lock_status_test.dart`, in die bestehende `main()`-Funktion:
   });
 ```
 
-- [ ] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
+- [x] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && flutter test test/lock_status_test.dart
@@ -1947,7 +1947,7 @@ cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && flutter test test/lock_s
 
 Erwartet: „The getter 'calendar' isn't defined for the type 'LockStatus'".
 
-- [ ] **Schritt 3: `lock_status.dart` erweitern**
+- [x] **Schritt 3: `lock_status.dart` erweitern**
 
 Vor `class LockStatus`:
 
@@ -2111,7 +2111,7 @@ und die beiden Getter ersetzen:
   };
 ```
 
-- [ ] **Schritt 4: Kanal-Methoden in `riegel_channel.dart`**
+- [x] **Schritt 4: Kanal-Methoden in `riegel_channel.dart`**
 
 ```dart
   Future<List<DeviceCalendarInfo>> deviceCalendars() async {
@@ -2145,15 +2145,15 @@ und die beiden Getter ersetzen:
   }
 ```
 
-- [ ] **Schritt 5: Tests laufen lassen**
+- [x] **Schritt 5: Tests laufen lassen**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && flutter test
 ```
 
-Erwartet: 18 Tests, alle grün.
+Erwartet: 19 Tests, alle grün.
 
-- [ ] **Schritt 6: Commit**
+- [x] **Schritt 6: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/lib nfc_riegel/test && git commit -m "feat: Dart-Zustand kennt den Kalender"

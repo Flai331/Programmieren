@@ -68,6 +68,36 @@ class RiegelChannel {
 
   Future<void> requestAdmin() => channel.invokeMethod<void>('requestAdmin');
 
+  Future<List<DeviceCalendarInfo>> deviceCalendars() async {
+    final raw = await channel.invokeMethod<List<dynamic>>('deviceCalendars');
+    return (raw ?? [])
+        .map((e) => DeviceCalendarInfo.fromMap(e as Map<dynamic, dynamic>))
+        .toList();
+  }
+
+  Future<bool> requestCalendarPermission() async =>
+      await channel.invokeMethod<bool>('requestCalendarPermission') ?? false;
+
+  Future<void> setCalendarSettings({
+    required bool enabled,
+    required Map<String, CalendarRuleInfo> calendarRules,
+    required String keywordMarker,
+    String? keywordProfileId,
+    Set<String> keywordCalendarIds = const {},
+  }) async {
+    await channel.invokeMethod<bool>('setCalendarSettings', {
+      'enabled': enabled,
+      'calendarRules': calendarRules.map((k, v) => MapEntry(k, v.toMap())),
+      'keywordMarker': keywordMarker,
+      'keywordProfileId': keywordProfileId,
+      'keywordCalendarIds': keywordCalendarIds.toList(),
+    });
+  }
+
+  Future<void> refreshCalendar() async {
+    await channel.invokeMethod<bool>('refreshCalendar');
+  }
+
   /// Zustand für Fehlerberichte. Enthält keine Tag-UIDs und keinen Code-Hash.
   Future<Map<String, String>> getDiagnostics() async {
     final map =

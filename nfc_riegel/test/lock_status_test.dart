@@ -102,4 +102,79 @@ void main() {
     expect(LockStatus.fromMap(stateMap(tags: [])).setupComplete, isFalse);
     expect(LockStatus.fromMap(stateMap(hasCode: false)).setupComplete, isFalse);
   });
+
+  test('Kalendereinstellungen werden gelesen', () {
+    final status = LockStatus.fromMap({
+      'profiles': <dynamic>[],
+      'tags': <dynamic>[],
+      'timeLocks': <dynamic>[],
+      'calendar': {
+        'enabled': true,
+        'calendarRules': {
+          'cal1': {'profileId': 'p1', 'match': 'ALL'},
+          'cal2': {'profileId': 'p2', 'match': 'KEYWORD'},
+        },
+        'keywordMarker': '[Fokus]',
+        'keywordProfileId': 'p2',
+        'keywordCalendarIds': ['cal3'],
+        'permissionGranted': true,
+        'windows': <dynamic>[],
+        'activeWindows': <dynamic>[],
+      },
+    });
+
+    expect(status.calendar.enabled, isTrue);
+    expect(status.calendar.calendarRules['cal1']!.profileId, 'p1');
+    expect(status.calendar.calendarRules['cal1']!.match, CalendarMatch.all);
+    expect(status.calendar.calendarRules['cal2']!.match, CalendarMatch.keyword);
+    expect(status.calendar.keywordMarker, '[Fokus]');
+    expect(status.calendar.keywordCalendarIds, {'cal3'});
+    expect(status.calendar.permissionGranted, isTrue);
+  });
+
+  test('leere Stichwort-Kalenderliste heisst alle', () {
+    final status = LockStatus.fromMap({
+      'profiles': <dynamic>[],
+      'tags': <dynamic>[],
+      'timeLocks': <dynamic>[],
+      'calendar': {'enabled': true},
+    });
+
+    expect(status.calendar.keywordCalendarIds, isEmpty);
+  });
+
+  test('fehlender Kalenderblock ergibt die Vorgaben', () {
+    final status = LockStatus.fromMap({
+      'profiles': <dynamic>[],
+      'tags': <dynamic>[],
+      'timeLocks': <dynamic>[],
+    });
+
+    expect(status.calendar.enabled, isFalse);
+    expect(status.calendar.keywordMarker, '[Riegel]');
+  });
+
+  test('laufendes Terminfenster gilt als Sperre', () {
+    final status = LockStatus.fromMap({
+      'profiles': <dynamic>[],
+      'tags': <dynamic>[],
+      'timeLocks': <dynamic>[],
+      'calendar': {
+        'enabled': true,
+        'activeWindows': [
+          {
+            'eventId': 'e1',
+            'title': 'Konzept',
+            'startsAt': 1000,
+            'endsAt': 2000,
+            'profileId': 'p1',
+          },
+        ],
+      },
+    });
+
+    expect(status.locked, isTrue);
+    expect(status.isProfileLocked('p1'), isTrue);
+    expect(status.calendar.activeWindows.first.title, 'Konzept');
+  });
 }
