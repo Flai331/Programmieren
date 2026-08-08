@@ -336,10 +336,21 @@ class LockEngine(private val store: LockStore) {
      */
     fun updateWindows(windows: List<CalendarWindow>, now: Long): LockState {
         val s = store.load()
+        val genagelt = CalendarPlanner.prunePins(s.calendar, now)
+
+        // Ein festgenageltes Fenster bleibt im Zwischenspeicher, auch wenn sein
+        // Termin aus dem Kalender verschwunden ist. Ohne das verlöre es sein
+        // Profil und sperrte nichts mehr — also genau das, wogegen das
+        // Festnageln gedacht ist.
+        val frisch = windows.map { it.eventId }.toSet()
+        val ueberlebende = s.calendar.cachedWindows.filter {
+            it.eventId in genagelt && it.eventId !in frisch
+        }
+
         val mitFenstern = s.calendar.copy(
-            cachedWindows = windows,
+            cachedWindows = windows + ueberlebende,
             windowsFetchedAt = now,
-            pinnedEnds = CalendarPlanner.prunePins(s.calendar, now),
+            pinnedEnds = genagelt,
         )
         val neueNaegel = CalendarPlanner.pinsToAdd(mitFenstern, s.profiles, now)
         val next = s.copy(

@@ -165,6 +165,39 @@ class LockEngineCalendarTest {
     }
 
     @Test
+    fun `festgenageltes Fenster sperrt weiter, wenn der Termin verschwindet`() {
+        val nagler = Profile("p1", "Arbeit", setOf("com.a"), LockMode.OPEN, pinCalendarEnd = true)
+        val store = FakeLockStore(
+            LockState(profiles = listOf(nagler), calendar = CalendarSettings(enabled = true))
+        )
+        val e = LockEngine(store)
+        val fenster = CalendarWindow("e1", "Konzept", jetzt - minute, jetzt + minute, "p1")
+
+        e.updateWindows(listOf(fenster), jetzt)
+        // Termin im Kalender gelöscht: der nächste Abgleich bringt nichts mehr mit.
+        e.updateWindows(emptyList(), jetzt)
+
+        assertEquals(mapOf("e1" to jetzt + minute), store.current.calendar.pinnedEnds)
+        assertEquals(setOf("com.a"), e.blockedPackages(jetzt))
+    }
+
+    @Test
+    fun `abgelaufener Nagel haelt das Fenster nicht mehr fest`() {
+        val nagler = Profile("p1", "Arbeit", setOf("com.a"), LockMode.OPEN, pinCalendarEnd = true)
+        val store = FakeLockStore(
+            LockState(profiles = listOf(nagler), calendar = CalendarSettings(enabled = true))
+        )
+        val e = LockEngine(store)
+        val fenster = CalendarWindow("e1", "Konzept", jetzt - minute, jetzt + minute, "p1")
+
+        e.updateWindows(listOf(fenster), jetzt)
+        e.updateWindows(emptyList(), jetzt + 2 * minute)
+
+        assertTrue(store.current.calendar.pinnedEnds.isEmpty())
+        assertTrue(store.current.calendar.cachedWindows.isEmpty())
+    }
+
+    @Test
     fun `Einstellungen schreiben laesst den Zwischenspeicher stehen`() {
         val (e, store) = engine(laufendesFenster())
 

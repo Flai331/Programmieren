@@ -122,7 +122,10 @@ class BlockActivity : Activity() {
 
         val codeField = EditText(this).apply {
             hint = "NOTFALL-CODE"
-            inputType = InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+            // TYPE_CLASS_TEXT muss mit: das Flag allein lässt die Klassenbits auf
+            // 0 stehen, das ist TYPE_NULL — „nicht editierbar". Die Tastatur geht
+            // dann nicht auf und der Notausgang bliebe zu.
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
             typeface = Typeface.MONOSPACE
             letterSpacing = 0.18f
             textSize = 15f

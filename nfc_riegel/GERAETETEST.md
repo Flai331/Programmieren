@@ -145,3 +145,27 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
 - [ ] Kalenderberechtigung in den Systemeinstellungen entziehen — Warnung erscheint
 - [ ] Handy neu starten während einer Kalendersperre — sperrt danach weiter
 - [ ] Fehlerbericht senden — Zeile „Kalender" steht drin, **ohne** Termintitel
+
+### Am Emulator geprüft (2026-08-08, Build 5)
+
+Der Emulator hat kein NFC — alles mit Chip bleibt offen. Der Zustand wurde per
+`run-as` gesetzt, Kalender und Termine über `content insert` angelegt.
+
+- [x] Kalender des Geräts erscheinen in der Liste
+- [x] Trefferart „alle Termine": jeder Termin des Kalenders sperrt
+- [x] Trefferart „nur Stichwort": nur Termine mit `[Riegel]` sperren
+- [x] Stichwortregel ohne Kalenderauswahl greift in allen Kalendern
+- [x] Stichwortregel mit Auswahl greift nur dort
+- [x] Kalenderregel schlägt die Stichwortregel
+- [x] Ganztägiger Termin sperrt nicht
+- [x] Sperrschirm zeigt Termintitel und „frei ab HH:MM"
+- [x] Termin endet — Sperre fällt von allein
+- [x] Laufenden Termin löschen — Sperre endet
+- [x] Mit `pinCalendarEnd`: laufenden Termin löschen — Sperre bleibt
+- [x] Notfall-Code während einer Kalendersperre — gibt frei, Termin sperrt bis zu
+      seinem Ende nicht erneut
+
+**Hinweis zum Testen:** `uiautomator dump` registriert UiAutomation als
+alleinigen Bedienungshilfe-Dienst und setzt beim Loslassen
+`accessibility_enabled` auf 0. Danach sperrt nichts mehr — das ist kein Fehler
+der App. Vor jeder Sperrprüfung neu setzen.
