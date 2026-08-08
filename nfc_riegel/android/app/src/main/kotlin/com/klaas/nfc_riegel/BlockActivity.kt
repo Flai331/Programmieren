@@ -16,6 +16,9 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Farben aus `design_system/tokens.css`. Dieser Schirm läuft ohne Flutter-Engine,
@@ -191,9 +194,11 @@ class BlockActivity : Activity() {
         val state = controller.engine.state()
         val now = System.currentTimeMillis()
         val laufende = state.timeLocks.filter { now < it.endsAt }
+        val termine = CalendarPlanner.activeWindows(state.calendar, now)
         val gesperrteProfile = buildSet {
             state.chipLock?.let { add(it.profileId) }
             laufende.forEach { add(it.profileId) }
+            termine.forEach { if (it.profileId.isNotEmpty()) add(it.profileId) }
         }
         if (gesperrteProfile.isEmpty()) {
             finish()
@@ -205,9 +210,11 @@ class BlockActivity : Activity() {
             .joinToString(", ")
             .ifEmpty { "Riegel" }
 
-        // Die am spätesten endende Zeitsperre zählt: eine frühere sagt nichts,
-        // solange eine spätere noch greift.
-        val spaetestesEnde = laufende.maxOfOrNull { it.endsAt }
+        // Die am spätesten endende Sperre zählt: eine frühere sagt nichts,
+        // solange eine spätere noch greift. Termine zählen mit — ein
+        // festgenageltes Ende schlägt dabei das Ende aus dem Kalender.
+        val terminEnden = termine.map { state.calendar.pinnedEnds[it.eventId] ?: it.endsAt }
+        val spaetestesEnde = (laufende.map { it.endsAt } + terminEnden).maxOrNull()
         if (spaetestesEnde != null) {
             val remaining = ((spaetestesEnde - now) / 1000).coerceAtLeast(0)
             countdown.visibility = View.VISIBLE
@@ -218,15 +225,23 @@ class BlockActivity : Activity() {
             } else {
                 "%02d:%02d".format(remaining / 60, remaining % 60)
             }
-            hint.text = if (state.chipLock != null) {
-                "Chip scannen oder warten"
-            } else {
-                "Vorher öffnet nur ein Generalschlüssel"
+            hint.text = when {
+                termine.isNotEmpty() -> "Bis der Termin vorbei ist, öffnet nur ein Generalschlüssel"
+                state.chipLock != null -> "Chip scannen oder warten"
+                else -> "Vorher öffnet nur ein Generalschlüssel"
             }
         } else {
             countdown.visibility = View.GONE
             hint.text = "Chip scannen, um freizugeben"
         }
-        modeCaption.text = "Profil: $profileName"
+
+        // Der Termin nennt den Grund der Sperre — das sagt mehr als der
+        // Profilname, den man ohnehin selbst vergeben hat.
+        modeCaption.text = if (termine.isEmpty()) {
+            "Profil: $profileName"
+        } else {
+            val ende = SimpleDateFormat("HH:mm", Locale.GERMANY).format(Date(terminEnden.first()))
+            "${termine.first().title} — frei ab $ende"
+        }
     }
 }

@@ -20,6 +20,7 @@ void main() {
     List<Map<String, dynamic>> timeLocks = const [],
     bool hasMasterTag = true,
     bool hasCode = true,
+    Map<String, dynamic>? calendar,
   }) {
     gestartetesProfil = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -50,6 +51,9 @@ void main() {
             'timeLocks': timeLocks,
             'hasMasterTag': hasMasterTag,
             'hasCode': hasCode,
+            // Fehlt der Block, fällt LockStatus.fromMap auf CalendarInfo.empty —
+            // deshalb laufen alle Tests ohne Kalender unverändert weiter.
+            'calendar': calendar,
           };
         case 'isAccessibilityEnabled':
           return accessibility;
@@ -143,5 +147,32 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(gestartetesProfil, 'p1');
+  });
+
+  testWidgets('laufender Termin steht in der Statuskachel', (tester) async {
+    final jetzt = DateTime.now();
+    stub(
+      accessibility: true,
+      calendar: {
+        'enabled': true,
+        'permissionGranted': true,
+        'calendarRules': <dynamic, dynamic>{},
+        'keywordMarker': '[Riegel]',
+        'keywordCalendarIds': <dynamic>[],
+        'windows': <dynamic>[],
+        'activeWindows': [
+          {
+            'eventId': 'e1',
+            'title': 'Konzept schreiben',
+            'startsAt': jetzt.millisecondsSinceEpoch,
+            'endsAt': jetzt.add(const Duration(hours: 1)).millisecondsSinceEpoch,
+            'profileId': 'p1',
+          },
+        ],
+      },
+    );
+    await zeige(tester);
+
+    expect(find.textContaining('Konzept schreiben'), findsOneWidget);
   });
 }

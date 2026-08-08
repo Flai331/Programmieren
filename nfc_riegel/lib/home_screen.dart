@@ -368,6 +368,14 @@ class _StatusTile extends StatelessWidget {
   }
 
   String _subtitle(LockStatus status) {
+    // Ein laufender Termin ist die aussagekräftigste Auskunft: er nennt den
+    // Grund, nicht nur die Uhrzeit.
+    final termine = status.calendar.activeWindows;
+    if (termine.isNotEmpty) {
+      final termin = termine.first;
+      return '${termin.title} — frei ab ${_hhmm(termin.endsAt)}';
+    }
+
     if (!status.locked) return 'Chip scannen oder Profil sperren';
 
     final ende = status.earliestEnd;
@@ -380,16 +388,17 @@ class _StatusTile extends StatelessWidget {
       return '$profil — frei nach erneutem Scan';
     }
 
-    final h = ende.hour.toString().padLeft(2, '0');
-    final m = ende.minute.toString().padLeft(2, '0');
-    if (anzahl > 1) return '$anzahl Sperren — frei ab $h:$m';
+    if (anzahl > 1) return '$anzahl Sperren — frei ab ${_hhmm(ende)}';
 
     final profil = status.profiles
         .where((p) => status.isProfileLocked(p.id))
         .map((p) => p.name)
         .join(', ');
-    return '$profil — frei ab $h:$m';
+    return '$profil — frei ab ${_hhmm(ende)}';
   }
+
+  static String _hhmm(DateTime t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 }
 
 class _ProfileRow extends StatelessWidget {

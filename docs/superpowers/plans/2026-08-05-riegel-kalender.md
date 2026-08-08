@@ -2666,7 +2666,7 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/lib nfc_riegel/t
 - Modify: `nfc_riegel/lib/home_screen.dart`
 - Test: `nfc_riegel/test/home_screen_test.dart`
 
-- [ ] **Schritt 1: Den fehlschlagenden Test schreiben**
+- [x] **Schritt 1: Den fehlschlagenden Test schreiben**
 
 `home_screen_test.dart` benutzt **keinen** `FakeRiegelChannel`, sondern einen
 Mock-`MethodChannel` über die dortige Hilfsfunktion `stub(...)`, die den
@@ -2730,11 +2730,11 @@ Der Kalenderteil ist `null`, wenn `stub` ihn nicht bekommt — alle bestehenden
 Tests laufen dann unverändert weiter, weil `LockStatus.fromMap` bei fehlendem
 `calendar` auf `CalendarInfo.empty` fällt.
 
-- [ ] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
+- [x] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
 
 Erwartet: „Expected: exactly one matching candidate, Actual: _TextWidgetFinder:<zero widgets>".
 
-- [ ] **Schritt 3: `_StatusTile._subtitle` erweitern**
+- [x] **Schritt 3: `_StatusTile._subtitle` erweitern**
 
 In `home_screen.dart` die Methode `_subtitle` ersetzen:
 
@@ -2772,7 +2772,7 @@ In `home_screen.dart` die Methode `_subtitle` ersetzen:
 
 `firstOrNull` kommt aus `dart:collection` über `package:collection`. Steht es nicht in `pubspec.yaml`, stattdessen `isEmpty ? null : first` verwenden — **keine neue Abhängigkeit aufnehmen**.
 
-- [ ] **Schritt 4: Sperrschirm ergänzen**
+- [x] **Schritt 4: Sperrschirm ergänzen**
 
 In `BlockActivity.kt` dort, wo der Text über die laufende Sperre gesetzt wird, den Kalenderfall voranstellen:
 
@@ -2787,17 +2787,17 @@ In `BlockActivity.kt` dort, wo der Text über die laufende Sperre gesetzt wird, 
         }
 ```
 
-- [ ] **Schritt 5: Prüfen und Tests laufen lassen**
+- [x] **Schritt 5: Prüfen und Tests laufen lassen**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && flutter analyze && flutter test
 ```
 
-Erwartet: sauber, 23 Tests grün. Danach die Kotlin-Tests:
+Erwartet: sauber, 27 Tests grün. Danach die Kotlin-Tests:
 
-Erwartet: 159 Tests, 0 Fehlschläge.
+Erwartet: 166 Tests, 0 Fehlschläge.
 
-- [ ] **Schritt 6: Commit**
+- [x] **Schritt 6: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel && git commit -m "feat: Termin auf Sperrschirm und Statuskachel"
@@ -2957,4 +2957,6 @@ Weicht eine Zahl ab, **nicht** die Zahl anpassen, sondern nachsehen, welcher Tes
 3. **Task 3, Schritt 4:** erwartet 136 statt 134 Tests.
 4. **Task 4, Schritt 4:** erwartet 151 statt 144 Tests.
 5. **Task 5, Schritt 7:** erwartet 163 statt 156 Tests.
-6. **Task 5, Testaufbau:** `arbeit` und `nacht` brauchen `LockMode.OPEN`. Mit dem Vorgabemodus `TIMER` startet `onTagScanned` eine Zeitsperre, statt die Chipsperre umzuschalten — der Test „normaler Chip beendet die Kalendersperre nicht" schlug mit `expected:<UNLOCKED> but was:<LOCKED>` fehl.
+6. **Task 13, Test „eingeschaltet zeigt Kalenderliste":** der Kalendername steht zweimal auf dem Schirm — in der Zuordnungsliste und als Ankreuzfeld der Stichwortregel. `findsNWidgets(2)` statt `findsOneWidget`.
+7. **Task 14, `BlockActivity.refresh`:** der Plan ergänzte nur den Untertitel. `gesperrteProfile` kannte den Kalender aber nicht, also hätte sich der Sperrschirm bei einer reinen Kalendersperre sofort selbst beendet (`finish()`). Zusätzlich gehen jetzt die Terminenden in den Countdown ein, und der Hinweis nennt den Generalschlüssel statt „Chip scannen" — ein normaler Chip öffnet eine Kalendersperre nicht.
+8. **Task 5, Testaufbau:** `arbeit` und `nacht` brauchen `LockMode.OPEN`. Mit dem Vorgabemodus `TIMER` startet `onTagScanned` eine Zeitsperre, statt die Chipsperre umzuschalten — der Test „normaler Chip beendet die Kalendersperre nicht" schlug mit `expected:<UNLOCKED> but was:<LOCKED>` fehl.
