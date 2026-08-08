@@ -1,6 +1,7 @@
 package com.klaas.nfc_riegel
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -137,5 +138,53 @@ class DiagnosticsTest {
         )
         assertTrue(bericht["Sperre"]!!.contains("Arbeit"))
         assertTrue(bericht["Sperre"]!!.contains("Nacht"))
+    }
+
+    @Test
+    fun `Kalenderlage nennt Anzahl und naechste Grenze`() {
+        val jetzt = 1_000_000L
+        val zustand = LockState(
+            profiles = listOf(Profile("p1", "Arbeit")),
+            calendar = CalendarSettings(
+                enabled = true,
+                calendarRules = mapOf("cal1" to CalendarRule("p1", CalendarMatch.KEYWORD)),
+                cachedWindows = listOf(
+                    CalendarWindow("e1", "Konzept", jetzt - 1, jetzt + 60_000, "p1"),
+                ),
+            ),
+        )
+
+        val bericht = Diagnostics.summarize(zustand, jetzt)
+
+        assertTrue(bericht.getValue("Kalender").contains("an"))
+        assertTrue(bericht.getValue("Kalender").contains("1 Kalender"))
+        assertTrue(bericht.getValue("Kalender").contains("1 nur Stichwort"))
+        assertTrue(bericht.getValue("Kalender").contains("1 Termin"))
+    }
+
+    @Test
+    fun `ausgeschalteter Kalender wird als aus gemeldet`() {
+        val bericht = Diagnostics.summarize(LockState(), 1_000L)
+
+        assertEquals("aus", bericht.getValue("Kalender"))
+    }
+
+    @Test
+    fun `Bericht enthaelt keine Termintitel`() {
+        val jetzt = 1_000_000L
+        val zustand = LockState(
+            profiles = listOf(Profile("p1", "Arbeit")),
+            calendar = CalendarSettings(
+                enabled = true,
+                cachedWindows = listOf(
+                    CalendarWindow("e1", "Therapie Dr. Meier", jetzt - 1, jetzt + 60_000, "p1"),
+                ),
+            ),
+        )
+
+        val bericht = Diagnostics.summarize(zustand, jetzt)
+
+        assertFalse(bericht.values.any { it.contains("Therapie") })
+        assertFalse(bericht.values.any { it.contains("Meier") })
     }
 }

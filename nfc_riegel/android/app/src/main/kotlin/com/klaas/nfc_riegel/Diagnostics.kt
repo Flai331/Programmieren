@@ -55,8 +55,36 @@ object Diagnostics {
             "Sperre" to lockLine,
             "Profile" to profiles,
             "Chips" to chips,
+            "Kalender" to kalenderZeile(state, now),
             "Gesperrte Pakete" to packages,
             "Notfall-Code" to if (state.codeHash != null) "ja" else "nein",
         )
+    }
+
+    /**
+     * Bewusst ohne Termintitel: der Bericht landet in einer Notion-Datenbank, und
+     * Termine sind persönlich. Anzahl und Zeiten reichen, um eine falsch greifende
+     * Sperre zu verstehen.
+     */
+    private fun kalenderZeile(state: LockState, now: Long): String {
+        val c = state.calendar
+        if (!c.enabled) return "aus"
+
+        val laufend = CalendarPlanner.activeWindows(c, now).size
+        val grenze = CalendarPlanner.nextBoundary(c, now)
+        val nurStichwort = c.calendarRules.values.count { it.match == CalendarMatch.KEYWORD }
+        val stichwortBereich =
+            if (c.keywordCalendarIds.isEmpty()) "alle" else "${c.keywordCalendarIds.size}"
+        val teile = mutableListOf(
+            "an",
+            "${c.calendarRules.size} Kalender zugeordnet ($nurStichwort nur Stichwort)",
+            "Stichwortregel in $stichwortBereich Kalendern",
+            "${c.cachedWindows.size} Termine im Speicher",
+            "$laufend Termin(e) sperren gerade",
+        )
+        if (c.pinnedEnds.isNotEmpty()) teile += "${c.pinnedEnds.size} festgenagelt"
+        if (c.suppressedUntil != null && now < c.suppressedUntil) teile += "unterdrückt"
+        if (grenze != null) teile += "nächste Änderung in ${(grenze - now) / 60_000} min"
+        return teile.joinToString(", ")
     }
 }

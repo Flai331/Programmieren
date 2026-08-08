@@ -1625,7 +1625,7 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src 
 
 **Wichtig:** Der Bericht landet in einer Notion-Datenbank. Termintitel können persönlich sein und gehören dort nicht hin — genauso wenig wie Tag-UIDs und der Code-Hash. Gemeldet werden nur Anzahl und Zeiten.
 
-- [ ] **Schritt 1: Die fehlschlagenden Tests schreiben**
+- [x] **Schritt 1: Die fehlschlagenden Tests schreiben**
 
 Ans Ende von `DiagnosticsTest.kt`, vor die schließende Klammer:
 
@@ -1679,11 +1679,11 @@ Ans Ende von `DiagnosticsTest.kt`, vor die schließende Klammer:
     }
 ```
 
-- [ ] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
+- [x] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
 
 Erwartet: `NoSuchElementException: Key Kalender is missing in the map`.
 
-- [ ] **Schritt 3: `Diagnostics` ergänzen**
+- [x] **Schritt 3: `Diagnostics` ergänzen**
 
 In der Map, die `summarize` aufbaut, hinter dem bestehenden Eintrag für die Chips:
 
@@ -1722,11 +1722,11 @@ und als private Funktion im `object`:
     }
 ```
 
-- [ ] **Schritt 4: Tests laufen lassen**
+- [x] **Schritt 4: Tests laufen lassen**
 
-Erwartet: 159 Tests, 0 Fehlschläge.
+Erwartet: 166 Tests, 0 Fehlschläge.
 
-- [ ] **Schritt 5: Commit**
+- [x] **Schritt 5: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src && git commit -m "feat: Kalenderlage im Fehlerbericht, ohne Termintitel"
