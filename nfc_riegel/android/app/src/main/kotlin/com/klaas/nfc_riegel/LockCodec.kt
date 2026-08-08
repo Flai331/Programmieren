@@ -142,15 +142,38 @@ object LockCodec {
     }
 
     /**
+     * Eine Kalenderregel als `id PAIR profilId PAIR trefferart`, Regeln durch
+     * ITEM getrennt.
+     */
+    private fun encodeRules(rules: Map<String, CalendarRule>): String =
+        rules.entries.joinToString(ITEM.toString()) { (id, regel) ->
+            "$id$PAIR${regel.profileId}$PAIR${regel.match.name}"
+        }
+
+    private fun decodeRules(raw: String): Map<String, CalendarRule> {
+        if (raw.isEmpty()) return emptyMap()
+        return raw.split(ITEM).mapNotNull { eintrag ->
+            val teile = eintrag.split(PAIR)
+            if (teile.size != 3) return@mapNotNull null
+            teile[0] to CalendarRule(
+                profileId = teile[1],
+                match = runCatching { CalendarMatch.valueOf(teile[2]) }
+                    .getOrDefault(CalendarMatch.ALL),
+            )
+        }.toMap()
+    }
+
+    /**
      * Die Fensterliste steckt als eigenes Feld mit RECORD- und FIELD-Trennern in
      * einem FIELD-getrennten Datensatz. Das geht nur, weil die äußere Aufteilung
      * mit `limit` arbeitet und das Fensterfeld zuletzt steht.
      */
     fun encodeCalendar(c: CalendarSettings): String = listOf(
         if (c.enabled) "1" else "0",
-        encodeMap(c.calendarProfiles),
+        encodeRules(c.calendarRules),
         c.keywordMarker,
         c.keywordProfileId ?: "",
+        c.keywordCalendarIds.joinToString(ITEM.toString()),
         c.windowsFetchedAt.toString(),
         encodeMap(c.pinnedEnds.mapValues { it.value.toString() }),
         c.suppressedUntil?.toString() ?: "",
@@ -159,19 +182,20 @@ object LockCodec {
 
     fun decodeCalendar(raw: String): CalendarSettings {
         if (raw.isEmpty()) return CalendarSettings()
-        val f = raw.split(FIELD, limit = 8)
-        if (f.size != 8) return CalendarSettings()
+        val f = raw.split(FIELD, limit = 9)
+        if (f.size != 9) return CalendarSettings()
         return CalendarSettings(
             enabled = f[0] == "1",
-            calendarProfiles = decodeMap(f[1]),
+            calendarRules = decodeRules(f[1]),
             keywordMarker = f[2],
             keywordProfileId = f[3].takeIf { it.isNotEmpty() },
-            windowsFetchedAt = f[4].toLongOrNull() ?: 0L,
-            pinnedEnds = decodeMap(f[5]).mapNotNull { (k, v) ->
+            keywordCalendarIds = if (f[4].isEmpty()) emptySet() else f[4].split(ITEM).toSet(),
+            windowsFetchedAt = f[5].toLongOrNull() ?: 0L,
+            pinnedEnds = decodeMap(f[6]).mapNotNull { (k, v) ->
                 v.toLongOrNull()?.let { k to it }
             }.toMap(),
-            suppressedUntil = f[6].toLongOrNull(),
-            cachedWindows = decodeWindows(f[7]),
+            suppressedUntil = f[7].toLongOrNull(),
+            cachedWindows = decodeWindows(f[8]),
         )
     }
 }

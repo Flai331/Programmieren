@@ -67,7 +67,7 @@ Die Gradle-Ausgabe nennt **keine Testzahl**. Sie steht in `nfc_riegel/build/app/
 
 Rein additiv: `LockState` bekommt ein Feld mit Vorgabewert, kein bestehender Aufrufer ändert sich.
 
-- [ ] **Schritt 1: `CalendarWindow.kt` anlegen**
+- [x] **Schritt 1: `CalendarWindow.kt` anlegen**
 
 ```kotlin
 package com.klaas.nfc_riegel
@@ -143,7 +143,7 @@ benutzt `keywordProfileId`. Welche gewinnt, legt Task 4 fest.
 > `calendarProfiles: Map<String, String>` statt `calendarRules`. Schreibe die
 > Datei auf den oben gezeigten Zielinhalt — nicht danebenlegen, nicht ergänzen.
 
-- [ ] **Schritt 2: `LockState` erweitern**
+- [x] **Schritt 2: `LockState` erweitern**
 
 Ersetze in `LockState.kt` den Kopfkommentar über `LockMode` und ergänze das Feld. Der alte Kommentar behauptet noch, `TIMER` und `UNTIL` endeten durch erneuten Scan — seit der Zeitsperren-Umstellung falsch.
 
@@ -162,7 +162,7 @@ und in der `data class LockState` hinter `timeLocks`:
     val calendar: CalendarSettings = CalendarSettings(),
 ```
 
-- [ ] **Schritt 3: Übersetzen**
+- [x] **Schritt 3: Übersetzen**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" && ./android/gradlew.bat -p android :app:testDebugUnitTest
@@ -170,7 +170,7 @@ cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && export JAVA_HOME="C:/Pro
 
 Erwartet: BUILD SUCCESSFUL, weiterhin 113 Tests, 0 Fehlschläge.
 
-- [ ] **Schritt 4: Commit**
+- [x] **Schritt 4: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src && git commit -m "feat: Datenmodell fuer Terminfenster und Kalendereinstellungen"
@@ -187,7 +187,7 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src 
 
 `LockCodec` benutzt Steuerzeichen als Trenner: `RECORD` = `\u0001`, `FIELD` = `\u0002`, `ITEM` = `\u0003`. Für die verschachtelten Karten (`calendarProfiles`, `pinnedEnds`) wird ein vierter Trenner `PAIR` = `\u0004` gebraucht — ITEM trennt die Paare, PAIR trennt Schlüssel und Wert.
 
-- [ ] **Schritt 1: Die fehlschlagenden Tests schreiben**
+- [x] **Schritt 1: Die fehlschlagenden Tests schreiben**
 
 Ans Ende von `LockCodecTest.kt`, vor die schließende Klammer:
 
@@ -267,7 +267,7 @@ Ans Ende von `LockCodecTest.kt`, vor die schließende Klammer:
     }
 ```
 
-- [ ] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
+- [x] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" && ./android/gradlew.bat -p android :app:testDebugUnitTest
@@ -275,7 +275,7 @@ cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && export JAVA_HOME="C:/Pro
 
 Erwartet: Übersetzungsfehler „Unresolved reference: encodeWindows".
 
-- [ ] **Schritt 3: Codec ergänzen**
+- [x] **Schritt 3: Codec ergänzen**
 
 In `LockCodec.kt` neben die bestehenden Trenner:
 
@@ -346,9 +346,9 @@ und ans Ende des `object`:
     }
 
     /**
-     * Die Fensterliste steckt als eigenes Feld mit RECORD-Trennern in einem
-     * FIELD-getrennten Datensatz. Das geht nur, weil sie zuletzt steht — RECORD
-     * kommt in keinem der Felder davor vor.
+     * Die Fensterliste steckt als eigenes Feld mit RECORD- und FIELD-Trennern in
+     * einem FIELD-getrennten Datensatz. Das geht nur, weil die äußere Aufteilung
+     * mit `limit` arbeitet und das Fensterfeld zuletzt steht.
      */
     fun encodeCalendar(c: CalendarSettings): String = listOf(
         if (c.enabled) "1" else "0",
@@ -364,7 +364,7 @@ und ans Ende des `object`:
 
     fun decodeCalendar(raw: String): CalendarSettings {
         if (raw.isEmpty()) return CalendarSettings()
-        val f = raw.split(FIELD)
+        val f = raw.split(FIELD, limit = 9)
         if (f.size != 9) return CalendarSettings()
         return CalendarSettings(
             enabled = f[0] == "1",
@@ -383,7 +383,7 @@ und ans Ende des `object`:
     }
 ```
 
-- [ ] **Schritt 4: Zustand ablegen und laden**
+- [x] **Schritt 4: Zustand ablegen und laden**
 
 In `SharedPrefsLockStore.kt` in `load()` hinter `codeLockedUntil`:
 
@@ -403,11 +403,11 @@ und in das `companion object`:
         const val KEY_CALENDAR = "calendar"
 ```
 
-- [ ] **Schritt 5: Tests laufen lassen**
+- [x] **Schritt 5: Tests laufen lassen**
 
-Erwartet: 118 Tests, 0 Fehlschläge.
+Erwartet: 120 Tests, 0 Fehlschläge.
 
-- [ ] **Schritt 6: Commit**
+- [x] **Schritt 6: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src && git commit -m "feat: Kalenderfenster und -einstellungen im Codec"

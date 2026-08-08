@@ -121,9 +121,13 @@ class LockCodecTest {
     fun `Kalendereinstellungen ueberstehen Kodieren und Dekodieren`() {
         val einstellungen = CalendarSettings(
             enabled = true,
-            calendarProfiles = mapOf("cal1" to "p1", "cal2" to "p2"),
+            calendarRules = mapOf(
+                "cal1" to CalendarRule("p1", CalendarMatch.ALL),
+                "cal2" to CalendarRule("p2", CalendarMatch.KEYWORD),
+            ),
             keywordMarker = "[Fokus]",
             keywordProfileId = "p2",
+            keywordCalendarIds = setOf("cal3", "cal4"),
             cachedWindows = listOf(CalendarWindow("e1", "Termin", 1_000L, 2_000L, "p1")),
             windowsFetchedAt = 5_000L,
             pinnedEnds = mapOf("e1" to 2_000L),
@@ -133,6 +137,26 @@ class LockCodecTest {
         val zurueck = LockCodec.decodeCalendar(LockCodec.encodeCalendar(einstellungen))
 
         assertEquals(einstellungen, zurueck)
+    }
+
+    @Test
+    fun `leere Stichwort-Kalenderliste bleibt leer`() {
+        val einstellungen = CalendarSettings(enabled = true, keywordCalendarIds = emptySet())
+
+        val zurueck = LockCodec.decodeCalendar(LockCodec.encodeCalendar(einstellungen))
+
+        assertTrue(zurueck.keywordCalendarIds.isEmpty())
+    }
+
+    @Test
+    fun `unbekannte Trefferart faellt auf ALL zurueck`() {
+        val roh = LockCodec.encodeCalendar(
+            CalendarSettings(calendarRules = mapOf("cal1" to CalendarRule("p1")))
+        ).replace("ALL", "QUATSCH")
+
+        val zurueck = LockCodec.decodeCalendar(roh)
+
+        assertEquals(CalendarMatch.ALL, zurueck.calendarRules.getValue("cal1").match)
     }
 
     @Test
