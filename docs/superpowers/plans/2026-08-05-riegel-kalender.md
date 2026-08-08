@@ -918,7 +918,7 @@ Drei Änderungen: `lockedProfileIds` bezieht Kalenderfenster ein, `clearAll` set
 
 **Wichtig:** `clearChipLock` bleibt unberührt. Ein normaler Chip kommt an die Kalendersperre nicht heran — das ist der Kern des Zwei-Spuren-Modells.
 
-- [ ] **Schritt 1: Die fehlschlagenden Tests schreiben**
+- [x] **Schritt 1: Die fehlschlagenden Tests schreiben**
 
 ```kotlin
 package com.klaas.nfc_riegel
@@ -1108,11 +1108,11 @@ class LockEngineCalendarTest {
 }
 ```
 
-- [ ] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
+- [x] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
 
 Erwartet: „Unresolved reference: updateWindows".
 
-- [ ] **Schritt 3: `lockedProfileIds` um den Kalender erweitern**
+- [x] **Schritt 3: `lockedProfileIds` um den Kalender erweitern**
 
 In `LockEngine.kt` ersetzen:
 
@@ -1138,7 +1138,7 @@ durch:
     }
 ```
 
-- [ ] **Schritt 4: `clearAll` unterdrückt den Kalender**
+- [x] **Schritt 4: `clearAll` unterdrückt den Kalender**
 
 Ersetzen:
 
@@ -1180,7 +1180,7 @@ durch:
     }
 ```
 
-- [ ] **Schritt 5: Die beiden Aufrufer von `clearAll` nachziehen**
+- [x] **Schritt 5: Die beiden Aufrufer von `clearAll` nachziehen**
 
 In `onTagScanned`:
 
@@ -1198,7 +1198,7 @@ In `submitCode`, in dem Zweig mit erfolgreichem Hash-Vergleich:
         }
 ```
 
-- [ ] **Schritt 6: Schreibwege ergänzen**
+- [x] **Schritt 6: Schreibwege ergänzen**
 
 Ans Ende der Klasse `LockEngine`, vor das `companion object`:
 
@@ -1253,11 +1253,11 @@ Ans Ende der Klasse `LockEngine`, vor das `companion object`:
         CalendarPlanner.activeWindows(store.load().calendar, now)
 ```
 
-- [ ] **Schritt 7: Tests laufen lassen**
+- [x] **Schritt 7: Tests laufen lassen**
 
-Erwartet: 156 Tests, 0 Fehlschläge.
+Erwartet: 163 Tests, 0 Fehlschläge.
 
-- [ ] **Schritt 8: Commit**
+- [x] **Schritt 8: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src && git commit -m "feat: Engine kennt die Kalendersperre"
@@ -2949,3 +2949,12 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel && git commit -m
 | 14 | 166 | 27 |
 
 Weicht eine Zahl ab, **nicht** die Zahl anpassen, sondern nachsehen, welcher Test fehlt oder zu viel ist.
+
+## Korrekturen aus der Umsetzung
+
+1. **Task 2, `decodeCalendar`:** braucht `raw.split(FIELD, limit = 9)`. Das Fensterfeld enthält selbst FIELD-Trenner; ohne `limit` zerfällt der Datensatz in mehr als neun Teile und die Einstellungen gehen verloren. Der Kommentar über `encodeCalendar` war entsprechend falsch und ist berichtigt.
+2. **Task 2, Schritt 5:** erwartet 120 statt 118 Tests (der Plan zählte die beiden Tests zur Trefferart nicht mit).
+3. **Task 3, Schritt 4:** erwartet 136 statt 134 Tests.
+4. **Task 4, Schritt 4:** erwartet 151 statt 144 Tests.
+5. **Task 5, Schritt 7:** erwartet 163 statt 156 Tests.
+6. **Task 5, Testaufbau:** `arbeit` und `nacht` brauchen `LockMode.OPEN`. Mit dem Vorgabemodus `TIMER` startet `onTagScanned` eine Zeitsperre, statt die Chipsperre umzuschalten — der Test „normaler Chip beendet die Kalendersperre nicht" schlug mit `expected:<UNLOCKED> but was:<LOCKED>` fehl.

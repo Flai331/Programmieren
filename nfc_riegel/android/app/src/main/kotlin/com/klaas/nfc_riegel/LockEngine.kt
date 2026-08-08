@@ -60,7 +60,7 @@ class LockEngine(private val store: LockStore) {
         val tag = s.tagByUid(uid) ?: return ScanResult(s, ScanOutcome.UNKNOWN_TAG)
 
         if (tag.isMaster && lockedProfileIds(s, now).isNotEmpty()) {
-            return ScanResult(clearAll(s), ScanOutcome.MASTER_CLEARED)
+            return ScanResult(clearAll(s, now), ScanOutcome.MASTER_CLEARED)
         }
 
         val profile = s.profileById(tag.profileId)
@@ -137,10 +137,14 @@ class LockEngine(private val store: LockStore) {
     private fun activeTimeLocks(s: LockState, now: Long): List<TimeLock> =
         s.timeLocks.filter { now < it.endsAt }
 
-    /** Profile, die gerade sperren — über die Chipsperre oder eine Zeitsperre. */
+    /**
+     * Profile, die gerade sperren — über die Chipsperre, eine Zeitsperre oder ein
+     * laufendes Terminfenster. Grundlage der Blockliste und aller Wächter.
+     */
     private fun lockedProfileIds(s: LockState, now: Long): Set<String> = buildSet {
         activeChipLock(s, now)?.let { add(it.profileId) }
         activeTimeLocks(s, now).forEach { add(it.profileId) }
+        addAll(CalendarPlanner.lockedProfileIds(s.calendar, now))
     }
 
     /** Sperrt gerade irgendetwas? Grundlage aller Einstellungswächter. */
@@ -150,12 +154,22 @@ class LockEngine(private val store: LockStore) {
      * Beendet alles: Chipsperre und sämtliche Zeitsperren. Nur der Generalschlüssel
      * und der Notfall-Code kommen hier hin.
      */
-    private fun clearAll(s: LockState): LockState {
+    private fun clearAll(s: LockState, now: Long): LockState {
+        // Ohne Unterdrückung griffe die Kalendersperre sofort wieder — sie wird ja
+        // aus dem Kalender gerechnet, und der Termin läuft noch. Unterdrückt wird
+        // bis zum Ende des spätesten laufenden Fensters; das nächste ist unberührt.
+        val laufendeFenster = CalendarPlanner.activeWindows(s.calendar, now)
+        val bisWann = laufendeFenster.maxOfOrNull { fenster ->
+            s.calendar.pinnedEnds[fenster.eventId] ?: fenster.endsAt
+        }
+
         val next = s.copy(
             chipLock = null,
             timeLocks = emptyList(),
             failedAttempts = 0,
             codeLockedUntil = null,
+            calendar = if (bisWann == null) s.calendar
+            else s.calendar.copy(suppressedUntil = bisWann),
         )
         store.save(next)
         return next
@@ -202,7 +216,7 @@ class LockEngine(private val store: LockStore) {
 
         val normalized = input.trim().uppercase()
         if (Hashing.sha256(normalized) == hash) {
-            return CodeResult(clearAll(s), CodeOutcome.UNLOCKED)
+            return CodeResult(clearAll(s, now), CodeOutcome.UNLOCKED)
         }
 
         val attempts = s.failedAttempts + 1
@@ -314,6 +328,55 @@ class LockEngine(private val store: LockStore) {
 
     private fun newId(): String =
         System.currentTimeMillis().toString(36) + (0..999).random().toString(36)
+
+    /**
+     * Legt frisch eingelesene Terminfenster ab. Nagelt dabei die Enden der
+     * Fenster fest, deren Profil [Profile.pinCalendarEnd] gesetzt hat, und räumt
+     * vergangene Nägel weg.
+     */
+    fun updateWindows(windows: List<CalendarWindow>, now: Long): LockState {
+        val s = store.load()
+        val mitFenstern = s.calendar.copy(
+            cachedWindows = windows,
+            windowsFetchedAt = now,
+            pinnedEnds = CalendarPlanner.prunePins(s.calendar, now),
+        )
+        val neueNaegel = CalendarPlanner.pinsToAdd(mitFenstern, s.profiles, now)
+        val next = s.copy(
+            calendar = mitFenstern.copy(pinnedEnds = mitFenstern.pinnedEnds + neueNaegel),
+        )
+        store.save(next)
+        return next
+    }
+
+    /**
+     * Speichert die Kalendereinstellungen. Der Zwischenspeicher bleibt stehen —
+     * er wird gleich darauf ohnehin neu eingelesen.
+     */
+    fun updateCalendarSettings(
+        enabled: Boolean,
+        calendarRules: Map<String, CalendarRule>,
+        keywordMarker: String,
+        keywordProfileId: String?,
+        keywordCalendarIds: Set<String>,
+    ): LockState {
+        val s = store.load()
+        val next = s.copy(
+            calendar = s.calendar.copy(
+                enabled = enabled,
+                calendarRules = calendarRules,
+                keywordMarker = keywordMarker,
+                keywordProfileId = keywordProfileId,
+                keywordCalendarIds = keywordCalendarIds,
+            ),
+        )
+        store.save(next)
+        return next
+    }
+
+    /** Laufende Terminfenster, für Anzeige und Diagnose. */
+    fun activeCalendarWindows(now: Long): List<CalendarWindow> =
+        CalendarPlanner.activeWindows(store.load().calendar, now)
 
     companion object {
         const val MAX_ATTEMPTS = 3
