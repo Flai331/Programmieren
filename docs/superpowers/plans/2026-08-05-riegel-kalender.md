@@ -423,7 +423,7 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src 
 
 Reine Funktionen ohne Android und ohne Speicher. Bekommen die Einstellungen und die Uhrzeit, geben zurück, welche Fenster jetzt sperren.
 
-- [ ] **Schritt 1: Die fehlschlagenden Tests schreiben**
+- [x] **Schritt 1: Die fehlschlagenden Tests schreiben**
 
 ```kotlin
 package com.klaas.nfc_riegel
@@ -595,11 +595,11 @@ class CalendarPlannerTest {
 }
 ```
 
-- [ ] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
+- [x] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
 
 Erwartet: „Unresolved reference: CalendarPlanner".
 
-- [ ] **Schritt 3: `CalendarPlanner.kt` anlegen**
+- [x] **Schritt 3: `CalendarPlanner.kt` anlegen**
 
 ```kotlin
 package com.klaas.nfc_riegel
@@ -672,11 +672,11 @@ object CalendarPlanner {
 }
 ```
 
-- [ ] **Schritt 4: Tests laufen lassen**
+- [x] **Schritt 4: Tests laufen lassen**
 
-Erwartet: 134 Tests, 0 Fehlschläge.
+Erwartet: 136 Tests, 0 Fehlschläge.
 
-- [ ] **Schritt 5: Commit**
+- [x] **Schritt 5: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src && git commit -m "feat: Kalenderfenster zu Sperren rechnen"
