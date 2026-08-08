@@ -7,12 +7,23 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
+
+    private val calendarWatcher by lazy { CalendarWatcher(this) }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // Zustand nach App-Start begradigen: abgelaufener Timer wird sofort aufgelöst.
-        LockController(this).expire()
+        val controller = LockController(this)
+        controller.expire()
+        controller.refreshCalendar()
+        calendarWatcher.start()
         RiegelChannel(this).register(flutterEngine.dartExecutor.binaryMessenger)
         requestNotificationPermission()
+    }
+
+    override fun onDestroy() {
+        calendarWatcher.stop()
+        super.onDestroy()
     }
 
     /**

@@ -1450,7 +1450,7 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src 
 **Files:**
 - Create: `nfc_riegel/android/app/src/main/kotlin/com/klaas/nfc_riegel/CalendarWatcher.kt`
 
-- [ ] **Schritt 1: `CalendarWatcher.kt` anlegen**
+- [x] **Schritt 1: `CalendarWatcher.kt` anlegen**
 
 ```kotlin
 package com.klaas.nfc_riegel
@@ -1491,7 +1491,7 @@ class CalendarWatcher(private val context: Context) {
 }
 ```
 
-- [ ] **Schritt 2: Übersetzen — schlägt fehl**
+- [x] **Schritt 2: Übersetzen — schlägt fehl**
 
 Erwartet: „Unresolved reference: refreshCalendar". Das ist beabsichtigt; Task 9 liefert die Methode. **Kein Commit in diesem Zustand** — Task 8 und 9 werden zusammen committet.
 
@@ -1505,7 +1505,7 @@ Erwartet: „Unresolved reference: refreshCalendar". Das ist beabsichtigt; Task 
 
 Hier sitzt die Korrektur an der Spec: der Wecker geht auf `min(Zeitsperren-Ende, nächste Fenstergrenze, jetzt + 12 h)`.
 
-- [ ] **Schritt 1: `LockController` ergänzen**
+- [x] **Schritt 1: `LockController` ergänzen**
 
 Ersetze `applyEffects` und ergänze `refreshCalendar`:
 
@@ -1559,7 +1559,7 @@ Ersetze `applyEffects` und ergänze `refreshCalendar`:
 
 Beachte: `LockScheduler.cancel` entfällt hier. Ohne Kalenderfunktion und ohne Zeitsperre wird der Wecker auf `now + 12 h` gesetzt; das ist ein Aufwachen alle zwölf Stunden, das nichts tut. Ist das unerwünscht, ersetze die letzte Zeile durch eine Rückgabe von `null` und rufe wieder `cancel`. **Für diesen Plan gilt die einfache Fassung** — ein Wecker, der nichts findet, kostet weniger als ein Kalender, der nicht sperrt.
 
-- [ ] **Schritt 2: `expire` frischt mit auf**
+- [x] **Schritt 2: `expire` frischt mit auf**
 
 Ersetze:
 
@@ -1581,7 +1581,7 @@ durch:
     }
 ```
 
-- [ ] **Schritt 3: `MainActivity` startet Beobachter und Auffrischung**
+- [x] **Schritt 3: `MainActivity` startet Beobachter und Auffrischung**
 
 Ersetze `configureFlutterEngine` in `MainActivity.kt`:
 
@@ -1605,11 +1605,11 @@ Ersetze `configureFlutterEngine` in `MainActivity.kt`:
     }
 ```
 
-- [ ] **Schritt 4: Tests laufen lassen**
+- [x] **Schritt 4: Tests laufen lassen**
 
-Erwartet: BUILD SUCCESSFUL, 156 Tests, 0 Fehlschläge.
+Erwartet: BUILD SUCCESSFUL, 163 Tests, 0 Fehlschläge.
 
-- [ ] **Schritt 5: Commit**
+- [x] **Schritt 5: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src && git commit -m "feat: Termine einlesen und Wecker auf die naechste Grenze"
