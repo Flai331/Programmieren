@@ -2168,7 +2168,7 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/lib nfc_riegel/t
 - Modify: `nfc_riegel/lib/home_screen.dart`
 - Test: `nfc_riegel/test/calendar_screen_test.dart`
 
-- [ ] **Schritt 1: Die fehlschlagenden Tests schreiben**
+- [x] **Schritt 1: Die fehlschlagenden Tests schreiben**
 
 Die Attrappe folgt dem Muster aus `home_screen_test.dart`: ein Mock-`MethodChannel`,
 der in `RiegelChannel(channel)` gesteckt wird. **Eine Klasse `FakeRiegelChannel`
@@ -2337,11 +2337,11 @@ void main() {
 }
 ```
 
-- [ ] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
+- [x] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
 
 Erwartet: „Target of URI doesn't exist: 'package:nfc_riegel/calendar_screen.dart'".
 
-- [ ] **Schritt 3: `calendar_screen.dart` anlegen**
+- [x] **Schritt 3: `calendar_screen.dart` anlegen**
 
 ```dart
 import 'package:flutter/material.dart';
@@ -2616,7 +2616,7 @@ class _KalenderZeile extends StatelessWidget {
 }
 ```
 
-- [ ] **Schritt 4: Vom Hauptscreen erreichbar machen**
+- [x] **Schritt 4: Vom Hauptscreen erreichbar machen**
 
 In `home_screen.dart` den Import ergänzen und hinter der Chips-Zeile eine weitere `_NavRow` einfügen:
 
@@ -2643,15 +2643,15 @@ In `home_screen.dart` den Import ergänzen und hinter der Chips-Zeile eine weite
             ),
 ```
 
-- [ ] **Schritt 5: Prüfen und Tests laufen lassen**
+- [x] **Schritt 5: Prüfen und Tests laufen lassen**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && flutter analyze && flutter test
 ```
 
-Erwartet: „No issues found!", 22 Tests grün.
+Erwartet: „No issues found!", 26 Tests grün.
 
-- [ ] **Schritt 6: Commit**
+- [x] **Schritt 6: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/lib nfc_riegel/test && git commit -m "feat: Kalenderbildschirm"

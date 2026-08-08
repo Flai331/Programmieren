@@ -1,6 +1,7 @@
 import 'package:feedback/feedback.dart';
 import 'package:flutter/material.dart';
 
+import 'calendar_screen.dart';
 import 'lock_status.dart';
 import 'profile_screen.dart';
 import 'riegel_channel.dart';
@@ -154,6 +155,16 @@ class _HomeScreenState extends State<HomeScreen> {
     await _refresh();
   }
 
+  Future<void> _openCalendar(LockStatus status) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CalendarScreen(status: status, channel: widget.channel),
+      ),
+    );
+    await _refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = _status;
@@ -215,6 +226,15 @@ class _HomeScreenState extends State<HomeScreen> {
               subtitle: '${status.tags.length} angelernt',
               enabled: !status.locked,
               onTap: () => _openTags(status),
+            ),
+            const SizedBox(height: RiegelSpacing.s3),
+            _NavRow(
+              title: 'Kalender',
+              subtitle: status.calendar.enabled
+                  ? '${status.calendar.calendarRules.length} Kalender zugeordnet'
+                  : 'aus',
+              enabled: !status.locked,
+              onTap: () => _openCalendar(status),
             ),
             if (status.tags.isEmpty) ...[
               const SizedBox(height: RiegelSpacing.s3),
