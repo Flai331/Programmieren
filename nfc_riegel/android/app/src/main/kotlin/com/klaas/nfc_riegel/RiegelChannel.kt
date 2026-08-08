@@ -111,6 +111,54 @@ class RiegelChannel(private val activity: Activity) {
                     result.success(outcome.name)
                 }
 
+                "deviceCalendars" ->
+                    result.success(
+                        ContentCalendarSource(activity).calendars().map {
+                            mapOf("id" to it.id, "name" to it.name, "account" to it.account)
+                        }
+                    )
+
+                "requestCalendarPermission" -> {
+                    if (CalendarPermission.granted(activity)) {
+                        result.success(true)
+                    } else {
+                        CalendarPermission.request(activity)
+                        // Die Antwort kommt asynchron ins System zurück; die
+                        // Oberfläche fragt den Zustand nach dem Dialog neu ab.
+                        result.success(false)
+                    }
+                }
+
+                "setCalendarSettings" -> {
+                    val roh = call.argument<Map<String, Map<String, String>>>("calendarRules")
+                        ?: emptyMap()
+                    val regeln = roh.mapValues { (_, eintrag) ->
+                        CalendarRule(
+                            profileId = eintrag["profileId"] ?: "",
+                            match = runCatching {
+                                CalendarMatch.valueOf(eintrag["match"] ?: "ALL")
+                            }.getOrDefault(CalendarMatch.ALL),
+                        )
+                    }.filterValues { it.profileId.isNotEmpty() }
+
+                    controller.engine.updateCalendarSettings(
+                        enabled = call.argument<Boolean>("enabled") ?: false,
+                        calendarRules = regeln,
+                        keywordMarker = call.argument<String>("keywordMarker") ?: "[Riegel]",
+                        keywordProfileId = call.argument<String>("keywordProfileId"),
+                        keywordCalendarIds =
+                            call.argument<List<String>>("keywordCalendarIds")?.toSet()
+                                ?: emptySet(),
+                    )
+                    controller.refreshCalendar()
+                    result.success(true)
+                }
+
+                "refreshCalendar" -> {
+                    controller.refreshCalendar()
+                    result.success(true)
+                }
+
                 else -> result.notImplemented()
             }
         }
@@ -147,10 +195,39 @@ class RiegelChannel(private val activity: Activity) {
                     "endsAt" to l.endsAt,
                 )
             },
+            "calendar" to mapOf(
+                "enabled" to s.calendar.enabled,
+                // Als Karte von Kalender-ID auf eine kleine Karte — der
+                // MethodChannel überträgt keine eigenen Typen.
+                "calendarRules" to s.calendar.calendarRules.mapValues { (_, regel) ->
+                    mapOf(
+                        "profileId" to regel.profileId,
+                        "match" to regel.match.name,
+                    )
+                },
+                "keywordMarker" to s.calendar.keywordMarker,
+                "keywordProfileId" to s.calendar.keywordProfileId,
+                "keywordCalendarIds" to s.calendar.keywordCalendarIds.toList(),
+                "permissionGranted" to CalendarPermission.granted(activity),
+                "windows" to s.calendar.cachedWindows
+                    .sortedBy { it.startsAt }
+                    .take(3)
+                    .map { windowMap(it) },
+                "activeWindows" to controller.engine.activeCalendarWindows(now)
+                    .map { windowMap(it) },
+            ),
             "hasMasterTag" to s.tags.any { it.isMaster },
             "hasCode" to (s.codeHash != null),
         )
     }
+
+    private fun windowMap(fenster: CalendarWindow): Map<String, Any?> = mapOf(
+        "eventId" to fenster.eventId,
+        "title" to fenster.title,
+        "startsAt" to fenster.startsAt,
+        "endsAt" to fenster.endsAt,
+        "profileId" to fenster.profileId,
+    )
 
     private fun devicePolicyManager() =
         activity.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager

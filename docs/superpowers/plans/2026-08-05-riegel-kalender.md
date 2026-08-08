@@ -1739,7 +1739,7 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src 
 **Files:**
 - Modify: `nfc_riegel/android/app/src/main/kotlin/com/klaas/nfc_riegel/RiegelChannel.kt`
 
-- [ ] **Schritt 1: Zustand um den Kalender erweitern**
+- [x] **Schritt 1: Zustand um den Kalender erweitern**
 
 In der Methode, die den Zustand als Map liefert (`getState`), hinter `timeLocks`:
 
@@ -1785,7 +1785,7 @@ In der Methode, die den Zustand als Map liefert (`getState`), hinter `timeLocks`
                         ),
 ```
 
-- [ ] **Schritt 2: Vier Methoden ergänzen**
+- [x] **Schritt 2: Vier Methoden ergänzen**
 
 Im `when` über `call.method`, vor den `else`-Zweig:
 
@@ -1839,11 +1839,11 @@ Im `when` über `call.method`, vor den `else`-Zweig:
                 }
 ```
 
-- [ ] **Schritt 3: Übersetzen**
+- [x] **Schritt 3: Übersetzen**
 
-Erwartet: BUILD SUCCESSFUL, 159 Tests. `flutter analyze` ist ab hier bis Task 13 nicht aussagekräftig.
+Erwartet: BUILD SUCCESSFUL, 166 Tests. `flutter analyze` ist ab hier bis Task 13 nicht aussagekräftig.
 
-- [ ] **Schritt 4: Commit**
+- [x] **Schritt 4: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src && git commit -m "feat: Kalendereinstellungen ueber den Kanal"
