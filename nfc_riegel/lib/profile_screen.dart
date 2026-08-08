@@ -38,7 +38,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _pickApps() async {
     final picked = await Navigator.push<List<String>>(
       context,
-      MaterialPageRoute(builder: (_) => AppPickerScreen(selected: _packages)),
+      MaterialPageRoute(
+        builder: (_) =>
+            AppPickerScreen(selected: _packages, channel: widget.channel),
+      ),
     );
     if (picked != null) setState(() => _packages = picked);
   }

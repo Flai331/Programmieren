@@ -68,6 +68,14 @@ class RiegelChannel {
 
   Future<void> requestAdmin() => channel.invokeMethod<void>('requestAdmin');
 
+  /// Sperrbare Apps: alles mit Startsymbol, ohne Riegel selbst.
+  Future<List<InstalledAppInfo>> launchableApps() async {
+    final raw = await channel.invokeMethod<List<dynamic>>('launchableApps');
+    return (raw ?? [])
+        .map((e) => InstalledAppInfo.fromMap(e as Map<dynamic, dynamic>))
+        .toList();
+  }
+
   Future<List<DeviceCalendarInfo>> deviceCalendars() async {
     final raw = await channel.invokeMethod<List<dynamic>>('deviceCalendars');
     return (raw ?? [])

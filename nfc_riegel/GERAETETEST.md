@@ -165,6 +165,13 @@ Der Emulator hat kein NFC — alles mit Chip bleibt offen. Der Zustand wurde per
 - [x] Notfall-Code während einer Kalendersperre — gibt frei, Termin sperrt bis zu
       seinem Ende nicht erneut
 
+### Ebenfalls am Emulator geprüft (Build 6)
+
+- [x] Frische Installation startet ohne Absturz, Abfrage nach Benachrichtigungen erscheint
+- [x] „Bedienungshilfe öffnen" führt in die Bedienungshilfen-Einstellungen
+- [x] „Geräteadministrator aktivieren" führt in den Admin-Dialog, Aktivieren wirkt
+- [x] App-Auswahl listet alle Apps mit Startsymbol (Chrome, Gmail, Maps …), Riegel selbst nicht
+
 **Hinweis zum Testen:** `uiautomator dump` registriert UiAutomation als
 alleinigen Bedienungshilfe-Dienst und setzt beim Loslassen
 `accessibility_enabled` auf 0. Danach sperrt nichts mehr — das ist kein Fehler

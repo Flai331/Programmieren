@@ -1,21 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:installed_apps/app_info.dart';
-import 'package:installed_apps/installed_apps.dart';
 
+import 'lock_status.dart';
+import 'riegel_channel.dart';
 import 'theme.dart';
 
 /// Auswahl der zu sperrenden Apps. Gibt die gewählten Paketnamen zurück.
 class AppPickerScreen extends StatefulWidget {
-  const AppPickerScreen({super.key, required this.selected});
+  const AppPickerScreen({
+    super.key,
+    required this.selected,
+    this.channel = const RiegelChannel(),
+  });
 
   final List<String> selected;
+  final RiegelChannel channel;
 
   @override
   State<AppPickerScreen> createState() => _AppPickerScreenState();
 }
 
 class _AppPickerScreenState extends State<AppPickerScreen> {
-  List<AppInfo>? _apps;
+  List<InstalledAppInfo>? _apps;
   late final Set<String> _selected = widget.selected.toSet();
 
   @override
@@ -25,8 +30,7 @@ class _AppPickerScreenState extends State<AppPickerScreen> {
   }
 
   Future<void> _load() async {
-    final apps = await InstalledApps.getInstalledApps(true, true);
-    apps.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final apps = await widget.channel.launchableApps();
     if (mounted) setState(() => _apps = apps);
   }
 

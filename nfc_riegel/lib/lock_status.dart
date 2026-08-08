@@ -86,6 +86,19 @@ class TimeLockInfo {
   );
 }
 
+/// Eine App, die im Starter auftaucht und damit sperrbar ist.
+class InstalledAppInfo {
+  const InstalledAppInfo({required this.name, required this.packageName});
+
+  final String name;
+  final String packageName;
+
+  factory InstalledAppInfo.fromMap(Map<dynamic, dynamic> map) => InstalledAppInfo(
+    name: map['name'] as String? ?? '',
+    packageName: map['packageName'] as String? ?? '',
+  );
+}
+
 /// Ein Termin, der sperrt oder sperren wird.
 class CalendarWindowInfo {
   const CalendarWindowInfo({

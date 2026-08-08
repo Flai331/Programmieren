@@ -65,7 +65,10 @@ class _SetupWizardState extends State<SetupWizard> {
     final picked = await Navigator.push<List<String>>(
       context,
       MaterialPageRoute(
-        builder: (_) => AppPickerScreen(selected: first.blockedPackages),
+        builder: (_) => AppPickerScreen(
+          selected: first.blockedPackages,
+          channel: widget.channel,
+        ),
       ),
     );
     if (picked != null) {

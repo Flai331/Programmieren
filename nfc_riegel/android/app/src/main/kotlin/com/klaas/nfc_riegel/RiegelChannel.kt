@@ -5,6 +5,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
 import io.flutter.plugin.common.BinaryMessenger
@@ -110,6 +111,8 @@ class RiegelChannel(private val activity: Activity) {
                     )
                     result.success(outcome.name)
                 }
+
+                "launchableApps" -> result.success(launchableApps())
 
                 "deviceCalendars" ->
                     result.success(
@@ -228,6 +231,37 @@ class RiegelChannel(private val activity: Activity) {
         "endsAt" to fenster.endsAt,
         "profileId" to fenster.profileId,
     )
+
+    /**
+     * Apps, die im Starter auftauchen. Bewusst **nicht** „alles außer
+     * Systemapps": Chrome, YouTube und Gmail sind auf Pixel und Samsung
+     * vorinstalliert und damit Systemapps — und genau die will man sperren.
+     * Umgekehrt hat kein Hintergrunddienst ein Startsymbol, die Liste bleibt
+     * also kurz.
+     *
+     * Riegel selbst fehlt: wer ihn sperrt, kommt an keine Einstellung mehr.
+     */
+    private fun launchableApps(): List<Map<String, String>> {
+        val pm = activity.packageManager
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val treffer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0L))
+        } else {
+            @Suppress("DEPRECATION")
+            pm.queryIntentActivities(intent, 0)
+        }
+        return treffer
+            .map { it.activityInfo.applicationInfo }
+            .filter { it.packageName != activity.packageName }
+            .distinctBy { it.packageName }
+            .map {
+                mapOf(
+                    "name" to pm.getApplicationLabel(it).toString(),
+                    "packageName" to it.packageName,
+                )
+            }
+            .sortedBy { it.getValue("name").lowercase() }
+    }
 
     private fun devicePolicyManager() =
         activity.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager

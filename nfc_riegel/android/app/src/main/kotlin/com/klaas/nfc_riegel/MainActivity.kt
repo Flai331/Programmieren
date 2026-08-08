@@ -21,6 +21,16 @@ class MainActivity : FlutterActivity() {
         requestNotificationPermission()
     }
 
+    /**
+     * Beim ersten Start fehlt `READ_CALENDAR`, der Beobachter kommt dann nicht
+     * zustande. Nach dem Erteilen kehrt der Nutzer hierher zurück — der zweite
+     * Versuch holt ihn nach.
+     */
+    override fun onResume() {
+        super.onResume()
+        calendarWatcher.start()
+    }
+
     override fun onDestroy() {
         calendarWatcher.stop()
         super.onDestroy()
