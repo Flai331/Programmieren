@@ -692,7 +692,7 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src 
 
 Zwei Ergänzungen: wann der Wecker klingeln muss, und welches Profil ein Rohtermin bekommt (Kalenderzuordnung schlägt Stichwort).
 
-- [ ] **Schritt 1: Die fehlschlagenden Tests schreiben**
+- [x] **Schritt 1: Die fehlschlagenden Tests schreiben**
 
 Ans Ende von `CalendarPlannerTest.kt`, vor die schließende Klammer:
 
@@ -838,11 +838,11 @@ Ans Ende von `CalendarPlannerTest.kt`, vor die schließende Klammer:
     }
 ```
 
-- [ ] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
+- [x] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
 
 Erwartet: „Unresolved reference: nextBoundary".
 
-- [ ] **Schritt 3: `CalendarPlanner` ergänzen**
+- [x] **Schritt 3: `CalendarPlanner` ergänzen**
 
 Ans Ende des `object`:
 
@@ -896,11 +896,11 @@ Ans Ende des `object`:
     }
 ```
 
-- [ ] **Schritt 4: Tests laufen lassen**
+- [x] **Schritt 4: Tests laufen lassen**
 
-Erwartet: 144 Tests, 0 Fehlschläge.
+Erwartet: 151 Tests, 0 Fehlschläge.
 
-- [ ] **Schritt 5: Commit**
+- [x] **Schritt 5: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src && git commit -m "feat: naechste Fenstergrenze und Profilzuordnung"

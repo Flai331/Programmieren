@@ -1,6 +1,7 @@
 package com.klaas.nfc_riegel
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -162,5 +163,145 @@ class CalendarPlannerTest {
         )
 
         assertEquals(mapOf("neu" to jetzt + minute), CalendarPlanner.prunePins(e, jetzt))
+    }
+
+    @Test
+    fun `naechste Grenze ist der Beginn des naechsten Fensters`() {
+        val spaeter = fenster(von = jetzt + 5 * minute, bis = jetzt + 10 * minute)
+
+        val grenze = CalendarPlanner.nextBoundary(einstellungen(spaeter), jetzt)
+
+        assertEquals(jetzt + 5 * minute, grenze)
+    }
+
+    @Test
+    fun `naechste Grenze ist das Ende des laufenden Fensters`() {
+        val grenze = CalendarPlanner.nextBoundary(einstellungen(fenster()), jetzt)
+
+        assertEquals(jetzt + minute, grenze)
+    }
+
+    @Test
+    fun `naechste Grenze nimmt die frueheste von mehreren`() {
+        val a = fenster(id = "e1", von = jetzt - minute, bis = jetzt + 3 * minute)
+        val b = fenster(id = "e2", von = jetzt + minute, bis = jetzt + 9 * minute)
+
+        assertEquals(jetzt + minute, CalendarPlanner.nextBoundary(einstellungen(a, b), jetzt))
+    }
+
+    @Test
+    fun `ohne Fenster gibt es keine Grenze`() {
+        assertNull(CalendarPlanner.nextBoundary(einstellungen(), jetzt))
+    }
+
+    @Test
+    fun `bei ausgeschalteter Kalenderfunktion gibt es keine Grenze`() {
+        assertNull(CalendarPlanner.nextBoundary(einstellungen(fenster(), an = false), jetzt))
+    }
+
+    @Test
+    fun `festgenageltes Ende zaehlt als Grenze`() {
+        val e = einstellungen(festgenagelt = mapOf("e1" to jetzt + 2 * minute))
+
+        assertEquals(jetzt + 2 * minute, CalendarPlanner.nextBoundary(e, jetzt))
+    }
+
+    @Test
+    fun `Kalender auf ALL sperrt mit jedem Termin`() {
+        val c = CalendarSettings(
+            enabled = true,
+            calendarRules = mapOf("cal1" to CalendarRule("p1", CalendarMatch.ALL)),
+        )
+
+        assertEquals("p1", CalendarPlanner.profileForEvent(c, "cal1", "Zahnarzt"))
+    }
+
+    @Test
+    fun `Kalender auf KEYWORD sperrt nur bei Treffer`() {
+        val c = CalendarSettings(
+            enabled = true,
+            calendarRules = mapOf("cal1" to CalendarRule("p1", CalendarMatch.KEYWORD)),
+            keywordMarker = "[Riegel]",
+        )
+
+        assertEquals("p1", CalendarPlanner.profileForEvent(c, "cal1", "[Riegel] Konzept"))
+        assertNull(CalendarPlanner.profileForEvent(c, "cal1", "Zahnarzt"))
+    }
+
+    @Test
+    fun `Kalenderregel schlaegt die Stichwortregel`() {
+        val c = CalendarSettings(
+            enabled = true,
+            calendarRules = mapOf("cal1" to CalendarRule("p1", CalendarMatch.ALL)),
+            keywordMarker = "[Riegel]",
+            keywordProfileId = "p9",
+        )
+
+        assertEquals("p1", CalendarPlanner.profileForEvent(c, "cal1", "[Riegel] Sport"))
+    }
+
+    @Test
+    fun `Kalender auf KEYWORD ohne Treffer faellt auf die Stichwortregel zurueck`() {
+        // cal1 sucht nach dem Marker, die eigenständige Regel nach demselben in
+        // allen Kalendern — hier greift sie nicht, weil der Titel nichts trifft.
+        val c = CalendarSettings(
+            enabled = true,
+            calendarRules = mapOf("cal1" to CalendarRule("p1", CalendarMatch.KEYWORD)),
+            keywordMarker = "[Riegel]",
+            keywordProfileId = "p9",
+        )
+
+        assertNull(CalendarPlanner.profileForEvent(c, "cal1", "Zahnarzt"))
+    }
+
+    @Test
+    fun `Stichwortregel greift ohne Kalenderauswahl ueberall`() {
+        val c = CalendarSettings(
+            enabled = true,
+            calendarRules = mapOf("cal1" to CalendarRule("p1")),
+            keywordMarker = "[Riegel]",
+            keywordProfileId = "p9",
+            keywordCalendarIds = emptySet(),
+        )
+
+        assertEquals("p9", CalendarPlanner.profileForEvent(c, "cal2", "[Riegel] Sport"))
+    }
+
+    @Test
+    fun `Stichwortregel sucht nur in den ausgewaehlten Kalendern`() {
+        val c = CalendarSettings(
+            enabled = true,
+            keywordMarker = "[Riegel]",
+            keywordProfileId = "p9",
+            keywordCalendarIds = setOf("cal2"),
+        )
+
+        assertEquals("p9", CalendarPlanner.profileForEvent(c, "cal2", "[Riegel] Sport"))
+        assertNull(CalendarPlanner.profileForEvent(c, "cal3", "[Riegel] Sport"))
+    }
+
+    @Test
+    fun `Termin ohne Regel und ohne Stichwort sperrt nicht`() {
+        val c = CalendarSettings(enabled = true, keywordProfileId = "p9")
+
+        assertNull(CalendarPlanner.profileForEvent(c, "cal2", "Zahnarzt"))
+    }
+
+    @Test
+    fun `Stichwort ohne hinterlegtes Profil sperrt nicht`() {
+        val c = CalendarSettings(enabled = true, keywordProfileId = null)
+
+        assertNull(CalendarPlanner.profileForEvent(c, "cal2", "[Riegel] Sport"))
+    }
+
+    @Test
+    fun `leerer Marker trifft nie`() {
+        val c = CalendarSettings(
+            enabled = true,
+            keywordMarker = "",
+            keywordProfileId = "p9",
+        )
+
+        assertNull(CalendarPlanner.profileForEvent(c, "cal2", "Irgendein Termin"))
     }
 }
