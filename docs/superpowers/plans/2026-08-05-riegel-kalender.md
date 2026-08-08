@@ -1273,7 +1273,7 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src 
 
 Ohne eigene Tests: `ContentResolver` läuft in reinem JUnit nicht. Die Logik davor und danach ist in Task 3–5 abgedeckt; diese Schicht ist eine dünne Abfrage.
 
-- [ ] **Schritt 1: `CalendarSource.kt` anlegen**
+- [x] **Schritt 1: `CalendarSource.kt` anlegen**
 
 ```kotlin
 package com.klaas.nfc_riegel
@@ -1380,7 +1380,7 @@ class ContentCalendarSource(private val context: Context) : CalendarSource {
 
 Die `eventId` bekommt den Beginn angehängt: eine wiederkehrende Serie hat für alle Termine dieselbe `EVENT_ID`, und das Festnageln muss den einzelnen Termin treffen, nicht die ganze Serie.
 
-- [ ] **Schritt 2: Berechtigung ins Manifest**
+- [x] **Schritt 2: Berechtigung ins Manifest**
 
 In `AndroidManifest.xml` hinter die `INTERNET`-Zeile:
 
@@ -1389,11 +1389,11 @@ In `AndroidManifest.xml` hinter die `INTERNET`-Zeile:
     <uses-permission android:name="android.permission.READ_CALENDAR"/>
 ```
 
-- [ ] **Schritt 3: Übersetzen**
+- [x] **Schritt 3: Übersetzen**
 
-Erwartet: BUILD SUCCESSFUL, weiterhin 156 Tests.
+Erwartet: BUILD SUCCESSFUL, weiterhin 163 Tests.
 
-- [ ] **Schritt 4: Commit**
+- [x] **Schritt 4: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src && git commit -m "feat: Kalender und Termine des Geraets lesen"
@@ -1409,7 +1409,7 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src 
 
 Die Berechtigung wird **nicht** beim Start angefragt, sondern erst, wenn der Nutzer die Kalenderfunktion einschaltet. Eine Sperr-App, die beim ersten Start nach dem Kalender fragt, wirkt übergriffig.
 
-- [ ] **Schritt 1: `CalendarPermission.kt` anlegen**
+- [x] **Schritt 1: `CalendarPermission.kt` anlegen**
 
 ```kotlin
 package com.klaas.nfc_riegel
@@ -1433,11 +1433,11 @@ object CalendarPermission {
 }
 ```
 
-- [ ] **Schritt 2: Übersetzen**
+- [x] **Schritt 2: Übersetzen**
 
-Erwartet: BUILD SUCCESSFUL, 156 Tests.
+Erwartet: BUILD SUCCESSFUL, 163 Tests.
 
-- [ ] **Schritt 3: Commit**
+- [x] **Schritt 3: Commit**
 
 ```bash
 cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel/android/app/src && git commit -m "feat: Kalenderberechtigung zur Laufzeit"
