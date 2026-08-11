@@ -34,7 +34,7 @@ class BlockerService : AccessibilityService() {
         if (blocked.isEmpty()) return
 
         if (pkg in blocked) {
-            showBlockScreen()
+            showBlockScreen(pkg)
             return
         }
 
@@ -45,9 +45,10 @@ class BlockerService : AccessibilityService() {
 
     override fun onInterrupt() {}
 
-    private fun showBlockScreen() {
+    private fun showBlockScreen(paket: String) {
         val intent = Intent(this, BlockActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra(BlockActivity.EXTRA_PACKAGE, paket)
         startActivity(intent)
     }
 

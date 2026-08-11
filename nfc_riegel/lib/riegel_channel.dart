@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import 'lock_status.dart';
+import 'screen_time.dart';
 
 /// Einzige Stelle, an der Dart mit der nativen Seite spricht.
 class RiegelChannel {
@@ -67,6 +68,20 @@ class RiegelChannel {
       await channel.invokeMethod<bool>('isAdminActive') ?? false;
 
   Future<void> requestAdmin() => channel.invokeMethod<void>('requestAdmin');
+
+  Future<bool> usageAccessGranted() async =>
+      await channel.invokeMethod<bool>('usageAccessGranted') ?? false;
+
+  Future<void> openUsageAccessSettings() =>
+      channel.invokeMethod<void>('openUsageAccessSettings');
+
+  /// Tagesnutzung ab Mitternacht, absteigend sortiert.
+  Future<List<AppUsage>> screenTimeToday() async {
+    final raw = await channel.invokeMethod<List<dynamic>>('screenTimeToday');
+    return (raw ?? [])
+        .map((e) => AppUsage.fromMap(e as Map<dynamic, dynamic>))
+        .toList();
+  }
 
   /// Sperrbare Apps: alles mit Startsymbol, ohne Riegel selbst.
   Future<List<InstalledAppInfo>> launchableApps() async {

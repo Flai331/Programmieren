@@ -175,4 +175,19 @@ void main() {
 
     expect(find.textContaining('Konzept schreiben'), findsOneWidget);
   });
+
+  testWidgets('zweiter Reiter zeigt die Screenzeit', (tester) async {
+    stub(accessibility: true);
+    await zeige(tester);
+
+    expect(find.text('Sperre'), findsOneWidget);
+    expect(find.text('Screenzeit'), findsOneWidget);
+
+    await tester.tap(find.text('Screenzeit'));
+    await tester.pumpAndSettle();
+
+    // Ohne Berechtigung — der Mock kennt 'usageAccessGranted' nicht und liefert
+    // null, was zu false wird.
+    expect(find.text('Zugriff erlauben'), findsOneWidget);
+  });
 }

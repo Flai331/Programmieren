@@ -5,6 +5,7 @@ import 'calendar_screen.dart';
 import 'lock_status.dart';
 import 'profile_screen.dart';
 import 'riegel_channel.dart';
+import 'screen_time_tab.dart';
 import 'tags_screen.dart';
 import 'theme.dart';
 
@@ -48,7 +49,8 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ProfileScreen(profile: profile, channel: widget.channel),
+        builder: (_) =>
+            ProfileScreen(profile: profile, channel: widget.channel),
       ),
     );
     await _refresh();
@@ -65,7 +67,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (ende == null || ende.isBefore(DateTime.now())) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Der Zeitpunkt liegt in der Vergangenheit.')),
+        const SnackBar(
+          content: Text('Der Zeitpunkt liegt in der Vergangenheit.'),
+        ),
       );
       return;
     }
@@ -117,7 +121,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     if (outcome == 'UNTIL_IN_PAST') {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Der Zeitpunkt liegt in der Vergangenheit.')),
+        const SnackBar(
+          content: Text('Der Zeitpunkt liegt in der Vergangenheit.'),
+        ),
       );
     } else if (outcome == 'ALREADY_RUNNING') {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -175,77 +181,96 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Riegel'),
-        actions: [
-          IconButton(
-            tooltip: 'Fehler melden',
-            icon: const Icon(Icons.bug_report_outlined),
-            onPressed: _reportProblem,
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Riegel'),
+          actions: [
+            IconButton(
+              tooltip: 'Fehler melden',
+              icon: const Icon(Icons.bug_report_outlined),
+              onPressed: _reportProblem,
+            ),
+          ],
+          // Der erste Reiter heißt „Sperre", nicht „Riegel" — die Kopfzeile
+          // trägt schon den Namen der App.
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Sperre'),
+              Tab(text: 'Screenzeit'),
+            ],
           ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: ListView(
-          padding: const EdgeInsets.all(RiegelSpacing.s4),
+        ),
+        body: TabBarView(
           children: [
-            if (!_accessibility) ...[
-              _AccessibilityWarning(
-                onEnable: widget.channel.openAccessibilitySettings,
+            RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                padding: const EdgeInsets.all(RiegelSpacing.s4),
+                children: [
+                  if (!_accessibility) ...[
+                    _AccessibilityWarning(
+                      onEnable: widget.channel.openAccessibilitySettings,
+                    ),
+                    const SizedBox(height: RiegelSpacing.s4),
+                  ],
+                  _StatusTile(status: status),
+                  const SizedBox(height: RiegelSpacing.s6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'PROFILE',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                      TextButton(
+                        onPressed: _addProfile,
+                        child: const Text('Neu'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: RiegelSpacing.s2),
+                  for (final profile in status.profiles) ...[
+                    _ProfileRow(
+                      profile: profile,
+                      locked: status.isProfileLocked(profile.id),
+                      timeLock: status.timeLockFor(profile.id),
+                      onTap: () => _editProfile(profile),
+                      onLock: () => _startTimeLock(profile, status),
+                    ),
+                    const SizedBox(height: RiegelSpacing.s2),
+                  ],
+                  const SizedBox(height: RiegelSpacing.s4),
+                  _NavRow(
+                    title: 'Chips',
+                    subtitle: '${status.tags.length} angelernt',
+                    enabled: !status.locked,
+                    onTap: () => _openTags(status),
+                  ),
+                  const SizedBox(height: RiegelSpacing.s3),
+                  _NavRow(
+                    title: 'Kalender',
+                    subtitle: status.calendar.enabled
+                        ? '${status.calendar.calendarRules.length} Kalender zugeordnet'
+                        : 'aus',
+                    enabled: !status.locked,
+                    onTap: () => _openCalendar(status),
+                  ),
+                  if (status.tags.isEmpty) ...[
+                    const SizedBox(height: RiegelSpacing.s3),
+                    Text(
+                      'Kein Chip angelernt — nur der Notfall-Code öffnet.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: RiegelColors.danger,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: RiegelSpacing.s4),
-            ],
-            _StatusTile(status: status),
-            const SizedBox(height: RiegelSpacing.s6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'PROFILE',
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-                TextButton(onPressed: _addProfile, child: const Text('Neu')),
-              ],
             ),
-            const SizedBox(height: RiegelSpacing.s2),
-            for (final profile in status.profiles) ...[
-              _ProfileRow(
-                profile: profile,
-                locked: status.isProfileLocked(profile.id),
-                timeLock: status.timeLockFor(profile.id),
-                onTap: () => _editProfile(profile),
-                onLock: () => _startTimeLock(profile, status),
-              ),
-              const SizedBox(height: RiegelSpacing.s2),
-            ],
-            const SizedBox(height: RiegelSpacing.s4),
-            _NavRow(
-              title: 'Chips',
-              subtitle: '${status.tags.length} angelernt',
-              enabled: !status.locked,
-              onTap: () => _openTags(status),
-            ),
-            const SizedBox(height: RiegelSpacing.s3),
-            _NavRow(
-              title: 'Kalender',
-              subtitle: status.calendar.enabled
-                  ? '${status.calendar.calendarRules.length} Kalender zugeordnet'
-                  : 'aus',
-              enabled: !status.locked,
-              onTap: () => _openCalendar(status),
-            ),
-            if (status.tags.isEmpty) ...[
-              const SizedBox(height: RiegelSpacing.s3),
-              Text(
-                'Kein Chip angelernt — nur der Notfall-Code öffnet.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: RiegelColors.danger,
-                ),
-              ),
-            ],
+            ScreenTimeTab(channel: widget.channel),
           ],
         ),
       ),
@@ -331,9 +356,7 @@ class _StatusTile extends StatelessWidget {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              color: locked
-                  ? RiegelColors.lockedTint
-                  : RiegelColors.accentTint,
+              color: locked ? RiegelColors.lockedTint : RiegelColors.accentTint,
               borderRadius: BorderRadius.circular(RiegelRadii.lg),
             ),
             child: Icon(
@@ -351,7 +374,9 @@ class _StatusTile extends StatelessWidget {
                   locked ? 'Riegel zu' : 'Riegel offen',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: locked ? RiegelColors.lockedBright : RiegelColors.fg1,
+                    color: locked
+                        ? RiegelColors.lockedBright
+                        : RiegelColors.fg1,
                   ),
                 ),
                 const SizedBox(height: 3),

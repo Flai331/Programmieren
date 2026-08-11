@@ -1,6 +1,7 @@
 package com.klaas.nfc_riegel
 
 import android.app.Activity
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -45,6 +46,8 @@ class BlockActivity : Activity() {
     private lateinit var countdown: TextView
     private lateinit var hint: TextView
     private lateinit var modeCaption: TextView
+    private lateinit var screenTime: TextView
+    private var blockiertesPaket: String? = null
     private val handler = Handler(Looper.getMainLooper())
 
     private val ticker = object : Runnable {
@@ -57,12 +60,22 @@ class BlockActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         controller = LockController(this)
+        blockiertesPaket = intent?.getStringExtra(EXTRA_PACKAGE)
         setContentView(buildLayout())
+    }
+
+    /** Wird mit `CLEAR_TOP` erneut gestartet, wenn eine andere gesperrte App drankommt. */
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        blockiertesPaket = intent?.getStringExtra(EXTRA_PACKAGE)
+        aktualisiereScreenzeit()
     }
 
     override fun onResume() {
         super.onResume()
         handler.post(ticker)
+        aktualisiereScreenzeit()
     }
 
     override fun onPause() {
@@ -158,6 +171,14 @@ class BlockActivity : Activity() {
             setPadding(0, dp(14), 0, 0)
         }
 
+        screenTime = TextView(this).apply {
+            textSize = 12f
+            setTextColor(BlockColors.FG_3)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(6), 0, 0)
+            visibility = View.GONE
+        }
+
         root.addView(glyph)
         root.addView(headline)
         root.addView(countdown)
@@ -165,6 +186,7 @@ class BlockActivity : Activity() {
         root.addView(codeField)
         root.addView(submit)
         root.addView(modeCaption)
+        root.addView(screenTime)
         return root
     }
 
@@ -246,5 +268,49 @@ class BlockActivity : Activity() {
             val ende = SimpleDateFormat("HH:mm", Locale.GERMANY).format(Date(terminEnden.first()))
             "${termine.first().title} — frei ab $ende"
         }
+    }
+
+    /**
+     * Bewusst nicht im Sekundentakt: der Ticker fragt jede Sekunde den
+     * Sperrzustand ab, aber die Nutzungsereignisse des ganzen Tages dafür
+     * durchzugehen wäre Verschwendung. Die Zahl ändert sich ohnehin nicht,
+     * solange dieser Schirm oben liegt — die App dahinter läuft ja nicht.
+     */
+    private fun aktualisiereScreenzeit() {
+        val paket = blockiertesPaket
+        if (paket == null) {
+            screenTime.visibility = View.GONE
+            return
+        }
+
+        val quelle = AndroidUsageSource(this)
+        // Ohne Berechtigung bleibt die Zeile weg. Der Sperrschirm ist der
+        // falsche Ort, um etwas einzufordern — dort ist man ohnehin gebremst.
+        if (!quelle.granted()) {
+            screenTime.visibility = View.GONE
+            return
+        }
+
+        val jetzt = System.currentTimeMillis()
+        val beginn = ScreenTimeCalculator.startOfDay(jetzt)
+        val millis = ScreenTimeCalculator
+            .totals(quelle.events(beginn, jetzt), beginn, jetzt)[paket] ?: 0L
+
+        screenTime.visibility = View.VISIBLE
+        screenTime.text = when {
+            millis == 0L -> "Heute noch nicht benutzt"
+            millis < 60_000L -> "Heute: unter 1 min"
+            else -> "Heute: ${formatiereDauer(millis)}"
+        }
+    }
+
+    /** Wie `formatUsage` in `lib/screen_time.dart` — hier ohne Flutter. */
+    private fun formatiereDauer(millis: Long): String {
+        val minuten = millis / 60_000L
+        return if (minuten < 60) "$minuten min" else "${minuten / 60} h ${minuten % 60} min"
+    }
+
+    companion object {
+        const val EXTRA_PACKAGE = "paket"
     }
 }
