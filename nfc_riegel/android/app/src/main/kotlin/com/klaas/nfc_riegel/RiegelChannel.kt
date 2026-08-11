@@ -101,6 +101,8 @@ class RiegelChannel(private val activity: Activity) {
                     map["Geräteadministrator"] =
                         if (devicePolicyManager().isAdminActive(adminComponent())) "an" else "aus"
                     map["Benachrichtigungen"] = notificationPermissionState()
+                    map["Nutzungsdaten"] =
+                        if (AndroidUsageSource(activity).granted()) "erlaubt" else "VERWEIGERT"
                     map["Android"] = "SDK ${Build.VERSION.SDK_INT} (${Build.VERSION.RELEASE})"
                     result.success(map)
                 }
@@ -111,6 +113,16 @@ class RiegelChannel(private val activity: Activity) {
                     )
                     result.success(outcome.name)
                 }
+
+                "usageAccessGranted" ->
+                    result.success(AndroidUsageSource(activity).granted())
+
+                "openUsageAccessSettings" -> {
+                    activity.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                    result.success(true)
+                }
+
+                "screenTimeToday" -> result.success(screenTimeToday())
 
                 "launchableApps" -> result.success(launchableApps())
 
@@ -231,6 +243,31 @@ class RiegelChannel(private val activity: Activity) {
         "endsAt" to fenster.endsAt,
         "profileId" to fenster.profileId,
     )
+
+    /**
+     * Tagesnutzung ab lokaler Mitternacht, absteigend sortiert.
+     *
+     * Die Namen kommen aus [launchableApps] — das filtert zugleich zweierlei
+     * heraus: Hintergrunddienste ohne Startsymbol, die keine „benutzte App"
+     * sind, und Riegel selbst. Wer die Screenzeit ansieht, erzeugt dabei
+     * Screenzeit; diese Zahl anzuzeigen wäre Rauschen.
+     */
+    private fun screenTimeToday(): List<Map<String, Any>> {
+        val quelle = AndroidUsageSource(activity)
+        if (!quelle.granted()) return emptyList()
+
+        val jetzt = System.currentTimeMillis()
+        val beginn = ScreenTimeCalculator.startOfDay(jetzt)
+        val summen = ScreenTimeCalculator.totals(quelle.events(beginn, jetzt), beginn, jetzt)
+        val namen = launchableApps().associate {
+            it.getValue("packageName") to it.getValue("name")
+        }
+
+        return summen.mapNotNull { (paket, millis) ->
+            val name = namen[paket] ?: return@mapNotNull null
+            mapOf<String, Any>("packageName" to paket, "name" to name, "millis" to millis)
+        }.sortedByDescending { it["millis"] as Long }
+    }
 
     /**
      * Apps, die im Starter auftauchen. Bewusst **nicht** „alles außer

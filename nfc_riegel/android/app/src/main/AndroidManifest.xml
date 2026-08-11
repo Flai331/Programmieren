@@ -10,6 +10,12 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Termine lesen, um sie sperren zu lassen. Zur Laufzeit angefragt. -->
     <uses-permission android:name="android.permission.READ_CALENDAR"/>
+    <!--
+        Tagesnutzung für den Screenzeit-Reiter. Sonderberechtigung: wird nicht
+        zur Laufzeit abgefragt, sondern über einen eigenen Systemschirm erteilt.
+    -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
