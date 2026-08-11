@@ -93,4 +93,45 @@ void main() {
 
     expect(find.textContaining('unter 1 Minute'), findsNothing);
   });
+
+  testWidgets('Betreten des Reiters liest neu', (tester) async {
+    var abrufe = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          switch (call.method) {
+            case 'usageAccessGranted':
+              return true;
+            case 'screenTimeToday':
+              abrufe++;
+              return <Map<String, dynamic>>[];
+          }
+          return null;
+        });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DefaultTabController(
+          length: 2,
+          child: Scaffold(
+            appBar: const TabBar(
+              tabs: [Tab(text: 'Sperre'), Tab(text: 'Screenzeit')],
+            ),
+            body: TabBarView(
+              children: [
+                const Text('Sperre'),
+                ScreenTimeTab(channel: RiegelChannel(channel), tabIndex: 1),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final nachDemBau = abrufe;
+
+    await tester.tap(find.text('Screenzeit'));
+    await tester.pumpAndSettle();
+
+    expect(abrufe, greaterThan(nachDemBau));
+  });
 }

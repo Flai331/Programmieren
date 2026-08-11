@@ -6,9 +6,17 @@ import 'theme.dart';
 
 /// Tagesnutzung ab Mitternacht. Zweiter Reiter des Hauptschirms.
 class ScreenTimeTab extends StatefulWidget {
-  const ScreenTimeTab({super.key, this.channel = const RiegelChannel()});
+  const ScreenTimeTab({
+    super.key,
+    this.channel = const RiegelChannel(),
+    this.tabIndex,
+  });
 
   final RiegelChannel channel;
+
+  /// Eigener Platz in der umgebenden [TabBar]. Ist er gesetzt, liest der Reiter
+  /// bei jedem Betreten neu. Ohne Angabe — etwa im Test — entfällt das.
+  final int? tabIndex;
 
   @override
   State<ScreenTimeTab> createState() => _ScreenTimeTabState();
@@ -26,8 +34,33 @@ class _ScreenTimeTabState extends State<ScreenTimeTab>
     _refresh();
   }
 
+  TabController? _tabs;
+
+  /// Der Lebenszyklus-Horcher allein genügt nicht: kommt die App aus dem
+  /// Hintergrund zurück, während dieser Reiter schon gebaut ist, blieben die
+  /// alten Zahlen stehen. Am Gerät waren es drei Abfragen hintereinander
+  /// dieselben, obwohl die Nutzung gewachsen war. Beim Betreten neu lesen ist
+  /// verlässlich — und ohnehin das, was man erwartet.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.tabIndex == null) return;
+    final controller = DefaultTabController.maybeOf(context);
+    if (controller == _tabs) return;
+    _tabs?.removeListener(_onTabChanged);
+    _tabs = controller;
+    _tabs?.addListener(_onTabChanged);
+  }
+
+  void _onTabChanged() {
+    final controller = _tabs;
+    if (controller == null || controller.indexIsChanging) return;
+    if (controller.index == widget.tabIndex) _refresh();
+  }
+
   @override
   void dispose() {
+    _tabs?.removeListener(_onTabChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

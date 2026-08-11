@@ -270,7 +270,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            ScreenTimeTab(channel: widget.channel),
+            ScreenTimeTab(channel: widget.channel, tabIndex: 1),
           ],
         ),
       ),

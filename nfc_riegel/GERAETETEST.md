@@ -176,3 +176,24 @@ Der Emulator hat kein NFC — alles mit Chip bleibt offen. Der Zustand wurde per
 alleinigen Bedienungshilfe-Dienst und setzt beim Loslassen
 `accessibility_enabled` auf 0. Danach sperrt nichts mehr — das ist kein Fehler
 der App. Vor jeder Sperrprüfung neu setzen.
+
+## Screenzeit
+
+- [x] Reiter „Screenzeit" ist da, Reiter „Sperre" zeigt weiterhin alles wie vorher
+- [x] Ohne Berechtigung: Hinweis und Knopf, keine Liste
+- [x] „Zugriff erlauben" führt in den Systemschirm für Nutzungsdaten
+- [x] Nach dem Erteilen und Zurückkommen erscheinen Tagessumme und Liste von selbst
+- [ ] Liste ist absteigend sortiert, Riegel selbst fehlt
+- [x] Apps unter einer Minute fehlen, Fußzeile nennt ihre Zahl
+- [ ] Zahlen grob gegen „Digital Wellbeing" gegenprüfen — kleine Abweichungen
+      sind normal, große weisen auf einen Fehler in den Rändern hin
+- [x] Gesperrte App öffnen: Sperrschirm zeigt „Heute: …" für genau diese App
+- [ ] Zweite gesperrte App öffnen: die Zeile wechselt mit
+- [ ] Berechtigung entziehen: Zeile auf dem Sperrschirm verschwindet, Reiter
+      zeigt wieder den Hinweis
+- [ ] Nach Mitternacht: Summen fangen wieder bei null an
+- [ ] Fehlerbericht enthält „Nutzungsdaten: erlaubt", aber keine Zeiten
+
+Am Emulator geprüft (Build 7). Offen bleibt, was der Emulator nicht hergibt:
+Gegenrechnen mit „Digital Wellbeing" über einen ganzen Tag, der Wechsel über
+Mitternacht und der Fehlerbericht in Notion.
