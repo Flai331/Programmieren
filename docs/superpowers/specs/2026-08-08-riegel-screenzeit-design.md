@@ -125,8 +125,12 @@ Der Hauptschirm bekommt oben eine `TabBar` mit zwei Reitern:
 
 | Reiter | Inhalt |
 |---|---|
-| **Riegel** | alles, was heute schon da ist: Statuskachel, Profile, Zeilen für Chips und Kalender |
+| **Sperre** | alles, was heute schon da ist: Statuskachel, Profile, Zeilen für Chips und Kalender |
 | **Screenzeit** | Tagessumme und Liste |
+
+Der erste Reiter heißt **Sperre**, nicht „Riegel": die Kopfzeile trägt bereits
+den Namen der App, und dasselbe Wort direkt darunter liest sich wie ein
+Versehen.
 
 Der erste Reiter ändert sich inhaltlich nicht. Nur die Hülle wandert: aus dem
 bisherigen `Scaffold`-Rumpf wird der Inhalt des ersten Reiters.
