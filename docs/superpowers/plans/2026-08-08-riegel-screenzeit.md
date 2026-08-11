@@ -1442,3 +1442,30 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel && git commit -m
    `accessibility_enabled` auf 0. Danach sperrt nichts mehr. Vor jeder
    Sperrprüfung neu setzen — und für den Sperrschirm besser `screencap` statt
    `dump` benutzen.
+
+---
+
+## Korrekturen aus der Umsetzung
+
+1. **`ACTIVITY_STOPPED` gehört nicht zu `BACKGROUND`.** Es räumt eine einzelne
+   Activity ab und trifft dabei *nach* dem `ACTIVITY_RESUMED` der nächsten
+   desselben Pakets ein — am Emulator gemessen: 13:46:10 `RESUMED`, 13:46:11
+   `STOPPED` der Vorgängerin. Da nur nach Paketnamen unterschieden wird, schloss
+   es die eben eröffnete Sitzung; deren echtes Ende fiel danach unter den Tisch,
+   weil das Paket schon als „gesehen" galt. Die Anzeige lag dadurch weit zu
+   niedrig: 130 s echte Nutzung wurden als „1 min" gemeldet. Mit
+   `ACTIVITY_PAUSED` allein stimmt es — 230 s ergeben 4 min.
+
+2. **Der Reiter braucht einen Horcher auf den `TabController`.** Der
+   Lebenszyklus-Horcher allein genügt nicht: kommt die App aus dem Hintergrund
+   zurück, während der Reiter schon gebaut ist, bleiben die alten Zahlen stehen.
+   Am Gerät waren es drei Abfragen hintereinander dieselben, obwohl die Nutzung
+   dazwischen gewachsen war. `ScreenTimeTab` bekommt dafür `tabIndex`; fehlt der
+   Wert — etwa im Test —, entfällt der Horcher.
+
+3. **Dart-Testzahl 36 statt 35** (der Test für die Auffrischung kam dazu).
+
+4. **Die beiden Fehler waren nur am Gerät zu sehen.** Beide Male stimmten die
+   Unit-Tests, weil sie die Ereignisfolge testen, die man erwartet — nicht die,
+   die Android tatsächlich schickt. Der Abgleich gegen `dumpsys usagestats`
+   sollte bei jeder Änderung an der Rechnung wiederholt werden.

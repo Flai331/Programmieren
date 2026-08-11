@@ -197,3 +197,28 @@ der App. Vor jeder Sperrprüfung neu setzen.
 Am Emulator geprüft (Build 7). Offen bleibt, was der Emulator nicht hergibt:
 Gegenrechnen mit „Digital Wellbeing" über einen ganzen Tag, der Wechsel über
 Mitternacht und der Fehlerbericht in Notion.
+
+## Screenzeit
+
+- [x] Reiter „Screenzeit" ist da, Reiter „Sperre" zeigt alles wie vorher
+- [x] Ohne Berechtigung: Hinweis und Knopf, keine Liste
+- [x] Nach dem Erteilen erscheinen Tagessumme und Liste
+- [x] Liste absteigend sortiert, Riegel selbst fehlt
+- [x] Apps unter einer Minute fehlen, Fußzeile nennt ihre Zahl
+- [x] Betreten des Reiters liest neu — Zahlen wachsen mit der Nutzung
+- [x] Zahlen gegen `dumpsys usagestats` gegengerechnet: 230 s Rohdaten → 4 min
+- [ ] „Zugriff erlauben" führt in den Systemschirm für Nutzungsdaten
+- [ ] Gesperrte App öffnen: Sperrschirm zeigt „Heute: …" für genau diese App
+- [ ] Zweite gesperrte App öffnen: die Zeile wechselt mit
+- [ ] Berechtigung entziehen: Zeile auf dem Sperrschirm verschwindet, Reiter
+      zeigt wieder den Hinweis
+- [ ] Nach Mitternacht: Summen fangen wieder bei null an
+- [ ] Fehlerbericht enthält „Nutzungsdaten: erlaubt", aber keine Zeiten
+
+**Beim Testen beachten:** Der Emulator setzt `appops GET_USAGE_STATS` gelegentlich
+von selbst auf `ignore` zurück, sobald der Bedienungshilfe-Dienst angeschaltet
+wird. Vor jeder Prüfung nachsehen:
+
+```bash
+adb shell appops get com.klaas.nfc_riegel GET_USAGE_STATS
+```
