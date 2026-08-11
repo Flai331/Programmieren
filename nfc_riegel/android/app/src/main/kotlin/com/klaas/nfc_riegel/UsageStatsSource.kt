@@ -54,12 +54,20 @@ class AndroidUsageSource(private val context: Context) : UsageSource {
             val paket = puffer.packageName ?: continue
             val art = when (puffer.eventType) {
                 UsageEvents.Event.ACTIVITY_RESUMED -> UsageEventType.FOREGROUND
-                UsageEvents.Event.ACTIVITY_PAUSED,
-                UsageEvents.Event.ACTIVITY_STOPPED -> UsageEventType.BACKGROUND
+                UsageEvents.Event.ACTIVITY_PAUSED -> UsageEventType.BACKGROUND
                 UsageEvents.Event.SCREEN_NON_INTERACTIVE,
                 UsageEvents.Event.KEYGUARD_SHOWN -> UsageEventType.SCREEN_OFF
-                // Alles andere — Benachrichtigungen, Konfigurationswechsel — sagt
-                // nichts über Vordergrundzeit aus.
+                // `ACTIVITY_STOPPED` bleibt bewusst draußen. Es räumt eine
+                // einzelne Activity ab und trifft dabei *nach* dem
+                // `ACTIVITY_RESUMED` der nächsten desselben Pakets ein — am
+                // Gerät gemessen: 13:46:10 RESUMED, 13:46:11 STOPPED der
+                // Vorgängerin. Da hier nur nach Paketnamen unterschieden wird,
+                // schlösse es die eben eröffnete Sitzung, und deren echtes Ende
+                // fiele danach unter den Tisch. `ACTIVITY_PAUSED` allein ist das
+                // verlässliche Signal für „nicht mehr im Vordergrund".
+                //
+                // Alles Übrige — Benachrichtigungen, Konfigurationswechsel —
+                // sagt ohnehin nichts über Vordergrundzeit aus.
                 else -> continue
             }
             ergebnis += UsageEvent(paket, art, puffer.timeStamp)

@@ -1421,3 +1421,24 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel && git commit -m
 | Fehlerbericht: Zustand ja, Zeiten nein | 4 |
 
 **Bewusst nicht enthalten** (wie in der Spec): Verlauf über mehrere Tage, Diagramme, Wochenansicht, Zeitbudgets, Warnungen, Export, eigener Speicher.
+
+## Korrekturen aus der Umsetzung
+
+1. **Task 2, Ereignisabbildung:** `ACTIVITY_STOPPED` gehört **nicht** zu
+   `BACKGROUND`. Es räumt eine einzelne Activity ab und trifft dabei *nach* dem
+   `ACTIVITY_RESUMED` der nächsten desselben Pakets ein — am Emulator gemessen:
+   13:46:10 RESUMED, 13:46:11 STOPPED der Vorgängerin. Da der Rechner nur nach
+   Paketnamen unterscheidet, schlösse es die eben eröffnete Sitzung, und deren
+   echtes Ende fiele danach unter den Tisch. `ACTIVITY_PAUSED` allein ist das
+   verlässliche Signal.
+2. **Task 6/7, Auffrischung des Reiters:** der Lebenszyklus-Horcher allein
+   genügt nicht. Kommt die App aus dem Hintergrund zurück, während der Reiter
+   schon gebaut ist, bleiben die alten Zahlen stehen — am Emulator dreimal
+   dieselben Werte trotz gewachsener Nutzung. Der Reiter hängt sich zusätzlich
+   an den `TabController` und liest bei jedem Betreten neu; `tabIndex` bleibt
+   optional, damit die Widget-Tests ohne `TabBar` auskommen.
+3. **Emulator-Eigenheit, kein Fehler:** `uiautomator dump` registriert
+   UiAutomation als alleinigen Bedienungshilfe-Dienst und setzt beim Loslassen
+   `accessibility_enabled` auf 0. Danach sperrt nichts mehr. Vor jeder
+   Sperrprüfung neu setzen — und für den Sperrschirm besser `screencap` statt
+   `dump` benutzen.
