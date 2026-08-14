@@ -78,6 +78,12 @@
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"/>
 
+        <activity
+            android:name=".PauseActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"/>
+
         <service
             android:name=".BlockerService"
             android:exported="true"
