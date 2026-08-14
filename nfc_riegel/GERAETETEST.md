@@ -222,3 +222,33 @@ wird. Vor jeder Prüfung nachsehen:
 ```bash
 adb shell appops get com.klaas.nfc_riegel GET_USAGE_STATS
 ```
+
+## Atempause
+
+- [ ] Ohne Nutzungsdaten-Berechtigung: Hinweis statt Regler im Profil
+- [ ] Atempause einschalten, Stufenabstand auf 5 Minuten stellen
+- [x] Gesperrte App öffnen und liegen lassen — Pause kommt **mitten im
+      Scrollen**, nicht erst beim App-Wechsel (Emulator, Stufenabstand 1 min)
+- [ ] Countdown lässt sich nicht überspringen, Zurück-Taste wirkt nicht
+- [x] „Weiter" führt zurück in die App
+- [x] „Schließen" führt auf den Startbildschirm
+- [ ] Zweite Stufe wartet doppelt so lang
+- [ ] Nach genug Stufen bleibt die Wartezeit bei 60 Sekunden
+- [ ] App aus einem Profil ohne Atempause: keine Pause
+- [x] Während einer laufenden Sperre: Sperrschirm, keine Pause
+- [ ] Über Mitternacht hinweg beginnt die Staffelung von vorn
+- [x] App wechseln und zurückkommen: keine doppelte Pause für dieselbe Stufe
+- [ ] Update über eine bestehende Installation: alte Profile sind noch da,
+      Atempause steht auf aus
+
+**Am Emulator geprüft (2026-08-14, Build 8):** Pausenschirm zeigt App-Name,
+Tagesnutzung, Countdown und beide Wege. Der Speicher hält Tag und Stufe
+(`2026-226|3`). Nicht prüfbar blieb alles mit Chip.
+
+**Stolperfalle:** `am force-stop` auf das Riegel-Paket hängt den
+Bedienungshilfe-Dienst ab, und die per `settings put` gesetzte Aktivierung kommt
+nicht von selbst zurück. Vor jeder Prüfung nachsehen:
+
+```bash
+adb shell dumpsys accessibility | grep "Enabled services"
+```
