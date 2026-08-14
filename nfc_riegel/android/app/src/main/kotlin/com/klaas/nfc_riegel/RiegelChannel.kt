@@ -38,6 +38,11 @@ class RiegelChannel(private val activity: Activity) {
                         durationMinutes = call.argument<Int>("durationMinutes") ?: 60,
                         untilAt = call.argument<Long>("untilAt"),
                         pinCalendarEnd = call.argument<Boolean>("pinCalendarEnd") ?: false,
+                        pause = PauseSettings(
+                            enabled = call.argument<Boolean>("pauseEnabled") ?: false,
+                            stepMinutes = call.argument<Int>("pauseStepMinutes") ?: 15,
+                            baseSeconds = call.argument<Int>("pauseBaseSeconds") ?: 5,
+                        ),
                     )
                     result.success(
                         controller.engine.updateProfile(profile, System.currentTimeMillis())
@@ -192,6 +197,9 @@ class RiegelChannel(private val activity: Activity) {
                     "durationMinutes" to p.durationMinutes,
                     "untilAt" to p.untilAt,
                     "pinCalendarEnd" to p.pinCalendarEnd,
+                    "pauseEnabled" to p.pause.enabled,
+                    "pauseStepMinutes" to p.pause.stepMinutes,
+                    "pauseBaseSeconds" to p.pause.baseSeconds,
                 )
             },
             "tags" to s.tags.map { t ->

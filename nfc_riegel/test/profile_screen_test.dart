@@ -1,0 +1,89 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:nfc_riegel/lock_status.dart';
+import 'package:nfc_riegel/profile_screen.dart';
+import 'package:nfc_riegel/riegel_channel.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  const channel = MethodChannel('test/riegel');
+
+  Map<dynamic, dynamic>? gespeichert;
+
+  void stub({required bool usageGranted}) {
+    gespeichert = null;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          switch (call.method) {
+            case 'usageAccessGranted':
+              return usageGranted;
+            case 'updateProfile':
+              gespeichert = call.arguments as Map<dynamic, dynamic>;
+              return true;
+            case 'openUsageAccessSettings':
+              return true;
+          }
+          return null;
+        });
+  }
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
+
+  const profil = ProfileInfo(
+    id: 'p1',
+    name: 'Arbeit',
+    blockedPackages: [],
+    mode: LockMode.timer,
+    durationMinutes: 60,
+    untilAt: null,
+    pinCalendarEnd: false,
+    pauseEnabled: false,
+    pauseStepMinutes: 15,
+    pauseBaseSeconds: 5,
+  );
+
+  Widget screen() => MaterialApp(
+    home: ProfileScreen(profile: profil, channel: RiegelChannel(channel)),
+  );
+
+  testWidgets('mit Berechtigung erscheint der Schalter', (tester) async {
+    stub(usageGranted: true);
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Atempause'), findsOneWidget);
+  });
+
+  testWidgets('ohne Berechtigung erscheint der Hinweis statt der Regler', (
+    tester,
+  ) async {
+    stub(usageGranted: false);
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Nutzungsdaten'), findsOneWidget);
+    expect(find.text('Zugriff erlauben'), findsOneWidget);
+    // Nicht auf `Slider` prüfen: das Profil steht auf „Auf Zeit" und zeigt
+    // deshalb ohnehin den Dauer-Regler. Fehlen muss der Schalter der Atempause.
+    expect(find.text('Atempause'), findsNothing);
+  });
+
+  testWidgets('eingeschaltete Atempause landet im Kanalaufruf', (tester) async {
+    stub(usageGranted: true);
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(SwitchListTile).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sichern'));
+    await tester.pumpAndSettle();
+
+    expect(gespeichert!['pauseEnabled'], isTrue);
+    expect(gespeichert!['pauseStepMinutes'], 15);
+  });
+}

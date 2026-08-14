@@ -177,4 +177,49 @@ void main() {
     expect(status.isProfileLocked('p1'), isTrue);
     expect(status.calendar.activeWindows.first.title, 'Konzept');
   });
+
+  test('Atempause-Einstellungen werden gelesen', () {
+    final status = LockStatus.fromMap({
+      'profiles': [
+        {
+          'id': 'p1',
+          'name': 'Arbeit',
+          'blockedPackages': <dynamic>[],
+          'defaultMode': 'TIMER',
+          'durationMinutes': 60,
+          'pinCalendarEnd': false,
+          'pauseEnabled': true,
+          'pauseStepMinutes': 20,
+          'pauseBaseSeconds': 8,
+        },
+      ],
+      'tags': <dynamic>[],
+      'timeLocks': <dynamic>[],
+    });
+
+    expect(status.profiles.first.pauseEnabled, isTrue);
+    expect(status.profiles.first.pauseStepMinutes, 20);
+    expect(status.profiles.first.pauseBaseSeconds, 8);
+  });
+
+  test('fehlende Atempause-Angaben ergeben die Vorgaben', () {
+    final status = LockStatus.fromMap({
+      'profiles': [
+        {
+          'id': 'p1',
+          'name': 'Arbeit',
+          'blockedPackages': <dynamic>[],
+          'defaultMode': 'TIMER',
+          'durationMinutes': 60,
+          'pinCalendarEnd': false,
+        },
+      ],
+      'tags': <dynamic>[],
+      'timeLocks': <dynamic>[],
+    });
+
+    expect(status.profiles.first.pauseEnabled, isFalse);
+    expect(status.profiles.first.pauseStepMinutes, 15);
+    expect(status.profiles.first.pauseBaseSeconds, 5);
+  });
 }

@@ -21,6 +21,9 @@ class ProfileInfo {
     required this.durationMinutes,
     required this.untilAt,
     required this.pinCalendarEnd,
+    required this.pauseEnabled,
+    required this.pauseStepMinutes,
+    required this.pauseBaseSeconds,
   });
 
   final String id;
@@ -30,6 +33,11 @@ class ProfileInfo {
   final int durationMinutes;
   final DateTime? untilAt;
   final bool pinCalendarEnd;
+
+  /// Atempause gegen Doomscrolling. Keine Sperre — sie hält kurz auf.
+  final bool pauseEnabled;
+  final int pauseStepMinutes;
+  final int pauseBaseSeconds;
 
   factory ProfileInfo.fromMap(Map<dynamic, dynamic> map) {
     final until = map['untilAt'] as int?;
@@ -42,6 +50,9 @@ class ProfileInfo {
       durationMinutes: map['durationMinutes'] as int? ?? 60,
       untilAt: until == null ? null : DateTime.fromMillisecondsSinceEpoch(until),
       pinCalendarEnd: map['pinCalendarEnd'] as bool? ?? false,
+      pauseEnabled: map['pauseEnabled'] as bool? ?? false,
+      pauseStepMinutes: map['pauseStepMinutes'] as int? ?? 15,
+      pauseBaseSeconds: map['pauseBaseSeconds'] as int? ?? 5,
     );
   }
 }

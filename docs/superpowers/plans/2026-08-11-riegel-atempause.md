@@ -64,7 +64,7 @@ adb shell appops get com.klaas.nfc_riegel GET_USAGE_STATS
 | Ausgangslage | 181 | 36 |
 | 1 | 193 | 36 |
 | 2 | 195 | 36 |
-| 6 | 195 | 40 |
+| 6 | 195 | 41 |
 
 Weicht eine Zahl ab, **nicht** die Zahl anpassen, sondern nachsehen, welcher Test fehlt oder zu viel ist.
 
@@ -1216,7 +1216,7 @@ Und im `build`, zwischen dem `SwitchListTile` für den Kalender-Nagel und dem `S
 cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && flutter analyze && flutter test
 ```
 
-Erwartet: „No issues found!", 40 Tests grün.
+Erwartet: „No issues found!", 41 Tests grün.
 
 - [ ] **Schritt 9: Commit**
 
@@ -1277,7 +1277,7 @@ version: 1.0.0+8
 cd "C:/Users/klaas/Desktop/Programmieren/nfc_riegel" && flutter analyze && flutter test && export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" && ./android/gradlew.bat -p android :app:testDebugUnitTest
 ```
 
-Erwartet: sauber, 40 Dart-Tests, 195 Kotlin-Tests, 0 Fehlschläge.
+Erwartet: sauber, 41 Dart-Tests, 195 Kotlin-Tests, 0 Fehlschläge.
 
 - [ ] **Schritt 4: Am Emulator prüfen**
 
@@ -1331,3 +1331,17 @@ cd "C:/Users/klaas/Desktop/Programmieren" && git add nfc_riegel && git commit -m
 | Hinweis statt Regler ohne Berechtigung | 6 |
 
 **Bewusst nicht enthalten** (wie in der Spec): keine Sperre, keine Statistik über Pausen, keine Belohnung fürs Aufhören, kein Verlauf.
+
+---
+
+## Korrekturen aus der Umsetzung
+
+1. **Dart-Testzahl 41 statt 40.** Im Plan falsch addiert: Task 6 bringt zwei
+   Tests in `lock_status_test.dart` und drei in `profile_screen_test.dart`, also
+   fünf statt vier.
+
+2. **Der Test „ohne Berechtigung erscheint der Hinweis statt der Regler" prüfte
+   das Falsche.** `expect(find.byType(Slider), findsNothing)` konnte nie stimmen:
+   das Testprofil steht auf `LockMode.timer` und zeigt deshalb ohnehin den
+   Dauer-Regler, der mit der Atempause nichts zu tun hat. Geprüft wird jetzt,
+   dass der Schalter „Atempause" fehlt und der Hinweis samt Knopf da ist.

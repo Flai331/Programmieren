@@ -28,6 +28,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late int _duration = widget.profile.durationMinutes;
   late DateTime? _untilAt = widget.profile.untilAt;
   late bool _pin = widget.profile.pinCalendarEnd;
+  late bool _pause = widget.profile.pauseEnabled;
+  late int _pauseStep = widget.profile.pauseStepMinutes;
+  late int _pauseBase = widget.profile.pauseBaseSeconds;
+  bool? _usageGranted;
+
+  @override
+  void initState() {
+    super.initState();
+    _ladeBerechtigung();
+  }
+
+  Future<void> _ladeBerechtigung() async {
+    final granted = await widget.channel.usageAccessGranted();
+    if (mounted) setState(() => _usageGranted = granted);
+  }
 
   @override
   void dispose() {
@@ -81,6 +96,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         durationMinutes: _duration,
         untilAt: _untilAt,
         pinCalendarEnd: _pin,
+        pauseEnabled: _pause,
+        pauseStepMinutes: _pauseStep,
+        pauseBaseSeconds: _pauseBase,
       ),
     );
     if (!mounted) return;
@@ -187,6 +205,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             contentPadding: EdgeInsets.zero,
           ),
+          const SizedBox(height: RiegelSpacing.s6),
+          Text('ATEMPAUSE', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: RiegelSpacing.s2),
+          if (_usageGranted == false)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Ohne Zugriff auf die Nutzungsdaten kann Riegel nicht wissen, '
+                  'wie lange du in einer App warst.',
+                  style: TextStyle(fontSize: 13, color: RiegelColors.fg2),
+                ),
+                const SizedBox(height: RiegelSpacing.s3),
+                OutlinedButton(
+                  onPressed: widget.channel.openUsageAccessSettings,
+                  child: const Text('Zugriff erlauben'),
+                ),
+              ],
+            )
+          else ...[
+            SwitchListTile(
+              value: _pause,
+              onChanged: (v) => setState(() => _pause = v),
+              title: const Text('Atempause'),
+              subtitle: const Text(
+                'Hält dich nach jeder Stufe kurz auf. Sperrt nicht — nach dem '
+                'Countdown geht es weiter.',
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+            if (_pause) ...[
+              Text(
+                'Alle $_pauseStep Minuten Tagesnutzung',
+                style: const TextStyle(
+                  fontFamily: kMonoFamily,
+                  fontSize: 12,
+                  color: RiegelColors.fg2,
+                ),
+              ),
+              Slider(
+                value: _pauseStep.toDouble(),
+                min: 5,
+                max: 60,
+                divisions: 11,
+                onChanged: (v) => setState(() => _pauseStep = v.round()),
+              ),
+              Text(
+                'Erste Pause $_pauseBase Sekunden, danach doppelt so lang',
+                style: const TextStyle(
+                  fontFamily: kMonoFamily,
+                  fontSize: 12,
+                  color: RiegelColors.fg2,
+                ),
+              ),
+              Slider(
+                value: _pauseBase.toDouble(),
+                min: 3,
+                max: 30,
+                divisions: 9,
+                onChanged: (v) => setState(() => _pauseBase = v.round()),
+              ),
+            ],
+          ],
           const SizedBox(height: RiegelSpacing.s8),
           TextButton(
             onPressed: _delete,

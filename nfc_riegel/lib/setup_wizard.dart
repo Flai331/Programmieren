@@ -81,6 +81,9 @@ class _SetupWizardState extends State<SetupWizard> {
           durationMinutes: first.durationMinutes,
           untilAt: first.untilAt,
           pinCalendarEnd: first.pinCalendarEnd,
+          pauseEnabled: first.pauseEnabled,
+          pauseStepMinutes: first.pauseStepMinutes,
+          pauseBaseSeconds: first.pauseBaseSeconds,
         ),
       );
       await _refresh();

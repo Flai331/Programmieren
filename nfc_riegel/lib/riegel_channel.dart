@@ -36,6 +36,9 @@ class RiegelChannel {
         'durationMinutes': profile.durationMinutes,
         'untilAt': profile.untilAt?.millisecondsSinceEpoch,
         'pinCalendarEnd': profile.pinCalendarEnd,
+        'pauseEnabled': profile.pauseEnabled,
+        'pauseStepMinutes': profile.pauseStepMinutes,
+        'pauseBaseSeconds': profile.pauseBaseSeconds,
       }) ??
       false;
 
