@@ -172,4 +172,29 @@ class LockCodecTest {
 
         assertEquals(fenster, LockCodec.decodeWindows(LockCodec.encodeWindows(fenster)))
     }
+
+    @Test
+    fun `Atempause-Einstellungen ueberstehen Kodieren und Dekodieren`() {
+        val profile = listOf(
+            Profile(
+                "p1", "Arbeit", setOf("com.a"), LockMode.TIMER, 45, null, false,
+                PauseSettings(enabled = true, stepMinutes = 20, baseSeconds = 8),
+            ),
+        )
+
+        assertEquals(profile, LockCodec.decodeProfiles(LockCodec.encodeProfiles(profile)))
+    }
+
+    @Test
+    fun `alter Profilsatz ohne Atempause bleibt lesbar`() {
+        // Sieben Felder, wie vor der Atempause abgelegt.
+        val alt = listOf("p1", "Arbeit", "com.a", "TIMER", "45", "", "0")
+            .joinToString("")
+
+        val zurueck = LockCodec.decodeProfiles(alt)
+
+        assertEquals(1, zurueck.size)
+        assertEquals("Arbeit", zurueck[0].name)
+        assertEquals(PauseSettings(), zurueck[0].pause)
+    }
 }

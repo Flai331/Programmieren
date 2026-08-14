@@ -22,14 +22,22 @@ object LockCodec {
                 p.durationMinutes.toString(),
                 p.untilAt?.toString() ?: "",
                 if (p.pinCalendarEnd) "1" else "0",
+                if (p.pause.enabled) "1" else "0",
+                p.pause.stepMinutes.toString(),
+                p.pause.baseSeconds.toString(),
             ).joinToString(FIELD.toString())
         }
 
+    /**
+     * Liest zehn Felder (mit Atempause) und sieben (davor). Ein alter Satz
+     * bekommt die Vorgaben — stillschweigend zu verwerfen hieße, gesperrte Apps
+     * zu vergessen.
+     */
     fun decodeProfiles(raw: String): List<Profile> {
         if (raw.isEmpty()) return emptyList()
         return raw.split(RECORD).mapNotNull { record ->
             val f = record.split(FIELD)
-            if (f.size != 7) return@mapNotNull null
+            if (f.size != 7 && f.size != 10) return@mapNotNull null
             Profile(
                 id = f[0],
                 name = f[1],
@@ -38,6 +46,15 @@ object LockCodec {
                 durationMinutes = f[4].toIntOrNull() ?: 60,
                 untilAt = f[5].toLongOrNull(),
                 pinCalendarEnd = f[6] == "1",
+                pause = if (f.size == 10) {
+                    PauseSettings(
+                        enabled = f[7] == "1",
+                        stepMinutes = f[8].toIntOrNull() ?: 15,
+                        baseSeconds = f[9].toIntOrNull() ?: 5,
+                    )
+                } else {
+                    PauseSettings()
+                },
             )
         }
     }

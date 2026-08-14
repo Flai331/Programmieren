@@ -15,6 +15,12 @@ data class Profile(
      * Modell später nicht wandern muss.
      */
     val pinCalendarEnd: Boolean = false,
+    /**
+     * Atempause gegen Doomscrolling. Keine Sperre — sie hält kurz auf und lässt
+     * dann weiter. Steht am Profil, gilt aber je App: man doomscrollt in einer
+     * App, nicht in einem Profil.
+     */
+    val pause: PauseSettings = PauseSettings(),
 )
 
 /** Womit gesperrt wird. Jeder Chip hat ein Profil — auch ein Generalschlüssel. */
