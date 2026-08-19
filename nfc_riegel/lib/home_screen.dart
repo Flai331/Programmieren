@@ -22,6 +22,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   LockStatus? _status;
   bool _accessibility = true;
+  bool _adminActive = false;
 
   @override
   void initState() {
@@ -32,10 +33,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refresh() async {
     final status = await widget.channel.getState();
     final accessibility = await widget.channel.isAccessibilityEnabled();
+    final admin = await widget.channel.isAdminActive();
     if (mounted) {
       setState(() {
         _status = status;
         _accessibility = accessibility;
+        _adminActive = admin;
       });
     }
   }
@@ -58,13 +61,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Startet oder verlängert eine Zeitsperre. Vorher ein Dialog, der beim Namen
   /// nennt, worauf man sich einlässt — die Sperre lässt sich nicht zurücknehmen.
-  Future<void> _startTimeLock(ProfileInfo profile, LockStatus status) async {
+  Future<void> _startLock(ProfileInfo profile, LockStatus status) async {
     final laufend = status.timeLockFor(profile.id);
-    final ende = profile.mode == LockMode.until
+    // „Bis Scan" ergibt eine Chipsperre: sie hat kein Ende, das man ausrechnen
+    // könnte, und wird deshalb an keiner Uhrzeit gemessen.
+    final chipsperre = profile.mode == LockMode.open;
+    final ende = chipsperre
+        ? null
+        : profile.mode == LockMode.until
         ? profile.untilAt
         : DateTime.now().add(Duration(minutes: profile.durationMinutes));
 
-    if (ende == null || ende.isBefore(DateTime.now())) {
+    if (!chipsperre && (ende == null || ende.isBefore(DateTime.now()))) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -83,10 +91,22 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Sperrt ${profile.name} bis ${_uhrzeit(ende)}.\n'
-              'Vorher öffnet nur ein Generalschlüssel oder der Notfall-Code.',
+              chipsperre
+                  ? 'Sperrt ${profile.name}, bis du den Chip erneut scannst.\n'
+                        'Ohne Chip öffnet nur der Notfall-Code.'
+                  : 'Sperrt ${profile.name} bis ${_uhrzeit(ende!)}.\n'
+                        'Vorher öffnet nur ein Generalschlüssel oder der Notfall-Code.',
             ),
-            if (!status.hasMasterTag) ...[
+            // Bei einer Chipsperre öffnet jeder Chip dieses Profils, nicht nur
+            // der Generalschlüssel — gewarnt wird erst, wenn gar keiner da ist.
+            if (chipsperre && status.tags.isEmpty) ...[
+              const SizedBox(height: RiegelSpacing.s3),
+              const Text(
+                'Kein Chip angelernt — dann öffnet nur der Notfall-Code.',
+                style: TextStyle(color: RiegelColors.danger),
+              ),
+            ],
+            if (!chipsperre && !status.hasMasterTag) ...[
               const SizedBox(height: RiegelSpacing.s3),
               const Text(
                 'Kein Generalschlüssel angelernt — dann öffnet nur der Notfall-Code.',
@@ -117,7 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (bestaetigt != true) return;
 
-    final outcome = await widget.channel.startTimeLock(profile.id);
+    final outcome = await widget.channel.startLock(profile.id);
     if (!mounted) return;
     if (outcome == 'UNTIL_IN_PAST') {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -128,6 +148,45 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (outcome == 'ALREADY_RUNNING') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Läuft bereits und endet nicht früher.')),
+      );
+    }
+    await _refresh();
+  }
+
+  /// Der Deinstallationsschutz braucht einen Notausgang für den Besitzer.
+  /// Ohne ihn kommt man an die App nur noch über die Systemeinstellungen —
+  /// und wer die nicht findet, sitzt fest.
+  Future<void> _releaseAdmin() async {
+    final bestaetigt = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Administratorrecht abgeben?'),
+        content: const Text(
+          'Danach lässt sich Riegel wieder normal deinstallieren — der Schutz '
+          'davor entfällt. Du kannst das Recht in der Einrichtung jederzeit '
+          'wieder erteilen.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Abgeben'),
+          ),
+        ],
+      ),
+    );
+    if (bestaetigt != true) return;
+
+    final ok = await widget.channel.releaseAdmin();
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Geht nicht, solange etwas gesperrt ist.'),
+        ),
       );
     }
     await _refresh();
@@ -237,7 +296,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       locked: status.isProfileLocked(profile.id),
                       timeLock: status.timeLockFor(profile.id),
                       onTap: () => _editProfile(profile),
-                      onLock: () => _startTimeLock(profile, status),
+                      onLock: () => _startLock(profile, status),
                     ),
                     const SizedBox(height: RiegelSpacing.s2),
                   ],
@@ -257,6 +316,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     enabled: !status.locked,
                     onTap: () => _openCalendar(status),
                   ),
+                  if (_adminActive) ...[
+                    const SizedBox(height: RiegelSpacing.s8),
+                    TextButton(
+                      onPressed: _releaseAdmin,
+                      style: TextButton.styleFrom(
+                        foregroundColor: RiegelColors.fg3,
+                      ),
+                      child: const Text('Administratorrecht abgeben'),
+                    ),
+                  ],
                   if (status.tags.isEmpty) ...[
                     const SizedBox(height: RiegelSpacing.s3),
                     Text(
@@ -461,9 +530,9 @@ class _ProfileRow extends StatelessWidget {
       enabled: !locked,
       onTap: onTap,
       trailingText: locked && profile.mode == LockMode.open ? 'sperrt' : null,
-      // OPEN-Profile lassen sich nur mit dem Chip sperren — dort wäre eine
-      // Schaltfläche nur ein Knopf, der nichts kann.
-      action: profile.mode == LockMode.open
+      // Auch „Bis Scan" lässt sich ohne Chip zumachen — nur eben nicht ohne
+      // Chip wieder auf. Läuft die Chipsperre schon, gibt es nichts zu drücken.
+      action: locked && profile.mode == LockMode.open
           ? null
           : _RowAction(
               label: zeitsperre == null ? 'Sperren' : 'Verlängern',

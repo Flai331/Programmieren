@@ -259,3 +259,38 @@ Neustart während laufender Zeitsperre.
 - Verkürzen einer laufenden Sperre, auf welchem Weg auch immer
 - Schutz gegen das Zurückstellen der Geräteuhr
 - Kalendersperren — eigene Spec, baut auf dieser auf
+
+---
+
+## Nachtrag 2026-08-14: Chipsperre ohne Chip starten
+
+Die ursprüngliche Fassung ließ `OPEN` nur durch einen Scan beginnen; die
+Schaltfläche gab es nur für `TIMER` und `UNTIL`. Damit ließ sich ein Profil im
+Modus „Bis Scan" ohne Chip gar nicht zumachen.
+
+**Neu:** `startLock` (vormals `startTimeLock`) startet die Sperre, für die das
+Profil eingerichtet ist — bei `OPEN` eine Chipsperre. Zumachen geht damit immer
+ohne Chip. Aufmachen nicht: die so gestartete Sperre endet erst durch einen
+Scan, den Generalschlüssel oder den Notfall-Code.
+
+Das ist der Kern des Zwei-Spuren-Modells, nur konsequent zu Ende gedacht — der
+Griff zum Riegel soll leicht sein, der Weg zurück nicht.
+
+`StartOutcome.WRONG_MODE` entfällt, weil es keinen Modus mehr gibt, der
+abgelehnt wird. Der Bestätigungsdialog warnt bei einer Chipsperre erst, wenn
+**gar kein** Chip angelernt ist — anders als bei einer Zeitsperre öffnet hier
+jeder Chip des Profils, nicht nur der Generalschlüssel.
+
+## Nachtrag 2026-08-14: Notausgang aus dem Administratorrecht
+
+Der Deinstallationsschutz hatte keinen Ausweg für den Besitzer: Android
+verweigert die Deinstallation, solange die App Geräteadministrator ist, und der
+einzige Weg führte über die Systemeinstellungen. Wer die nicht findet, sitzt
+fest — genau das ist am 2026-08-14 passiert.
+
+**Neu:** ein Knopf „Administratorrecht abgeben" am Fuß des Sperre-Reiters, nur
+sichtbar, solange das Recht aktiv ist. Er ruft `removeActiveAdmin`.
+
+**Während einer laufenden Sperre verweigert er den Dienst.** Sonst wäre der
+Umgehungsschutz eine Attrappe: man könnte im Sperrmoment das Recht abgeben und
+die App löschen. Dieselbe Bedingung wie bei allen anderen Einstellungen.

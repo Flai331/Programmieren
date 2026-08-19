@@ -31,8 +31,6 @@ enum class StartOutcome {
     EXTENDED,
     /** Lief bereits, das neue Ende liegt nicht später — Zustand unverändert. */
     ALREADY_RUNNING,
-    /** OPEN gibt es nur als Chipsperre. */
-    WRONG_MODE,
     UNTIL_IN_PAST,
     NO_PROFILE,
 }
@@ -67,7 +65,7 @@ class LockEngine(private val store: LockStore) {
             ?: return ScanResult(s, ScanOutcome.NO_PROFILE)
 
         if (profile.defaultMode != LockMode.OPEN) {
-            val result = startTimeLock(profile.id, now, allowExtend = false)
+            val result = startLock(profile.id, now, allowExtend = false)
             return ScanResult(result.state, result.outcome.asScanOutcome())
         }
 
@@ -89,24 +87,33 @@ class LockEngine(private val store: LockStore) {
         StartOutcome.EXTENDED -> ScanOutcome.EXTENDED
         StartOutcome.ALREADY_RUNNING -> ScanOutcome.TIME_LOCK_RUNNING
         StartOutcome.UNTIL_IN_PAST -> ScanOutcome.UNTIL_IN_PAST
-        StartOutcome.WRONG_MODE, StartOutcome.NO_PROFILE -> ScanOutcome.NO_PROFILE
+        StartOutcome.NO_PROFILE -> ScanOutcome.NO_PROFILE
     }
 
     /**
-     * Startet eine Zeitsperre — aus der Oberfläche oder durch einen Scan. Strenger
-     * stellen ist immer erlaubt, verkürzen nie: ein späteres Ende überschreibt,
-     * ein früheres lässt die laufende Sperre in Ruhe.
+     * Startet die Sperre, für die das Profil eingerichtet ist — aus der
+     * Oberfläche oder durch einen Scan. Der Modus entscheidet die Spur:
+     * `OPEN` ergibt eine Chipsperre, `TIMER` und `UNTIL` eine Zeitsperre.
+     *
+     * Zumachen geht immer ohne Chip. Aufmachen nicht: eine so gestartete
+     * Chipsperre endet erst durch einen Scan, den Generalschlüssel oder den
+     * Notfall-Code. Genau darin liegt der Sinn — der Griff zum Riegel soll
+     * leicht sein, der Weg zurück nicht.
+     *
+     * Bei den Zeitsperren gilt: strenger stellen ist immer erlaubt, verkürzen
+     * nie. Ein späteres Ende überschreibt, ein früheres lässt die laufende
+     * Sperre in Ruhe.
      *
      * [allowExtend] steht nur der Schaltfläche zu. Beim Scan ist es `false`, damit
      * ein versehentlich vorbeigeführter Chip eine Sperre nicht verdoppelt.
      */
-    fun startTimeLock(profileId: String, now: Long, allowExtend: Boolean = true): StartResult {
+    fun startLock(profileId: String, now: Long, allowExtend: Boolean = true): StartResult {
         val s = store.load()
         val profile = s.profileById(profileId)
             ?: return StartResult(s, StartOutcome.NO_PROFILE)
 
         val endsAt = when (profile.defaultMode) {
-            LockMode.OPEN -> return StartResult(s, StartOutcome.WRONG_MODE)
+            LockMode.OPEN -> return startChipLock(s, profileId)
             LockMode.TIMER -> now + profile.durationMinutes * 60_000L
             LockMode.UNTIL -> {
                 val until = profile.untilAt
@@ -128,6 +135,20 @@ class LockEngine(private val store: LockStore) {
         )
         store.save(next)
         return StartResult(next, if (laufend != null) StartOutcome.EXTENDED else StartOutcome.STARTED)
+    }
+
+    /**
+     * Chipsperre ohne Chip. Läuft schon eine für dasselbe Profil, ändert sich
+     * nichts; eine Chipsperre eines anderen Profils wird abgelöst — mehr als
+     * eine gibt es nicht.
+     */
+    private fun startChipLock(s: LockState, profileId: String): StartResult {
+        if (s.chipLock?.profileId == profileId) {
+            return StartResult(s, StartOutcome.ALREADY_RUNNING)
+        }
+        val next = s.copy(chipLock = ChipLock(profileId))
+        store.save(next)
+        return StartResult(next, StartOutcome.STARTED)
     }
 
     /** Die Chipsperre. Sie läuft nicht ab — nur ein Scan oder der Code beendet sie. */

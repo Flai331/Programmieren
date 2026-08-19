@@ -21,8 +21,8 @@ class RiegelChannel {
 
   /// Startet eine Zeitsperre ohne Chip. Liefert den nativen Ausgang als Text,
   /// z.B. `STARTED`, `EXTENDED`, `ALREADY_RUNNING`, `UNTIL_IN_PAST`.
-  Future<String> startTimeLock(String profileId) async =>
-      await channel.invokeMethod<String>('startTimeLock', {
+  Future<String> startLock(String profileId) async =>
+      await channel.invokeMethod<String>('startLock', {
         'profileId': profileId,
       }) ??
       'NO_PROFILE';
@@ -71,6 +71,11 @@ class RiegelChannel {
       await channel.invokeMethod<bool>('isAdminActive') ?? false;
 
   Future<void> requestAdmin() => channel.invokeMethod<void>('requestAdmin');
+
+  /// Gibt das Administratorrecht zurueck, damit sich die App deinstallieren
+  /// laesst. Liefert false, wenn gerade etwas sperrt.
+  Future<bool> releaseAdmin() async =>
+      await channel.invokeMethod<bool>('releaseAdmin') ?? false;
 
   Future<bool> usageAccessGranted() async =>
       await channel.invokeMethod<bool>('usageAccessGranted') ?? false;

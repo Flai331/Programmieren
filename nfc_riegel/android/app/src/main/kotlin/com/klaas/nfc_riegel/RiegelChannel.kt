@@ -84,6 +84,21 @@ class RiegelChannel(private val activity: Activity) {
                     result.success(true)
                 }
 
+                /**
+                 * Gibt das Administratorrecht zurueck, damit sich die App
+                 * normal deinstallieren laesst. Waehrend einer Sperre
+                 * verweigert - sonst waere der Umgehungsschutz eine Attrappe,
+                 * die man im Sperrmoment einfach abstellt.
+                 */
+                "releaseAdmin" -> {
+                    if (controller.engine.hasActiveLock(System.currentTimeMillis())) {
+                        result.success(false)
+                    } else {
+                        devicePolicyManager().removeActiveAdmin(adminComponent())
+                        result.success(true)
+                    }
+                }
+
                 "isAdminActive" -> result.success(devicePolicyManager().isAdminActive(adminComponent()))
 
                 "requestAdmin" -> {
@@ -112,8 +127,8 @@ class RiegelChannel(private val activity: Activity) {
                     result.success(map)
                 }
 
-                "startTimeLock" -> {
-                    val outcome = controller.startTimeLock(
+                "startLock" -> {
+                    val outcome = controller.startLock(
                         call.argument<String>("profileId") ?: "",
                     )
                     result.success(outcome.name)

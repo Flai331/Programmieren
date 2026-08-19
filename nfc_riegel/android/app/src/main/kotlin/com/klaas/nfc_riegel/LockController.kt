@@ -46,11 +46,11 @@ class LockController(private val context: Context) {
         return result
     }
 
-    fun startTimeLock(
+    fun startLock(
         profileId: String,
         now: Long = System.currentTimeMillis(),
     ): StartOutcome {
-        val result = engine.startTimeLock(profileId, now)
+        val result = engine.startLock(profileId, now)
         applyEffects(result.state)
         return result.outcome
     }

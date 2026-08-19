@@ -41,7 +41,7 @@ class LockEngineStartTest {
     @Test
     fun `TIMER startet und endet nach der Dauer`() {
         val (e, store) = engine()
-        val result = e.startTimeLock("p1", now)
+        val result = e.startLock("p1", now)
         assertEquals(StartOutcome.STARTED, result.outcome)
         assertEquals(now + 30 * 60_000L, store.current.timeLocks.single().endsAt)
     }
@@ -49,22 +49,52 @@ class LockEngineStartTest {
     @Test
     fun `UNTIL startet und uebernimmt den Zeitpunkt des Profils`() {
         val (e, store) = engine()
-        val result = e.startTimeLock("p2", now)
+        val result = e.startLock("p2", now)
         assertEquals(StartOutcome.STARTED, result.outcome)
         assertEquals(now + 3_600_000, store.current.timeLocks.single().endsAt)
     }
 
     @Test
-    fun `OPEN-Profil laesst sich nicht als Zeitsperre starten`() {
+    fun `OPEN-Profil laesst sich ohne Chip sperren`() {
         val (e, store) = engine()
-        assertEquals(StartOutcome.WRONG_MODE, e.startTimeLock("p3", now).outcome)
+
+        assertEquals(StartOutcome.STARTED, e.startLock("p3", now).outcome)
+
+        assertEquals(ChipLock("p3"), store.current.chipLock)
+        // Keine Zeitsperre: eine Chipsperre hat kein Ende.
         assertEquals(emptyList<TimeLock>(), store.current.timeLocks)
+    }
+
+    @Test
+    fun `laufende Chipsperre desselben Profils meldet ALREADY_RUNNING`() {
+        val (e, store) = engine()
+        e.startLock("p3", now)
+
+        assertEquals(StartOutcome.ALREADY_RUNNING, e.startLock("p3", now).outcome)
+        assertEquals(ChipLock("p3"), store.current.chipLock)
+    }
+
+    @Test
+    fun `ohne Chip gestartete Sperre oeffnet der Scan wieder`() {
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(openProfil),
+                tags = listOf(TagBinding("04AA", "Schreibtisch", "p3")),
+            )
+        )
+        val e = LockEngine(store)
+        e.startLock("p3", now)
+
+        val ergebnis = e.onTagScanned("04AA", now)
+
+        assertEquals(ScanOutcome.UNLOCKED, ergebnis.outcome)
+        assertEquals(null, store.current.chipLock)
     }
 
     @Test
     fun `unbekanntes Profil ergibt NO_PROFILE`() {
         val (e, _) = engine()
-        assertEquals(StartOutcome.NO_PROFILE, e.startTimeLock("gibtsnicht", now).outcome)
+        assertEquals(StartOutcome.NO_PROFILE, e.startLock("gibtsnicht", now).outcome)
     }
 
     @Test
@@ -73,7 +103,7 @@ class LockEngineStartTest {
             LockState(profiles = listOf(untilProfil.copy(untilAt = now - 1)))
         )
         val e = LockEngine(store)
-        assertEquals(StartOutcome.UNTIL_IN_PAST, e.startTimeLock("p2", now).outcome)
+        assertEquals(StartOutcome.UNTIL_IN_PAST, e.startLock("p2", now).outcome)
         assertEquals(emptyList<TimeLock>(), store.current.timeLocks)
     }
 
@@ -83,13 +113,13 @@ class LockEngineStartTest {
             LockState(profiles = listOf(untilProfil.copy(untilAt = null)))
         )
         val e = LockEngine(store)
-        assertEquals(StartOutcome.UNTIL_IN_PAST, e.startTimeLock("p2", now).outcome)
+        assertEquals(StartOutcome.UNTIL_IN_PAST, e.startLock("p2", now).outcome)
     }
 
     @Test
     fun `zweiter Start verlaengert den TIMER ab jetzt`() {
         val (e, store) = engine(TimeLock("p1", LockMode.TIMER, now + 10 * 60_000))
-        val result = e.startTimeLock("p1", now)
+        val result = e.startLock("p1", now)
         assertEquals(StartOutcome.EXTENDED, result.outcome)
         assertEquals(now + 30 * 60_000L, store.current.timeLocks.single().endsAt)
     }
@@ -98,7 +128,7 @@ class LockEngineStartTest {
     fun `Start verkuerzt eine laufende Sperre niemals`() {
         val spaeter = now + 120 * 60_000
         val (e, store) = engine(TimeLock("p1", LockMode.TIMER, spaeter))
-        val result = e.startTimeLock("p1", now)
+        val result = e.startLock("p1", now)
         assertEquals(StartOutcome.ALREADY_RUNNING, result.outcome)
         assertEquals(spaeter, store.current.timeLocks.single().endsAt)
     }
@@ -106,7 +136,7 @@ class LockEngineStartTest {
     @Test
     fun `ohne Verlaengerungserlaubnis passiert bei laufender Sperre nichts`() {
         val (e, store) = engine(TimeLock("p1", LockMode.TIMER, now + 10 * 60_000))
-        val result = e.startTimeLock("p1", now, allowExtend = false)
+        val result = e.startLock("p1", now, allowExtend = false)
         assertEquals(StartOutcome.ALREADY_RUNNING, result.outcome)
         assertEquals(now + 10 * 60_000, store.current.timeLocks.single().endsAt)
     }
@@ -114,7 +144,7 @@ class LockEngineStartTest {
     @Test
     fun `abgelaufene Sperre desselben Profils wird ersetzt statt ergaenzt`() {
         val (e, store) = engine(TimeLock("p1", LockMode.TIMER, now - 1))
-        val result = e.startTimeLock("p1", now)
+        val result = e.startLock("p1", now)
         assertEquals(StartOutcome.STARTED, result.outcome)
         assertEquals(1, store.current.timeLocks.size)
         assertEquals(now + 30 * 60_000L, store.current.timeLocks.single().endsAt)
@@ -123,8 +153,8 @@ class LockEngineStartTest {
     @Test
     fun `zwei Profile duerfen gleichzeitig sperren`() {
         val (e, store) = engine()
-        e.startTimeLock("p1", now)
-        e.startTimeLock("p2", now)
+        e.startLock("p1", now)
+        e.startLock("p2", now)
         assertEquals(2, store.current.timeLocks.size)
     }
 }

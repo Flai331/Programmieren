@@ -9,7 +9,7 @@ void main() {
 
   const channel = MethodChannel('test/riegel');
 
-  /// Zuletzt an `startTimeLock` übergebenes Profil — so lässt sich prüfen, ob
+  /// Zuletzt an `startLock` übergebenes Profil — so lässt sich prüfen, ob
   /// der Knopf wirklich bis zur nativen Seite durchschlägt.
   String? gestartetesProfil;
 
@@ -25,46 +25,46 @@ void main() {
     gestartetesProfil = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      switch (call.method) {
-        case 'getState':
-          return {
-            'profiles': [
-              {
-                'id': 'p1',
-                'name': 'Arbeit',
-                'blockedPackages': ['com.instagram.android'],
-                'defaultMode': defaultMode,
-                'durationMinutes': 60,
-                'untilAt': null,
-                'pinCalendarEnd': false,
-              },
-            ],
-            'tags': [
-              {
-                'uid': '04AA',
-                'label': 'Schreibtisch',
-                'profileId': 'p1',
-                'isMaster': hasMasterTag,
-              },
-            ],
-            'chipLock': chipLock,
-            'timeLocks': timeLocks,
-            'hasMasterTag': hasMasterTag,
-            'hasCode': hasCode,
-            // Fehlt der Block, fällt LockStatus.fromMap auf CalendarInfo.empty —
-            // deshalb laufen alle Tests ohne Kalender unverändert weiter.
-            'calendar': calendar,
-          };
-        case 'isAccessibilityEnabled':
-          return accessibility;
-        case 'isAdminActive':
-          return true;
-        case 'startTimeLock':
-          gestartetesProfil = call.arguments['profileId'] as String?;
-          return 'STARTED';
-      }
-      return null;
-    });
+          switch (call.method) {
+            case 'getState':
+              return {
+                'profiles': [
+                  {
+                    'id': 'p1',
+                    'name': 'Arbeit',
+                    'blockedPackages': ['com.instagram.android'],
+                    'defaultMode': defaultMode,
+                    'durationMinutes': 60,
+                    'untilAt': null,
+                    'pinCalendarEnd': false,
+                  },
+                ],
+                'tags': [
+                  {
+                    'uid': '04AA',
+                    'label': 'Schreibtisch',
+                    'profileId': 'p1',
+                    'isMaster': hasMasterTag,
+                  },
+                ],
+                'chipLock': chipLock,
+                'timeLocks': timeLocks,
+                'hasMasterTag': hasMasterTag,
+                'hasCode': hasCode,
+                // Fehlt der Block, fällt LockStatus.fromMap auf CalendarInfo.empty —
+                // deshalb laufen alle Tests ohne Kalender unverändert weiter.
+                'calendar': calendar,
+              };
+            case 'isAccessibilityEnabled':
+              return accessibility;
+            case 'isAdminActive':
+              return true;
+            case 'startLock':
+              gestartetesProfil = call.arguments['profileId'] as String?;
+              return 'STARTED';
+          }
+          return null;
+        });
   }
 
   List<Map<String, dynamic>> laufendeSperre() => [
@@ -111,8 +111,30 @@ void main() {
     expect(find.text('Sperren'), findsOneWidget);
   });
 
-  testWidgets('OPEN-Profil zeigt keinen Sperren-Knopf', (tester) async {
+  testWidgets('OPEN-Profil laesst sich ohne Chip sperren', (tester) async {
     stub(accessibility: true, defaultMode: 'OPEN');
+    await zeige(tester);
+
+    await tester.tap(find.text('Sperren'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('bis du den Chip erneut scannst'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Sperren').last);
+    await tester.pumpAndSettle();
+
+    expect(gestartetesProfil, 'p1');
+  });
+
+  testWidgets('laufende Chipsperre zeigt keinen Sperren-Knopf', (tester) async {
+    stub(
+      accessibility: true,
+      defaultMode: 'OPEN',
+      chipLock: {'profileId': 'p1'},
+    );
     await zeige(tester);
 
     expect(find.text('Sperren'), findsNothing);
@@ -165,7 +187,9 @@ void main() {
             'eventId': 'e1',
             'title': 'Konzept schreiben',
             'startsAt': jetzt.millisecondsSinceEpoch,
-            'endsAt': jetzt.add(const Duration(hours: 1)).millisecondsSinceEpoch,
+            'endsAt': jetzt
+                .add(const Duration(hours: 1))
+                .millisecondsSinceEpoch,
             'profileId': 'p1',
           },
         ],
