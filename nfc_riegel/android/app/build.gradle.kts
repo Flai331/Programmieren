@@ -1,3 +1,18 @@
+import java.util.Properties
+
+// Eigener Release-Schlüssel statt des Debug-Schlüssels von Android Studio.
+// Der Debug-Schlüssel gehört dem Werkzeug, nicht dem Projekt: bei einer
+// Neuinstallation von Android Studio wird er neu erzeugt, und danach lehnt
+// Android jedes Update mit „App nicht installiert" ab.
+//
+// Datei und Passwort liegen außerhalb des Projektverzeichnisses und sind
+// zusätzlich über .gitignore ausgeschlossen. Geht der Keystore verloren, lässt
+// sich die App nie wieder aktualisieren — nur noch frisch installieren.
+val keystoreProperties = Properties().apply {
+    val datei = rootProject.file("key.properties")
+    if (datei.exists()) datei.inputStream().use { load(it) }
+}
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -25,11 +40,28 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            keystoreProperties.getProperty("storeFile")?.let {
+                storeFile = file(it)
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Fehlt key.properties — etwa auf einem frisch geklonten Rechner —
+            // bleibt es beim Debug-Schlüssel, damit der Build nicht scheitert.
+            signingConfig = if (keystoreProperties.getProperty("storeFile") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
