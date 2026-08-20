@@ -25,6 +25,7 @@ object LockCodec {
                 if (p.pause.enabled) "1" else "0",
                 p.pause.stepMinutes.toString(),
                 p.pause.baseSeconds.toString(),
+                p.pause.resetMinutes.toString(),
             ).joinToString(FIELD.toString())
         }
 
@@ -37,7 +38,7 @@ object LockCodec {
         if (raw.isEmpty()) return emptyList()
         return raw.split(RECORD).mapNotNull { record ->
             val f = record.split(FIELD)
-            if (f.size != 7 && f.size != 10) return@mapNotNull null
+            if (f.size != 7 && f.size != 10 && f.size != 11) return@mapNotNull null
             Profile(
                 id = f[0],
                 name = f[1],
@@ -46,11 +47,13 @@ object LockCodec {
                 durationMinutes = f[4].toIntOrNull() ?: 60,
                 untilAt = f[5].toLongOrNull(),
                 pinCalendarEnd = f[6] == "1",
-                pause = if (f.size == 10) {
+                pause = if (f.size >= 10) {
                     PauseSettings(
                         enabled = f[7] == "1",
                         stepMinutes = f[8].toIntOrNull() ?: 15,
                         baseSeconds = f[9].toIntOrNull() ?: 5,
+                        // Feld 11 kam mit dem Wechsel auf Sitzungszeit dazu.
+                        resetMinutes = if (f.size == 11) f[10].toIntOrNull() ?: 15 else 15,
                     )
                 } else {
                     PauseSettings()

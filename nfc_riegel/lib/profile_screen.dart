@@ -21,8 +21,9 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late final TextEditingController _name =
-      TextEditingController(text: widget.profile.name);
+  late final TextEditingController _name = TextEditingController(
+    text: widget.profile.name,
+  );
   late List<String> _packages = List.of(widget.profile.blockedPackages);
   late LockMode _mode = widget.profile.mode;
   late int _duration = widget.profile.durationMinutes;
@@ -31,6 +32,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late bool _pause = widget.profile.pauseEnabled;
   late int _pauseStep = widget.profile.pauseStepMinutes;
   late int _pauseBase = widget.profile.pauseBaseSeconds;
+  late int _pauseReset = widget.profile.pauseResetMinutes;
   bool? _usageGranted;
 
   @override
@@ -99,6 +101,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         pauseEnabled: _pause,
         pauseStepMinutes: _pauseStep,
         pauseBaseSeconds: _pauseBase,
+        pauseResetMinutes: _pauseReset,
       ),
     );
     if (!mounted) return;
@@ -130,9 +133,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profil'),
-        actions: [
-          TextButton(onPressed: _save, child: const Text('Sichern')),
-        ],
+        actions: [TextButton(onPressed: _save, child: const Text('Sichern'))],
       ),
       body: ListView(
         padding: const EdgeInsets.all(RiegelSpacing.s4),
@@ -237,7 +238,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             if (_pause) ...[
               Text(
-                'Alle $_pauseStep Minuten Tagesnutzung',
+                'Alle $_pauseStep Minuten am Stück',
                 style: const TextStyle(
                   fontFamily: kMonoFamily,
                   fontSize: 12,
@@ -269,14 +270,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 divisions: 29,
                 onChanged: (v) => setState(() => _pauseBase = v.round()),
               ),
+              Text(
+                'Nach $_pauseReset Minuten ohne die App beginnt die '
+                'Staffelung von vorn',
+                style: const TextStyle(
+                  fontFamily: kMonoFamily,
+                  fontSize: 12,
+                  color: RiegelColors.fg2,
+                ),
+              ),
+              Slider(
+                value: _pauseReset.toDouble(),
+                min: 5,
+                max: 60,
+                divisions: 11,
+                onChanged: (v) => setState(() => _pauseReset = v.round()),
+              ),
             ],
           ],
           const SizedBox(height: RiegelSpacing.s8),
           TextButton(
             onPressed: _delete,
-            style: TextButton.styleFrom(
-              foregroundColor: RiegelColors.danger,
-            ),
+            style: TextButton.styleFrom(foregroundColor: RiegelColors.danger),
             child: const Text('Profil löschen'),
           ),
         ],

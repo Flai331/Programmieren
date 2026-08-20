@@ -90,14 +90,19 @@ class BlockerService : AccessibilityService() {
 
         val jetzt = System.currentTimeMillis()
         val beginn = ScreenTimeCalculator.startOfDay(jetzt)
-        val genutzt = ScreenTimeCalculator
-            .totals(quelle.events(beginn, jetzt), beginn, jetzt)[pkg] ?: 0L
-
-        val entscheidung = PausePlanner.decide(
-            settings,
-            genutzt,
-            PauseStore(this).lastStep(pkg, jetzt),
+        // Gemessen wird die laufende Sitzung, nicht die Tagessumme: die Pause
+        // soll darauf reagieren, wie lange man am Stueck haengt.
+        val genutzt = ScreenTimeCalculator.sessionMillis(
+            quelle.events(beginn, jetzt),
+            pkg,
+            beginn,
+            jetzt,
+            settings.resetMinutes * 60_000L,
         )
+
+        val store = PauseStore(this)
+        val gespeichert = store.lastStep(pkg, jetzt)
+        val entscheidung = PausePlanner.decide(settings, genutzt, gespeichert)
 
         val wartezeit = entscheidung.waitSeconds
         if (wartezeit != null) {
@@ -115,6 +120,12 @@ class BlockerService : AccessibilityService() {
                     .putExtra(PauseActivity.EXTRA_USED_MINUTES, (genutzt / 60_000L).toInt())
             )
             return
+        }
+
+        // Neue Sitzung: die erreichte Stufe liegt unter der gespeicherten, also
+        // faengt die Staffelung wieder von vorn an.
+        if (entscheidung.step < gespeichert) {
+            store.remember(pkg, entscheidung.step, jetzt)
         }
 
         val rest = entscheidung.nextCheckAfterMillis ?: return

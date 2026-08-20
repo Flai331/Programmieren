@@ -84,6 +84,7 @@ class _SetupWizardState extends State<SetupWizard> {
           pauseEnabled: first.pauseEnabled,
           pauseStepMinutes: first.pauseStepMinutes,
           pauseBaseSeconds: first.pauseBaseSeconds,
+          pauseResetMinutes: first.pauseResetMinutes,
         ),
       );
       await _refresh();

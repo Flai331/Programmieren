@@ -27,6 +27,81 @@ object ScreenTimeCalculator {
     }
 
     /**
+     * Die einzelnen Vordergrund-Abschnitte **eines** Pakets, in zeitlicher
+     * Reihenfolge. Dieselben drei Ränder wie in [totals]; nur eben nicht zu
+     * einer Summe verdichtet, weil die Atempause die Lücken dazwischen braucht.
+     */
+    fun intervals(
+        events: List<UsageEvent>,
+        packageName: String,
+        from: Long,
+        to: Long,
+    ): List<Pair<Long, Long>> {
+        val abschnitte = mutableListOf<Pair<Long, Long>>()
+        var offen: Long? = null
+        var gesehen = false
+
+        fun schliesse(zeitpunkt: Long) {
+            val start = offen ?: if (gesehen) return else from
+            offen = null
+            gesehen = true
+            if (zeitpunkt > start) abschnitte += start to zeitpunkt
+        }
+
+        for (ereignis in events.sortedBy { it.timestamp }) {
+            val t = ereignis.timestamp.coerceIn(from, to)
+            when (ereignis.type) {
+                UsageEventType.FOREGROUND -> if (ereignis.packageName == packageName) {
+                    gesehen = true
+                    if (offen == null) offen = t
+                }
+                UsageEventType.BACKGROUND -> if (ereignis.packageName == packageName) {
+                    schliesse(t)
+                }
+                UsageEventType.SCREEN_OFF -> if (offen != null) schliesse(t)
+            }
+        }
+        // Nur schliessen, was auch offen ist. Ohne diese Bedingung bekaeme ein
+        // Paket ganz ohne Ereignisse den Rueckfall auf [from] und damit das
+        // gesamte Fenster angerechnet.
+        if (offen != null) schliesse(to)
+        return abschnitte
+    }
+
+    /**
+     * Zeit der laufenden Sitzung: rückwärts summiert, bis eine Lücke von
+     * mindestens [resetMillis] kommt.
+     *
+     * Anders als die Tagessumme misst das, wie lange man **am Stück** in einer
+     * App hängt. Wer wirklich weglegt, fängt wieder bei null an — wer nur kurz
+     * herausspringt, nicht. Genau darin liegt der Unterschied zwischen einer
+     * Pause, die etwas bewirkt, und einer, die man umgeht.
+     */
+    fun sessionMillis(
+        events: List<UsageEvent>,
+        packageName: String,
+        from: Long,
+        to: Long,
+        resetMillis: Long,
+    ): Long {
+        val abschnitte = intervals(events, packageName, from, to)
+        if (abschnitte.isEmpty()) return 0L
+
+        // Liegt die letzte Nutzung lange genug zurück, läuft keine Sitzung mehr.
+        if (to - abschnitte.last().second >= resetMillis) return 0L
+
+        var summe = 0L
+        var vorherigerStart: Long? = null
+        for ((start, ende) in abschnitte.asReversed()) {
+            val vorher = vorherigerStart
+            if (vorher != null && vorher - ende >= resetMillis) break
+            summe += ende - start
+            vorherigerStart = start
+        }
+        return summe
+    }
+
+    /**
      * Vordergrundzeit je Paket im Fenster [from]..[to].
      *
      * Drei Fälle, die eine naive Paarbildung falsch rechnet:

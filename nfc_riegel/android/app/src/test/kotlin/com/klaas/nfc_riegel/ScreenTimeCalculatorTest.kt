@@ -119,6 +119,72 @@ class ScreenTimeCalculatorTest {
         assertTrue(ScreenTimeCalculator.totals(emptyList(), beginn, ende).isEmpty())
     }
 
+    private val reset = 15 * minute
+
+    private fun sitzung(vararg events: UsageEvent, bis: Long = ende) =
+        ScreenTimeCalculator.sessionMillis(events.toList(), "com.a", beginn, bis, reset)
+
+    @Test
+    fun `durchgehende Nutzung ergibt die Sitzungsdauer`() {
+        val s = sitzung(
+            vorn("com.a", ende - 10 * minute),
+            hinten("com.a", ende - minute),
+            bis = ende,
+        )
+
+        assertEquals(9 * minute, s)
+    }
+
+    @Test
+    fun `kurze Unterbrechung zaehlt weiter`() {
+        // Zwei Minuten raus, dann wieder rein: eine Sitzung, keine zwei.
+        val s = sitzung(
+            vorn("com.a", ende - 20 * minute),
+            hinten("com.a", ende - 15 * minute),
+            vorn("com.a", ende - 13 * minute),
+            hinten("com.a", ende - minute),
+            bis = ende,
+        )
+
+        assertEquals(5 * minute + 12 * minute, s)
+    }
+
+    @Test
+    fun `lange Unterbrechung schneidet die aeltere Nutzung ab`() {
+        val s = sitzung(
+            vorn("com.a", beginn),
+            hinten("com.a", beginn + 20 * minute),
+            vorn("com.a", ende - 5 * minute),
+            hinten("com.a", ende - minute),
+            bis = ende,
+        )
+
+        assertEquals(4 * minute, s)
+    }
+
+    @Test
+    fun `lange nicht mehr benutzt ergibt null`() {
+        val s = sitzung(
+            vorn("com.a", beginn),
+            hinten("com.a", beginn + 5 * minute),
+            bis = ende,
+        )
+
+        assertEquals(0L, s)
+    }
+
+    @Test
+    fun `ohne Nutzung ergibt null`() {
+        assertEquals(0L, sitzung(vorn("com.b", ende - minute)))
+    }
+
+    @Test
+    fun `noch offene App zaehlt bis jetzt mit`() {
+        val s = sitzung(vorn("com.a", ende - 3 * minute), bis = ende)
+
+        assertEquals(3 * minute, s)
+    }
+
     @Test
     fun `Mitternacht ist der Beginn des laufenden Tages`() {
         val zone = TimeZone.getTimeZone("Europe/Berlin")

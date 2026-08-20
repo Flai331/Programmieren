@@ -24,6 +24,7 @@ class ProfileInfo {
     required this.pauseEnabled,
     required this.pauseStepMinutes,
     required this.pauseBaseSeconds,
+    required this.pauseResetMinutes,
   });
 
   final String id;
@@ -39,20 +40,26 @@ class ProfileInfo {
   final int pauseStepMinutes;
   final int pauseBaseSeconds;
 
+  /// So lange unbenutzt, dann faengt die Staffelung von vorn an.
+  final int pauseResetMinutes;
+
   factory ProfileInfo.fromMap(Map<dynamic, dynamic> map) {
     final until = map['untilAt'] as int?;
     return ProfileInfo(
       id: map['id'] as String? ?? '',
       name: map['name'] as String? ?? '',
-      blockedPackages:
-          (map['blockedPackages'] as List<dynamic>? ?? []).cast<String>(),
+      blockedPackages: (map['blockedPackages'] as List<dynamic>? ?? [])
+          .cast<String>(),
       mode: _modeFrom(map['defaultMode'] as String?),
       durationMinutes: map['durationMinutes'] as int? ?? 60,
-      untilAt: until == null ? null : DateTime.fromMillisecondsSinceEpoch(until),
+      untilAt: until == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(until),
       pinCalendarEnd: map['pinCalendarEnd'] as bool? ?? false,
       pauseEnabled: map['pauseEnabled'] as bool? ?? false,
       pauseStepMinutes: map['pauseStepMinutes'] as int? ?? 15,
       pauseBaseSeconds: map['pauseBaseSeconds'] as int? ?? 5,
+      pauseResetMinutes: map['pauseResetMinutes'] as int? ?? 15,
     );
   }
 }
@@ -104,10 +111,11 @@ class InstalledAppInfo {
   final String name;
   final String packageName;
 
-  factory InstalledAppInfo.fromMap(Map<dynamic, dynamic> map) => InstalledAppInfo(
-    name: map['name'] as String? ?? '',
-    packageName: map['packageName'] as String? ?? '',
-  );
+  factory InstalledAppInfo.fromMap(Map<dynamic, dynamic> map) =>
+      InstalledAppInfo(
+        name: map['name'] as String? ?? '',
+        packageName: map['packageName'] as String? ?? '',
+      );
 }
 
 /// Ein Termin, der sperrt oder sperren wird.
@@ -130,7 +138,9 @@ class CalendarWindowInfo {
       CalendarWindowInfo(
         eventId: map['eventId'] as String? ?? '',
         title: map['title'] as String? ?? '',
-        startsAt: DateTime.fromMillisecondsSinceEpoch(map['startsAt'] as int? ?? 0),
+        startsAt: DateTime.fromMillisecondsSinceEpoch(
+          map['startsAt'] as int? ?? 0,
+        ),
         endsAt: DateTime.fromMillisecondsSinceEpoch(map['endsAt'] as int? ?? 0),
         profileId: map['profileId'] as String? ?? '',
       );
@@ -172,10 +182,11 @@ class CalendarRuleInfo {
   final String profileId;
   final CalendarMatch match;
 
-  factory CalendarRuleInfo.fromMap(Map<dynamic, dynamic> map) => CalendarRuleInfo(
-    profileId: map['profileId'] as String? ?? '',
-    match: _matchFrom(map['match'] as String?),
-  );
+  factory CalendarRuleInfo.fromMap(Map<dynamic, dynamic> map) =>
+      CalendarRuleInfo(
+        profileId: map['profileId'] as String? ?? '',
+        match: _matchFrom(map['match'] as String?),
+      );
 
   Map<String, String> toMap() => {
     'profileId': profileId,
@@ -234,8 +245,9 @@ class CalendarInfo {
     ),
     keywordMarker: map['keywordMarker'] as String? ?? '[Riegel]',
     keywordProfileId: map['keywordProfileId'] as String?,
-    keywordCalendarIds:
-        (map['keywordCalendarIds'] as List<dynamic>? ?? []).cast<String>().toSet(),
+    keywordCalendarIds: (map['keywordCalendarIds'] as List<dynamic>? ?? [])
+        .cast<String>()
+        .toSet(),
     permissionGranted: map['permissionGranted'] as bool? ?? false,
     windows: (map['windows'] as List<dynamic>? ?? [])
         .map((e) => CalendarWindowInfo.fromMap(e as Map<dynamic, dynamic>))
@@ -307,7 +319,8 @@ class LockStatus {
     ...calendar.activeWindows.map((w) => w.profileId),
   };
 
-  bool isProfileLocked(String profileId) => lockedProfileIds.contains(profileId);
+  bool isProfileLocked(String profileId) =>
+      lockedProfileIds.contains(profileId);
 
   TimeLockInfo? timeLockFor(String profileId) {
     for (final lock in timeLocks) {

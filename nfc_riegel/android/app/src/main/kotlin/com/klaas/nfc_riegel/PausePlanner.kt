@@ -7,6 +7,12 @@ data class PauseSettings(
     val stepMinutes: Int = 15,
     /** Wartezeit der ersten Stufe in Sekunden; danach verdoppelt sie sich. */
     val baseSeconds: Int = 5,
+    /**
+     * So lange muss die App unbenutzt bleiben, damit die Staffelung von vorn
+     * beginnt. Gemessen wird die Zeit **am Stück**, nicht die Tagessumme: wer
+     * wirklich weglegt, faengt wieder bei null an.
+     */
+    val resetMinutes: Int = 15,
 )
 
 data class PauseDecision(
@@ -55,7 +61,10 @@ object PausePlanner {
         if (stufe > lastShownStep) {
             return PauseDecision(wartezeit(stufe, settings.baseSeconds), stufe, bisZurNaechsten)
         }
-        return PauseDecision(null, lastShownStep, bisZurNaechsten)
+        // Auch ohne faellige Pause die tatsaechlich erreichte Stufe melden: faellt
+        // sie unter die gespeicherte, hat eine neue Sitzung begonnen, und der
+        // Aufrufer muss den Zaehler zuruecksetzen.
+        return PauseDecision(null, stufe, bisZurNaechsten)
     }
 
     private fun wartezeit(stufe: Int, baseSeconds: Int): Int {
@@ -81,6 +90,9 @@ object PausePlanner {
             enabled = true,
             stepMinutes = an.minOf { it.stepMinutes },
             baseSeconds = an.maxOf { it.baseSeconds },
+            // Laengeres Zuruecksetzen ist das strengere: die Staffelung haelt
+            // laenger durch.
+            resetMinutes = an.maxOf { it.resetMinutes },
         )
     }
 }

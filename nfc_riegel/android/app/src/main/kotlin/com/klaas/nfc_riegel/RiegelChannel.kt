@@ -42,6 +42,7 @@ class RiegelChannel(private val activity: Activity) {
                             enabled = call.argument<Boolean>("pauseEnabled") ?: false,
                             stepMinutes = call.argument<Int>("pauseStepMinutes") ?: 15,
                             baseSeconds = call.argument<Int>("pauseBaseSeconds") ?: 5,
+                            resetMinutes = call.argument<Int>("pauseResetMinutes") ?: 15,
                         ),
                     )
                     result.success(
@@ -215,6 +216,7 @@ class RiegelChannel(private val activity: Activity) {
                     "pauseEnabled" to p.pause.enabled,
                     "pauseStepMinutes" to p.pause.stepMinutes,
                     "pauseBaseSeconds" to p.pause.baseSeconds,
+                    "pauseResetMinutes" to p.pause.resetMinutes,
                 )
             },
             "tags" to s.tags.map { t ->

@@ -39,6 +39,7 @@ class RiegelChannel {
         'pauseEnabled': profile.pauseEnabled,
         'pauseStepMinutes': profile.pauseStepMinutes,
         'pauseBaseSeconds': profile.pauseBaseSeconds,
+        'pauseResetMinutes': profile.pauseResetMinutes,
       }) ??
       false;
 

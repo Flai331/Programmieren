@@ -199,3 +199,43 @@ Paket bereits.
 ## Offene Kleinigkeiten
 
 Keine. Alles oben ist entschieden.
+
+---
+
+## Nachtrag 2026-08-20: Sitzungszeit statt Tagessumme
+
+Beim Entwurf fiel die Wahl auf die **Tagesnutzung** — mit dem Argument, kurz
+herauszuspringen dürfe die Staffelung nicht zurücksetzen. Nach dem Benutzen
+wurde daraus der umgekehrte Wunsch, und der ist berechtigt: an einem langen Tag
+kommt die Pause irgendwann im Minutentakt, auch wenn man die App nur kurz und
+bewusst aufmacht. Das bestraft die gute Nutzung mit.
+
+**Neu:** gemessen wird die Zeit **am Stück**. Die Staffelung beginnt von vorn,
+sobald die App eine einstellbare Weile (Vorgabe 15 Minuten) unbenutzt bleibt.
+
+`ScreenTimeCalculator.sessionMillis` summiert dafür rückwärts über die
+Vordergrund-Abschnitte, bis eine Lücke von mindestens dieser Länge kommt. Kurz
+herauszuspringen hilft also weiterhin nicht — man muss die App wirklich
+liegenlassen.
+
+`PauseSettings` bekommt `resetMinutes`; der Profilsatz wächst von zehn auf elf
+Felder und liest weiterhin sieben und zehn.
+
+**`PauseDecision.step` meldet jetzt immer die tatsächlich erreichte Stufe**, auch
+wenn keine Pause fällig ist. Nur so erkennt der Dienst am Absinken, dass eine
+neue Sitzung begonnen hat, und setzt den gespeicherten Zähler zurück.
+
+## Nachtrag 2026-08-20: Die Pause ließ sich wegwischen
+
+Gemeldet aus Build 9: der Pausenschirm ließ sich abwischen und die App danach
+weiter benutzen, obwohl der Countdown nicht abgelaufen war.
+
+Zwei Ursachen, beide behoben:
+
+1. **Die Stufe galt als gezeigt, sobald der Schirm startete.** Vermerkt wird sie
+   jetzt erst, wenn der Countdown wirklich abgelaufen ist. Wer vorher wegwischt,
+   bekommt dieselbe Stufe beim nächsten Blick in die App wieder — die Pause
+   lässt sich aussitzen, aber nicht abschütteln.
+2. **Der Schirm lag in derselben Aufgabe wie Riegel** und war damit aus der
+   Übersicht wischbar. Er bekommt jetzt eine eigene Aufgabe wie der Sperrschirm.
+   Das ursprüngliche „die Pause darf im Verlauf auftauchen" war falsch gedacht.

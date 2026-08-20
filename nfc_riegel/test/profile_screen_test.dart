@@ -45,6 +45,7 @@ void main() {
     pauseEnabled: false,
     pauseStepMinutes: 15,
     pauseBaseSeconds: 5,
+    pauseResetMinutes: 15,
   );
 
   Widget screen() => MaterialApp(
