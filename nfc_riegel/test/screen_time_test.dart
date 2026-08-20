@@ -22,5 +22,18 @@ void main() {
     expect(nutzung.name, 'Chrome');
     expect(nutzung.packageName, 'com.android.chrome');
     expect(nutzung.duration, const Duration(seconds: 90));
+    expect(nutzung.background, Duration.zero);
+  });
+
+  test('Hintergrundzeit wird gelesen und zaehlt in die Gesamtzeit', () {
+    final nutzung = AppUsage.fromMap({
+      'name': 'Spotify',
+      'packageName': 'com.spotify.music',
+      'millis': 60000,
+      'backgroundMillis': 120000,
+    });
+
+    expect(nutzung.background, const Duration(minutes: 2));
+    expect(nutzung.total, const Duration(minutes: 3));
   });
 }

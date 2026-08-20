@@ -15,6 +15,13 @@ class ScreenTimeCalculatorTest {
     private fun vorn(paket: String, t: Long) = UsageEvent(paket, UsageEventType.FOREGROUND, t)
     private fun hinten(paket: String, t: Long) = UsageEvent(paket, UsageEventType.BACKGROUND, t)
     private fun aus(t: Long) = UsageEvent("", UsageEventType.SCREEN_OFF, t)
+    private fun dienstAn(paket: String, t: Long) =
+        UsageEvent(paket, UsageEventType.SERVICE_START, t)
+    private fun dienstAus(paket: String, t: Long) =
+        UsageEvent(paket, UsageEventType.SERVICE_STOP, t)
+
+    private fun hintergrund(vararg events: UsageEvent) =
+        ScreenTimeCalculator.backgroundTotals(events.toList(), beginn, ende)
 
     private fun summen(vararg events: UsageEvent) =
         ScreenTimeCalculator.totals(events.toList(), beginn, ende)
@@ -214,5 +221,112 @@ class ScreenTimeCalculatorTest {
         val mitternacht = ScreenTimeCalculator.startOfDay(kalender.timeInMillis, zone)
 
         assertEquals(30_000L, kalender.timeInMillis - mitternacht)
+    }
+
+    @Test
+    fun `Dienst ohne Vordergrund zaehlt ganz als Hintergrund`() {
+        val h = hintergrund(
+            dienstAn("com.a", beginn + minute),
+            dienstAus("com.a", beginn + 31 * minute),
+        )
+
+        assertEquals(mapOf("com.a" to 30 * minute), h)
+    }
+
+    @Test
+    fun `der Vordergrundanteil wird vom Dienst abgezogen`() {
+        // Musik laeuft 30 min, davon 10 min mit der App vor Augen.
+        val h = hintergrund(
+            dienstAn("com.a", beginn),
+            vorn("com.a", beginn + 5 * minute),
+            hinten("com.a", beginn + 15 * minute),
+            dienstAus("com.a", beginn + 30 * minute),
+        )
+
+        assertEquals(mapOf("com.a" to 20 * minute), h)
+    }
+
+    @Test
+    fun `Vordergrund ueber die ganze Dienstzeit laesst nichts uebrig`() {
+        val h = hintergrund(
+            vorn("com.a", beginn),
+            dienstAn("com.a", beginn + minute),
+            dienstAus("com.a", beginn + 5 * minute),
+            hinten("com.a", beginn + 10 * minute),
+        )
+
+        assertEquals(emptyMap<String, Long>(), h)
+    }
+
+    @Test
+    fun `zwei gleichzeitige Dienste ergeben einen Abschnitt`() {
+        // Wiedergabe und Download desselben Pakets. Der Abschnitt endet erst,
+        // wenn der letzte Dienst aufhoert — sonst zaehlte die Zeit doppelt.
+        val h = hintergrund(
+            dienstAn("com.a", beginn),
+            dienstAn("com.a", beginn + 2 * minute),
+            dienstAus("com.a", beginn + 4 * minute),
+            dienstAus("com.a", beginn + 10 * minute),
+        )
+
+        assertEquals(mapOf("com.a" to 10 * minute), h)
+    }
+
+    @Test
+    fun `ueber Mitternacht laufender Dienst zaehlt ab dem Fensterbeginn`() {
+        val h = hintergrund(dienstAus("com.a", beginn + 10 * minute))
+
+        assertEquals(mapOf("com.a" to 10 * minute), h)
+    }
+
+    @Test
+    fun `noch laufender Dienst zaehlt bis zum Fensterende`() {
+        val h = hintergrund(dienstAn("com.a", ende - 15 * minute))
+
+        assertEquals(mapOf("com.a" to 15 * minute), h)
+    }
+
+    @Test
+    fun `Bildschirm aus beendet den Dienst nicht`() {
+        // Der Regelfall bei Musik. Anders als beim Vordergrund darf SCREEN_OFF
+        // hier nichts abschneiden.
+        val h = hintergrund(
+            dienstAn("com.a", beginn),
+            aus(beginn + 2 * minute),
+            dienstAus("com.a", beginn + 20 * minute),
+        )
+
+        assertEquals(mapOf("com.a" to 20 * minute), h)
+    }
+
+    @Test
+    fun `ohne Dienstereignisse gibt es keine Hintergrundzeit`() {
+        val h = hintergrund(vorn("com.a", beginn), hinten("com.a", beginn + 5 * minute))
+
+        assertEquals(emptyMap<String, Long>(), h)
+    }
+
+    @Test
+    fun `Dienstereignisse aendern die Vordergrundsumme nicht`() {
+        val s = summen(
+            dienstAn("com.a", beginn),
+            vorn("com.a", beginn + minute),
+            hinten("com.a", beginn + 6 * minute),
+            dienstAus("com.a", beginn + 30 * minute),
+        )
+
+        assertEquals(mapOf("com.a" to 5 * minute), s)
+    }
+
+    @Test
+    fun `Hintergrundzeit wird je Paket getrennt gerechnet`() {
+        val h = hintergrund(
+            dienstAn("com.a", beginn),
+            dienstAn("com.b", beginn + 5 * minute),
+            dienstAus("com.a", beginn + 10 * minute),
+            dienstAus("com.b", beginn + 8 * minute),
+        )
+
+        assertEquals(mapOf("com.a" to 10 * minute, "com.b" to 3 * minute), h)
     }
 }

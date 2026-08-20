@@ -23,4 +23,15 @@ enum class UsageEventType {
      * Nacht offen gelassene App sammelte acht Stunden an.
      */
     SCREEN_OFF,
+
+    /**
+     * Ein Vordergrunddienst des Pakets faengt an. Musik, Navigation, Aufnahme,
+     * laufende Uebertragung — die einzige Hintergrundarbeit, die Android
+     * ueberhaupt nach aussen meldet. Stille Dienste ohne Benachrichtigung
+     * tauchen nirgends auf und lassen sich deshalb auch nicht zaehlen.
+     */
+    SERVICE_START,
+
+    /** Der letzte Vordergrunddienst des Pakets hoert auf. */
+    SERVICE_STOP,
 }

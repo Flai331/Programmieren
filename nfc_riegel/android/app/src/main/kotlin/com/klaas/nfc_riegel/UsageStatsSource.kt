@@ -57,6 +57,12 @@ class AndroidUsageSource(private val context: Context) : UsageSource {
                 UsageEvents.Event.ACTIVITY_PAUSED -> UsageEventType.BACKGROUND
                 UsageEvents.Event.SCREEN_NON_INTERACTIVE,
                 UsageEvents.Event.KEYGUARD_SHOWN -> UsageEventType.SCREEN_OFF
+                // Hintergrundarbeit. Beide Konstanten gibt es erst ab Android 10;
+                // es sind `static final int`, also zur Bauzeit eingesetzt — auf
+                // aelteren Geraeten kommen die Ereignisse schlicht nie an, und
+                // die Hintergrundzeit bleibt dort null.
+                UsageEvents.Event.FOREGROUND_SERVICE_START -> UsageEventType.SERVICE_START
+                UsageEvents.Event.FOREGROUND_SERVICE_STOP -> UsageEventType.SERVICE_STOP
                 // `ACTIVITY_STOPPED` bleibt bewusst draußen. Es räumt eine
                 // einzelne Activity ab und trifft dabei *nach* dem
                 // `ACTIVITY_RESUMED` der nächsten desselben Pakets ein — am

@@ -94,6 +94,50 @@ void main() {
     expect(find.textContaining('unter 1 Minute'), findsNothing);
   });
 
+  testWidgets('Hintergrundzeit steht in der Kopfzeile und an der App', (
+    tester,
+  ) async {
+    stub(
+      granted: true,
+      apps: [
+        {
+          'name': 'Spotify',
+          'packageName': 'com.spotify.music',
+          'millis': 600000,
+          'backgroundMillis': 3600000,
+        },
+      ],
+    );
+    await tester.pumpWidget(tab());
+    await tester.pumpAndSettle();
+
+    // Die grosse Zahl bleibt die Zeit am Schirm — zweimal zu finden, weil bei
+    // einer einzigen App die Tagessumme und ihre Zeile denselben Wert tragen.
+    expect(find.text('10 min'), findsNWidgets(2));
+    expect(find.text('+ 1 h 0 min im Hintergrund'), findsOneWidget);
+    expect(find.text('+ 1 h 0 min Hintergrund'), findsOneWidget);
+  });
+
+  testWidgets('App nur im Hintergrund bleibt in der Liste', (tester) async {
+    stub(
+      granted: true,
+      apps: [
+        {
+          'name': 'Radio',
+          'packageName': 'com.radio',
+          'millis': 0,
+          'backgroundMillis': 1800000,
+        },
+      ],
+    );
+    await tester.pumpWidget(tab());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Radio'), findsOneWidget);
+    expect(find.text('–'), findsOneWidget);
+    expect(find.textContaining('unter 1 Minute'), findsNothing);
+  });
+
   testWidgets('Betreten des Reiters liest neu', (tester) async {
     var abrufe = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

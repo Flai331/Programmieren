@@ -97,11 +97,22 @@ class _ScreenTimeTabState extends State<ScreenTimeTab>
       return _AccessHint(onRequest: _requestAccess);
     }
 
-    final lang = apps.where((a) => a.duration >= kUsageThreshold).toList();
+    // Eine App zaehlt als erwaehnenswert, wenn sie vorn *oder* hinten ueber
+    // einer Minute liegt. Ein Radiowecker, den man nie ansieht, gehoert in die
+    // Liste — bisher fiel er heraus.
+    final lang = apps
+        .where(
+          (a) => a.duration >= kUsageThreshold || a.background >= kUsageThreshold,
+        )
+        .toList();
     final kurz = apps.length - lang.length;
     final summe = apps.fold<Duration>(
       Duration.zero,
       (acc, a) => acc + a.duration,
+    );
+    final summeHintergrund = apps.fold<Duration>(
+      Duration.zero,
+      (acc, a) => acc + a.background,
     );
 
     return RefreshIndicator(
@@ -123,6 +134,19 @@ class _ScreenTimeTabState extends State<ScreenTimeTab>
               color: RiegelColors.fg1,
             ),
           ),
+          // Nicht in die grosse Zahl eingerechnet: Screenzeit ist Zeit am
+          // Schirm. Musik im Hintergrund gehoert daneben, nicht hinein.
+          if (summeHintergrund >= kUsageThreshold) ...[
+            const SizedBox(height: RiegelSpacing.s1),
+            Text(
+              '+ ${formatUsage(summeHintergrund)} im Hintergrund',
+              style: const TextStyle(
+                fontFamily: kMonoFamily,
+                fontSize: 13,
+                color: RiegelColors.fg3,
+              ),
+            ),
+          ],
           const SizedBox(height: RiegelSpacing.s6),
           if (lang.isEmpty)
             const Text('Heute noch keine App länger als eine Minute benutzt.'),
@@ -130,6 +154,7 @@ class _ScreenTimeTabState extends State<ScreenTimeTab>
             Padding(
               padding: const EdgeInsets.only(bottom: RiegelSpacing.s3),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
@@ -142,13 +167,32 @@ class _ScreenTimeTabState extends State<ScreenTimeTab>
                       ),
                     ),
                   ),
-                  Text(
-                    formatUsage(app.duration),
-                    style: const TextStyle(
-                      fontFamily: kMonoFamily,
-                      fontSize: 13,
-                      color: RiegelColors.fg2,
-                    ),
+                  const SizedBox(width: RiegelSpacing.s3),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        // Ein Strich statt „0 min": die App war heute nur im
+                        // Hintergrund taetig, und das steht in der Zeile darunter.
+                        app.duration >= kUsageThreshold
+                            ? formatUsage(app.duration)
+                            : '–',
+                        style: const TextStyle(
+                          fontFamily: kMonoFamily,
+                          fontSize: 13,
+                          color: RiegelColors.fg2,
+                        ),
+                      ),
+                      if (app.background >= kUsageThreshold)
+                        Text(
+                          '+ ${formatUsage(app.background)} Hintergrund',
+                          style: const TextStyle(
+                            fontFamily: kMonoFamily,
+                            fontSize: 11,
+                            color: RiegelColors.fg3,
+                          ),
+                        ),
+                    ],
                   ),
                 ],
               ),

@@ -231,3 +231,42 @@ dieselbe Linie wie bei Chip-Kennungen, Code-Hash und Termintiteln.
 ## Offene Kleinigkeiten
 
 Keine. Alles oben ist entschieden.
+
+---
+
+## Nachtrag 2026-08-20: Hintergrundarbeit zählt mit
+
+Gemeldet nach dem Benutzen: „es wird nicht alles getrackt, was die App macht."
+Stimmt — gezählt wurde nur, was vorn stand. Eine App, die drei Stunden Musik
+spielt oder navigiert, erschien mit null Minuten.
+
+**Was Android hergibt.** Nur `FOREGROUND_SERVICE_START` und
+`FOREGROUND_SERVICE_STOP`, also Dienste mit sichtbarer Benachrichtigung: Musik,
+Navigation, Aufnahme, laufende Übertragungen. Stille Hintergrundarbeit —
+Netzabfragen, Synchronisierung, Weckdienste — meldet das System überhaupt nicht.
+Vollständigkeit ist hier also nicht zu haben; erfasst wird, was erfassbar ist.
+Beide Ereignisse gibt es erst ab Android 10, auf älteren Geräten bleibt die
+Hintergrundzeit null.
+
+**Der Vordergrundanteil wird abgezogen.** Wer eine Stunde Spotify bedient, hat
+dabei auch eine Stunde Dienstlaufzeit; beides zu addieren ergäbe zwei Stunden
+für eine. `backgroundTotals` zieht die Vordergrundabschnitte desselben Pakets
+ab. Übrig bleibt genau das, was die App tat, während man sie nicht ansah.
+
+**Getrennt angezeigt, nicht dazugerechnet.** Die große Zahl bleibt die Zeit am
+Schirm — Screenzeit ist Screenzeit. Darunter steht „+ 1 h 20 min im
+Hintergrund", je App eine zweite Zeile. Eine App ohne Vordergrundzeit bekommt
+einen Strich und bleibt trotzdem in der Liste; genau dieser Fall fehlte bisher
+ganz.
+
+**`SCREEN_OFF` beendet einen Dienstabschnitt nicht.** Musik bei ausgeschaltetem
+Bildschirm ist der Regelfall, nicht der Fehler — genau anders herum als beim
+Vordergrund, wo eine über Nacht offene App sonst acht Stunden sammelte.
+
+**Mehrere gleichzeitige Dienste eines Pakets** (Wiedergabe und Download) ergeben
+einen Abschnitt, nicht zwei. `serviceIntervals` zählt dafür die
+Schachtelungstiefe.
+
+**Die Atempause bleibt unberührt.** Sie rechnet weiter mit reiner
+Vordergrundzeit. Doomscrolling passiert nicht im Hintergrund, und eine Pause,
+die wegen laufender Musik aufpoppt, hätte mit dem Zweck nichts zu tun.

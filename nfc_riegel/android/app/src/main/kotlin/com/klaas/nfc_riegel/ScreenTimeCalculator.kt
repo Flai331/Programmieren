@@ -59,6 +59,8 @@ object ScreenTimeCalculator {
                     schliesse(t)
                 }
                 UsageEventType.SCREEN_OFF -> if (offen != null) schliesse(t)
+                // Dienstereignisse sagen nichts ueber den Vordergrund aus.
+                UsageEventType.SERVICE_START, UsageEventType.SERVICE_STOP -> Unit
             }
         }
         // Nur schliessen, was auch offen ist. Ohne diese Bedingung bekaeme ein
@@ -138,10 +140,118 @@ object ScreenTimeCalculator {
                 }
                 UsageEventType.BACKGROUND -> schliesse(ereignis.packageName, t)
                 UsageEventType.SCREEN_OFF -> offen.keys.toList().forEach { schliesse(it, t) }
+                UsageEventType.SERVICE_START, UsageEventType.SERVICE_STOP -> Unit
             }
         }
 
         offen.keys.toList().forEach { schliesse(it, to) }
         return summen
+    }
+
+    /**
+     * Die Laufzeiten der Vordergrunddienste **eines** Pakets.
+     *
+     * Ein Paket kann mehrere Dienste gleichzeitig laufen lassen — Spotify etwa
+     * Wiedergabe und Download. Gezaehlt wird deshalb die Schachtelungstiefe: der
+     * Abschnitt beginnt beim ersten Dienst und endet mit dem letzten.
+     *
+     * `SCREEN_OFF` beendet hier bewusst nichts. Musik bei ausgeschaltetem
+     * Bildschirm ist der Regelfall, nicht der Fehler — genau anders herum als
+     * beim Vordergrund.
+     */
+    fun serviceIntervals(
+        events: List<UsageEvent>,
+        packageName: String,
+        from: Long,
+        to: Long,
+    ): List<Pair<Long, Long>> {
+        val abschnitte = mutableListOf<Pair<Long, Long>>()
+        var offen: Long? = null
+        var gesehen = false
+        var tiefe = 0
+
+        fun schliesse(zeitpunkt: Long) {
+            // Kein offener Anfang und noch nichts gesehen: der Dienst lief schon
+            // vor dem Fenster, also ab [from]. Dieselbe Randbehandlung wie in
+            // [totals].
+            val start = offen ?: if (gesehen) return else from
+            offen = null
+            gesehen = true
+            if (zeitpunkt > start) abschnitte += start to zeitpunkt
+        }
+
+        for (ereignis in events.sortedBy { it.timestamp }) {
+            if (ereignis.packageName != packageName) continue
+            val t = ereignis.timestamp.coerceIn(from, to)
+            when (ereignis.type) {
+                UsageEventType.SERVICE_START -> {
+                    if (tiefe == 0) {
+                        gesehen = true
+                        if (offen == null) offen = t
+                    }
+                    tiefe++
+                }
+                UsageEventType.SERVICE_STOP -> {
+                    if (tiefe > 0) tiefe--
+                    if (tiefe == 0) schliesse(t)
+                }
+                else -> Unit
+            }
+        }
+        if (offen != null) schliesse(to)
+        return abschnitte
+    }
+
+    /**
+     * Hintergrundzeit je Paket: Dienstlaufzeit **ohne** den Anteil, in dem das
+     * Paket ohnehin vorn war.
+     *
+     * Der Abzug ist der Kern. Wer eine Stunde Spotify bedient, hat dabei auch
+     * eine Stunde Dienstlaufzeit; beides zu addieren ergaebe zwei Stunden fuer
+     * eine. Uebrig bleibt genau das, was die App tat, waehrend man sie nicht
+     * angesehen hat.
+     */
+    fun backgroundTotals(events: List<UsageEvent>, from: Long, to: Long): Map<String, Long> {
+        val pakete = events
+            .filter {
+                it.type == UsageEventType.SERVICE_START ||
+                    it.type == UsageEventType.SERVICE_STOP
+            }
+            .map { it.packageName }
+            .toSet()
+
+        val summen = mutableMapOf<String, Long>()
+        for (paket in pakete) {
+            val dienst = serviceIntervals(events, paket, from, to)
+            val summe = subtract(dienst, intervals(events, paket, from, to))
+                .sumOf { it.second - it.first }
+            if (summe > 0) summen[paket] = summe
+        }
+        return summen
+    }
+
+    /**
+     * [basis] ohne die Zeitraeume aus [abzug]. Beide Listen kommen sortiert und
+     * in sich ueberlappungsfrei aus [serviceIntervals] bzw. [intervals]; die
+     * Rechnung bleibt damit ein einfacher Durchlauf je Abzugsstueck.
+     */
+    private fun subtract(
+        basis: List<Pair<Long, Long>>,
+        abzug: List<Pair<Long, Long>>,
+    ): List<Pair<Long, Long>> {
+        var rest = basis
+        for ((abStart, abEnde) in abzug) {
+            val neu = mutableListOf<Pair<Long, Long>>()
+            for ((start, ende) in rest) {
+                if (abEnde <= start || abStart >= ende) {
+                    neu += start to ende
+                    continue
+                }
+                if (start < abStart) neu += start to abStart
+                if (abEnde < ende) neu += abEnde to ende
+            }
+            rest = neu
+        }
+        return rest
     }
 }

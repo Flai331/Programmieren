@@ -275,14 +275,24 @@ class BlockActivity : Activity() {
 
         val jetzt = System.currentTimeMillis()
         val beginn = ScreenTimeCalculator.startOfDay(jetzt)
-        val millis = ScreenTimeCalculator
-            .totals(quelle.events(beginn, jetzt), beginn, jetzt)[paket] ?: 0L
+        val ereignisse = quelle.events(beginn, jetzt)
+        val millis = ScreenTimeCalculator.totals(ereignisse, beginn, jetzt)[paket] ?: 0L
+        val hintergrund =
+            ScreenTimeCalculator.backgroundTotals(ereignisse, beginn, jetzt)[paket] ?: 0L
 
-        screenTime.visibility = View.VISIBLE
-        screenTime.text = when {
+        val zeile = when {
             millis == 0L -> "Heute noch nicht benutzt"
             millis < 60_000L -> "Heute: unter 1 min"
             else -> "Heute: ${formatiereDauer(millis)}"
+        }
+
+        screenTime.visibility = View.VISIBLE
+        // Unter einer Minute Hintergrund bleibt die Zeile knapp: eine kurz
+        // aufblitzende Dienstlaufzeit sagt nichts.
+        screenTime.text = if (hintergrund >= 60_000L) {
+            "$zeile  ·  ${formatiereDauer(hintergrund)} im Hintergrund"
+        } else {
+            zeile
         }
     }
 
