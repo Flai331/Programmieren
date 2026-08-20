@@ -78,10 +78,17 @@
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"/>
 
+        <!--
+            Eigene Aufgabe wie der Sperrschirm: liegt die Pause in derselben
+            Aufgabe wie Riegel, laesst sie sich aus der Uebersicht wegwischen und
+            man landet wieder in der App. Genau das wurde am 2026-08-20 gemeldet.
+        -->
         <activity
             android:name=".PauseActivity"
             android:exported="false"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"/>
 
         <service

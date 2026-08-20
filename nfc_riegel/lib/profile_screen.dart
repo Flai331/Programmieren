@@ -260,10 +260,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               Slider(
+                // Sekundenweise, nicht in Dreierschritten: bei so kurzen
+                // Wartezeiten ist der Unterschied zwischen 5 und 6 Sekunden
+                // spuerbar.
                 value: _pauseBase.toDouble(),
-                min: 3,
+                min: 1,
                 max: 30,
-                divisions: 9,
+                divisions: 29,
                 onChanged: (v) => setState(() => _pauseBase = v.round()),
               ),
             ],

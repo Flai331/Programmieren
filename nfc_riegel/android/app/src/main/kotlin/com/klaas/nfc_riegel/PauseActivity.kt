@@ -35,6 +35,7 @@ class PauseActivity : Activity() {
                 handler.postDelayed(this, 1000)
             } else {
                 countdown.text = "0"
+                merkeStufe()
                 zeigeKnoepfe()
             }
         }
@@ -150,6 +151,18 @@ class PauseActivity : Activity() {
         return root
     }
 
+    /**
+     * Erst jetzt gilt die Stufe als gezeigt. Wer den Schirm vorher wegwischt,
+     * bekommt ihn beim naechsten Blick in die App wieder — die Pause laesst
+     * sich aussitzen, aber nicht abschuetteln.
+     */
+    private fun merkeStufe() {
+        val paket = intent?.getStringExtra(EXTRA_PACKAGE) ?: return
+        val stufe = intent?.getIntExtra(EXTRA_STEP, 0) ?: return
+        if (stufe <= 0) return
+        PauseStore(this).remember(paket, stufe, System.currentTimeMillis())
+    }
+
     private fun zeigeKnoepfe() {
         weiter.visibility = View.VISIBLE
         schliessen.visibility = View.VISIBLE
@@ -166,6 +179,8 @@ class PauseActivity : Activity() {
         }
 
     companion object {
+        const val EXTRA_PACKAGE = "paket"
+        const val EXTRA_STEP = "stufe"
         const val EXTRA_SECONDS = "sekunden"
         const val EXTRA_APP_NAME = "appName"
         const val EXTRA_USED_MINUTES = "genutzteMinuten"

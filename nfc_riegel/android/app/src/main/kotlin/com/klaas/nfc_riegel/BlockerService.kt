@@ -93,15 +93,23 @@ class BlockerService : AccessibilityService() {
         val genutzt = ScreenTimeCalculator
             .totals(quelle.events(beginn, jetzt), beginn, jetzt)[pkg] ?: 0L
 
-        val store = PauseStore(this)
-        val entscheidung = PausePlanner.decide(settings, genutzt, store.lastStep(pkg, jetzt))
+        val entscheidung = PausePlanner.decide(
+            settings,
+            genutzt,
+            PauseStore(this).lastStep(pkg, jetzt),
+        )
 
         val wartezeit = entscheidung.waitSeconds
         if (wartezeit != null) {
-            store.remember(pkg, entscheidung.step, jetzt)
+            // Die Stufe wird hier bewusst **nicht** vermerkt. Sie gilt erst als
+            // gezeigt, wenn der Countdown wirklich abgelaufen ist — sonst
+            // genuegt Wegwischen, um sie loszuwerden. Genau das ist am
+            // 2026-08-20 auf dem Geraet passiert.
             startActivity(
                 Intent(this, PauseActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    .putExtra(PauseActivity.EXTRA_PACKAGE, pkg)
+                    .putExtra(PauseActivity.EXTRA_STEP, entscheidung.step)
                     .putExtra(PauseActivity.EXTRA_SECONDS, wartezeit)
                     .putExtra(PauseActivity.EXTRA_APP_NAME, appName(pkg))
                     .putExtra(PauseActivity.EXTRA_USED_MINUTES, (genutzt / 60_000L).toInt())
