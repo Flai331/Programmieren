@@ -149,6 +149,11 @@ object ScreenTimeCalculator {
     }
 
     /**
+     * **Wird zurzeit nirgends angezeigt.** Die Hintergrundzeit war kurz im
+     * Screenzeit-Reiter und auf dem Sperrschirm zu sehen und wurde auf Wunsch
+     * wieder herausgenommen: Screenzeit soll Zeit am Schirm bleiben. Rechnung
+     * und Prüfungen bleiben stehen, damit die Anzeige jederzeit zurückkann.
+     *
      * Die Laufzeiten der Vordergrunddienste **eines** Pakets.
      *
      * Ein Paket kann mehrere Dienste gleichzeitig laufen lassen — Spotify etwa

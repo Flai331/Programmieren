@@ -223,25 +223,6 @@ wird. Vor jeder Prüfung nachsehen:
 adb shell appops get com.klaas.nfc_riegel GET_USAGE_STATS
 ```
 
-## Hintergrundzeit (Build 12)
-
-- [ ] Musik-App starten, Bildschirm aus, 5 Minuten spielen lassen: im
-      Screenzeit-Reiter steht „+ 5 min Hintergrund" an der App
-- [ ] Die große Zahl oben wächst dabei **nicht** mit — sie bleibt die Zeit am
-      Schirm
-- [ ] Kopfzeile „+ x im Hintergrund" erscheint nur, wenn überhaupt etwas
-      zusammenkommt
-- [ ] Musik-App bedienen und dabei spielen lassen: die Vordergrundzeit wird
-      nicht zusätzlich als Hintergrund gezählt
-- [ ] Nie angesehene App mit Dienst (Radiowecker, Navigation) steht mit einem
-      Strich in der Liste statt zu fehlen
-- [ ] Navigation laufen lassen: taucht als Hintergrundzeit auf
-- [ ] Gesperrte App mit laufendem Dienst öffnen: Sperrschirm zeigt „Heute: …  ·
-      … im Hintergrund"
-- [ ] Atempause bleibt unberührt — laufende Musik allein löst keine Pause aus
-- [ ] Gegen „Digital Wellbeing" gegenprüfen: dort gibt es keine
-      Hintergrundzeit, die Vordergrundzahl muss aber weiter passen
-
 ## Atempause
 
 - [ ] Ohne Nutzungsdaten-Berechtigung: Hinweis statt Regler im Profil

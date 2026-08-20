@@ -283,25 +283,15 @@ class RiegelChannel(private val activity: Activity) {
 
         val jetzt = System.currentTimeMillis()
         val beginn = ScreenTimeCalculator.startOfDay(jetzt)
-        val ereignisse = quelle.events(beginn, jetzt)
-        val vorn = ScreenTimeCalculator.totals(ereignisse, beginn, jetzt)
-        val hinten = ScreenTimeCalculator.backgroundTotals(ereignisse, beginn, jetzt)
+        val summen = ScreenTimeCalculator.totals(quelle.events(beginn, jetzt), beginn, jetzt)
         val namen = launchableApps().associate {
             it.getValue("packageName") to it.getValue("name")
         }
 
-        // Die Vereinigung, nicht nur die Vordergrundliste: eine App, die den
-        // ganzen Tag Musik spielt und nie angesehen wurde, faellt sonst heraus —
-        // und das ist genau der Fall, um den es hier geht.
-        return (vorn.keys + hinten.keys).mapNotNull { paket ->
+        return summen.mapNotNull { (paket, millis) ->
             val name = namen[paket] ?: return@mapNotNull null
-            mapOf<String, Any>(
-                "packageName" to paket,
-                "name" to name,
-                "millis" to (vorn[paket] ?: 0L),
-                "backgroundMillis" to (hinten[paket] ?: 0L),
-            )
-        }.sortedByDescending { (it["millis"] as Long) + (it["backgroundMillis"] as Long) }
+            mapOf<String, Any>("packageName" to paket, "name" to name, "millis" to millis)
+        }.sortedByDescending { it["millis"] as Long }
     }
 
     /**

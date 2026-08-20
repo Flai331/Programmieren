@@ -270,3 +270,15 @@ Schachtelungstiefe.
 **Die Atempause bleibt unberührt.** Sie rechnet weiter mit reiner
 Vordergrundzeit. Doomscrolling passiert nicht im Hintergrund, und eine Pause,
 die wegen laufender Musik aufpoppt, hätte mit dem Zweck nichts zu tun.
+
+## Nachtrag 2026-08-21: Hintergrundzeit wieder aus der Anzeige
+
+Einen Build später zurückgenommen: die Hintergrundzeit wird **nirgends mehr
+angezeigt** — weder im Reiter noch auf dem Sperrschirm. Screenzeit soll Zeit am
+Schirm bleiben, und eine zweite Zahl daneben verwässert genau die Aussage, für
+die der Reiter gebaut wurde: „so lange hast du heute auf dieses Gerät gesehen."
+
+Die Rechnung bleibt stehen — `serviceIntervals`, `backgroundTotals`, die
+Ereignisabbildung und die zugehörigen Prüfungen. Sie kostet nichts, solange
+niemand sie aufruft, und die Anzeige kann damit jederzeit zurück. Was hier fiel,
+war eine Entscheidung über die Darstellung, nicht über die Machbarkeit.
