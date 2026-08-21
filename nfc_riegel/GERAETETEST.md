@@ -77,6 +77,16 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
 - [ ] Im Eintrag stehen **keine** Tag-UIDs und kein Code-Hash
 - [ ] Flugmodus an, Bericht abschicken → E-Mail-App öffnet sich als Rückfall
 
+### Aktionen im Protokoll (Build 14)
+
+- [ ] Profil anlegen, speichern, löschen → jede Aktion steht im Protokoll
+- [ ] Gespeichertes Profil steht mit Name, App-Anzahl, Modus und Atempause da
+- [ ] Chip anlernen und löschen → im Protokoll, **ohne** die Kennung
+- [ ] Notfall-Code erzeugen → „Notfall-Code erzeugt", **ohne** den Code
+- [ ] Kalender speichern → Anzahl der Regeln, **keine** Termintitel
+- [ ] Sperre ohne Chip starten → Ausgang steht dabei (`STARTED`, `EXTENDED` …)
+- [ ] Adminrecht abgeben, Berechtigungsschirme öffnen → stehen drin
+
 ## Zeitsperren ohne Chip
 
 - [ ] Profil auf `TIMER` mit 5 Minuten stellen, „Sperren" drücken, Dialog bestätigen
@@ -225,6 +235,10 @@ adb shell appops get com.klaas.nfc_riegel GET_USAGE_STATS
 
 ## Atempause
 
+- [ ] Pausenschirm zeigt beide Zahlen: „Am Stück …  ·  Heute …" (Build 14)
+- [ ] Stufenabstand lässt sich minutenweise stellen (Build 14)
+- [ ] Stift neben jeder Zahl öffnet die Tastatur, Wert landet im Regler
+- [ ] Zu große Eingabe wird auf die Obergrenze geklemmt statt abgewiesen
 - [ ] Ohne Nutzungsdaten-Berechtigung: Hinweis statt Regler im Profil
 - [ ] Atempause einschalten, Stufenabstand auf 5 Minuten stellen
 - [x] Gesperrte App öffnen und liegen lassen — Pause kommt **mitten im

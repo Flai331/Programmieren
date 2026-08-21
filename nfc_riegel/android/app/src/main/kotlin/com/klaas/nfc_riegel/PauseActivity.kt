@@ -79,9 +79,14 @@ class PauseActivity : Activity() {
             gravity = Gravity.CENTER
         }
 
-        val heute = TextView(this).apply {
-            val minuten = intent?.getIntExtra(EXTRA_USED_MINUTES, 0) ?: 0
-            text = "Heute $minuten Minuten"
+        // Zwei Zahlen, weil sie Verschiedenes sagen: „am Stueck" ist der Grund,
+        // aus dem dieser Schirm gerade da ist, „heute" der Tag als Ganzes. Vorher
+        // stand hier die Sitzungszeit unter der Ueberschrift „Heute" — schlicht
+        // falsch beschriftet, seit die Pause auf Sitzungen umgestellt wurde.
+        val zeiten = TextView(this).apply {
+            val sitzung = intent?.getLongExtra(EXTRA_SESSION_MILLIS, 0L) ?: 0L
+            val tag = intent?.getLongExtra(EXTRA_TODAY_MILLIS, 0L) ?: 0L
+            text = "Am Stück ${formatiereDauer(sitzung)}  ·  Heute ${formatiereDauer(tag)}"
             textSize = 15f
             setTextColor(BlockColors.FG_2)
             gravity = Gravity.CENTER
@@ -143,7 +148,7 @@ class PauseActivity : Activity() {
         }
 
         root.addView(app)
-        root.addView(heute)
+        root.addView(zeiten)
         root.addView(countdown)
         root.addView(frage)
         root.addView(weiter)
@@ -183,6 +188,7 @@ class PauseActivity : Activity() {
         const val EXTRA_STEP = "stufe"
         const val EXTRA_SECONDS = "sekunden"
         const val EXTRA_APP_NAME = "appName"
-        const val EXTRA_USED_MINUTES = "genutzteMinuten"
+        const val EXTRA_SESSION_MILLIS = "sitzungMillis"
+        const val EXTRA_TODAY_MILLIS = "tagMillis"
     }
 }

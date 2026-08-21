@@ -63,6 +63,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (picked != null) setState(() => _packages = picked);
   }
 
+  /// Zahl per Tastatur statt per Regler. Der Regler bleibt fuer das grobe
+  /// Einstellen, die Eingabe fuer den genauen Wert — 37 Minuten trifft man mit
+  /// dem Daumen nicht.
+  Future<void> _zahlEingeben({
+    required String titel,
+    required String einheit,
+    required int wert,
+    required int min,
+    required int max,
+    required ValueChanged<int> uebernehmen,
+  }) async {
+    final neuerWert = await showDialog<int>(
+      context: context,
+      builder: (context) => _ZahlDialog(
+        titel: titel,
+        einheit: einheit,
+        wert: wert,
+        min: min,
+        max: max,
+      ),
+    );
+    // Unsinn wird geklemmt statt abgewiesen: wer 999 tippt, meint „so viel wie
+    // geht", und eine Fehlermeldung dafuer ist Schikane.
+    if (neuerWert != null) uebernehmen(neuerWert.clamp(min, max));
+  }
+
+  /// Beschriftung eines Reglers, mit Stift zum Tippen.
+  Widget _zahlZeile(String text, VoidCallback bearbeiten) => Row(
+    children: [
+      Expanded(
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontFamily: kMonoFamily,
+            fontSize: 12,
+            color: RiegelColors.fg2,
+          ),
+        ),
+      ),
+      IconButton(
+        onPressed: bearbeiten,
+        icon: const Icon(Icons.edit, size: 16),
+        color: RiegelColors.fg3,
+        visualDensity: VisualDensity.compact,
+        tooltip: 'Zahl eingeben',
+      ),
+    ],
+  );
+
   Future<void> _pickUntil() async {
     final now = DateTime.now();
     final date = await showDatePicker(
@@ -167,18 +216,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           if (_mode == LockMode.timer) ...[
             Slider(
-              value: _duration.toDouble(),
-              min: 15,
+              value: _duration.toDouble().clamp(5, 480),
+              min: 5,
               max: 480,
-              divisions: 31,
+              divisions: 95,
               onChanged: (v) => setState(() => _duration = v.round()),
             ),
-            Text(
+            _zahlZeile(
               '$_duration Minuten',
-              style: const TextStyle(
-                fontFamily: kMonoFamily,
-                fontSize: 12,
-                color: RiegelColors.fg2,
+              () => _zahlEingeben(
+                titel: 'Dauer der Sperre',
+                einheit: 'Minuten',
+                wert: _duration,
+                min: 5,
+                max: 480,
+                uebernehmen: (v) => setState(() => _duration = v),
               ),
             ),
           ],
@@ -237,53 +289,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
               contentPadding: EdgeInsets.zero,
             ),
             if (_pause) ...[
-              Text(
+              _zahlZeile(
                 'Alle $_pauseStep Minuten am Stück',
-                style: const TextStyle(
-                  fontFamily: kMonoFamily,
-                  fontSize: 12,
-                  color: RiegelColors.fg2,
+                () => _zahlEingeben(
+                  titel: 'Stufenabstand',
+                  einheit: 'Minuten',
+                  wert: _pauseStep,
+                  min: 1,
+                  max: 60,
+                  uebernehmen: (v) => setState(() => _pauseStep = v),
                 ),
               ),
               Slider(
-                value: _pauseStep.toDouble(),
-                min: 5,
+                // Minutenweise. Fuenferschritte waren zu grob: die erste Stufe
+                // entscheidet, ob die Pause im Weg steht oder etwas bewirkt.
+                value: _pauseStep.toDouble().clamp(1, 60),
+                min: 1,
                 max: 60,
-                divisions: 11,
+                divisions: 59,
                 onChanged: (v) => setState(() => _pauseStep = v.round()),
               ),
-              Text(
+              _zahlZeile(
                 'Erste Pause $_pauseBase Sekunden, danach doppelt so lang',
-                style: const TextStyle(
-                  fontFamily: kMonoFamily,
-                  fontSize: 12,
-                  color: RiegelColors.fg2,
+                () => _zahlEingeben(
+                  titel: 'Grundwartezeit',
+                  einheit: 'Sekunden',
+                  wert: _pauseBase,
+                  min: 1,
+                  max: 60,
+                  uebernehmen: (v) => setState(() => _pauseBase = v),
                 ),
               ),
               Slider(
                 // Sekundenweise, nicht in Dreierschritten: bei so kurzen
                 // Wartezeiten ist der Unterschied zwischen 5 und 6 Sekunden
                 // spuerbar.
-                value: _pauseBase.toDouble(),
+                value: _pauseBase.toDouble().clamp(1, 60),
                 min: 1,
-                max: 30,
-                divisions: 29,
+                max: 60,
+                divisions: 59,
                 onChanged: (v) => setState(() => _pauseBase = v.round()),
               ),
-              Text(
+              _zahlZeile(
                 'Nach $_pauseReset Minuten ohne die App beginnt die '
                 'Staffelung von vorn',
-                style: const TextStyle(
-                  fontFamily: kMonoFamily,
-                  fontSize: 12,
-                  color: RiegelColors.fg2,
+                () => _zahlEingeben(
+                  titel: 'Sitzungspause',
+                  einheit: 'Minuten',
+                  wert: _pauseReset,
+                  min: 1,
+                  max: 120,
+                  uebernehmen: (v) => setState(() => _pauseReset = v),
                 ),
               ),
               Slider(
-                value: _pauseReset.toDouble(),
-                min: 5,
-                max: 60,
-                divisions: 11,
+                value: _pauseReset.toDouble().clamp(1, 120),
+                min: 1,
+                max: 120,
+                divisions: 119,
                 onChanged: (v) => setState(() => _pauseReset = v.round()),
               ),
             ],
@@ -298,4 +361,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+}
+
+/// Eigenes Widget, damit der Controller so lange lebt wie der Dialog. Wird er
+/// gleich nach `showDialog` weggeraeumt, baut die Schliessanimation noch einmal
+/// auf einen entsorgten Controller — und das schlaegt als Flutter-Fehler bis in
+/// den Fehlermelder durch.
+class _ZahlDialog extends StatefulWidget {
+  const _ZahlDialog({
+    required this.titel,
+    required this.einheit,
+    required this.wert,
+    required this.min,
+    required this.max,
+  });
+
+  final String titel;
+  final String einheit;
+  final int wert;
+  final int min;
+  final int max;
+
+  @override
+  State<_ZahlDialog> createState() => _ZahlDialogState();
+}
+
+class _ZahlDialogState extends State<_ZahlDialog> {
+  late final _feld = TextEditingController(text: '${widget.wert}');
+
+  @override
+  void dispose() {
+    _feld.dispose();
+    super.dispose();
+  }
+
+  void _fertig() => Navigator.pop(context, int.tryParse(_feld.text.trim()));
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.titel),
+    content: TextField(
+      controller: _feld,
+      autofocus: true,
+      keyboardType: TextInputType.number,
+      decoration: InputDecoration(
+        suffixText: widget.einheit,
+        helperText: '${widget.min} bis ${widget.max}',
+      ),
+      onSubmitted: (_) => _fertig(),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Abbrechen'),
+      ),
+      FilledButton(onPressed: _fertig, child: const Text('Übernehmen')),
+    ],
+  );
 }

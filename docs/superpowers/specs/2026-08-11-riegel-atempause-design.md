@@ -239,3 +239,35 @@ Zwei Ursachen, beide behoben:
 2. **Der Schirm lag in derselben Aufgabe wie Riegel** und war damit aus der
    Übersicht wischbar. Er bekommt jetzt eine eigene Aufgabe wie der Sperrschirm.
    Das ursprüngliche „die Pause darf im Verlauf auftauchen" war falsch gedacht.
+
+## Nachtrag 2026-08-21: Zwei Zahlen auf dem Pausenschirm
+
+Aus Build 11 gemeldet: „in dem Durchatmen Fenster die Zeit anzeigen, die zum
+Durchatmen führt, und die gesamte Screentime der App."
+
+Berechtigt, und dahinter steckte ein Beschriftungsfehler von mir. Seit der
+Umstellung auf Sitzungszeit stand dort die **Sitzung** unter der Überschrift
+**„Heute"** — schlicht falsch benannt. Jetzt stehen beide Zahlen da, jede mit
+ihrem eigenen Namen:
+
+> Am Stück 15 min · Heute 1 h 20 min
+
+Die erste ist der Grund, aus dem der Schirm gerade da ist; die zweite der Tag
+als Ganzes. `BlockerService` reicht beide in Millisekunden weiter statt
+gerundeter Minuten, `formatiereDauer` liegt jetzt in `Dauer.kt` statt privat in
+`BlockActivity`.
+
+## Nachtrag 2026-08-21: Minutenweise, und mit Tastatur
+
+Ebenfalls gemeldet: der Stufenabstand ließ sich nur in Fünferschritten
+einstellen, und für genaue Werte fehlte die Tastatur.
+
+- **Stufenabstand** jetzt 1–60 Minuten in Minutenschritten. Gerade die erste
+  Stufe entscheidet, ob die Pause im Weg steht oder etwas bewirkt; fünf Minuten
+  Sprungweite sind dafür zu grob.
+- **Alle Zahlen** haben einen Stift neben dem Regler. Der Regler bleibt fürs
+  grobe Einstellen, die Eingabe für den genauen Wert — 37 Minuten trifft man mit
+  dem Daumen nicht. Eingaben außerhalb der Grenzen werden geklemmt statt
+  abgewiesen: wer 999 tippt, meint „so viel wie geht".
+- Grundwartezeit 1–60 s, Sitzungspause 1–120 min, Sperrdauer 5–480 min in
+  Fünferschritten.
