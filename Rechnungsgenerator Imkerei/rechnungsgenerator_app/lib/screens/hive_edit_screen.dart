@@ -8,6 +8,7 @@ import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/pdf_hive_service.dart';
 import '../utils/app_utils.dart';
+import 'hive_action_edit_screen.dart';
 
 class HiveEditScreen extends StatefulWidget {
   final String? hiveId;
@@ -33,6 +34,9 @@ class _HiveEditScreenState extends State<HiveEditScreen> {
   bool _loading = true;
   bool _isSaving = false;
 
+  /// Maßnahmen-Verlauf des Volkes (leer bei einem neuen Volk).
+  List<HiveActionModel> _actions = [];
+
   @override
   void initState() {
     super.initState();
@@ -44,6 +48,7 @@ class _HiveEditScreenState extends State<HiveEditScreen> {
       if (widget.hiveId != null) {
         _current = await _db.getHive(widget.hiveId!);
         if (_current != null) _populate(_current!);
+        _actions = await _db.getHiveActions(widget.hiveId!);
       } else {
         // Neu: Default-Werte vorbelegen
         final next = await _db.getNextHiveNumber();
@@ -88,28 +93,79 @@ class _HiveEditScreenState extends State<HiveEditScreen> {
   Future<void> _save() async {
     setState(() => _isSaving = true);
     try {
+      if (!await _saveSilently()) return;
+      if (mounted) {
+        _snack('✓ Volk gespeichert');
+        Navigator.of(context).pop();
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _reloadActions() async {
+    if (_current == null) return;
+    final actions = await _db.getHiveActions(_current!.id);
+    if (mounted) setState(() => _actions = actions);
+  }
+
+  /// Maßnahme erfassen. Ein neues Volk muss dafür erst gespeichert sein –
+  /// sonst hinge die Maßnahme an einer ID, die es nicht gibt.
+  Future<void> _addAction({String? type}) async {
+    if (_current == null) {
+      final gespeichert = await _saveSilently();
+      if (!gespeichert) return;
+    }
+    if (!mounted) return;
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => HiveActionEditScreen(
+          hiveId: _current!.id,
+          hiveLabel: _current!.displayLabel,
+          initialType: type,
+        ),
+      ),
+    );
+    if (changed == true) await _reloadActions();
+  }
+
+  Future<void> _openAction(HiveActionModel action) async {
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => HiveActionEditScreen(
+          hiveId: action.hiveId,
+          hiveLabel: _current?.displayLabel ?? 'Volk',
+          actionId: action.id,
+        ),
+      ),
+    );
+    if (changed == true) await _reloadActions();
+  }
+
+  /// Volk speichern, ohne den Screen zu verlassen.
+  Future<bool> _saveSilently() async {
+    try {
       final h = _buildModel();
       if (_current == null) {
         await _db.insertHive(h);
       } else {
         await _db.updateHive(h);
       }
-      _current = h;
-      if (mounted) {
-        _snack('✓ Volk gespeichert');
-        Navigator.of(context).pop();
-      }
+      if (mounted) setState(() => _current = h);
+      return true;
     } catch (e) {
-      _snack('Fehler: $e', err: true);
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
+      _snack('Volk konnte nicht gespeichert werden: $e', err: true);
+      return false;
     }
   }
 
   Future<void> _printStockkarte() async {
     try {
       final h = _buildModel();
-      final pdf = await PdfHiveService().generateStockkartePdf(hive: h);
+      final pdf = await PdfHiveService()
+          .generateStockkartePdf(hive: h, actions: _actions);
       final bytes = await pdf.save();
       final tmp = await getTemporaryDirectory();
       final num = h.number ?? 0;
@@ -329,6 +385,9 @@ class _HiveEditScreenState extends State<HiveEditScreen> {
           ),
           const SizedBox(height: 8),
 
+          const SizedBox(height: 8),
+          _buildActionTimeline(),
+
           if (_current != null) ...[
             const SizedBox(height: 8),
             Text(
@@ -361,6 +420,155 @@ class _HiveEditScreenState extends State<HiveEditScreen> {
             style: const TextStyle(
                 color: _peach, fontSize: 14, fontWeight: FontWeight.bold)),
       );
+
+  // ── Maßnahmen-Verlauf ───────────────────────────────────────
+  static const _muted = Color(0xFF8a8a94);
+
+  IconData _actionIcon(String type) => switch (type) {
+        HiveActionTypes.inspection => Icons.search,
+        HiveActionTypes.feeding => Icons.water_drop_outlined,
+        HiveActionTypes.varroa => Icons.medical_services_outlined,
+        HiveActionTypes.harvest => Icons.inventory_2_outlined,
+        HiveActionTypes.swarm => Icons.groups_outlined,
+        HiveActionTypes.queen => Icons.star_outline,
+        HiveActionTypes.combs => Icons.grid_on_outlined,
+        _ => Icons.edit_note_outlined,
+      };
+
+  Widget _buildActionTimeline() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _section('Maßnahmen (${_actions.length})'),
+            TextButton.icon(
+              onPressed: () => _addAction(),
+              icon: const Icon(Icons.add, size: 16, color: _peach),
+              label: const Text('Erfassen',
+                  style: TextStyle(color: _peach)),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
+        ),
+
+        // Schnellzugriff auf die häufigsten Arbeiten
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final t in const [
+                HiveActionTypes.inspection,
+                HiveActionTypes.feeding,
+                HiveActionTypes.varroa,
+                HiveActionTypes.harvest,
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ActionChip(
+                    avatar: Icon(_actionIcon(t), size: 15, color: _peach),
+                    label: Text(HiveActionTypes.labelOf(t),
+                        style: const TextStyle(fontSize: 12)),
+                    onPressed: () => _addAction(type: t),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        if (_actions.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Center(
+              child: Text(
+                _current == null
+                    ? 'Nach dem Speichern lassen sich hier Maßnahmen erfassen'
+                    : 'Noch keine Maßnahmen erfasst',
+                style: const TextStyle(fontSize: 12, color: _muted),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          )
+        else
+          for (final a in _actions) _buildActionRow(a),
+      ],
+    );
+  }
+
+  Widget _buildActionRow(HiveActionModel a) {
+    final summary = a.summary;
+    return InkWell(
+      onTap: () => _openAction(a),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF18181c),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0x14ffffff)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(_actionIcon(a.type), size: 18, color: _peach),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(a.typeLabel,
+                            style: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w600)),
+                      ),
+                      Text(AppUtils.formatDate(a.date),
+                          style: const TextStyle(
+                              fontSize: 11, color: _muted)),
+                    ],
+                  ),
+                  if (summary.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(summary,
+                        style: const TextStyle(fontSize: 11, color: _muted)),
+                  ],
+                  if (summary != (a.note ?? '') &&
+                      (a.note ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(a.note!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11)),
+                  ],
+                  if (a.hasPhotos) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.photo_outlined,
+                            size: 12, color: _muted),
+                        const SizedBox(width: 3),
+                        Text('${a.photoPaths.length}',
+                            style: const TextStyle(
+                                fontSize: 10, color: _muted)),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   void dispose() {

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/models.dart';
@@ -24,9 +25,55 @@ class DatabaseService {
 
     return openDatabase(
       path,
-      version: 1,
+      version: _dbVersion,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
+  }
+
+  /// Schema-Version. Bei Erhöhung immer auch [_onUpgrade] ergänzen, sonst
+  /// verlieren bestehende Installationen beim Update ihre Tabellen.
+  static const int _dbVersion = 2;
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    FeedbackService.log('🗄️ SQLite-Migration $oldVersion → $newVersion');
+    if (oldVersion < 2) {
+      await _createHiveActionsTable(db);
+    }
+  }
+
+  /// DDL der Maßnahmen-Tabelle. Als Konstante, damit Neuanlage, Migration
+  /// und Test garantiert dasselbe Schema verwenden.
+  @visibleForTesting
+  static const String hiveActionsTableSql = '''
+      CREATE TABLE IF NOT EXISTS hive_actions (
+        id TEXT PRIMARY KEY,
+        hive_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        type TEXT NOT NULL,
+        note TEXT,
+        brood_frames INTEGER,
+        bee_frames INTEGER,
+        temper INTEGER,
+        queen_seen INTEGER,
+        swarm_cells INTEGER,
+        amount REAL,
+        unit TEXT,
+        treatment TEXT,
+        photo_paths TEXT,
+        created_at TEXT,
+        updated_at TEXT
+      )
+    ''';
+
+  @visibleForTesting
+  static const String hiveActionsIndexSql =
+      'CREATE INDEX IF NOT EXISTS idx_hive_actions_hive '
+      'ON hive_actions (hive_id, date DESC)';
+
+  Future<void> _createHiveActionsTable(Database db) async {
+    await db.execute(hiveActionsTableSql);
+    await db.execute(hiveActionsIndexSql);
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -200,7 +247,9 @@ class DatabaseService {
       )
     ''');
 
-    FeedbackService.log('🗄️ SQLite-Schema erstellt (v1)');
+    await _createHiveActionsTable(db);
+
+    FeedbackService.log('🗄️ SQLite-Schema erstellt (v$_dbVersion)');
   }
 
   // ============ COMPANY OPERATIONS ============
@@ -717,6 +766,9 @@ class DatabaseService {
 
   Future<void> deleteHive(String id) async {
     final db = await database;
+    // Maßnahmen hängen am Volk und werden mitgelöscht (Fremdschlüssel sind
+    // in sqflite standardmäßig nicht aktiv, deshalb explizit).
+    await db.delete('hive_actions', where: 'hive_id = ?', whereArgs: [id]);
     await db.delete('hives', where: 'id = ?', whereArgs: [id]);
     FeedbackService.logDbOperation('DELETE', 'hives', id: id);
   }
@@ -733,6 +785,123 @@ class DatabaseService {
     }
   }
 
+  // ============ HIVE ACTION OPERATIONS (Maßnahmen) ============
+
+  /// Maßnahmen eines Volkes, neueste zuerst.
+  Future<List<HiveActionModel>> getHiveActions(String hiveId) async {
+    try {
+      final db = await database;
+      final result = await db.query(
+        'hive_actions',
+        where: 'hive_id = ?',
+        whereArgs: [hiveId],
+        orderBy: 'date DESC, created_at DESC',
+      );
+      return result.map((m) => HiveActionModel.fromMap(m)).toList();
+    } catch (e) {
+      FeedbackService.logError('getHiveActions: $e', context: 'hive_actions');
+      return [];
+    }
+  }
+
+  /// Alle Maßnahmen über alle Völker, neueste zuerst.
+  Future<List<HiveActionModel>> getAllHiveActions({int? limit}) async {
+    try {
+      final db = await database;
+      final result = await db.query(
+        'hive_actions',
+        orderBy: 'date DESC, created_at DESC',
+        limit: limit,
+      );
+      return result.map((m) => HiveActionModel.fromMap(m)).toList();
+    } catch (e) {
+      FeedbackService.logError('getAllHiveActions: $e', context: 'hive_actions');
+      return [];
+    }
+  }
+
+  /// Jeweils jüngste Maßnahme je Volk – für die Völker-Übersicht.
+  Future<Map<String, HiveActionModel>> getLatestActionPerHive() async {
+    try {
+      final db = await database;
+      final result = await db.rawQuery('''
+        SELECT a.* FROM hive_actions a
+        JOIN (
+          SELECT hive_id, MAX(date) AS max_date
+          FROM hive_actions GROUP BY hive_id
+        ) neueste
+          ON a.hive_id = neueste.hive_id AND a.date = neueste.max_date
+      ''');
+      final map = <String, HiveActionModel>{};
+      for (final row in result) {
+        final action = HiveActionModel.fromMap(row);
+        // Bei gleichem Datum gewinnt der zuletzt erfasste Eintrag.
+        final vorhanden = map[action.hiveId];
+        if (vorhanden == null ||
+            action.createdAt.isAfter(vorhanden.createdAt)) {
+          map[action.hiveId] = action;
+        }
+      }
+      return map;
+    } catch (e) {
+      FeedbackService.logError('getLatestActionPerHive: $e',
+          context: 'hive_actions');
+      return {};
+    }
+  }
+
+  Future<HiveActionModel?> getHiveAction(String id) async {
+    final db = await database;
+    final result =
+        await db.query('hive_actions', where: 'id = ?', whereArgs: [id]);
+    return result.isNotEmpty ? HiveActionModel.fromMap(result.first) : null;
+  }
+
+  Future<void> insertHiveAction(HiveActionModel action) async {
+    final db = await database;
+    await db.insert(
+      'hive_actions',
+      action.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    FeedbackService.logDbOperation('INSERT', 'hive_actions', id: action.id);
+  }
+
+  Future<void> updateHiveAction(HiveActionModel action) async {
+    final db = await database;
+    await db.update(
+      'hive_actions',
+      action.toMap(),
+      where: 'id = ?',
+      whereArgs: [action.id],
+    );
+    FeedbackService.logDbOperation('UPDATE', 'hive_actions', id: action.id);
+  }
+
+  Future<void> deleteHiveAction(String id) async {
+    final db = await database;
+    await db.delete('hive_actions', where: 'id = ?', whereArgs: [id]);
+    FeedbackService.logDbOperation('DELETE', 'hive_actions', id: id);
+  }
+
+  /// Anzahl Maßnahmen je Typ – Grundlage für Auswertungen.
+  Future<Map<String, int>> countActionsByType() async {
+    try {
+      final db = await database;
+      final result = await db.rawQuery(
+        'SELECT type, COUNT(*) AS anzahl FROM hive_actions GROUP BY type',
+      );
+      return {
+        for (final r in result)
+          r['type'] as String: (r['anzahl'] as num).toInt(),
+      };
+    } catch (e) {
+      FeedbackService.logError('countActionsByType: $e',
+          context: 'hive_actions');
+      return {};
+    }
+  }
+
   // ============ UTILITY OPERATIONS ============
 
   Future<void> clearAllData() async {
@@ -744,6 +913,7 @@ class DatabaseService {
     await db.delete('design_settings');
     await db.delete('companies');
     await db.delete('letters');
+    await db.delete('hive_actions');
     await db.delete('hives');
     await db.delete('articles');
     FeedbackService.log('🗄️ Alle Daten gelöscht');

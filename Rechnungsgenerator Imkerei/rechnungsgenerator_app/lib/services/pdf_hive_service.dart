@@ -16,8 +16,11 @@ class PdfHiveService {
 
   static const _peach = PdfColor(0.992, 0.627, 0.522);
 
+  /// Stockkarte als PDF. [actions] erscheinen als Verlauf auf einer
+  /// zweiten Seite – neueste zuerst.
   Future<pw.Document> generateStockkartePdf({
     required HiveModel hive,
+    List<HiveActionModel> actions = const [],
   }) async {
     final base = await PdfGoogleFonts.robotoRegular();
     final bold = await PdfGoogleFonts.robotoBold();
@@ -91,7 +94,80 @@ class PdfHiveService {
         ),
       ),
     );
+
+    if (actions.isNotEmpty) {
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a6,
+          margin: const pw.EdgeInsets.all(8 * PdfPageFormat.mm),
+          header: (ctx) => pw.Padding(
+            padding:
+                const pw.EdgeInsets.only(bottom: 3 * PdfPageFormat.mm),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('MASSNAHMEN',
+                    style: pw.TextStyle(
+                        font: bold, fontSize: 9, color: _peach)),
+                pw.Text(hive.displayLabel,
+                    style: pw.TextStyle(font: bold, fontSize: 11)),
+                pw.SizedBox(height: 2 * PdfPageFormat.mm),
+                pw.Divider(thickness: 0.5, color: PdfColors.grey400),
+              ],
+            ),
+          ),
+          build: (ctx) => [
+            for (final a in actions) _actionEntry(base, bold, a),
+          ],
+        ),
+      );
+    }
+
     return doc;
+  }
+
+  pw.Widget _actionEntry(pw.Font base, pw.Font bold, HiveActionModel a) {
+    final summary = a.summary;
+    final note = (a.note ?? '').trim();
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 3 * PdfPageFormat.mm),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(
+                width: 20 * PdfPageFormat.mm,
+                child: pw.Text(DateFormat('dd.MM.yyyy').format(a.date),
+                    style: pw.TextStyle(font: base, fontSize: 8)),
+              ),
+              pw.Expanded(
+                child: pw.Text(a.typeLabel,
+                    style: pw.TextStyle(font: bold, fontSize: 8)),
+              ),
+            ],
+          ),
+          if (summary.isNotEmpty)
+            pw.Padding(
+              padding:
+                  const pw.EdgeInsets.only(left: 20 * PdfPageFormat.mm),
+              child: pw.Text(summary,
+                  style: pw.TextStyle(
+                      font: base, fontSize: 8, color: PdfColors.grey700)),
+            ),
+          // Notiz nur zusätzlich zeigen, wenn sie nicht schon die
+          // Zusammenfassung ist (bei Maßnahmen ohne Kennzahlen).
+          if (note.isNotEmpty && note != summary)
+            pw.Padding(
+              padding:
+                  const pw.EdgeInsets.only(left: 20 * PdfPageFormat.mm),
+              child: pw.Text(note,
+                  style: pw.TextStyle(font: base, fontSize: 8)),
+            ),
+        ],
+      ),
+    );
   }
 
   pw.Widget _row(pw.Font base, pw.Font bold, String label, String value) {

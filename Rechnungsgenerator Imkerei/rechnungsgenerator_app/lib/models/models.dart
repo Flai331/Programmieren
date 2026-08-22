@@ -7,3 +7,4 @@ export 'address_template_model.dart';
 export 'design_template_model.dart';
 export 'letter_model.dart';
 export 'hive_model.dart';
+export 'hive_action_model.dart';

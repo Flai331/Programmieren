@@ -37,8 +37,34 @@ class AppUtils {
     ).format(amount);
   }
 
-  static String formatNumber(double number, {int decimalDigits = 2}) {
-    return NumberFormat.decimalPattern('de_DE').format(number);
+  static String formatNumber(double number, {int? decimalDigits}) {
+    final format = NumberFormat.decimalPattern('de_DE');
+    if (decimalDigits != null) {
+      format.minimumFractionDigits = decimalDigits;
+      format.maximumFractionDigits = decimalDigits;
+    }
+    return format.format(number);
+  }
+
+  /// Zahl aus einer Nutzereingabe lesen – akzeptiert deutsche und englische
+  /// Schreibweise ('12,5' wie '12.5'). Leere oder ungültige Eingabe → null.
+  static double? parseNumber(String input) {
+    final cleaned = input.trim().replaceAll(' ', '');
+    if (cleaned.isEmpty) return null;
+    // Beide Trennzeichen vorhanden: das letzte ist das Dezimaltrennzeichen.
+    final lastComma = cleaned.lastIndexOf(',');
+    final lastDot = cleaned.lastIndexOf('.');
+    String normalized;
+    if (lastComma >= 0 && lastDot >= 0) {
+      normalized = lastComma > lastDot
+          ? cleaned.replaceAll('.', '').replaceAll(',', '.')
+          : cleaned.replaceAll(',', '');
+    } else if (lastComma >= 0) {
+      normalized = cleaned.replaceAll(',', '.');
+    } else {
+      normalized = cleaned;
+    }
+    return double.tryParse(normalized);
   }
 
   // ============ INVOICE OPERATIONS ============

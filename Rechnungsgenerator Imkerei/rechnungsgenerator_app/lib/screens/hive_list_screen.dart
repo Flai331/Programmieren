@@ -14,16 +14,41 @@ class _HiveListScreenState extends State<HiveListScreen> {
   final _db = DatabaseService();
   static const _peach = Color(0xFFfda085);
 
-  late Future<List<HiveModel>> _future;
+  late Future<_HiveOverview> _future;
   String _filter = 'aktiv'; // aktiv | alle | abgegeben | eingegangen
 
   @override
   void initState() {
     super.initState();
-    _future = _db.getAllHives();
+    _future = _load();
   }
 
-  void _reload() => setState(() => _future = _db.getAllHives());
+  /// Völker und die jeweils jüngste Maßnahme in einem Zug laden, damit
+  /// Liste und Zusatzzeile immer denselben Stand zeigen.
+  Future<_HiveOverview> _load() async {
+    final hives = await _db.getAllHives();
+    final latest = await _db.getLatestActionPerHive();
+    return _HiveOverview(hives, latest);
+  }
+
+  void _reload() {
+    if (!mounted) return;
+    setState(() {
+      _future = _load();
+    });
+  }
+
+  /// „heute", „gestern", „vor 5 Tagen" – Abstand zur letzten Maßnahme.
+  String _relativeDays(DateTime date) {
+    final heute = DateUtils.dateOnly(DateTime.now());
+    final tage = heute.difference(DateUtils.dateOnly(date)).inDays;
+    if (tage <= 0) return 'heute';
+    if (tage == 1) return 'gestern';
+    if (tage < 7) return 'vor $tage Tagen';
+    if (tage < 14) return 'vor 1 Woche';
+    if (tage < 70) return 'vor ${(tage / 7).round()} Wochen';
+    return 'vor ${(tage / 30).round()} Monaten';
+  }
 
   Color _statusColor(String s) {
     switch (s) {
@@ -46,13 +71,14 @@ class _HiveListScreenState extends State<HiveListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: FutureBuilder<List<HiveModel>>(
+      body: FutureBuilder<_HiveOverview>(
         future: _future,
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          final all = snap.data ?? [];
+          final overview = snap.data ?? const _HiveOverview([], {});
+          final all = overview.hives;
 
           if (all.isEmpty) {
             return Center(
@@ -202,6 +228,14 @@ class _HiveListScreenState extends State<HiveListScreen> {
                                                     fontSize: 11,
                                                     color: Color(0xFF8a8a94)),
                                               ),
+                                            if (overview.latestAction[h.id]
+                                                case final letzte?)
+                                              Text(
+                                                '${letzte.typeLabel} · ${_relativeDays(letzte.date)}',
+                                                style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: _peach),
+                                              ),
                                           ],
                                         ),
                                       ),
@@ -252,4 +286,11 @@ class _HiveListScreenState extends State<HiveListScreen> {
       ),
     );
   }
+}
+
+/// Völker samt jeweils jüngster Maßnahme – ein gemeinsamer Ladestand.
+class _HiveOverview {
+  final List<HiveModel> hives;
+  final Map<String, HiveActionModel> latestAction;
+  const _HiveOverview(this.hives, this.latestAction);
 }

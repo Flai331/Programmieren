@@ -26,5 +26,8 @@ void main() {
     expect(FeedbackService.screenObserver, isNotNull);
     expect(const FeedbackActions(), isNotNull);
     expect(const GradientButton(label: 'x'), isNotNull);
+    expect(InvoiceItemWidget, isNotNull);
+    expect(const ElementPos(x: 0, y: 0, w: 1, h: 1).x, 0);
+    expect(HiveActionTypes.all, isNotEmpty);
   });
 }
