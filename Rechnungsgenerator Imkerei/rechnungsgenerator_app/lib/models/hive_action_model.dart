@@ -41,6 +41,14 @@ class HiveActionModel {
   /// Lokale Dateipfade der angehängten Fotos
   final List<String> photoPaths;
 
+  /// Id der Saison-Aufgabe, die mit dieser Maßnahme erledigt wurde
+  /// (siehe SeasonCatalog). Null bei frei erfassten Maßnahmen.
+  ///
+  /// Nötig, weil mehrere Saison-Aufgaben dieselbe Maßnahmenart nutzen –
+  /// „Drohnenrahmen einsetzen" und „Alte Waben austauschen" sind beide
+  /// eine Wabenerneuerung im Frühjahr.
+  final String? seasonTask;
+
   final DateTime createdAt;
   final DateTime? updatedAt;
 
@@ -59,6 +67,7 @@ class HiveActionModel {
     this.unit,
     this.treatment,
     this.photoPaths = const [],
+    this.seasonTask,
     required this.createdAt,
     this.updatedAt,
   });
@@ -108,6 +117,7 @@ class HiveActionModel {
         'unit': unit,
         'treatment': treatment,
         'photo_paths': photoPaths.isEmpty ? null : jsonEncode(photoPaths),
+        'season_task': seasonTask,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt?.toIso8601String(),
       };
@@ -127,6 +137,7 @@ class HiveActionModel {
         unit: m['unit'] as String?,
         treatment: m['treatment'] as String?,
         photoPaths: _photosFromDb(m['photo_paths']),
+        seasonTask: m['season_task'] as String?,
         createdAt: DateTime.parse(m['created_at'] as String),
         updatedAt: m['updated_at'] != null
             ? DateTime.parse(m['updated_at'] as String)
@@ -165,6 +176,7 @@ class HiveActionModel {
     String? unit,
     String? treatment,
     List<String>? photoPaths,
+    String? seasonTask,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -183,6 +195,7 @@ class HiveActionModel {
         unit: unit ?? this.unit,
         treatment: treatment ?? this.treatment,
         photoPaths: photoPaths ?? this.photoPaths,
+        seasonTask: seasonTask ?? this.seasonTask,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );

@@ -33,13 +33,30 @@ class DatabaseService {
 
   /// Schema-Version. Bei Erhöhung immer auch [_onUpgrade] ergänzen, sonst
   /// verlieren bestehende Installationen beim Update ihre Tabellen.
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 3;
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     FeedbackService.log('🗄️ SQLite-Migration $oldVersion → $newVersion');
     if (oldVersion < 2) {
       await _createHiveActionsTable(db);
     }
+    if (oldVersion < 3) {
+      // Bei einer Neuanlage ab v3 ist die Spalte schon im CREATE enthalten,
+      // deshalb nur ergänzen, wenn sie fehlt.
+      await addColumnIfMissing(db, 'hive_actions', 'season_task', 'TEXT');
+    }
+  }
+
+  /// Spalte nachrüsten. SQLite kennt kein `ADD COLUMN IF NOT EXISTS`, ein
+  /// zweiter Versuch würde also mit einem Fehler abbrechen.
+  @visibleForTesting
+  static Future<void> addColumnIfMissing(
+      Database db, String table, String column, String type) async {
+    final spalten = await db.rawQuery('PRAGMA table_info($table)');
+    final vorhanden = spalten.any((s) => s['name'] == column);
+    if (vorhanden) return;
+    await db.execute('ALTER TABLE $table ADD COLUMN $column $type');
+    FeedbackService.log('🗄️ Spalte $table.$column ergänzt');
   }
 
   /// DDL der Maßnahmen-Tabelle. Als Konstante, damit Neuanlage, Migration
@@ -61,6 +78,7 @@ class DatabaseService {
         unit TEXT,
         treatment TEXT,
         photo_paths TEXT,
+        season_task TEXT,
         created_at TEXT,
         updated_at TEXT
       )

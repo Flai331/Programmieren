@@ -19,12 +19,17 @@ class HiveActionEditScreen extends StatefulWidget {
   /// Vorauswahl des Typs beim Anlegen (Schnellzugriff aus der Timeline).
   final String? initialType;
 
+  /// Id der Saison-Aufgabe, die mit dieser Maßnahme erledigt wird.
+  /// Gesetzt, wenn die Erfassung aus der Saison-Ansicht heraus startet.
+  final String? seasonTask;
+
   const HiveActionEditScreen({
     Key? key,
     required this.hiveId,
     required this.hiveLabel,
     this.actionId,
     this.initialType,
+    this.seasonTask,
   }) : super(key: key);
 
   @override
@@ -55,6 +60,9 @@ class _HiveActionEditScreenState extends State<HiveActionEditScreen> {
   /// Beim Bearbeiten entfernte Fotos – erst beim Speichern wirklich löschen.
   final List<String> _removedPhotos = [];
 
+  /// Zugeordnete Saison-Aufgabe (beim Bearbeiten aus dem Datensatz).
+  String? _seasonTask;
+
   HiveActionModel? _current;
   bool _loading = true;
   bool _isSaving = false;
@@ -72,7 +80,13 @@ class _HiveActionEditScreenState extends State<HiveActionEditScreen> {
         _current = await _db.getHiveAction(widget.actionId!);
         if (_current != null) _populate(_current!);
       } else {
-        _type = widget.initialType ?? HiveActionTypes.inspection;
+        _seasonTask = widget.seasonTask;
+        final aufgabe = _seasonTask == null
+            ? null
+            : SeasonCatalog.byId(_seasonTask!);
+        _type = widget.initialType ??
+            aufgabe?.actionType ??
+            HiveActionTypes.inspection;
         _unit.text = HiveActionTypes.defaultUnitOf(_type);
       }
     } catch (e) {
@@ -97,6 +111,7 @@ class _HiveActionEditScreenState extends State<HiveActionEditScreen> {
     _queenSeen = a.queenSeen ?? false;
     _swarmCells = a.swarmCells ?? false;
     _photos = List.of(a.photoPaths);
+    _seasonTask = a.seasonTask;
   }
 
   String? _nullable(String s) => s.trim().isEmpty ? null : s.trim();
@@ -122,6 +137,7 @@ class _HiveActionEditScreenState extends State<HiveActionEditScreen> {
       unit: withAmount ? _nullable(_unit.text) : null,
       treatment: withTreatment ? _nullable(_treatment.text) : null,
       photoPaths: _photos,
+      seasonTask: _seasonTask,
       createdAt: _current?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -302,6 +318,32 @@ class _HiveActionEditScreenState extends State<HiveActionEditScreen> {
         children: [
           Text(widget.hiveLabel,
               style: const TextStyle(fontSize: 12, color: _muted)),
+          if (SeasonCatalog.byId(_seasonTask ?? '') case final aufgabe?) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: _peach.withAlpha(30),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _peach),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.event_available_outlined,
+                      size: 15, color: _peach),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text('Saison: ${aufgabe.title}',
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: _peach,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
 
           _section('Art der Maßnahme'),

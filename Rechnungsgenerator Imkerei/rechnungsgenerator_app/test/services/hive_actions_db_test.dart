@@ -124,6 +124,90 @@ void main() {
     });
   });
 
+  group('Migration v2 → v3', () {
+    /// Maßnahmen-Tabelle in der Fassung von Version 2 – noch ohne die
+    /// Spalte für die Saison-Zuordnung.
+    const v2Actions = '''
+      CREATE TABLE hive_actions (
+        id TEXT PRIMARY KEY,
+        hive_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        type TEXT NOT NULL,
+        note TEXT,
+        brood_frames INTEGER,
+        bee_frames INTEGER,
+        temper INTEGER,
+        queen_seen INTEGER,
+        swarm_cells INTEGER,
+        amount REAL,
+        unit TEXT,
+        treatment TEXT,
+        photo_paths TEXT,
+        created_at TEXT,
+        updated_at TEXT
+      )
+    ''';
+
+    Future<Database> openV2() async {
+      final db = await openV1();
+      await db.execute(v2Actions);
+      return db;
+    }
+
+    Future<List<String>> columns(Database db) async {
+      final info = await db.rawQuery('PRAGMA table_info(hive_actions)');
+      return info.map((r) => r['name'] as String).toList();
+    }
+
+    test('ergänzt die Spalte season_task', () async {
+      final db = await openV2();
+      addTearDown(db.close);
+
+      expect(await columns(db), isNot(contains('season_task')));
+      await DatabaseService.addColumnIfMissing(
+          db, 'hive_actions', 'season_task', 'TEXT');
+      expect(await columns(db), contains('season_task'));
+    });
+
+    test('bestehende Maßnahmen bleiben erhalten', () async {
+      final db = await openV2();
+      addTearDown(db.close);
+
+      // Datensatz im alten Format (ohne die neue Spalte)
+      final alt = _action(id: 'alt', note: 'vor der Migration').toMap()
+        ..remove('season_task');
+      await db.insert('hive_actions', alt);
+
+      await DatabaseService.addColumnIfMissing(
+          db, 'hive_actions', 'season_task', 'TEXT');
+
+      final rows = await db.query('hive_actions');
+      expect(rows, hasLength(1));
+      final gelesen = HiveActionModel.fromMap(rows.single);
+      expect(gelesen.note, 'vor der Migration');
+      expect(gelesen.seasonTask, isNull);
+    });
+
+    test('ist mehrfach ausführbar', () async {
+      final db = await openV2();
+      addTearDown(db.close);
+
+      for (var i = 0; i < 3; i++) {
+        await DatabaseService.addColumnIfMissing(
+            db, 'hive_actions', 'season_task', 'TEXT');
+      }
+      final spalten = await columns(db);
+      expect(spalten.where((c) => c == 'season_task'), hasLength(1));
+    });
+
+    test('Neuanlage ab v3 bringt die Spalte schon mit', () async {
+      final db = await openV1();
+      addTearDown(db.close);
+      await db.execute(DatabaseService.hiveActionsTableSql);
+      expect(await columns(db), contains('season_task'));
+    });
+  });
+
   group('Maßnahmen speichern und lesen', () {
     late Database db;
 

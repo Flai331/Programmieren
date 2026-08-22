@@ -46,7 +46,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   List<Widget> get _screens => [
         DashboardScreen(onNavigate: _goToTab),
-        const HiveListScreen(),
+        const BeeYearScreen(),
         InvoiceListScreen(
           // Der Key erzwingt einen frischen State, wenn das Dashboard einen
           // anderen Filter anfordert.

@@ -29,5 +29,9 @@ void main() {
     expect(InvoiceItemWidget, isNotNull);
     expect(const ElementPos(x: 0, y: 0, w: 1, h: 1).x, 0);
     expect(HiveActionTypes.all, isNotEmpty);
+    expect(const BeeYearScreen(), isNotNull);
+    expect(const SeasonScreen(), isNotNull);
+    expect(SeasonCatalog.tasks, isNotEmpty);
+    expect(SeasonService(), isNotNull);
   });
 }
