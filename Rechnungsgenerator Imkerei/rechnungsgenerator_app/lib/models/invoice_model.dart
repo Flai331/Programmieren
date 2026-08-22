@@ -51,6 +51,28 @@ class InvoiceModel {
 
   bool get isQuote => documentType == 'quote';
 
+  /// Gültige Status je Dokumenttyp – einzige Quelle für Dashboard & Liste.
+  static const List<String> invoiceStatuses = ['draft', 'sent', 'paid'];
+  static const List<String> quoteStatuses = [
+    'draft',
+    'sent',
+    'accepted',
+    'rejected'
+  ];
+
+  static List<String> statusesFor(String documentType) =>
+      documentType == 'quote' ? quoteStatuses : invoiceStatuses;
+
+  List<String> get statusOrder => statusesFor(documentType);
+
+  /// Status auf die für den Dokumenttyp gültigen Werte abgebildet.
+  ///
+  /// Ohne diese Normalisierung zählt ein Datensatz mit typfremdem Status
+  /// (z.B. eine aus einem Angebot entstandene Rechnung mit `accepted`)
+  /// im Dashboard und in der Rechnungsliste unterschiedlich.
+  String get normalizedStatus =>
+      statusOrder.contains(status) ? status : 'draft';
+
   DateTime get dueDate => date.add(Duration(days: paymentTerms));
 
   Map<String, dynamic> toMap() {

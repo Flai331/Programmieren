@@ -28,23 +28,38 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     'Einstellungen',
   ];
 
-  void _goToTab(int index) {
-    setState(() => _selectedIndex = index);
+  /// Status-Filter für die Rechnungsliste, wenn sie über eine Dashboard-Kachel
+  /// geöffnet wird ('all' | 'draft' | 'sent' | 'paid').
+  String _invoiceFilter = 'all';
+
+  void _goToTab(int index, {String? invoiceStatusFilter}) {
+    setState(() {
+      _selectedIndex = index;
+      if (invoiceStatusFilter != null) _invoiceFilter = invoiceStatusFilter;
+    });
     FeedbackService.logUserAction('Tab gewechselt (Dashboard)',
-        context: {'tab': index.toString()});
+        context: {
+          'tab': index.toString(),
+          if (invoiceStatusFilter != null) 'filter': invoiceStatusFilter,
+        });
   }
 
-  late final List<Widget> _screens = [
-    DashboardScreen(onNavigate: _goToTab),
-    const HiveListScreen(),
-    const InvoiceListScreen(),
-    const AddressBookScreen(),
-    const ArticlesScreen(),
-    const TemplatesScreen(),
-    const LetterListScreen(),
-    const StatisticsScreen(),
-    const SettingsScreen(),
-  ];
+  List<Widget> get _screens => [
+        DashboardScreen(onNavigate: _goToTab),
+        const HiveListScreen(),
+        InvoiceListScreen(
+          // Der Key erzwingt einen frischen State, wenn das Dashboard einen
+          // anderen Filter anfordert.
+          key: ValueKey('invoices-$_invoiceFilter'),
+          initialFilter: _invoiceFilter,
+        ),
+        const AddressBookScreen(),
+        const ArticlesScreen(),
+        const TemplatesScreen(),
+        const LetterListScreen(),
+        const StatisticsScreen(),
+        const SettingsScreen(),
+      ];
 
   late final List<NavigationDestination> _destinations = const [
     NavigationDestination(
@@ -127,7 +142,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           selectedIndex: _selectedIndex,
           indicatorColor: _peach.withAlpha(51), // 20% per design system
           onDestinationSelected: (int index) {
-            setState(() => _selectedIndex = index);
+            setState(() {
+              _selectedIndex = index;
+              // Direkt über die Navigationsleiste: ungefilterte Liste zeigen,
+              // damit kein Filter einer Dashboard-Kachel hängen bleibt.
+              _invoiceFilter = 'all';
+            });
             FeedbackService.logScreenLoad(_titles[index]);
             FeedbackService.logUserAction('Tab gewechselt',
                 context: {'tab': index.toString()});

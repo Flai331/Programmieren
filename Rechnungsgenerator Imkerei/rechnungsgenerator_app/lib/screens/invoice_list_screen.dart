@@ -10,7 +10,19 @@ import '../utils/utils.dart';
 import 'invoice_edit_screen.dart';
 
 class InvoiceListScreen extends StatefulWidget {
-  const InvoiceListScreen({Key? key}) : super(key: key);
+  /// Status-Filter beim Öffnen ('all' | 'draft' | 'sent' | 'paid' | …).
+  /// Wird vom Dashboard gesetzt, damit die Liste genau die Datensätze zeigt,
+  /// die die angetippte Kachel gezählt hat.
+  final String initialFilter;
+
+  /// 'invoice' | 'quote'
+  final String initialDocType;
+
+  const InvoiceListScreen({
+    Key? key,
+    this.initialFilter = 'all',
+    this.initialDocType = 'invoice',
+  }) : super(key: key);
 
   @override
   State<InvoiceListScreen> createState() => _InvoiceListScreenState();
@@ -19,14 +31,44 @@ class InvoiceListScreen extends StatefulWidget {
 class _InvoiceListScreenState extends State<InvoiceListScreen> {
   late DatabaseService _dbService;
   late SyncService _syncService;
-  String _filter = 'all';
-  String _docType = 'invoice'; // 'invoice' | 'quote'
+  late String _filter;
+  late String _docType; // 'invoice' | 'quote'
+
+  /// Gecachte Abfrage. Ohne den Cache würde jeder Rebuild (z.B. beim Tippen
+  /// eines Filter-Chips) eine neue Datenbankabfrage starten und die Liste
+  /// dabei kurz auf den Ladezustand zurückfallen.
+  late Future<List<InvoiceModel>> _invoicesFuture;
 
   @override
   void initState() {
     super.initState();
     _dbService = DatabaseService();
     _syncService = SyncService();
+    _filter = widget.initialFilter;
+    _docType = widget.initialDocType;
+    _invoicesFuture = _dbService.getAllInvoices();
+  }
+
+  @override
+  void didUpdateWidget(covariant InvoiceListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Dashboard-Kachel getippt, während die Liste schon aufgebaut ist
+    if (widget.initialFilter != oldWidget.initialFilter ||
+        widget.initialDocType != oldWidget.initialDocType) {
+      setState(() {
+        _filter = widget.initialFilter;
+        _docType = widget.initialDocType;
+        _invoicesFuture = _dbService.getAllInvoices();
+      });
+    }
+  }
+
+  /// Liste aus der Datenbank neu laden.
+  void _reload() {
+    if (!mounted) return;
+    setState(() {
+      _invoicesFuture = _dbService.getAllInvoices();
+    });
   }
 
   Color _statusColor(String status) {
@@ -50,9 +92,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   }
 
   // Status-Reihenfolge je Dokumenttyp
-  List<String> get _statusOrder => _docType == 'quote'
-      ? ['draft', 'sent', 'accepted', 'rejected']
-      : ['draft', 'sent', 'paid'];
+  List<String> get _statusOrder => InvoiceModel.statusesFor(_docType);
 
   Future<void> _shareInvoice(InvoiceModel invoice) async {
     try {
@@ -94,7 +134,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
         text: body,
       );
       await _dbService.updateInvoiceStatus(invoice.id, 'sent');
-      if (mounted) setState(() {});
+      _reload();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -106,13 +146,11 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
 
   Future<void> _cycleStatus(InvoiceModel invoice) async {
     // Zyklus je Dokumenttyp
-    final order = invoice.isQuote
-        ? ['draft', 'sent', 'accepted', 'rejected']
-        : ['draft', 'sent', 'paid'];
-    final idx = order.indexOf(invoice.status);
+    final order = invoice.statusOrder;
+    final idx = order.indexOf(invoice.normalizedStatus);
     final next = order[(idx + 1) % order.length];
     await _dbService.updateInvoiceStatus(invoice.id, next);
-    if (mounted) setState(() {});
+    _reload();
   }
 
   // Angebot → Rechnung umwandeln
@@ -172,7 +210,11 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
       }
 
       if (mounted) {
-        setState(() => _docType = 'invoice');
+        setState(() {
+          _docType = 'invoice';
+          _filter = 'all';
+          _invoicesFuture = _dbService.getAllInvoices();
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('✓ Rechnung $newNumber erstellt')),
         );
@@ -189,7 +231,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<InvoiceModel>>(
-      future: _dbService.getAllInvoices(),
+      future: _invoicesFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -205,7 +247,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                 const Text('Fehler beim Laden der Rechnungen'),
                 const SizedBox(height: 32),
                 ElevatedButton.icon(
-                  onPressed: () => setState(() {}),
+                  onPressed: _reload,
                   icon: const Icon(Icons.refresh),
                   label: const Text('Neu laden'),
                 ),
@@ -223,7 +265,9 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
 
         final filtered = _filter == 'all'
             ? typeInvoices
-            : typeInvoices.where((i) => i.status == _filter).toList();
+            : typeInvoices
+                .where((i) => i.normalizedStatus == _filter)
+                .toList();
 
         return Column(
           children: [
@@ -263,7 +307,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       child: ChoiceChip(
                         label: Text(f == 'all'
                             ? 'Alle (${typeInvoices.length})'
-                            : '${_statusLabel(f)} (${typeInvoices.where((i) => i.status == f).length})'),
+                            : '${_statusLabel(f)} (${typeInvoices.where((i) => i.normalizedStatus == f).length})'),
                         selected: _filter == f,
                         onSelected: (_) => setState(() => _filter = f),
                         selectedColor: f == 'all'
@@ -303,7 +347,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                       documentType: _docType),
                                 ),
                               );
-                              setState(() {});
+                              _reload();
                             },
                             icon: const Icon(Icons.add),
                             label: Text(isQuote
@@ -315,8 +359,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                     )
                   : RefreshIndicator(
                       onRefresh: () async {
-                        setState(() {});
                         await _syncService.syncInvoicesManual();
+                        _reload();
                       },
                       child: filtered.isEmpty
                           ? Center(
@@ -334,8 +378,10 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                 final invoice = filtered[index];
                                 return InvoiceListCard(
                                   invoice: invoice,
-                                  statusColor: _statusColor(invoice.status),
-                                  statusLabel: _statusLabel(invoice.status),
+                                  statusColor:
+                                      _statusColor(invoice.normalizedStatus),
+                                  statusLabel:
+                                      _statusLabel(invoice.normalizedStatus),
                                   onTap: () async {
                                     await Navigator.of(context).push(
                                       MaterialPageRoute(
@@ -343,7 +389,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                             invoiceId: invoice.id),
                                       ),
                                     );
-                                    setState(() {});
+                                    _reload();
                                   },
                                   onDelete: () =>
                                       _showDeleteConfirmation(context, invoice),
@@ -363,32 +409,46 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context, InvoiceModel invoice) {
+  Future<void> _showDeleteConfirmation(
+      BuildContext context, InvoiceModel invoice) async {
     final label = invoice.isQuote ? 'Angebot' : 'Rechnung';
-    showDialog(
+    // Erst den Dialog schließen, dann löschen: der Dialog-Context ist nach
+    // dem Pop ungültig und darf für Snackbar/setState nicht mehr dienen.
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: Text('$label löschen'),
         content: Text('$label ${invoice.invoiceNumber} wirklich löschen?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Abbrechen'),
           ),
           TextButton(
-            onPressed: () async {
-              await _dbService.deleteInvoice(invoice.id);
-              Navigator.pop(context);
-              setState(() {});
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('$label gelöscht')),
-              );
-            },
-            child: const Text('Löschen', style: TextStyle(color: Color(0xFFff6b7a))),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Löschen',
+                style: TextStyle(color: Color(0xFFff6b7a))),
           ),
         ],
       ),
     );
+    if (ok != true) return;
+
+    try {
+      await _dbService.deleteInvoice(invoice.id);
+      _reload();
+      if (mounted) {
+        ScaffoldMessenger.of(this.context).showSnackBar(
+          SnackBar(content: Text('$label gelöscht')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(this.context).showSnackBar(
+          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }
 

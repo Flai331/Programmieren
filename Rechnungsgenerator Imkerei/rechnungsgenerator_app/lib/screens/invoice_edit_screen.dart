@@ -289,6 +289,9 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
         headerText: null,
         headerTextSize: 24,
         isGrossPrice: _isGrossPrice,
+        // Bestehenden Status beibehalten: Ohne das wurde eine bezahlte
+        // Rechnung beim Bearbeiten stillschweigend wieder zum Entwurf.
+        status: _currentInvoice?.status ?? 'draft',
         documentType: _docType,
       );
 
@@ -359,7 +362,9 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
         headerText: null,
         headerTextSize: 24,
         isGrossPrice: _isGrossPrice,
-        status: 'sent',
+        // Eine bereits bezahlte Rechnung bleibt bezahlt, auch wenn sie
+        // erneut versendet wird.
+        status: _currentInvoice?.status == 'paid' ? 'paid' : 'sent',
         documentType: _docType,
       );
       await _dbService.insertInvoice(invoice);
@@ -535,6 +540,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
       headerText: null,
       headerTextSize: 24,
       isGrossPrice: _isGrossPrice,
+      status: _currentInvoice?.status ?? 'draft',
       documentType: _docType,
     );
   }

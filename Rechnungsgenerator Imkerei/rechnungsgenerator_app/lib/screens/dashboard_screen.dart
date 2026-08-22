@@ -12,13 +12,58 @@ class _TileDef {
   final String title;
   final IconData icon;
   final _C style;
-  String value;
-  _TileDef(this.id, this.title, this.icon, this.style) : value = '–';
+  const _TileDef(this.id, this.title, this.icon, this.style);
+}
+
+/// Ergebnis eines Dashboard-Ladevorgangs.
+///
+/// Kacheln UND Listen werden aus genau diesem Objekt gerendert. Früher hielten
+/// die Kacheln ihren Wert in einem veränderlichen Feld, das ein parallel
+/// laufender (älterer) Ladevorgang überschreiben konnte – dadurch zeigten die
+/// Kacheln andere Zahlen als die Liste darunter.
+class _DashboardStats {
+  final String revenue;
+  final int total;
+  final int customers;
+  final int paid;
+  final int sent;
+  final int draft;
+  final List<InvoiceModel> openInvoices;
+  final List<InvoiceModel> openQuotes;
+  final List<InvoiceModel> doneQuotes;
+  final Map<String, String> customerMap;
+
+  const _DashboardStats({
+    required this.revenue,
+    required this.total,
+    required this.customers,
+    required this.paid,
+    required this.sent,
+    required this.draft,
+    required this.openInvoices,
+    required this.openQuotes,
+    required this.doneQuotes,
+    required this.customerMap,
+  });
+
+  String valueFor(String tileId) => switch (tileId) {
+        'revenue' => revenue,
+        'total' => '$total',
+        'customers' => '$customers',
+        'paid' => '$paid',
+        'sent' => '$sent',
+        'draft' => '$draft',
+        _ => '–',
+      };
 }
 
 class DashboardScreen extends StatefulWidget {
-  /// Wechselt zu einem Tab in der Hauptnavigation (0=Start,1=Rechnungen,2=Kunden...).
-  final void Function(int tabIndex)? onNavigate;
+  /// Wechselt zu einem Tab in der Hauptnavigation
+  /// (0=Start, 1=Völker, 2=Rechnungen, 3=Kunden, …).
+  ///
+  /// [invoiceStatusFilter] setzt beim Rechnungs-Tab direkt den Status-Filter,
+  /// damit die Liste genau die Datensätze zeigt, die die Kachel gezählt hat.
+  final void Function(int tabIndex, {String? invoiceStatusFilter})? onNavigate;
   const DashboardScreen({Key? key, this.onNavigate}) : super(key: key);
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -26,7 +71,11 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final _dbService = DatabaseService();
-  late Future<Map<String, dynamic>> _statsFuture;
+  late Future<_DashboardStats> _statsFuture;
+
+  /// Zuletzt fertig geladener Stand – überbrückt das Neuladen, damit die
+  /// Kacheln beim Refresh nicht kurz auf „–" springen.
+  _DashboardStats? _lastStats;
 
   // Kachel-Reihenfolge (drag-and-drop veränderbar)
   late List<_TileDef> _tiles;
@@ -36,17 +85,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     FeedbackService.logScreenLoad('Dashboard');
     _tiles = [
-      _TileDef('revenue',   'Umsatz',      Icons.euro_outlined,         _C.accent),
-      _TileDef('total',     'Rechnungen',  Icons.receipt_outlined,      _C.info),
-      _TileDef('customers', 'Kunden',      Icons.people_outline,        _C.neutral),
-      _TileDef('paid',      'Bezahlt',     Icons.check_circle_outline,  _C.success),
-      _TileDef('sent',      'Gestellt',    Icons.send_outlined,         _C.warning),
-      _TileDef('draft',     'Entwurf',     Icons.edit_outlined,         _C.neutral),
+      const _TileDef('revenue',   'Umsatz',      Icons.euro_outlined,         _C.accent),
+      const _TileDef('total',     'Rechnungen',  Icons.receipt_outlined,      _C.info),
+      const _TileDef('customers', 'Kunden',      Icons.people_outline,        _C.neutral),
+      const _TileDef('paid',      'Bezahlt',     Icons.check_circle_outline,  _C.success),
+      const _TileDef('sent',      'Gestellt',    Icons.send_outlined,         _C.warning),
+      const _TileDef('draft',     'Entwurf',     Icons.edit_outlined,         _C.neutral),
     ];
     _statsFuture = _load();
   }
 
-  Future<Map<String, dynamic>> _load() async {
+  /// Neu laden. Eigene Methode statt `setState(() => _statsFuture = _load())`:
+  /// eine Arrow-Funktion liefert die zugewiesene Future zurück, und `setState`
+  /// bricht bei einem Future-Rückgabewert mit einer Assertion ab.
+  void _reload() {
+    if (!mounted) return;
+    setState(() {
+      _statsFuture = _load();
+    });
+  }
+
+  Future<_DashboardStats> _load() async {
     final all       = await _dbService.getAllInvoices();
     // Angebote zählen NICHT als Umsatz/Rechnung
     final invoices  = all.where((i) => i.documentType == 'invoice').toList();
@@ -57,41 +116,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
     int paid = 0, sent = 0, draft = 0;
     for (final inv in invoices) {
       revenue += inv.total;
-      if (inv.status == 'paid')       paid++;
-      else if (inv.status == 'sent')  sent++;
-      else                            draft++;
+      // normalizedStatus: identische Zählung wie in der Rechnungsliste
+      switch (inv.normalizedStatus) {
+        case 'paid': paid++;
+        case 'sent': sent++;
+        default:     draft++;
+      }
     }
 
     // Dashboard-Listen: nur offene + abgearbeitete Angebote
     int byDate(InvoiceModel a, InvoiceModel b) => b.date.compareTo(a.date);
-    final openInvoices = invoices.where((i) => i.status != 'paid').toList()
-      ..sort(byDate);
+    final openInvoices =
+        invoices.where((i) => i.normalizedStatus != 'paid').toList()
+          ..sort(byDate);
     final openQuotes = quotes
-        .where((q) => q.status == 'draft' || q.status == 'sent')
+        .where((q) =>
+            q.normalizedStatus == 'draft' || q.normalizedStatus == 'sent')
         .toList()
       ..sort(byDate);
     final doneQuotes = quotes
-        .where((q) => q.status == 'accepted' || q.status == 'rejected')
+        .where((q) =>
+            q.normalizedStatus == 'accepted' || q.normalizedStatus == 'rejected')
         .toList()
       ..sort(byDate);
 
-    final stats = {
-      'revenue':     AppUtils.formatCurrency(revenue),
-      'total':       '${invoices.length}',
-      'customers':   '${customers.length}',
-      'paid':        '$paid',
-      'sent':        '$sent',
-      'draft':       '$draft',
-      'openInvoices': openInvoices,
-      'openQuotes':   openQuotes,
-      'doneQuotes':   doneQuotes,
-      'customerMap': customerMap,
-    };
-    setState(() {
-      for (final t in _tiles) {
-        t.value = stats[t.id] as String? ?? t.value;
-      }
-    });
+    final stats = _DashboardStats(
+      revenue:      AppUtils.formatCurrency(revenue),
+      total:        invoices.length,
+      customers:    customers.length,
+      paid:         paid,
+      sent:         sent,
+      draft:        draft,
+      openInvoices: openInvoices,
+      openQuotes:   openQuotes,
+      doneQuotes:   doneQuotes,
+      customerMap:  customerMap,
+    );
     return stats;
   }
 
@@ -165,7 +225,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
       }
       if (mounted) {
-        setState(() => _statsFuture = _load());
+        _reload();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('✓ Rechnung $newNumber erstellt')),
         );
@@ -188,12 +248,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // Kachel-Tap → passenden Tab öffnen (Index nach Nav-Layout in main_navigation_screen)
+  //
+  // Status-Kacheln öffnen die Rechnungsliste direkt mit dem passenden Filter,
+  // damit dort exakt die Datensätze stehen, die die Kachel gezählt hat.
   void _onTileTap(String id) {
-    final tab = switch (id) {
-      'customers' => 3, // Kunden
-      _ => 2, // Rechnungen
+    if (id == 'customers') {
+      widget.onNavigate?.call(3); // Kunden
+      return;
+    }
+    final filter = switch (id) {
+      'paid'  => 'paid',
+      'sent'  => 'sent',
+      'draft' => 'draft',
+      _       => 'all', // Umsatz + Rechnungen → alle Rechnungen
     };
-    widget.onNavigate?.call(tab);
+    widget.onNavigate?.call(2, invoiceStatusFilter: filter);
   }
 
   // Dokument öffnen/bearbeiten
@@ -203,18 +272,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (_) => InvoiceEditScreen(invoiceId: doc.id),
       ),
     );
-    if (mounted) setState(() => _statsFuture = _load());
+    _reload();
   }
 
   // Status zyklisch ändern – je Dokumenttyp
   Future<void> _cycleStatus(InvoiceModel doc) async {
-    final order = doc.isQuote
-        ? ['draft', 'sent', 'accepted', 'rejected']
-        : ['draft', 'sent', 'paid'];
-    final idx = order.indexOf(doc.status);
+    final order = doc.statusOrder;
+    final idx = order.indexOf(doc.normalizedStatus);
     final next = order[(idx + 1) % order.length];
     await _dbService.updateInvoiceStatus(doc.id, next);
-    if (mounted) setState(() => _statsFuture = _load());
+    _reload();
   }
 
   Widget _sectionHeader(String title, int count) {
@@ -238,8 +305,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _docRow(InvoiceModel doc, Map<String, String> customerMap,
       {bool showConvert = false}) {
-    final color = _statusColor(doc.status);
-    final label = _statusLabel(doc.status, doc.isQuote);
+    final color = _statusColor(doc.normalizedStatus);
+    final label = _statusLabel(doc.normalizedStatus, doc.isQuote);
     final custName = customerMap[doc.customerId] ?? '–';
     final dateStr = AppUtils.formatDate(doc.date);
     return InkWell(
@@ -322,36 +389,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: RefreshIndicator(
-        onRefresh: () async => setState(() => _statsFuture = _load()),
-        child: FutureBuilder<Map<String, dynamic>>(
+        onRefresh: () async => _reload(),
+        child: FutureBuilder<_DashboardStats>(
           future: _statsFuture,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting &&
-                _tiles.every((t) => t.value == '–')) {
+            // Fertige Daten merken, damit ein Refresh nicht auf „–" zurückfällt.
+            if (snapshot.hasData) _lastStats = snapshot.data;
+            final stats = snapshot.data ?? _lastStats;
+
+            if (stats == null) {
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline,
+                          size: 40, color: Colors.red),
+                      const SizedBox(height: 12),
+                      Text('${snapshot.error}'),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _reload,
+                        child: const Text('Neu laden'),
+                      ),
+                    ],
+                  ),
+                );
+              }
               return const Center(child: CircularProgressIndicator());
             }
-            if (snapshot.hasError && _tiles.every((t) => t.value == '–')) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline, size: 40, color: Colors.red),
-                    const SizedBox(height: 12),
-                    Text('${snapshot.error}'),
-                    const SizedBox(height: 12),
-                    ElevatedButton(
-                      onPressed: () => setState(() => _statsFuture = _load()),
-                      child: const Text('Neu laden'),
-                    ),
-                  ],
-                ),
-              );
-            }
 
-            final openInvoices = (snapshot.data?['openInvoices'] as List?)?.cast<InvoiceModel>() ?? [];
-            final openQuotes   = (snapshot.data?['openQuotes'] as List?)?.cast<InvoiceModel>() ?? [];
-            final doneQuotes   = (snapshot.data?['doneQuotes'] as List?)?.cast<InvoiceModel>() ?? [];
-            final customerMap  = snapshot.data?['customerMap'] as Map<String, String>? ?? {};
+            // Kacheln und Listen stammen aus demselben Ladevorgang – sie
+            // können deshalb nicht mehr unterschiedliche Zahlen zeigen.
+            final openInvoices = stats.openInvoices;
+            final openQuotes   = stats.openQuotes;
+            final doneQuotes   = stats.doneQuotes;
+            final customerMap  = stats.customerMap;
 
             return LayoutBuilder(builder: (ctx, box) {
               final wide = box.maxWidth >= 600;
@@ -366,6 +439,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     // ── Drag-and-Drop Kacheln ──
                     _DraggableGrid(
                       tiles: _tiles,
+                      stats: stats,
                       cols: cols,
                       onReorder: _onReorder,
                       onTileTap: _onTileTap,
@@ -413,12 +487,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 // ── Drag-and-Drop Grid ───────────────────────────────────────────
 class _DraggableGrid extends StatefulWidget {
   final List<_TileDef> tiles;
+  final _DashboardStats stats;
   final int cols;
   final void Function(int from, int to) onReorder;
   final void Function(String id) onTileTap;
 
   const _DraggableGrid({
     required this.tiles,
+    required this.stats,
     required this.cols,
     required this.onReorder,
     required this.onTileTap,
@@ -499,7 +575,8 @@ class _DraggableGridState extends State<_DraggableGrid> {
                 color: Colors.transparent,
                 child: Opacity(
                   opacity: 0.85,
-                  child: _Tile(tile, highlight: true),
+                  child: _Tile(tile, widget.stats.valueFor(tile.id),
+                      highlight: true),
                 ),
               ),
             ),
@@ -523,7 +600,7 @@ class _DraggableGridState extends State<_DraggableGrid> {
                           color: const Color(0xFFfda085), width: 2)
                       : null,
                 ),
-                child: _Tile(tile),
+                child: _Tile(tile, widget.stats.valueFor(tile.id)),
               ),
             ),
           );
@@ -539,8 +616,9 @@ enum _C { accent, success, info, neutral, warning, danger }
 // ── Kachel-Widget ────────────────────────────────────────────────
 class _Tile extends StatelessWidget {
   final _TileDef tile;
+  final String value;
   final bool highlight;
-  const _Tile(this.tile, {this.highlight = false});
+  const _Tile(this.tile, this.value, {this.highlight = false});
 
   @override
   Widget build(BuildContext context) {
@@ -579,7 +657,7 @@ class _Tile extends StatelessWidget {
                         fontSize: 10,
                         color: Color(0xFF8a8a94),
                         fontWeight: FontWeight.w600)),
-                Text(tile.value,
+                Text(value,
                     style: TextStyle(
                         fontSize: 16,
                         color: vc,
