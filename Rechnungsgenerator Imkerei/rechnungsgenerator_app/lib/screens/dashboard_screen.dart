@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../services/database_service.dart';
+import '../services/season_service.dart';
 import '../models/models.dart';
 import '../utils/feedback_service.dart';
 import '../utils/utils.dart';
 import 'invoice_edit_screen.dart';
+import 'season_task_detail_screen.dart';
 
 // ── Kachel-Definition ────────────────────────────────────────────
 class _TileDef {
@@ -33,6 +35,9 @@ class _DashboardStats {
   final List<InvoiceModel> doneQuotes;
   final Map<String, String> customerMap;
 
+  /// Saison-Aufgaben, die diesen Monat anstehen und noch offene Völker haben.
+  final List<SeasonTaskStatus> seasonOpen;
+
   const _DashboardStats({
     required this.revenue,
     required this.total,
@@ -44,6 +49,7 @@ class _DashboardStats {
     required this.openQuotes,
     required this.doneQuotes,
     required this.customerMap,
+    required this.seasonOpen,
   });
 
   String valueFor(String tileId) => switch (tileId) {
@@ -112,6 +118,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final quotes    = all.where((i) => i.documentType == 'quote').toList();
     final customers = await _dbService.getAllCustomers();
     final customerMap = {for (final c in customers) c.id: c.name};
+
+    // Saison: nur was jetzt ansteht und noch nicht überall erledigt ist.
+    final saison = SeasonService.due(await SeasonService().loadAll())
+        .where((s) => s.openCount > 0)
+        .toList(growable: false);
     double revenue = 0;
     int paid = 0, sent = 0, draft = 0;
     for (final inv in invoices) {
@@ -151,6 +162,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       openQuotes:   openQuotes,
       doneQuotes:   doneQuotes,
       customerMap:  customerMap,
+      seasonOpen:   saison,
     );
     return stats;
   }
@@ -282,6 +294,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final next = order[(idx + 1) % order.length];
     await _dbService.updateInvoiceStatus(doc.id, next);
     _reload();
+  }
+
+  // Saison-Aufgabe öffnen, ohne den Tab zu wechseln.
+  Future<void> _openSeasonTask(SeasonTaskStatus status) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => SeasonTaskDetailScreen(status: status),
+      ),
+    );
+    if (changed == true) _reload();
+  }
+
+  Widget _seasonRow(SeasonTaskStatus s) {
+    return InkWell(
+      onTap: () => _openSeasonTask(s),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF18181c),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0x14ffffff)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.event_note_outlined,
+                size: 16, color: Color(0xFFfda085)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(s.task.title,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis),
+                  Text('${s.doneCount} von ${s.total} Völkern erledigt',
+                      style: const TextStyle(
+                          fontSize: 10, color: Color(0xFF8a8a94))),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFfda085).withAlpha(38),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFfda085), width: 1),
+              ),
+              child: Text('${s.openCount} offen',
+                  style: const TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFFfda085),
+                      fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _sectionHeader(String title, int count) {
@@ -444,6 +518,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onReorder: _onReorder,
                       onTileTap: _onTileTap,
                     ),
+
+                    if (stats.seasonOpen.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      _sectionHeader(
+                          'Jetzt im Bienenjahr', stats.seasonOpen.length),
+                      ...stats.seasonOpen.map(_seasonRow),
+                    ],
 
                     const SizedBox(height: 16),
 
