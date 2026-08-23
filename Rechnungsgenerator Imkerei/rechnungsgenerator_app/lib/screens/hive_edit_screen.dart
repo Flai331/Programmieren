@@ -25,6 +25,7 @@ class _HiveEditScreenState extends State<HiveEditScreen> {
   final _number = TextEditingController();
   final _name = TextEditingController();
   final _location = TextEditingController();
+  final _position = TextEditingController();
   final _queenYear = TextEditingController();
   final _queenOrigin = TextEditingController();
   final _notes = TextEditingController();
@@ -67,6 +68,7 @@ class _HiveEditScreenState extends State<HiveEditScreen> {
     _number.text = h.number?.toString() ?? '';
     _name.text = h.name ?? '';
     _location.text = h.location ?? '';
+    _position.text = h.position ?? '';
     _queenYear.text = h.queenYear?.toString() ?? '';
     _queenOrigin.text = h.queenOrigin ?? '';
     _notes.text = h.notes ?? '';
@@ -82,6 +84,7 @@ class _HiveEditScreenState extends State<HiveEditScreen> {
         queenYear: int.tryParse(_queenYear.text),
         queenOrigin: _nullable(_queenOrigin.text),
         location: _nullable(_location.text),
+        position: _nullable(_position.text),
         status: _status,
         notes: _nullable(_notes.text),
         createdAt: _current?.createdAt ?? DateTime.now(),
@@ -316,30 +319,76 @@ class _HiveEditScreenState extends State<HiveEditScreen> {
           const SizedBox(height: 16),
 
           _section('Stammdaten'),
+          TextField(
+            controller: _number,
+            keyboardType: TextInputType.number,
+            decoration: _deco('Nr.'),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 16),
+
+          _section('Ort'),
           Row(children: [
             Expanded(
-              flex: 1,
+              flex: 3,
               child: TextField(
-                controller: _number,
-                keyboardType: TextInputType.number,
-                decoration: _deco('Nr.'),
+                controller: _location,
+                decoration:
+                    _deco('Standort', hint: 'z.B. Hausstand'),
                 onChanged: (_) => setState(() {}),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              flex: 3,
+              flex: 2,
               child: TextField(
-                controller: _name,
-                decoration: _deco('Name (optional)'),
+                controller: _position,
+                decoration:
+                    _deco('Aufstellungsort', hint: 'z.B. Reihe 2'),
                 onChanged: (_) => setState(() {}),
               ),
             ),
           ]),
           const SizedBox(height: 8),
+
+          // Name entsteht aus Standort + Aufstellungsort und zieht bei einem
+          // Ortswechsel mit. Ein eigener Name übersteuert das dauerhaft.
           TextField(
-            controller: _location,
-            decoration: _deco('Standort', hint: 'z.B. Hausstand, Wiese am Bach'),
+            controller: _name,
+            decoration: _deco(
+              'Name',
+              hint: h.derivedName.isEmpty
+                  ? 'wird aus Standort + Aufstellungsort gebildet'
+                  : h.derivedName,
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(
+                h.usesDerivedName
+                    ? Icons.autorenew
+                    : Icons.push_pin_outlined,
+                size: 13,
+                color: const Color(0xFF8a8a94),
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  h.usesDerivedName
+                      ? 'Heißt „${h.effectiveName}" und ändert sich mit dem Ort'
+                      : (_name.text.trim().isEmpty
+                          ? 'Trag Standort und Aufstellungsort ein – daraus '
+                              'entsteht der Name'
+                          : 'Eigener Name – bleibt bei einem Ortswechsel '
+                              'stehen. Feld leeren, um ihn wieder aus dem Ort '
+                              'zu bilden.'),
+                  style: const TextStyle(
+                      fontSize: 11, color: Color(0xFF8a8a94)),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
 
@@ -575,6 +624,7 @@ class _HiveEditScreenState extends State<HiveEditScreen> {
     _number.dispose();
     _name.dispose();
     _location.dispose();
+    _position.dispose();
     _queenYear.dispose();
     _queenOrigin.dispose();
     _notes.dispose();

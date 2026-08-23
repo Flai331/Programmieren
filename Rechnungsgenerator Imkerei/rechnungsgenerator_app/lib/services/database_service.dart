@@ -33,7 +33,7 @@ class DatabaseService {
 
   /// Schema-Version. Bei Erhöhung immer auch [_onUpgrade] ergänzen, sonst
   /// verlieren bestehende Installationen beim Update ihre Tabellen.
-  static const int _dbVersion = 3;
+  static const int _dbVersion = 4;
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     FeedbackService.log('🗄️ SQLite-Migration $oldVersion → $newVersion');
@@ -44,6 +44,9 @@ class DatabaseService {
       // Bei einer Neuanlage ab v3 ist die Spalte schon im CREATE enthalten,
       // deshalb nur ergänzen, wenn sie fehlt.
       await addColumnIfMissing(db, 'hive_actions', 'season_task', 'TEXT');
+    }
+    if (oldVersion < 4) {
+      await addColumnIfMissing(db, 'hives', 'position', 'TEXT');
     }
   }
 
@@ -258,6 +261,7 @@ class DatabaseService {
         queen_year INTEGER,
         queen_origin TEXT,
         location TEXT,
+        position TEXT,
         status TEXT DEFAULT 'aktiv',
         notes TEXT,
         created_at TEXT,

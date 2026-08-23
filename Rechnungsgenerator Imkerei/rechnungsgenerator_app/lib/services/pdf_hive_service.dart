@@ -64,6 +64,8 @@ class PdfHiveService {
 
             // Stammdaten
             _row(base, bold, 'Standort', hive.location ?? '—'),
+            if ((hive.position ?? '').isNotEmpty)
+              _row(base, bold, 'Platz', hive.position!),
             _row(base, bold, 'Königin',
                 _queenInfo(hive.queenYear, hive.queenOrigin)),
             _row(base, bold, 'Status', _statusLabel(hive.status)),

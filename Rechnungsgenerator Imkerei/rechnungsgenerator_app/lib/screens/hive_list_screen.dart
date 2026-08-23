@@ -203,9 +203,7 @@ class _HiveListScreenState extends State<HiveListScreen> {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              (h.name ?? '').isNotEmpty
-                                                  ? h.name!
-                                                  : 'Volk #${h.number ?? "–"}',
+                                              h.effectiveName,
                                               style: const TextStyle(
                                                   fontWeight:
                                                       FontWeight.w700,
@@ -214,7 +212,8 @@ class _HiveListScreenState extends State<HiveListScreen> {
                                                   TextOverflow.ellipsis,
                                             ),
                                             const SizedBox(height: 2),
-                                            if ((h.location ?? '').isNotEmpty)
+                                            if ((h.location ?? '').isNotEmpty &&
+                                                !h.usesDerivedName)
                                               Text(h.location!,
                                                   style: const TextStyle(
                                                       fontSize: 12,

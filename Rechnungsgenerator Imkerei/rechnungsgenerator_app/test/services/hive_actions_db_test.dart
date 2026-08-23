@@ -208,6 +208,59 @@ void main() {
     });
   });
 
+  group('Migration v3 → v4', () {
+    Future<List<String>> hiveColumns(Database db) async {
+      final info = await db.rawQuery('PRAGMA table_info(hives)');
+      return info.map((r) => r['name'] as String).toList();
+    }
+
+    test('ergänzt die Spalte position', () async {
+      final db = await openV1();
+      addTearDown(db.close);
+
+      expect(await hiveColumns(db), isNot(contains('position')));
+      await DatabaseService.addColumnIfMissing(
+          db, 'hives', 'position', 'TEXT');
+      expect(await hiveColumns(db), contains('position'));
+    });
+
+    test('bestehende Völker behalten ihren Standort', () async {
+      final db = await openV1();
+      addTearDown(db.close);
+
+      await db.insert('hives', {
+        'id': 'h1',
+        'number': 1,
+        'name': 'Zuchtvolk Anna',
+        'qr_id': 'hive-abc',
+        'location': 'Hausstand',
+        'status': 'aktiv',
+        'created_at': DateTime(2026, 3, 1).toIso8601String(),
+      });
+
+      await DatabaseService.addColumnIfMissing(
+          db, 'hives', 'position', 'TEXT');
+
+      final gelesen = HiveModel.fromMap((await db.query('hives')).single);
+      expect(gelesen.location, 'Hausstand');
+      expect(gelesen.position, isNull);
+      // Eigener Name bleibt, obwohl es jetzt einen Ort gibt
+      expect(gelesen.effectiveName, 'Zuchtvolk Anna');
+    });
+
+    test('ist mehrfach ausführbar', () async {
+      final db = await openV1();
+      addTearDown(db.close);
+
+      for (var i = 0; i < 3; i++) {
+        await DatabaseService.addColumnIfMissing(
+            db, 'hives', 'position', 'TEXT');
+      }
+      final spalten = await hiveColumns(db);
+      expect(spalten.where((c) => c == 'position'), hasLength(1));
+    });
+  });
+
   group('Maßnahmen speichern und lesen', () {
     late Database db;
 
