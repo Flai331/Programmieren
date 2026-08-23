@@ -295,10 +295,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Gemeldete Fehler werden auf dem Gerät abgelegt. Von dort aus '
-              'lassen sie sich teilen oder kopieren – etwa nach Notion.',
-              style: TextStyle(fontSize: 12, color: Color(0xFF8a8a94)),
+            Text(
+              'Gemeldete Fehler werden auf dem Gerät abgelegt und gehen per '
+              'Mail an ${FeedbackService.supportEmail}. Von hier aus lassen '
+              'sie sich jederzeit erneut senden, teilen oder kopieren.',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF8a8a94)),
             ),
             const SizedBox(height: 12),
             SizedBox(

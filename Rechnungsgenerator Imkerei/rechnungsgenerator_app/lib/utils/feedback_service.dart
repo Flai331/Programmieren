@@ -27,9 +27,21 @@ import '../build_info.dart';
 //  Teilen abgebrochen wird – der Bericht bleibt in der Ablage.
 // ═══════════════════════════════════════════════════════════════
 
+/// Auf welchem Weg ein Bericht die App verlässt.
+enum FeedbackDelivery {
+  /// Direkt an die Support-Adresse.
+  mail,
+
+  /// Teilen-Menü des Systems – Notion-App, Messenger, Mail, …
+  share,
+}
+
 class FeedbackService {
-  // E-Mail-Empfänger für den Fall, dass der Nutzer per Mail teilt
-  static const String _supportEmail = 'klaasotte99@gmail.com';
+  /// Zieladresse für Fehlerberichte.
+  static const String _supportEmail = 'error.404.found@outlook.de';
+
+  /// Öffentlich, damit Screens die Adresse anzeigen können.
+  static String get supportEmail => _supportEmail;
   static const String _appName = 'BeeBrain';
 
   /// Höchstzahl aufbewahrter Berichte.
@@ -334,8 +346,10 @@ class FeedbackService {
           appName: _appName,
           // Screenshot wird im Dialog selbst im Hintergrund geladen
           initialPhotoPaths: const [],
-          onSend: (note, photoPaths) =>
-              sendReport(userNote: note, photoPaths: photoPaths),
+          onSend: (note, photoPaths, delivery) => sendReport(
+              userNote: note,
+              photoPaths: photoPaths,
+              delivery: delivery),
         ),
       );
     } finally {
@@ -351,13 +365,14 @@ class FeedbackService {
   /// wenn das Teilen danach abgebrochen wird.
   /// [shared] sagt, ob das Teilen-Menü tatsächlich etwas übernommen hat.
 
-  /// Bericht ablegen und das Teilen-Menü öffnen.
+  /// Bericht ablegen und auf dem gewählten Weg weitergeben.
   ///
-  /// Rückgabe: true, wenn der Bericht abgelegt werden konnte. Ob der Nutzer
-  /// im Teilen-Menü dann wirklich eine App auswählt, liegt außerhalb der App.
+  /// Rückgabe: true, wenn der Bericht abgelegt werden konnte. Was der Nutzer
+  /// danach im Mail- oder Teilen-Menü tut, liegt außerhalb der App.
   static Future<bool> sendReport({
     String? userNote,
     List<String>? photoPaths,
+    FeedbackDelivery delivery = FeedbackDelivery.mail,
   }) async {
     try {
       final now = DateTime.now();
@@ -372,7 +387,15 @@ class FeedbackService {
         isAutoError: false,
         photoPaths: photoPaths ?? const [],
       );
-      await shareReport(report);
+      switch (delivery) {
+        case FeedbackDelivery.mail:
+          // Ohne Mail-App nicht den Bericht verlieren, sondern das
+          // Teilen-Menü anbieten.
+          final perMail = await mailReport(report);
+          if (!perMail) await shareReport(report);
+        case FeedbackDelivery.share:
+          await shareReport(report);
+      }
       return true;
     } catch (e) {
       log('Fehlerbericht fehlgeschlagen: $e');
@@ -512,7 +535,8 @@ class _FeedbackDialog extends StatefulWidget {
   final String supportEmail;
   final String appName;
   final List<String> initialPhotoPaths;
-  final Future<bool> Function(String? note, List<String>? photoPaths) onSend;
+  final Future<bool> Function(
+      String? note, List<String>? photoPaths, FeedbackDelivery delivery) onSend;
 
   const _FeedbackDialog({
     required this.onSend,
@@ -566,7 +590,7 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
     } catch (_) {}
   }
 
-  Future<void> _send() async {
+  Future<void> _send(FeedbackDelivery delivery) async {
     setState(() => _sending = true);
     final note = _controller.text.trim();
     final paths =
@@ -574,12 +598,14 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final ok =
-        await widget.onSend(note.isEmpty ? null : note, paths);
+        await widget.onSend(note.isEmpty ? null : note, paths, delivery);
     if (!mounted) return;
     navigator.pop();
     messenger.showSnackBar(SnackBar(
       content: Text(ok
-          ? '✓ Bericht gespeichert – wähle aus, wohin er soll.'
+          ? (delivery == FeedbackDelivery.mail
+              ? '✓ Gespeichert – E-Mail an ${widget.supportEmail} vorbereitet.'
+              : '✓ Gespeichert – wähle aus, wohin er soll.')
           : '✗ Bericht konnte nicht gespeichert werden.'),
       backgroundColor:
           ok ? Colors.green.shade700 : Colors.red.shade700,
@@ -836,12 +862,19 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
           onPressed: _sending ? null : () => Navigator.pop(context),
           child: const Text('Abbrechen'),
         ),
+        TextButton.icon(
+          onPressed:
+              _sending ? null : () => _send(FeedbackDelivery.share),
+          icon: const Icon(Icons.ios_share, size: 16),
+          label: const Text('Teilen'),
+        ),
         ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
             backgroundColor: _peach,
             foregroundColor: Colors.white,
           ),
-          onPressed: _sending ? null : _send,
+          onPressed:
+              _sending ? null : () => _send(FeedbackDelivery.mail),
           icon: _sending
               ? const SizedBox(
                   width: 14,
@@ -849,8 +882,8 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: Colors.white),
                 )
-              : const Icon(Icons.ios_share, size: 16),
-          label: Text(_sending ? 'Speichere...' : 'Speichern & teilen'),
+              : const Icon(Icons.mail_outline, size: 16),
+          label: Text(_sending ? 'Speichere...' : 'Per Mail'),
         ),
       ],
     );
@@ -879,10 +912,10 @@ class _InfoBanner extends StatelessWidget {
       text = 'Wird gespeichert – danach wählst du, wohin er soll';
     } else {
       color = Colors.blue;
-      icon = Icons.ios_share;
-      text = 'Wird gespeichert und dann geteilt – z.B. in Notion, '
-          'per Mail oder Messenger. Alle Berichte findest du unter '
-          'Einstellungen.';
+      icon = Icons.mail_outline;
+      text = 'Wird gespeichert und geht an $supportEmail. '
+          'Über „Teilen" auch an jede andere App. Alle Berichte findest '
+          'du unter Einstellungen.';
     }
 
     return Container(

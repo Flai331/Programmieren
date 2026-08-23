@@ -52,11 +52,11 @@ class _ReportListScreenState extends State<ReportListScreen> {
   Future<void> _mail(FeedbackReport r) async {
     final ok = await FeedbackService.mailReport(r);
     if (!mounted) return;
-    if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Keine E-Mail-App gefunden – teilen oder kopieren'),
-      ));
-    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok
+          ? 'E-Mail an ${FeedbackService.supportEmail} vorbereitet'
+          : 'Keine E-Mail-App gefunden – teilen oder kopieren'),
+    ));
     _reload();
   }
 
