@@ -1,0 +1,77 @@
+name: BeeBrain APK
+
+# Baut das Test-APK auf einem GitHub-Runner. Dort ist das Android-SDK
+# vorhanden; in manchen Entwicklungsumgebungen ist dl.google.com gesperrt,
+# sodass sich SDK und Android-Gradle-Plugin lokal nicht laden lassen.
+#
+# Das Ergebnis trägt die Anwendungs-ID com.klaasotte.beebrain.test und
+# installiert sich damit NEBEN einer vorhandenen BeeBrain, mit eigenem
+# Datenbestand. Siehe android/app/build.gradle.kts.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'claude/**'
+    paths:
+      - 'Rechnungsgenerator Imkerei/rechnungsgenerator_app/**'
+      - '.github/workflows/beebrain-apk.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 'Rechnungsgenerator Imkerei/rechnungsgenerator_app'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK einrichten
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Flutter einrichten
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.1'
+          channel: stable
+          cache: true
+
+      - name: Abhängigkeiten holen
+        run: flutter pub get
+
+      - name: Statische Analyse
+        # Nur echte Fehler brechen ab. Der Bestand enthält ältere
+        # Lint-Warnungen, die den Bau nicht blockieren sollen.
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Tests
+        run: flutter test
+
+      - name: APK bauen
+        # Der Speicher wird gedrosselt: gradle.properties fordert 8 GB Heap,
+        # mehr als ein Runner zuverlässig hergibt.
+        run: |
+          flutter build apk --debug \
+            --dart-define=FLUTTER_BUILD_NAME=test \
+            -Porg.gradle.jvmargs="-Xmx4G -XX:MaxMetaspaceSize=1G"
+
+      - name: APK benennen
+        id: apk
+        run: |
+          quelle="build/app/outputs/flutter-apk/app-debug.apk"
+          ziel="BeeBrain-Test-${GITHUB_SHA::7}.apk"
+          cp "$quelle" "$ziel"
+          echo "name=$ziel" >> "$GITHUB_OUTPUT"
+          ls -lh "$ziel"
+
+      - name: APK bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: 'Rechnungsgenerator Imkerei/rechnungsgenerator_app/${{ steps.apk.outputs.name }}'
+          retention-days: 30
+          if-no-files-found: error
