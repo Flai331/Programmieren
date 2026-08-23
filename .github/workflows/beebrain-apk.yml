@@ -52,12 +52,7 @@ jobs:
         run: flutter test
 
       - name: APK bauen
-        # Der Speicher wird gedrosselt: gradle.properties fordert 8 GB Heap,
-        # mehr als ein Runner zuverlässig hergibt.
-        run: |
-          flutter build apk --debug \
-            --dart-define=FLUTTER_BUILD_NAME=test \
-            -Porg.gradle.jvmargs="-Xmx4G -XX:MaxMetaspaceSize=1G"
+        run: flutter build apk --debug
 
       - name: APK benennen
         id: apk
