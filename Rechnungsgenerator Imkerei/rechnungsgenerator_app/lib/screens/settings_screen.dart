@@ -6,6 +6,7 @@ import '../utils/utils.dart';
 import '../utils/feedback_service.dart';
 import 'company_screen.dart';
 import 'report_list_screen.dart';
+import 'import_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -285,6 +286,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
                 icon: const Icon(Icons.business),
                 label: const Text('Firmendaten'),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const ImportScreen()),
+                  );
+                },
+                icon: const Icon(Icons.download_outlined),
+                label: const Text('Daten aus dem Rechnungsgenerator '
+                    'übernehmen'),
               ),
             ),
             const SizedBox(height: 32),
