@@ -14,6 +14,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    buildFeatures {
+        // Nötig für die resValue-Einträge in den Build-Typen weiter unten,
+        // über die der App-Name je Variante gesetzt wird. Ab AGP 9 ist diese
+        // Funktion standardmäßig abgeschaltet; ohne sie bricht die
+        // Konfiguration ab mit „Build Type debug contains custom resource
+        // values, but the feature is disabled".
+        resValues = true
+    }
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.klaasotte.beebrain"
