@@ -9,11 +9,26 @@ build/
 pubspec.lock
 
 # Android
-android/
+#
+# Der Ordner android/ gehört bewusst NICHT hierher: Er enthält die
+# Projektkonfiguration – Anwendungs-ID, App-Name, Berechtigungen, Icons.
+# Solange er ausgeschlossen war, ließ sich aus diesem Stand gar kein APK
+# bauen, und lokale Änderungen daran waren für alle anderen unsichtbar.
+# Ausgeschlossen bleibt nur, was beim Bauen entsteht oder zum Rechner gehört.
+android/.gradle/
+android/app/build/
+android/local.properties
+android/.cxx/
+android/**/GeneratedPluginRegistrant.java
 .gradle/
 *.apk
 *.zip
 *.aab
+
+# Signaturschlüssel gehören niemals ins Repository
+android/key.properties
+*.jks
+*.keystore
 
 # iOS
 ios/
