@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../utils/utils.dart';
 import '../utils/feedback_service.dart';
 import 'company_screen.dart';
+import 'report_list_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -284,6 +285,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
                 icon: const Icon(Icons.business),
                 label: const Text('Firmendaten'),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // ── Fehlerberichte ────────────────────────────────────
+            const Text(
+              'Fehlerberichte',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Gemeldete Fehler werden auf dem Gerät abgelegt. Von dort aus '
+              'lassen sie sich teilen oder kopieren – etwa nach Notion.',
+              style: TextStyle(fontSize: 12, color: Color(0xFF8a8a94)),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const ReportListScreen()),
+                  );
+                },
+                icon: const Icon(Icons.bug_report_outlined),
+                label: const Text('Abgelegte Berichte'),
               ),
             ),
             const SizedBox(height: 32),

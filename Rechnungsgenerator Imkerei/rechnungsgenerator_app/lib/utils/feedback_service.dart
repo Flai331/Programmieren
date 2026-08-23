@@ -1,38 +1,39 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/rendering.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart' show Share, XFile;
+
+import 'feedback_report.dart';
+import 'report_store.dart';
 
 import '../build_info.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  FEEDBACK & ERROR LOGGER — BeeBrain
 //
-//  Primär: Notion-Datenbank → sendet direkt aus der App.
-//  Fallback: öffnet E-Mail-App (nur wenn Notion fehlschlägt).
+//  Ein Bericht wird zuerst lokal abgelegt und danach über das
+//  Teilen-Menü des Systems weitergegeben (Notion-App, Mail,
+//  Messenger …) oder in die Zwischenablage kopiert.
 //
-//  Token-Konfiguration via --dart-define=NOTION_TOKEN=ntn_...
+//  Kein Direktversand an einen Dienst: Dafür müsste ein
+//  Zugangsschlüssel in der App liegen, und der lässt sich aus dem
+//  fertigen Paket auslesen. Nichts geht mehr verloren, wenn das
+//  Teilen abgebrochen wird – der Bericht bleibt in der Ablage.
 // ═══════════════════════════════════════════════════════════════
 
 class FeedbackService {
-  // ── Notion-Konfiguration ────────────────────────────────────
-  static const String _notionToken =
-      String.fromEnvironment('NOTION_TOKEN', defaultValue: '');
-  static const String _notionDbId =
-      String.fromEnvironment('NOTION_DB_ID', defaultValue: '');
-
-  // E-Mail-Empfänger (Fallback)
+  // E-Mail-Empfänger für den Fall, dass der Nutzer per Mail teilt
   static const String _supportEmail = 'klaasotte99@gmail.com';
   static const String _appName = 'BeeBrain';
 
-  static bool get _notionConfigured => _notionToken.isNotEmpty;
+  /// Höchstzahl aufbewahrter Berichte.
+  static const int _maxStoredReports = 50;
 
   static final List<String> _log = [];
 
@@ -137,10 +138,10 @@ class FeedbackService {
     _autoSendError(error, context: context, stack: stackTrace);
   }
 
-  /// Sendet Fehler automatisch an Notion. Dedupt gleiche Fehler innerhalb 30s.
+  /// Automatisch erkannte Fehler landen in der lokalen Ablage.
+  /// Gleiche Fehler innerhalb von 30 Sekunden nur einmal.
   static void _autoSendError(String error,
       {String? context, StackTrace? stack}) {
-    if (!_notionConfigured) return;
     final fp = '$error|$context';
     final now = DateTime.now();
     if (_lastErrorFingerprint == fp &&
@@ -150,11 +151,11 @@ class FeedbackService {
     }
     _lastErrorFingerprint = fp;
     _lastErrorSentAt = now;
-    // fire-and-forget
-    _notionSendError(error, context: context, stack: stack);
+    // Kein await: Das Protokollieren darf den Programmablauf nicht bremsen.
+    _storeAutoError(error, context: context, stack: stack);
   }
 
-  static Future<void> _notionSendError(String error,
+  static Future<void> _storeAutoError(String error,
       {String? context, StackTrace? stack}) async {
     try {
       final now = DateTime.now();
@@ -164,81 +165,69 @@ class FeedbackService {
       final titel = '⚠️ $shortErr — ${pad(now.day)}.${pad(now.month)} '
           '${pad(now.hour)}:${pad(now.minute)}';
 
-      final logTail = _log
-          .skip(_log.length > 50 ? _log.length - 50 : 0)
-          .join('\n');
-      final body = [
+      final beschreibung = [
         'FEHLER: $error',
         if (context != null) 'KONTEXT: $context',
         if (stack != null)
           'STACK:\n${stack.toString().split('\n').take(10).join('\n')}',
-        if (_currentScreen.isNotEmpty) 'SEITE: $_currentScreen',
-        '---',
-        'PROTOKOLL:',
-        logTail,
       ].join('\n');
-      final truncated = body.length > 1990
-          ? '…${body.substring(body.length - 1989)}'
-          : body;
 
-      String os = 'Web';
-      if (!kIsWeb) {
-        try {
-          os = '${Platform.operatingSystem} '
-              '${Platform.operatingSystemVersion}';
-        } catch (_) {}
-      }
-
-      final props = <String, dynamic>{
-        'Titel': {
-          'title': [
-            {'text': {'content': titel}}
-          ]
-        },
-        'Status': {'select': {'name': 'Offen'}},
-        'App-Version': {
-          'rich_text': [
-            {'text': {'content': 'Build $kBuildNumber'}}
-          ]
-        },
-        'Protokoll': {
-          'rich_text': [
-            {'text': {'content': truncated}}
-          ]
-        },
-        'OS': {
-          'rich_text': [
-            {'text': {'content': os}}
-          ]
-        },
-        'Zeitstempel': {'date': {'start': now.toIso8601String()}},
-        'Beschreibung': {
-          'rich_text': [
-            {'text': {'content': error.length > 2000 ? error.substring(0, 2000) : error}}
-          ]
-        },
-      };
-
-      final res = await http
-          .post(
-            Uri.parse('https://api.notion.com/v1/pages'),
-            headers: {
-              'Authorization': 'Bearer $_notionToken',
-              'Notion-Version': '2022-06-28',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'parent': {'database_id': _notionDbId},
-              'properties': props,
-            }),
-          )
-          .timeout(const Duration(seconds: 10));
-
-      log('Notion auto-send: ${res.statusCode}'
-          '${res.statusCode != 200 ? " body=${res.body.length > 200 ? res.body.substring(0, 200) : res.body}" : ""}');
+      await _storeReport(
+        title: titel,
+        note: beschreibung,
+        isAutoError: true,
+        photoPaths: const [],
+      );
     } catch (e) {
-      // bewusst still — kein Endlos-Loop wenn Notion offline
-      debugPrint('Notion auto-send Fehler: $e');
+      log('Bericht ablegen fehlgeschlagen: $e');
+    }
+  }
+
+  /// Bericht in der lokalen Ablage speichern und zurückgeben.
+  static Future<FeedbackReport> _storeReport({
+    required String title,
+    String? note,
+    required bool isAutoError,
+    required List<String> photoPaths,
+  }) async {
+    final now = DateTime.now();
+    final id = '${now.millisecondsSinceEpoch}-'
+        '${now.microsecond.toString().padLeft(6, '0')}';
+
+    // Screenshots liegen im temporären Verzeichnis, das das System jederzeit
+    // leeren darf – deshalb in die Berichts-Ablage übernehmen.
+    final namen = <String>[];
+    for (var i = 0; i < photoPaths.length; i++) {
+      final name = await ReportStore.adoptPhoto(photoPaths[i], id, i);
+      if (name != null) namen.add(name);
+    }
+
+    final report = FeedbackReport(
+      id: id,
+      createdAt: now,
+      title: title,
+      note: note,
+      log: _log.join('\n'),
+      appVersion: '$kBuildNumber',
+      os: _osLabel(),
+      screen: _currentScreen,
+      photoNames: namen,
+      isAutoError: isAutoError,
+    );
+
+    await ReportStore.save(report);
+    await ReportStore.pruneTo(_maxStoredReports);
+    log('📝 Fehlerbericht abgelegt: $title');
+    return report;
+  }
+
+  static String _osLabel() {
+    if (kIsWeb) return 'Web';
+    try {
+      return '${Platform.operatingSystem} '
+          '${Platform.operatingSystemVersion}';
+    } catch (_) {
+      return '';
     }
   }
 
@@ -340,7 +329,6 @@ class FeedbackService {
         context: context,
         barrierDismissible: !isAutoError,
         builder: (_) => _FeedbackDialog(
-          notionAvailable: _notionConfigured,
           isAutoError: isAutoError,
           supportEmail: _supportEmail,
           appName: _appName,
@@ -355,21 +343,22 @@ class FeedbackService {
     }
   }
 
-  // ── Fehlerbericht senden ────────────────────────────────────
+  // ── Fehlerbericht ablegen und weitergeben ───────────────────
+
+  /// Ergebnis eines Melde-Vorgangs.
+  ///
+  /// [stored] ist der entscheidende Teil: Der Bericht ist gespeichert, auch
+  /// wenn das Teilen danach abgebrochen wird.
+  /// [shared] sagt, ob das Teilen-Menü tatsächlich etwas übernommen hat.
+
+  /// Bericht ablegen und das Teilen-Menü öffnen.
+  ///
+  /// Rückgabe: true, wenn der Bericht abgelegt werden konnte. Ob der Nutzer
+  /// im Teilen-Menü dann wirklich eine App auswählt, liegt außerhalb der App.
   static Future<bool> sendReport({
     String? userNote,
     List<String>? photoPaths,
   }) async {
-    if (_notionConfigured) {
-      final ok = await _notionSend(userNote);
-      if (ok) return true;
-      log('Notion fehlgeschlagen – öffne E-Mail-Fallback');
-    }
-    return _sendEmail(_buildPlain(userNote), photoPaths ?? []);
-  }
-
-  // ── Notion: Fehlerbericht anlegen ───────────────────────────
-  static Future<bool> _notionSend(String? userNote) async {
     try {
       final now = DateTime.now();
       String pad(int n) => n.toString().padLeft(2, '0');
@@ -377,128 +366,88 @@ class FeedbackService {
           'Fehlerbericht ${pad(now.day)}.${pad(now.month)}.${now.year} '
           '${pad(now.hour)}:${pad(now.minute)}';
 
-      final screenHeader = _currentScreen.isNotEmpty
-          ? 'SEITE: $_currentScreen'
-              '${_screenContent.isNotEmpty ? "\nINHALT: $_screenContent" : ""}'
-              '\n---\n'
-          : '';
-      final protokoll = screenHeader + _log.join('\n');
-      final protokollTrunc = protokoll.length > 1990
-          ? '…${protokoll.substring(protokoll.length - 1989)}'
-          : protokoll;
-
-      String os = 'Web';
-      if (!kIsWeb) {
-        try {
-          os =
-              '${Platform.operatingSystem} ${Platform.operatingSystemVersion}';
-        } catch (_) {}
-      }
-
-      final props = <String, dynamic>{
-        'Titel': {
-          'title': [
-            {
-              'text': {'content': titel}
-            }
-          ]
-        },
-        'Status': {
-          'select': {'name': 'Offen'}
-        },
-        'App-Version': {
-          'rich_text': [
-            {
-              'text': {'content': 'Build $kBuildNumber'}
-            }
-          ]
-        },
-        'Protokoll': {
-          'rich_text': [
-            {
-              'text': {'content': protokollTrunc}
-            }
-          ]
-        },
-        'OS': {
-          'rich_text': [
-            {
-              'text': {'content': os}
-            }
-          ]
-        },
-        'Zeitstempel': {'date': {'start': now.toIso8601String()}},
-      };
-
-      if (userNote != null && userNote.isNotEmpty) {
-        final desc =
-            userNote.length > 2000 ? userNote.substring(0, 2000) : userNote;
-        props['Beschreibung'] = {
-          'rich_text': [
-            {
-              'text': {'content': desc}
-            }
-          ]
-        };
-      }
-
-      final res = await http
-          .post(
-            Uri.parse('https://api.notion.com/v1/pages'),
-            headers: {
-              'Authorization': 'Bearer $_notionToken',
-              'Notion-Version': '2022-06-28',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode(
-                {'parent': {'database_id': _notionDbId}, 'properties': props}),
-          )
-          .timeout(const Duration(seconds: 15));
-
-      log('Notion: ${res.statusCode}');
-      return res.statusCode == 200;
+      final report = await _storeReport(
+        title: titel,
+        note: userNote,
+        isAutoError: false,
+        photoPaths: photoPaths ?? const [],
+      );
+      await shareReport(report);
+      return true;
     } catch (e) {
-      log('Notion Fehler: $e');
+      log('Fehlerbericht fehlgeschlagen: $e');
       return false;
     }
   }
 
-  // ── E-Mail senden ───────────────────────────────────────────
-  static Future<bool> _sendEmail(
-      String body, List<String> photoPaths) async {
-    // Auf Windows / Web: nur URL-Launcher (mailto:)
-    if (kIsWeb || (!kIsWeb && Platform.isWindows)) {
-      return _launchMailto(body);
-    }
-
-    // Mobile: flutter_email_sender mit Anhängen versuchen
+  /// Bericht über das Teilen-Menü des Systems weitergeben.
+  ///
+  /// Damit landet er dort, wo der Nutzer ihn haben will – Notion-App, Mail,
+  /// Messenger –, ohne dass die App einen Zugangsschlüssel kennen muss.
+  static Future<bool> shareReport(FeedbackReport report) async {
+    final text = report.asPlainText();
     try {
-      // Dynamischer Import über Reflection nicht möglich —
-      // wir nutzen url_launcher als zuverlässige Fallback-Lösung
-      return _launchMailto(body);
+      final bilder = await ReportStore.photoPaths(report);
+      if (bilder.isNotEmpty && !kIsWeb) {
+        await Share.shareXFiles(
+          [for (final pfad in bilder) XFile(pfad, mimeType: 'image/png')],
+          subject: '[$_appName] ${report.title}',
+          text: text,
+        );
+      } else {
+        await Share.share(text, subject: '[$_appName] ${report.title}');
+      }
+      await ReportStore.save(report.copyWith(exported: true));
+      return true;
+    } catch (e) {
+      log('Teilen fehlgeschlagen: $e');
+      return false;
+    }
+  }
+
+  /// Bericht in die Zwischenablage legen – zum Einfügen in Notion o.ä.
+  static Future<bool> copyReport(FeedbackReport report) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: report.asPlainText()));
+      await ReportStore.save(report.copyWith(exported: true));
+      log('📋 Fehlerbericht kopiert');
+      return true;
+    } catch (e) {
+      log('Kopieren fehlgeschlagen: $e');
+      return false;
+    }
+  }
+
+  /// Bericht per E-Mail an den Support – nur noch als ausdrückliche Wahl,
+  /// nicht mehr als stiller Notnagel.
+  static Future<bool> mailReport(FeedbackReport report) async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: _supportEmail,
+      queryParameters: {
+        'subject': '[$_appName] ${report.title}',
+        'body': report.asPlainText(),
+      },
+    );
+    try {
+      // Rückgabewert auswerten: Ohne Mail-App meldet launchUrl false, und
+      // vorher galt der Bericht trotzdem als versendet.
+      final ok = await launchUrl(uri);
+      if (ok) await ReportStore.save(report.copyWith(exported: true));
+      if (!ok) log('Keine E-Mail-App gefunden');
+      return ok;
     } catch (e) {
       log('E-Mail öffnen fehlgeschlagen: $e');
       return false;
     }
   }
 
-  static Future<bool> _launchMailto(String body) async {
-    final uri = Uri(
-      scheme: 'mailto',
-      path: _supportEmail,
-      queryParameters: {
-        'subject': '[$_appName] Fehlerbericht',
-        'body': body,
-      },
-    );
-    try {
-      await launchUrl(uri);
-      return true;
-    } catch (e) {
-      log('E-Mail Fallback fehlgeschlagen: $e');
-      return false;
-    }
-  }
+  /// Abgelegte Berichte, neueste zuerst.
+  static Future<List<FeedbackReport>> storedReports() => ReportStore.list();
+
+  static Future<void> deleteReport(String id) => ReportStore.delete(id);
+
+  static Future<void> deleteAllReports() => ReportStore.deleteAll();
 
   // ── Report-Text ─────────────────────────────────────────────
   static String buildPlainPublic(String? userNote) =>
@@ -559,7 +508,6 @@ class FeedbackService {
 // ═══════════════════════════════════════════════════════════════
 
 class _FeedbackDialog extends StatefulWidget {
-  final bool notionAvailable;
   final bool isAutoError;
   final String supportEmail;
   final String appName;
@@ -567,7 +515,6 @@ class _FeedbackDialog extends StatefulWidget {
   final Future<bool> Function(String? note, List<String>? photoPaths) onSend;
 
   const _FeedbackDialog({
-    required this.notionAvailable,
     required this.onSend,
     required this.supportEmail,
     required this.appName,
@@ -632,10 +579,8 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
     navigator.pop();
     messenger.showSnackBar(SnackBar(
       content: Text(ok
-          ? (widget.notionAvailable
-              ? '✓ Fehlerbericht gesendet.'
-              : '✓ E-Mail-App geöffnet.')
-          : '✗ Senden fehlgeschlagen – Verbindung prüfen.'),
+          ? '✓ Bericht gespeichert – wähle aus, wohin er soll.'
+          : '✗ Bericht konnte nicht gespeichert werden.'),
       backgroundColor:
           ok ? Colors.green.shade700 : Colors.red.shade700,
     ));
@@ -682,7 +627,6 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _InfoBanner(
-                notion: widget.notionAvailable,
                 isAutoError: widget.isAutoError,
                 supportEmail: widget.supportEmail,
               ),
@@ -905,12 +849,8 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: Colors.white),
                 )
-              : Icon(
-                  widget.notionAvailable ? Icons.send : Icons.email,
-                  size: 16),
-          label: Text(_sending
-              ? 'Sende...'
-              : widget.notionAvailable ? 'Senden' : 'Per E-Mail'),
+              : const Icon(Icons.ios_share, size: 16),
+          label: Text(_sending ? 'Speichere...' : 'Speichern & teilen'),
         ),
       ],
     );
@@ -919,12 +859,10 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
 
 // ── Info-Banner ──────────────────────────────────────────────────
 class _InfoBanner extends StatelessWidget {
-  final bool notion;
   final bool isAutoError;
   final String supportEmail;
 
   const _InfoBanner({
-    required this.notion,
     required this.isAutoError,
     required this.supportEmail,
   });
@@ -935,18 +873,16 @@ class _InfoBanner extends StatelessWidget {
     final IconData icon;
     final String text;
 
-    if (notion) {
-      color = Colors.green.shade700;
-      icon = Icons.send;
-      text = 'Wird direkt aus der App gesendet – kein Login nötig';
-    } else if (isAutoError) {
+    if (isAutoError) {
       color = Colors.orange;
-      icon = Icons.email_outlined;
-      text = 'Öffnet E-Mail-App an: $supportEmail';
+      icon = Icons.save_outlined;
+      text = 'Wird gespeichert – danach wählst du, wohin er soll';
     } else {
       color = Colors.blue;
-      icon = Icons.email_outlined;
-      text = 'Öffnet deine E-Mail-App – Adresse & Text sind eingetragen';
+      icon = Icons.ios_share;
+      text = 'Wird gespeichert und dann geteilt – z.B. in Notion, '
+          'per Mail oder Messenger. Alle Berichte findest du unter '
+          'Einstellungen.';
     }
 
     return Container(

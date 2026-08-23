@@ -39,13 +39,13 @@ dependencies:
   # File Sharing
   share_plus: ^7.2.0
 
-  # Networking (für Notion-Fehlerlogging)
-  http: ^1.1.0
+  # Netzwerk-Status (Anzeige offline/online)
   connectivity_plus: ^5.0.0
 
-  # Feedback / Fehlerberichte
+  # Feedback / Fehlerberichte: teilen, kopieren, per Mail öffnen.
+  # Kein Direktversand an einen Dienst – dafür müsste ein Zugangsschlüssel
+  # in der App liegen, und der lässt sich aus dem Paket auslesen.
   url_launcher: ^6.2.5
-  flutter_email_sender: ^6.0.3
 
   # Charts & Graphs
   fl_chart: ^0.65.0

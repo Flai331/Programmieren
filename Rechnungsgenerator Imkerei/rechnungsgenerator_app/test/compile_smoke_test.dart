@@ -33,5 +33,6 @@ void main() {
     expect(const SeasonScreen(), isNotNull);
     expect(SeasonCatalog.tasks, isNotEmpty);
     expect(SeasonService(), isNotNull);
+    expect(const ReportListScreen(), isNotNull);
   });
 }
