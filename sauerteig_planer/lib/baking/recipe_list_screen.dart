@@ -193,6 +193,7 @@ class _RecipeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final stepCount = recipe.steps.length;
     final totalDuration = recipe.steps.fold(Duration.zero, (sum, s) {
+      if (s.repeatCount < 1) return sum;
       final stepTime = s.duration * s.repeatCount;
       final pauseTime = s.repeatCount > 1
           ? s.repeatInterval * (s.repeatCount - 1)

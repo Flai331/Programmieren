@@ -35,7 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final notifEnabled = await StarterStorage.isNotificationEnabled();
     setState(() {
       // onboarding_done == false → Tutorial ist aktiv
-      _tutorialEnabled = !(prefs.getBool('onboarding_done') ?? true);
+      _tutorialEnabled = !(prefs.getBool('onboarding_done') ?? false);
       _starterNotifEnabled = notifEnabled;
     });
   }
@@ -109,7 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: TextStyle(color: AppColors.text)),
             subtitle: const Text('Onboarding-Seiten beim nächsten App-Start zeigen',
                 style: TextStyle(color: AppColors.text3, fontSize: 12)),
-            activeThumbColor: AppColors.gold,
+            activeColor: AppColors.gold,
           ),
           const Divider(color: AppColors.border, height: 1),
           _sectionHeader('Starter-Erinnerungen'),
@@ -124,7 +124,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : 'Erinnert dich täglich deinen Starter zu kontrollieren',
               style: TextStyle(color: AppColors.text3, fontSize: 12),
             ),
-            activeThumbColor: AppColors.green,
+            activeColor: AppColors.green,
           ),
           const Divider(color: AppColors.border, height: 1),
           _sectionHeader('Feedback'),

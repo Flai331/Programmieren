@@ -235,7 +235,7 @@ class _StarterScreenState extends State<StarterScreen> {
               },
               title: const Text('Tägliche Erinnerung um 8:00',
                   style: TextStyle(color: AppColors.text)),
-              activeThumbColor: AppColors.green,
+              activeColor: AppColors.green,
               contentPadding: EdgeInsets.zero,
             ),
           ],

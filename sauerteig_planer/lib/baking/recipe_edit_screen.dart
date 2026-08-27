@@ -116,7 +116,7 @@ class _RecipeEditScreenState extends State<RecipeEditScreen> {
                 // Vorlage
                 _label('Vorlage (optional)'),
                 DropdownButtonFormField<StepTemplate?>(
-                  initialValue: selectedTemplate,
+                  value: selectedTemplate,
                   dropdownColor: AppColors.surface2,
                   style: const TextStyle(color: AppColors.text),
                   decoration: _inputDeco('Beispielschritt wählen...'),
@@ -243,7 +243,7 @@ class _RecipeEditScreenState extends State<RecipeEditScreen> {
                       style: TextStyle(color: AppColors.text, fontSize: 14)),
                   subtitle: const Text('Öffnet die Uhr-App mit diesem Timer',
                       style: TextStyle(color: AppColors.text3, fontSize: 12)),
-                  activeThumbColor: AppColors.gold,
+                  activeColor: AppColors.gold,
                   contentPadding: EdgeInsets.zero,
                 ),
 

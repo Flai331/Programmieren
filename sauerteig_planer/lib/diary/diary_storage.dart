@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'diary_models.dart';
@@ -24,7 +24,8 @@ class DiaryStorage {
       // Newest first
       entries.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       return entries;
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('DiaryStorage.loadAll error: $e\n$st');
       return [];
     }
   }

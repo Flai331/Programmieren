@@ -87,7 +87,7 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
   int get _completedCount =>
       _steps.where((s) => s.status == StepStatus.completed || s.status == StepStatus.skipped).length;
 
-  bool get _hasActiveTimer => _activeIndex >= 0 && _steps[_activeIndex].status == StepStatus.active;
+  bool get _hasActiveTimer => _activeIndex >= 0 && _activeIndex < _steps.length && _steps[_activeIndex].status == StepStatus.active;
 
   // ── Abbruch-Bestätigung ───────────────────────────────────
   Future<void> _confirmExit() async {
