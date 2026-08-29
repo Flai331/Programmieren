@@ -774,7 +774,8 @@
 
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
                     <button class="btn-primary" onclick="switchTab(1)" style="flex: 1;">Weiter zu Absenderdaten →</button>
-                    <button onclick="exportForBeeBrain()" style="padding: 12px 20px; background: #fda085; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;" title="Vorlage als Datei sichern, um sie in BeeBrain zu laden">🐝 Für BeeBrain exportieren</button>
+                    <button onclick="copyForBeeBrain()" style="padding: 12px 20px; background: #fda085; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;" title="Vorlage in die Zwischenablage legen, um sie in BeeBrain einzufügen">🐝 Für BeeBrain kopieren</button>
+                    <button onclick="exportForBeeBrain()" style="padding: 12px 20px; background: #6c757d; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;" title="Vorlage samt Bildern als Datei sichern">💾 Als Datei sichern</button>
                     <button onclick="clearAllStorage()" style="padding: 12px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;" title="Alle gespeicherten Daten löschen">🗑️ Daten zurücksetzen</button>
                 </div>
             </div>
@@ -2110,30 +2111,83 @@
         // Rechnungen sind bewusst nicht dabei: Dieser Generator legt keine
         // an, er erzeugt nur PDFs. Gespeichert wird ausschließlich die
         // Vorlage – Absenderdaten, Logo, Briefkopf und Farben.
+        // Vorlage in die Zwischenablage legen – zum Einfügen in BeeBrain
+        // unter Einstellungen → Daten übernehmen.
+        //
+        // Ohne Logo und Briefkopf: Die stecken als Base64 in der Vorlage und
+        // sind mehrere hundert Kilobyte groß. Über die Zwischenablage aufs
+        // Handy wäre das unhandlich; Bilder lädt man in BeeBrain direkt hoch.
+        function copyForBeeBrain() {
+            try {
+                var daten = beeBrainPayload(false);
+                if (!daten) return;
+                var text = JSON.stringify(daten, null, 2);
+
+                var fertig = function () {
+                    alert('Vorlage kopiert (' + text.length + ' Zeichen).\n\n' +
+                          'In BeeBrain: Einstellungen → Daten übernehmen → ' +
+                          'Aus Zwischenablage einfügen.');
+                };
+
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(fertig, function () {
+                        copyViaTextarea(text); fertig();
+                    });
+                } else {
+                    copyViaTextarea(text);
+                    fertig();
+                }
+            } catch (e) {
+                alert('Kopieren fehlgeschlagen: ' + e);
+            }
+        }
+
+        // Rückfalllösung für Browser ohne Clipboard-API bzw. ohne HTTPS.
+        function copyViaTextarea(text) {
+            var feld = document.createElement('textarea');
+            feld.value = text;
+            feld.style.position = 'fixed';
+            feld.style.opacity = '0';
+            document.body.appendChild(feld);
+            feld.select();
+            try { document.execCommand('copy'); } catch (e) { /* egal */ }
+            document.body.removeChild(feld);
+        }
+
+        // Gemeinsamer Datensatz für Kopieren und Datei-Export.
+        // mitBildern=false lässt Logo und Briefkopf weg.
+        function beeBrainPayload(mitBilder) {
+            var roh = localStorage.getItem('invoiceDesign');
+            if (!roh) {
+                alert('Es ist noch keine Vorlage gespeichert.\n\n' +
+                      'Trag zuerst deine Absenderdaten ein.');
+                return null;
+            }
+            var design = JSON.parse(roh);
+            if (!mitBilder) {
+                delete design.logo;
+                delete design.topHeader;
+            }
+            return {
+                beebrain_import: 1,
+                exported_at: new Date().toISOString(),
+                source: 'RECHNUNGSGENERATOR WebApp',
+                design: design,
+                lastInvoiceNumber:
+                    localStorage.getItem('lastInvoiceNumber') || null,
+                topHeader: {
+                    x: localStorage.getItem('topHeaderX'),
+                    y: localStorage.getItem('topHeaderY'),
+                    width: localStorage.getItem('topHeaderWidth'),
+                    height: localStorage.getItem('topHeaderHeight')
+                }
+            };
+        }
+
         function exportForBeeBrain() {
             try {
-                var design = localStorage.getItem('invoiceDesign');
-                if (!design) {
-                    alert('Es ist noch keine Vorlage gespeichert.\n\n' +
-                          'Trag zuerst deine Absenderdaten ein und lade Logo ' +
-                          'bzw. Briefkopf hoch.');
-                    return;
-                }
-
-                var daten = {
-                    beebrain_import: 1,
-                    exported_at: new Date().toISOString(),
-                    source: 'RECHNUNGSGENERATOR WebApp',
-                    design: JSON.parse(design),
-                    lastInvoiceNumber:
-                        localStorage.getItem('lastInvoiceNumber') || null,
-                    topHeader: {
-                        x: localStorage.getItem('topHeaderX'),
-                        y: localStorage.getItem('topHeaderY'),
-                        width: localStorage.getItem('topHeaderWidth'),
-                        height: localStorage.getItem('topHeaderHeight')
-                    }
-                };
+                var daten = beeBrainPayload(true);
+                if (!daten) return;
 
                 var blob = new Blob([JSON.stringify(daten, null, 2)],
                                     { type: 'application/json' });

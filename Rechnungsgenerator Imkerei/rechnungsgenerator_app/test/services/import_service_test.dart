@@ -362,6 +362,81 @@ void main() {
     });
   });
 
+  group('Echte Zwischenablage-Ausgabe der WebApp', () {
+    // Wortwörtlich das, was copyForBeeBrain() erzeugt: dieselbe Vorlage,
+    // aber ohne Logo und Briefkopf, damit sie in die Zwischenablage passt.
+    const ausZwischenablage = r'''
+{
+  "beebrain_import": 1,
+  "exported_at": "2026-08-23T10:00:00.000Z",
+  "source": "RECHNUNGSGENERATOR WebApp",
+  "design": {
+    "senderName": "Imkerei Otte",
+    "senderCity": "26123 Oldenburg",
+    "senderIban": "DE02120300000000202051",
+    "headerTextColor": "#fda085",
+    "headerTextSize": "24"
+  },
+  "lastInvoiceNumber": "RE-2026-005",
+  "topHeader": {
+    "x": "10",
+    "y": "20",
+    "width": "300",
+    "height": "80"
+  }
+}
+''';
+
+    test('lässt sich einlesen', () {
+      final data = ImportParser.decode(ausZwischenablage);
+      expect(data['source'], 'RECHNUNGSGENERATOR WebApp');
+    });
+
+    test('Absenderdaten kommen an', () {
+      final firma =
+          ImportParser.toCompany(ImportParser.decode(ausZwischenablage))!;
+      expect(firma.name, 'Imkerei Otte');
+      expect(firma.zipcode, '26123');
+      expect(firma.city, 'Oldenburg');
+      expect(firma.iban, 'DE02120300000000202051');
+    });
+
+    test('Farben und Briefkopf-Position kommen an', () {
+      final data = ImportParser.decode(ausZwischenablage);
+      final design = ImportParser.toDesignSettings(data, companyId: 'c1');
+      expect(design.headerTextColor, '#fda085');
+      expect(design.headerTextSize, 24);
+      expect(design.headerX, 10);
+      expect(design.headerWidth, 300);
+    });
+
+    test('ohne Bilder – und das ist in Ordnung', () {
+      final data = ImportParser.decode(ausZwischenablage);
+      expect(ImportParser.logoDataUrl(data), isNull);
+      expect(ImportParser.headerDataUrl(data), isNull);
+
+      // Ein Import ohne Bilder darf vorhandene Bilder nicht löschen.
+      final bestehend = DesignSettingsModel(
+        id: 'd1',
+        companyId: 'c1',
+        logoUrl: '/pfad/logo.png',
+        topHeaderUrl: '/pfad/briefkopf.png',
+        createdAt: DateTime(2026, 1, 1),
+      );
+      final design = ImportParser.toDesignSettings(
+        data,
+        companyId: 'c1',
+        existing: bestehend,
+      );
+      expect(design.logoUrl, '/pfad/logo.png');
+      expect(design.topHeaderUrl, '/pfad/briefkopf.png');
+    });
+
+    test('bleibt klein genug für die Zwischenablage', () {
+      expect(ausZwischenablage.length, lessThan(4000));
+    });
+  });
+
   group('ImportResult', () {
     test('leeres Ergebnis wird erkannt', () {
       expect(const ImportResult().isEmpty, isTrue);
