@@ -46,6 +46,12 @@ void main() {
     pauseStepMinutes: 15,
     pauseBaseSeconds: 5,
     pauseResetMinutes: 15,
+    quietEnabled: false,
+    quietScope: QuietScope.alle,
+    quietNumbers: [],
+    quietAfterEventMinutes: 0,
+    quietWhileLocked: true,
+    quietSchedules: [],
   );
 
   Widget screen() => MaterialApp(
@@ -81,9 +87,12 @@ void main() {
 
     // Der Profilschirm ist laenger als das 800x600-Fenster des Tests; ohne
     // Scrollen liegt der Schalter ausserhalb und der Tipp geht ins Leere.
-    await tester.ensureVisible(find.byType(SwitchListTile).last);
+    // Den Schalter ueber seinen Titel suchen: unter der Atempause stehen
+    // inzwischen die Schalter der Ruhe.
+    final pause = find.widgetWithText(SwitchListTile, 'Atempause');
+    await tester.ensureVisible(pause);
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(SwitchListTile).last);
+    await tester.tap(pause);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Sichern'));
     await tester.pumpAndSettle();

@@ -44,11 +44,16 @@ class RiegelChannel {
   }
 
   Future<bool> updateProfile(ProfileInfo profile) async {
+    // Rufnummern gehoeren nicht ins Protokoll — es landet in einer
+    // Notion-Datenbank. Die Anzahl beantwortet dieselbe Frage.
     FeedbackService.log(
       'Profil gespeichert: ${profile.name}, '
       '${profile.blockedPackages.length} Apps, '
       'Modus ${modeToNative(profile.mode)}, '
-      'Atempause ${profile.pauseEnabled ? "an" : "aus"}',
+      'Atempause ${profile.pauseEnabled ? "an" : "aus"}, '
+      'Ruhe ${profile.quietEnabled ? "an" : "aus"} '
+      '(${profile.quietNumbers.length} Nummern, '
+      '${profile.quietSchedules.length} Zeitfenster)',
     );
     return await channel.invokeMethod<bool>('updateProfile', {
           'id': profile.id,
@@ -62,6 +67,14 @@ class RiegelChannel {
           'pauseStepMinutes': profile.pauseStepMinutes,
           'pauseBaseSeconds': profile.pauseBaseSeconds,
           'pauseResetMinutes': profile.pauseResetMinutes,
+          'quietEnabled': profile.quietEnabled,
+          'quietScope': scopeToNative(profile.quietScope),
+          'quietNumbers': profile.quietNumbers,
+          'quietAfterEventMinutes': profile.quietAfterEventMinutes,
+          'quietWhileLocked': profile.quietWhileLocked,
+          'quietSchedules': profile.quietSchedules
+              .map((plan) => plan.toMap())
+              .toList(),
         }) ??
         false;
   }
@@ -189,6 +202,41 @@ class RiegelChannel {
 
   Future<void> refreshCalendar() async {
     await channel.invokeMethod<bool>('refreshCalendar');
+  }
+
+  /// Kontakte für die Auswahl. Ohne Berechtigung kommt eine leere Liste.
+  Future<List<ContactInfo>> contacts() async {
+    final raw = await channel.invokeMethod<List<dynamic>>('contacts');
+    return (raw ?? [])
+        .map((e) => ContactInfo.fromMap(e as Map<dynamic, dynamic>))
+        .toList();
+  }
+
+  Future<bool> contactsGranted() async =>
+      await channel.invokeMethod<bool>('contactsGranted') ?? false;
+
+  Future<bool> requestContacts() async =>
+      await channel.invokeMethod<bool>('requestContacts') ?? false;
+
+  /// Ob das System die Anruffilter-Rolle überhaupt vergibt — erst ab Android 10.
+  Future<bool> callScreeningAvailable() async =>
+      await channel.invokeMethod<bool>('callScreeningAvailable') ?? false;
+
+  Future<bool> callScreeningHeld() async =>
+      await channel.invokeMethod<bool>('callScreeningHeld') ?? false;
+
+  /// Öffnet den Systemdialog für die Anruffilter-Rolle.
+  Future<bool> requestCallScreening() async {
+    FeedbackService.log('Anruffilter angefragt');
+    return await channel.invokeMethod<bool>('requestCallScreening') ?? false;
+  }
+
+  Future<bool> dndGranted() async =>
+      await channel.invokeMethod<bool>('dndGranted') ?? false;
+
+  Future<void> openDndSettings() {
+    FeedbackService.log('Bitte-nicht-stören-Einstellungen geöffnet');
+    return channel.invokeMethod<void>('openDndSettings');
   }
 
   /// Zustand für Fehlerberichte. Enthält keine Tag-UIDs und keinen Code-Hash.

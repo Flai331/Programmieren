@@ -21,6 +21,12 @@ data class Profile(
      * App, nicht in einem Profil.
      */
     val pause: PauseSettings = PauseSettings(),
+    /**
+     * Ruhe: Anrufe stumm schalten, ohne die Apps zu sperren. Steht wie [pause]
+     * am Profil, weil beides dieselbe Frage beantwortet — was gilt, während
+     * dieses Profil greift.
+     */
+    val quiet: QuietSettings = QuietSettings(),
 )
 
 /** Womit gesperrt wird. Jeder Chip hat ein Profil — auch ein Generalschlüssel. */

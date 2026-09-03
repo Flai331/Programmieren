@@ -12,6 +12,101 @@ String modeToNative(LockMode mode) => switch (mode) {
   LockMode.until => 'UNTIL',
 };
 
+/// Wen die Ruhe stumm schaltet. Spiegelt `QuietScope` der nativen Seite.
+enum QuietScope { alle, ausgewaehlte, alleAusser }
+
+QuietScope _scopeFrom(String? raw) => switch (raw) {
+  'AUSGEWAEHLTE' => QuietScope.ausgewaehlte,
+  'ALLE_AUSSER' => QuietScope.alleAusser,
+  _ => QuietScope.alle,
+};
+
+String scopeToNative(QuietScope scope) => switch (scope) {
+  QuietScope.alle => 'ALLE',
+  QuietScope.ausgewaehlte => 'AUSGEWAEHLTE',
+  QuietScope.alleAusser => 'ALLE_AUSSER',
+};
+
+/// Kürzel der Wochentage nach `Calendar.DAY_OF_WEEK`: Sonntag ist die 1.
+const Map<int, String> kTagKuerzel = {
+  2: 'Mo',
+  3: 'Di',
+  4: 'Mi',
+  5: 'Do',
+  6: 'Fr',
+  7: 'Sa',
+  1: 'So',
+};
+
+/// Minuten seit Mitternacht als `22:00`.
+String uhrzeitAusMinuten(int minuten) {
+  final h = (minuten ~/ 60).toString().padLeft(2, '0');
+  final m = (minuten % 60).toString().padLeft(2, '0');
+  return '$h:$m';
+}
+
+/// Ein wiederkehrendes Ruhefenster, etwa Mo–Fr 22:00–06:00.
+class QuietScheduleInfo {
+  const QuietScheduleInfo({
+    required this.days,
+    required this.startMinute,
+    required this.endMinute,
+  });
+
+  /// Wochentage nach `Calendar.DAY_OF_WEEK` — dieselbe Zählung wie nativ.
+  final Set<int> days;
+  final int startMinute;
+  final int endMinute;
+
+  factory QuietScheduleInfo.fromMap(Map<dynamic, dynamic> map) =>
+      QuietScheduleInfo(
+        days: (map['days'] as List<dynamic>? ?? []).cast<int>().toSet(),
+        startMinute: map['startMinute'] as int? ?? 22 * 60,
+        endMinute: map['endMinute'] as int? ?? 6 * 60,
+      );
+
+  Map<String, dynamic> toMap() => {
+    'days': days.toList(),
+    'startMinute': startMinute,
+    'endMinute': endMinute,
+  };
+
+  QuietScheduleInfo copyWith({
+    Set<int>? days,
+    int? startMinute,
+    int? endMinute,
+  }) => QuietScheduleInfo(
+    days: days ?? this.days,
+    startMinute: startMinute ?? this.startMinute,
+    endMinute: endMinute ?? this.endMinute,
+  );
+
+  /// „Mo Di Mi · 22:00–06:00". Ohne Tag heißt: das Fenster greift nie.
+  String get label {
+    // In Wochenreihenfolge, nicht in der Reihenfolge des Antippens.
+    final tage = kTagKuerzel.keys
+        .where(days.contains)
+        .map((t) => kTagKuerzel[t])
+        .join(' ');
+    final zeit =
+        '${uhrzeitAusMinuten(startMinute)}–${uhrzeitAusMinuten(endMinute)}';
+    return tage.isEmpty ? 'kein Tag · $zeit' : '$tage · $zeit';
+  }
+}
+
+/// Ein Kontakt für die Auswahl. Die Nummer ist bereits auf Ziffern normalisiert.
+class ContactInfo {
+  const ContactInfo({required this.name, required this.number});
+
+  final String name;
+  final String number;
+
+  factory ContactInfo.fromMap(Map<dynamic, dynamic> map) => ContactInfo(
+    name: map['name'] as String? ?? '',
+    number: map['number'] as String? ?? '',
+  );
+}
+
 class ProfileInfo {
   const ProfileInfo({
     required this.id,
@@ -25,6 +120,12 @@ class ProfileInfo {
     required this.pauseStepMinutes,
     required this.pauseBaseSeconds,
     required this.pauseResetMinutes,
+    required this.quietEnabled,
+    required this.quietScope,
+    required this.quietNumbers,
+    required this.quietAfterEventMinutes,
+    required this.quietWhileLocked,
+    required this.quietSchedules,
   });
 
   final String id;
@@ -43,6 +144,20 @@ class ProfileInfo {
   /// So lange unbenutzt, dann faengt die Staffelung von vorn an.
   final int pauseResetMinutes;
 
+  /// Ruhe: Anrufe stumm schalten, ohne die Apps zu sperren.
+  final bool quietEnabled;
+  final QuietScope quietScope;
+
+  /// Normalisierte Rufnummern — nur Ziffern, ohne Namen.
+  final List<String> quietNumbers;
+
+  /// Nachlauf nach dem Ende eines Termins dieses Profils.
+  final int quietAfterEventMinutes;
+
+  /// Ruhe auch, solange eine Sperre dieses Profils laeuft.
+  final bool quietWhileLocked;
+  final List<QuietScheduleInfo> quietSchedules;
+
   factory ProfileInfo.fromMap(Map<dynamic, dynamic> map) {
     final until = map['untilAt'] as int?;
     return ProfileInfo(
@@ -60,6 +175,14 @@ class ProfileInfo {
       pauseStepMinutes: map['pauseStepMinutes'] as int? ?? 15,
       pauseBaseSeconds: map['pauseBaseSeconds'] as int? ?? 5,
       pauseResetMinutes: map['pauseResetMinutes'] as int? ?? 15,
+      quietEnabled: map['quietEnabled'] as bool? ?? false,
+      quietScope: _scopeFrom(map['quietScope'] as String?),
+      quietNumbers: (map['quietNumbers'] as List<dynamic>? ?? []).cast<String>(),
+      quietAfterEventMinutes: map['quietAfterEventMinutes'] as int? ?? 0,
+      quietWhileLocked: map['quietWhileLocked'] as bool? ?? true,
+      quietSchedules: (map['quietSchedules'] as List<dynamic>? ?? [])
+          .map((e) => QuietScheduleInfo.fromMap(e as Map<dynamic, dynamic>))
+          .toList(),
     );
   }
 }
@@ -268,6 +391,7 @@ class LockStatus {
     required this.calendar,
     required this.hasMasterTag,
     required this.hasCode,
+    required this.quietNow,
   });
 
   final List<ProfileInfo> profiles;
@@ -285,6 +409,10 @@ class LockStatus {
   /// Ob überhaupt ein Generalschlüssel angelernt ist — sonst öffnet nur der Code.
   final bool hasMasterTag;
   final bool hasCode;
+
+  /// Ob gerade Ruhe gilt — nativ gerechnet, damit die Fensterlogik nicht
+  /// zweimal existiert.
+  final bool quietNow;
 
   factory LockStatus.fromMap(Map<dynamic, dynamic> map) {
     final chipLock = map['chipLock'] as Map<dynamic, dynamic>?;
@@ -304,6 +432,7 @@ class LockStatus {
           : CalendarInfo.fromMap(map['calendar'] as Map<dynamic, dynamic>),
       hasMasterTag: map['hasMasterTag'] as bool? ?? false,
       hasCode: map['hasCode'] as bool? ?? false,
+      quietNow: map['quietNow'] as bool? ?? false,
     );
   }
 

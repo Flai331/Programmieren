@@ -44,15 +44,32 @@ class RiegelChannel(private val activity: Activity) {
                             baseSeconds = call.argument<Int>("pauseBaseSeconds") ?: 5,
                             resetMinutes = call.argument<Int>("pauseResetMinutes") ?: 15,
                         ),
+                        quiet = QuietSettings(
+                            enabled = call.argument<Boolean>("quietEnabled") ?: false,
+                            scope = runCatching {
+                                QuietScope.valueOf(call.argument<String>("quietScope") ?: "ALLE")
+                            }.getOrDefault(QuietScope.ALLE),
+                            // Normalisiert wird hier, damit im Speicher nur
+                            // Ziffern landen — die Oberfläche darf schicken, was
+                            // in den Kontakten steht.
+                            numbers = call.argument<List<String>>("quietNumbers")
+                                ?.map { PhoneNumbers.normalize(it) }
+                                ?.filter { it.isNotEmpty() }
+                                ?.toSet()
+                                ?: emptySet(),
+                            afterEventMinutes = call.argument<Int>("quietAfterEventMinutes") ?: 0,
+                            whileLocked = call.argument<Boolean>("quietWhileLocked") ?: true,
+                            schedules = wochenplaene(call.argument("quietSchedules")),
+                        ),
                     )
                     result.success(
-                        controller.engine.updateProfile(profile, System.currentTimeMillis())
+                        controller.updateProfile(profile, System.currentTimeMillis())
                     )
                 }
 
                 "deleteProfile" ->
                     result.success(
-                        controller.engine.deleteProfile(
+                        controller.deleteProfile(
                             call.argument<String>("id") ?: "",
                             System.currentTimeMillis(),
                         )
@@ -113,6 +130,38 @@ class RiegelChannel(private val activity: Activity) {
                     result.success(true)
                 }
 
+                "contacts" -> result.success(
+                    ContactSource(activity).contacts().map {
+                        mapOf("name" to it.name, "number" to it.number)
+                    }
+                )
+
+                "contactsGranted" -> result.success(ContactPermission.granted(activity))
+
+                "requestContacts" -> {
+                    if (ContactPermission.granted(activity)) {
+                        result.success(true)
+                    } else {
+                        ContactPermission.request(activity)
+                        // Wie beim Kalender: die Antwort kommt asynchron ins
+                        // System zurück, die Oberfläche fragt danach neu.
+                        result.success(false)
+                    }
+                }
+
+                "callScreeningAvailable" -> result.success(CallScreening.available(activity))
+
+                "callScreeningHeld" -> result.success(CallScreening.held(activity))
+
+                "requestCallScreening" -> result.success(CallScreening.request(activity))
+
+                "dndGranted" -> result.success(QuietDnd(activity).granted())
+
+                "openDndSettings" -> {
+                    QuietDnd(activity).openSettings()
+                    result.success(true)
+                }
+
                 "getDiagnostics" -> {
                     val map = Diagnostics.summarize(
                         controller.engine.state(),
@@ -122,6 +171,16 @@ class RiegelChannel(private val activity: Activity) {
                     map["Geräteadministrator"] =
                         if (devicePolicyManager().isAdminActive(adminComponent())) "an" else "aus"
                     map["Benachrichtigungen"] = notificationPermissionState()
+                    map["Anruffilter"] = if (CallScreening.held(activity)) "an" else "aus"
+                    map["Bitte nicht stören"] =
+                        if (QuietDnd(activity).granted()) "erlaubt" else "VERWEIGERT"
+                    map["Ruhe"] = if (
+                        QuietPlanner.isQuiet(controller.engine.state(), System.currentTimeMillis())
+                    ) {
+                        "aktiv"
+                    } else {
+                        "aus"
+                    }
                     map["Nutzungsdaten"] =
                         if (AndroidUsageSource(activity).granted()) "erlaubt" else "VERWEIGERT"
                     map["Android"] = "SDK ${Build.VERSION.SDK_INT} (${Build.VERSION.RELEASE})"
@@ -200,6 +259,28 @@ class RiegelChannel(private val activity: Activity) {
         }
     }
 
+    /**
+     * Wochenpläne aus Flutter. Je Plan `days` mit Zahlen nach
+     * `Calendar.DAY_OF_WEEK` (Sonntag = 1), dazu Beginn und Ende als Minuten
+     * seit Mitternacht. Unvollständige Einträge fallen weg, statt den ganzen
+     * Aufruf scheitern zu lassen.
+     */
+    private fun wochenplaene(roh: List<Map<String, Any?>>?): List<QuietSchedule> =
+        roh.orEmpty().mapNotNull { eintrag ->
+            val tage = (eintrag["days"] as? List<*>)
+                ?.mapNotNull { (it as? Number)?.toInt() }
+                ?.toSet()
+                ?: return@mapNotNull null
+            if (tage.isEmpty()) return@mapNotNull null
+            QuietSchedule(
+                days = tage,
+                startMinute = (eintrag["startMinute"] as? Number)?.toInt()
+                    ?: return@mapNotNull null,
+                endMinute = (eintrag["endMinute"] as? Number)?.toInt()
+                    ?: return@mapNotNull null,
+            )
+        }
+
     private fun stateMap(): Map<String, Any?> {
         val s = controller.engine.state()
         val now = System.currentTimeMillis()
@@ -217,6 +298,18 @@ class RiegelChannel(private val activity: Activity) {
                     "pauseStepMinutes" to p.pause.stepMinutes,
                     "pauseBaseSeconds" to p.pause.baseSeconds,
                     "pauseResetMinutes" to p.pause.resetMinutes,
+                    "quietEnabled" to p.quiet.enabled,
+                    "quietScope" to p.quiet.scope.name,
+                    "quietNumbers" to p.quiet.numbers.toList(),
+                    "quietAfterEventMinutes" to p.quiet.afterEventMinutes,
+                    "quietWhileLocked" to p.quiet.whileLocked,
+                    "quietSchedules" to p.quiet.schedules.map { plan ->
+                        mapOf(
+                            "days" to plan.days.toList(),
+                            "startMinute" to plan.startMinute,
+                            "endMinute" to plan.endMinute,
+                        )
+                    },
                 )
             },
             "tags" to s.tags.map { t ->
@@ -228,6 +321,9 @@ class RiegelChannel(private val activity: Activity) {
                 )
             },
             "chipLock" to s.chipLock?.let { mapOf("profileId" to it.profileId) },
+            // Damit die Oberfläche zeigen kann, dass gerade still gestellt ist,
+            // ohne die Fensterrechnung noch einmal in Dart nachzubauen.
+            "quietNow" to QuietPlanner.isQuiet(s, now),
             "timeLocks" to s.timeLocks.filter { now < it.endsAt }.map { l ->
                 mapOf(
                     "profileId" to l.profileId,

@@ -266,3 +266,77 @@ nicht von selbst zurück. Vor jeder Prüfung nachsehen:
 ```bash
 adb shell dumpsys accessibility | grep "Enabled services"
 ```
+
+## Aktualisieren und Deinstallieren
+
+Der Deinstallationsschutz ist der Geräteadministrator: Solange er aktiv ist,
+verweigert Android die Deinstallation. Aktualisieren darf er nie behindern —
+dafür müssen alle Builds denselben Schlüssel tragen, sonst verlangt Android
+vor dem Update eine Deinstallation, und genau die schlägt dann fehl.
+
+- [ ] `flutter run` auf ein Gerät, auf dem die abgelegte Release-APK liegt →
+      installiert durch, ohne eine Deinstallation zu verlangen
+- [ ] Neue APK über die alte installieren, **während eine Sperre läuft** →
+      Update geht durch
+- [ ] Nach dem Update: die Sperre gilt weiter und die Benachrichtigung ist
+      wieder da, ohne die App zu öffnen
+- [ ] Nach dem Update einer laufenden Zeitsperre: sie endet zur ursprünglichen
+      Zeit von selbst — der Wecker wurde neu gestellt
+- [ ] Nach dem Update mit aktiver Kalenderregel: der nächste Termin sperrt
+- [ ] Ohne laufende Sperre „Administratorrecht abgeben" → danach lässt sich
+      Riegel normal deinstallieren
+- [ ] Während einer Sperre „Administratorrecht abgeben" → Meldung „Geht nicht,
+      solange etwas gesperrt ist", Recht bleibt bestehen
+- [ ] Während einer Sperre über die Systemeinstellungen deinstallieren wollen →
+      wird verhindert
+
+## Ruhe — Anrufe stumm schalten
+
+Einzelne Kontakte lassen sich nur treffen, wenn Riegel in den
+Systemeinstellungen die Anruffilter-App ist. Ohne diese Rolle bleibt „Bitte
+nicht stören" — das stellt alles still, nicht nur die gewählten Nummern.
+
+### Einrichtung
+
+- [ ] Profil öffnen, „Anrufe stumm schalten" anschalten
+- [ ] Solange Riegel nicht die Anruffilter-App ist, steht der Hinweis da
+- [ ] „Riegel zum Anruffilter machen" öffnet den Systemdialog; nach dem
+      Zurückkommen ist der Hinweis von selbst weg
+- [ ] „Auswahl" wählen, Kontakte öffnen → Berechtigungsabfrage, danach die
+      Liste mit Namen
+- [ ] Suchfeld filtert, gewählte Zeilen bleiben getönt
+- [ ] Sichern, Profil erneut öffnen: die Auswahl steht noch
+
+### Wirkung
+
+- [ ] Zeitfenster auf die nächsten Minuten stellen → Statuskarte zeigt
+      „Ruhe — Anrufe sind stumm"
+- [ ] Aus der Auswahl anrufen lassen → kein Klingeln, kein Vibrieren, der
+      Anruf steht danach im Anrufprotokoll
+- [ ] Von einer nicht gewählten Nummer anrufen lassen → klingelt normal
+- [ ] Auf „Alle außer" umstellen → genau umgekehrt
+- [ ] Fensterende abwarten → Anrufe klingeln wieder, **ohne** die App zu öffnen
+- [ ] Fenster über Mitternacht (23:00–06:00) → um 00:30 ist es still
+
+### Termine
+
+- [ ] Nachlauf auf 15 Minuten stellen, Termin des Profils anlegen
+- [ ] Während des Termins still, 10 Minuten nach Ende still,
+      16 Minuten nach Ende klingelt es wieder
+- [ ] Laufenden Termin löschen → die Ruhe endet mit ihm
+
+### Sperre
+
+- [ ] „Auch während einer Sperre" an, Profil sperren → still
+- [ ] Schalter aus, erneut sperren → klingelt
+
+### Grenzfälle
+
+- [ ] Ohne Anruffilter-Rolle, aber mit „Bitte nicht stören"-Zugriff: die Ruhe
+      schaltet den Filter an und am Ende wieder aus
+- [ ] „Bitte nicht stören" vorher selbst eingeschaltet → nach der Ruhe ist es
+      immer noch an, mit den alten Einstellungen
+- [ ] Neustart während eines Zeitfensters → die Ruhe gilt weiter
+- [ ] Unterdrückte Nummer: bei „Alle" still, bei „Auswahl" klingelt sie
+- [ ] Fehlerbericht enthält „Anruffilter", „Bitte nicht stören" und „Ruhe",
+      aber **keine** Rufnummern

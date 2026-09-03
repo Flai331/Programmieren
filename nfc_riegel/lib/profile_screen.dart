@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_picker_screen.dart';
+import 'contact_picker_screen.dart';
 import 'lock_status.dart';
 import 'riegel_channel.dart';
 import 'theme.dart';
@@ -20,7 +21,8 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen>
+    with WidgetsBindingObserver {
   late final TextEditingController _name = TextEditingController(
     text: widget.profile.name,
   );
@@ -33,23 +35,95 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late int _pauseStep = widget.profile.pauseStepMinutes;
   late int _pauseBase = widget.profile.pauseBaseSeconds;
   late int _pauseReset = widget.profile.pauseResetMinutes;
+  late bool _quiet = widget.profile.quietEnabled;
+  late QuietScope _quietScope = widget.profile.quietScope;
+  late List<String> _quietNumbers = List.of(widget.profile.quietNumbers);
+  late int _quietAfter = widget.profile.quietAfterEventMinutes;
+  late bool _quietWhileLocked = widget.profile.quietWhileLocked;
+  late List<QuietScheduleInfo> _quietSchedules = List.of(
+    widget.profile.quietSchedules,
+  );
   bool? _usageGranted;
+  bool _screeningVerfuegbar = false;
+  bool? _screeningGehalten;
+  bool? _dndErlaubt;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ladeBerechtigung();
+  }
+
+  /// Rolle und Berechtigungen werden in Systemdialogen vergeben. Zurueck in der
+  /// App muss der Schirm den neuen Stand zeigen, ohne dass man ihn neu oeffnet.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _ladeBerechtigung();
   }
 
   Future<void> _ladeBerechtigung() async {
     final granted = await widget.channel.usageAccessGranted();
-    if (mounted) setState(() => _usageGranted = granted);
+    final verfuegbar = await widget.channel.callScreeningAvailable();
+    final gehalten = await widget.channel.callScreeningHeld();
+    final dnd = await widget.channel.dndGranted();
+    if (!mounted) return;
+    setState(() {
+      _usageGranted = granted;
+      _screeningVerfuegbar = verfuegbar;
+      _screeningGehalten = gehalten;
+      _dndErlaubt = dnd;
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _name.dispose();
     super.dispose();
+  }
+
+  Future<void> _waehleKontakte() async {
+    final gewaehlt = await Navigator.push<List<String>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ContactPickerScreen(
+          selected: _quietNumbers,
+          channel: widget.channel,
+        ),
+      ),
+    );
+    if (gewaehlt != null) setState(() => _quietNumbers = gewaehlt);
+  }
+
+  Future<void> _frageAnruffilter() async {
+    await widget.channel.requestCallScreening();
+    // Die Rolle vergibt das System in einem eigenen Dialog. Der Stand danach
+    // kommt ueber didChangeAppLifecycleState zurueck.
+  }
+
+  /// [index] null legt ein neues Fenster an, sonst wird eines geaendert.
+  Future<void> _planBearbeiten(int? index) async {
+    const vorgabe = QuietScheduleInfo(
+      // Mo–Fr 22:00–06:00 als Vorschlag: der haeufigste Fall ist die Nacht
+      // unter der Woche.
+      days: {2, 3, 4, 5, 6},
+      startMinute: 22 * 60,
+      endMinute: 6 * 60,
+    );
+    final plan = await showDialog<QuietScheduleInfo>(
+      context: context,
+      builder: (_) =>
+          _PlanDialog(plan: index == null ? vorgabe : _quietSchedules[index]),
+    );
+    if (plan == null) return;
+    setState(() {
+      if (index == null) {
+        _quietSchedules.add(plan);
+      } else {
+        _quietSchedules[index] = plan;
+      }
+    });
   }
 
   Future<void> _pickApps() async {
@@ -151,6 +225,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         pauseStepMinutes: _pauseStep,
         pauseBaseSeconds: _pauseBase,
         pauseResetMinutes: _pauseReset,
+        quietEnabled: _quiet,
+        quietScope: _quietScope,
+        quietNumbers: _quietNumbers,
+        quietAfterEventMinutes: _quietAfter,
+        quietWhileLocked: _quietWhileLocked,
+        quietSchedules: _quietSchedules,
       ),
     );
     if (!mounted) return;
@@ -351,6 +431,124 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ],
           ],
+          const SizedBox(height: RiegelSpacing.s6),
+          Text('RUHE', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: RiegelSpacing.s2),
+          SwitchListTile(
+            value: _quiet,
+            onChanged: (v) => setState(() => _quiet = v),
+            title: const Text('Anrufe stumm schalten'),
+            subtitle: const Text(
+              'Klingelt nicht und vibriert nicht. Der Anruf läuft weiter und '
+              'steht danach im Anrufprotokoll — Riegel legt nicht auf.',
+            ),
+            contentPadding: EdgeInsets.zero,
+          ),
+          if (_quiet) ...[
+            const SizedBox(height: RiegelSpacing.s3),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<QuietScope>(
+                segments: const [
+                  ButtonSegment(value: QuietScope.alle, label: Text('Alle')),
+                  ButtonSegment(
+                    value: QuietScope.ausgewaehlte,
+                    label: Text('Auswahl'),
+                  ),
+                  ButtonSegment(
+                    value: QuietScope.alleAusser,
+                    label: Text('Alle außer'),
+                  ),
+                ],
+                selected: {_quietScope},
+                showSelectedIcon: false,
+                onSelectionChanged: (s) =>
+                    setState(() => _quietScope = s.first),
+              ),
+            ),
+            if (_quietScope != QuietScope.alle) ...[
+              const SizedBox(height: RiegelSpacing.s3),
+              OutlinedButton(
+                onPressed: _waehleKontakte,
+                child: Text('${_quietNumbers.length} Kontakte gewählt'),
+              ),
+            ],
+            if (_screeningGehalten == false) ...[
+              const SizedBox(height: RiegelSpacing.s3),
+              const Text(
+                'Riegel ist nicht die Anruffilter-App. Ohne diese Rolle bleibt '
+                'nur „Bitte nicht stören" — das stellt alles still, nicht nur '
+                'die gewählten Nummern.',
+                style: TextStyle(fontSize: 13, color: RiegelColors.fg2),
+              ),
+              const SizedBox(height: RiegelSpacing.s2),
+              if (_screeningVerfuegbar)
+                OutlinedButton(
+                  onPressed: _frageAnruffilter,
+                  child: const Text('Riegel zum Anruffilter machen'),
+                ),
+              if (_dndErlaubt == false)
+                OutlinedButton(
+                  onPressed: widget.channel.openDndSettings,
+                  child: const Text('„Bitte nicht stören" erlauben'),
+                ),
+            ],
+            const SizedBox(height: RiegelSpacing.s4),
+            SwitchListTile(
+              value: _quietWhileLocked,
+              onChanged: (v) => setState(() => _quietWhileLocked = v),
+              title: const Text('Auch während einer Sperre'),
+              subtitle: const Text(
+                'Solange dieses Profil sperrt, bleiben Anrufe still.',
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+            _zahlZeile(
+              _quietAfter == 0
+                  ? 'Kein Nachlauf nach einem Termin'
+                  : 'Noch $_quietAfter Minuten nach einem Termin',
+              () => _zahlEingeben(
+                titel: 'Nachlauf nach Terminende',
+                einheit: 'Minuten',
+                wert: _quietAfter,
+                min: 0,
+                max: 120,
+                uebernehmen: (v) => setState(() => _quietAfter = v),
+              ),
+            ),
+            Slider(
+              value: _quietAfter.toDouble().clamp(0, 120),
+              min: 0,
+              max: 120,
+              divisions: 120,
+              onChanged: (v) => setState(() => _quietAfter = v.round()),
+            ),
+            const SizedBox(height: RiegelSpacing.s3),
+            Text(
+              'ZEITFENSTER',
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+            for (var i = 0; i < _quietSchedules.length; i++)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  _quietSchedules[i].label,
+                  style: const TextStyle(fontFamily: kMonoFamily, fontSize: 13),
+                ),
+                trailing: IconButton(
+                  onPressed: () =>
+                      setState(() => _quietSchedules.removeAt(i)),
+                  icon: const Icon(Icons.close, size: 18),
+                  color: RiegelColors.fg3,
+                  tooltip: 'Zeitfenster entfernen',
+                ),
+                onTap: () => _planBearbeiten(i),
+              ),
+            TextButton(
+              onPressed: () => _planBearbeiten(null),
+              child: const Text('+ Zeitfenster'),
+            ),
+          ],
           const SizedBox(height: RiegelSpacing.s8),
           TextButton(
             onPressed: _delete,
@@ -416,6 +614,111 @@ class _ZahlDialogState extends State<_ZahlDialog> {
         child: const Text('Abbrechen'),
       ),
       FilledButton(onPressed: _fertig, child: const Text('Übernehmen')),
+    ],
+  );
+}
+
+/// Ein Zeitfenster einstellen: Wochentage und die beiden Uhrzeiten.
+class _PlanDialog extends StatefulWidget {
+  const _PlanDialog({required this.plan});
+
+  final QuietScheduleInfo plan;
+
+  @override
+  State<_PlanDialog> createState() => _PlanDialogState();
+}
+
+class _PlanDialogState extends State<_PlanDialog> {
+  late final Set<int> _tage = {...widget.plan.days};
+  late int _start = widget.plan.startMinute;
+  late int _ende = widget.plan.endMinute;
+
+  Future<void> _waehleZeit({required bool start}) async {
+    final aktuell = start ? _start : _ende;
+    final gewaehlt = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: aktuell ~/ 60, minute: aktuell % 60),
+    );
+    if (gewaehlt == null) return;
+    setState(() {
+      final minuten = gewaehlt.hour * 60 + gewaehlt.minute;
+      if (start) {
+        _start = minuten;
+      } else {
+        _ende = minuten;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Zeitfenster'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: RiegelSpacing.s2,
+          children: kTagKuerzel.entries
+              .map(
+                (eintrag) => FilterChip(
+                  label: Text(eintrag.value),
+                  selected: _tage.contains(eintrag.key),
+                  onSelected: (an) => setState(() {
+                    if (an) {
+                      _tage.add(eintrag.key);
+                    } else {
+                      _tage.remove(eintrag.key);
+                    }
+                  }),
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: RiegelSpacing.s4),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => _waehleZeit(start: true),
+                child: Text('ab ${uhrzeitAusMinuten(_start)}'),
+              ),
+            ),
+            const SizedBox(width: RiegelSpacing.s2),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => _waehleZeit(start: false),
+                child: Text('bis ${uhrzeitAusMinuten(_ende)}'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: RiegelSpacing.s3),
+        const Text(
+          'Liegt das Ende vor dem Beginn, läuft das Fenster über Mitternacht.',
+          style: TextStyle(fontSize: 12, color: RiegelColors.fg3),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Abbrechen'),
+      ),
+      FilledButton(
+        // Ohne Wochentag greift das Fenster nie — das ist kein Fenster.
+        onPressed: _tage.isEmpty
+            ? null
+            : () => Navigator.pop(
+                context,
+                QuietScheduleInfo(
+                  days: _tage,
+                  startMinute: _start,
+                  endMinute: _ende,
+                ),
+              ),
+        child: const Text('Übernehmen'),
+      ),
     ],
   );
 }

@@ -65,6 +65,12 @@ void main() {
         pauseStepMinutes: 15,
         pauseBaseSeconds: 5,
         pauseResetMinutes: 15,
+        quietEnabled: false,
+        quietScope: QuietScope.alle,
+        quietNumbers: [],
+        quietAfterEventMinutes: 0,
+        quietWhileLocked: true,
+        quietSchedules: [],
       ),
     );
 

@@ -85,6 +85,12 @@ class _SetupWizardState extends State<SetupWizard> {
           pauseStepMinutes: first.pauseStepMinutes,
           pauseBaseSeconds: first.pauseBaseSeconds,
           pauseResetMinutes: first.pauseResetMinutes,
+          quietEnabled: first.quietEnabled,
+          quietScope: first.quietScope,
+          quietNumbers: first.quietNumbers,
+          quietAfterEventMinutes: first.quietAfterEventMinutes,
+          quietWhileLocked: first.quietWhileLocked,
+          quietSchedules: first.quietSchedules,
         ),
       );
       await _refresh();

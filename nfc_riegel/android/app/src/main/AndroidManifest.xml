@@ -22,6 +22,16 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission"/>
+    <!--
+        Ruhe: Kontakte nur zum Auswählen der Nummern, die stumm bleiben sollen.
+        Gespeichert wird davon allein die Nummer. Zur Laufzeit angefragt.
+    -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
+    <!--
+        Rückfall über „Bitte nicht stören", wenn Riegel nicht die Anruffilter-App
+        ist. Sonderberechtigung: wird über einen eigenen Systemschirm erteilt.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/>
 
     <uses-feature android:name="android.hardware.nfc" android:required="true"/>
 
@@ -117,7 +127,33 @@
             </intent-filter>
         </receiver>
 
+        <!--
+            Anruffilter für die Ruhe. Android bindet den Dienst nur, wenn Riegel
+            die Rolle hält; die Berechtigung schützt ihn davor, von irgendwem
+            sonst angesprochen zu werden.
+        -->
+        <service
+            android:name=".QuietCallScreeningService"
+            android:exported="true"
+            android:permission="android.permission.BIND_SCREENING_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService"/>
+            </intent-filter>
+        </service>
+
         <receiver android:name=".TimerReceiver" android:exported="false"/>
+
+        <!--
+            Nach einem Update stellt sich der Riegel selbst wieder auf: Wecker
+            und Benachrichtigung sind mit dem alten Prozess verschwunden.
+            Nicht exportiert — der Rundruf kommt vom System und erreicht die
+            eigene App auch so.
+        -->
+        <receiver android:name=".PackageReplacedReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+            </intent-filter>
+        </receiver>
 
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>

@@ -12,6 +12,9 @@ object LockCodec {
     private const val ITEM = ''
     private const val PAIR = ''
 
+    /** Feldzahlen, die je Ausbaustufe entstanden sind: 7, 10/11, 17. */
+    private val GUELTIGE_PROFILFELDER = setOf(7, 10, 11, 17)
+
     fun encodeProfiles(profiles: List<Profile>): String =
         profiles.joinToString(RECORD.toString()) { p ->
             listOf(
@@ -26,19 +29,25 @@ object LockCodec {
                 p.pause.stepMinutes.toString(),
                 p.pause.baseSeconds.toString(),
                 p.pause.resetMinutes.toString(),
+                if (p.quiet.enabled) "1" else "0",
+                p.quiet.scope.name,
+                p.quiet.numbers.joinToString(ITEM.toString()),
+                p.quiet.afterEventMinutes.toString(),
+                if (p.quiet.whileLocked) "1" else "0",
+                encodeSchedules(p.quiet.schedules),
             ).joinToString(FIELD.toString())
         }
 
     /**
-     * Liest zehn Felder (mit Atempause) und sieben (davor). Ein alter Satz
-     * bekommt die Vorgaben — stillschweigend zu verwerfen hieße, gesperrte Apps
-     * zu vergessen.
+     * Liest siebzehn Felder (mit Ruhe), elf und zehn (mit Atempause) und sieben
+     * (davor). Ein alter Satz bekommt die Vorgaben — stillschweigend zu
+     * verwerfen hieße, gesperrte Apps zu vergessen.
      */
     fun decodeProfiles(raw: String): List<Profile> {
         if (raw.isEmpty()) return emptyList()
         return raw.split(RECORD).mapNotNull { record ->
             val f = record.split(FIELD)
-            if (f.size != 7 && f.size != 10 && f.size != 11) return@mapNotNull null
+            if (f.size !in GUELTIGE_PROFILFELDER) return@mapNotNull null
             Profile(
                 id = f[0],
                 name = f[1],
@@ -53,10 +62,27 @@ object LockCodec {
                         stepMinutes = f[8].toIntOrNull() ?: 15,
                         baseSeconds = f[9].toIntOrNull() ?: 5,
                         // Feld 11 kam mit dem Wechsel auf Sitzungszeit dazu.
-                        resetMinutes = if (f.size == 11) f[10].toIntOrNull() ?: 15 else 15,
+                        resetMinutes = if (f.size >= 11) f[10].toIntOrNull() ?: 15 else 15,
                     )
                 } else {
                     PauseSettings()
+                },
+                quiet = if (f.size >= 17) {
+                    QuietSettings(
+                        enabled = f[11] == "1",
+                        scope = runCatching { QuietScope.valueOf(f[12]) }
+                            .getOrDefault(QuietScope.ALLE),
+                        numbers = if (f[13].isEmpty()) {
+                            emptySet()
+                        } else {
+                            f[13].split(ITEM).filter { it.isNotEmpty() }.toSet()
+                        },
+                        afterEventMinutes = f[14].toIntOrNull() ?: 0,
+                        whileLocked = f[15] == "1",
+                        schedules = decodeSchedules(f[16]),
+                    )
+                } else {
+                    QuietSettings()
                 },
             )
         }
@@ -149,6 +175,35 @@ object LockCodec {
             )
         }
     }
+
+    /**
+     * Ein Wochenplan als `wochentage PAIR beginn PAIR ende`, Pläne durch ITEM
+     * getrennt. Die Wochentage stehen als sieben Zeichen, Sonntag zuerst — dann
+     * entspricht die Stelle dem Wert aus `Calendar.DAY_OF_WEEK`.
+     */
+    private fun encodeSchedules(schedules: List<QuietSchedule>): String =
+        schedules.joinToString(ITEM.toString()) { plan ->
+            "${encodeDays(plan.days)}$PAIR${plan.startMinute}$PAIR${plan.endMinute}"
+        }
+
+    private fun decodeSchedules(raw: String): List<QuietSchedule> {
+        if (raw.isEmpty()) return emptyList()
+        return raw.split(ITEM).mapNotNull { eintrag ->
+            val teile = eintrag.split(PAIR)
+            if (teile.size != 3) return@mapNotNull null
+            QuietSchedule(
+                days = decodeDays(teile[0]),
+                startMinute = teile[1].toIntOrNull() ?: return@mapNotNull null,
+                endMinute = teile[2].toIntOrNull() ?: return@mapNotNull null,
+            )
+        }
+    }
+
+    private fun encodeDays(days: Set<Int>): String =
+        (1..7).joinToString("") { if (it in days) "1" else "0" }
+
+    private fun decodeDays(raw: String): Set<Int> =
+        raw.mapIndexedNotNull { stelle, zeichen -> (stelle + 1).takeIf { zeichen == '1' } }.toSet()
 
     private fun encodeMap(map: Map<String, String>): String =
         map.entries.joinToString(ITEM.toString()) { "${it.key}$PAIR${it.value}" }

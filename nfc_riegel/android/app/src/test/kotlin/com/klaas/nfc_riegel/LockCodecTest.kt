@@ -1,5 +1,6 @@
 package com.klaas.nfc_riegel
 
+import java.util.Calendar
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -196,5 +197,61 @@ class LockCodecTest {
         assertEquals(1, zurueck.size)
         assertEquals("Arbeit", zurueck[0].name)
         assertEquals(PauseSettings(), zurueck[0].pause)
+    }
+
+    @Test
+    fun `Ruhe uebersteht Kodieren und Dekodieren`() {
+        val profile = listOf(
+            Profile(
+                id = "p1",
+                name = "Arbeit",
+                quiet = QuietSettings(
+                    enabled = true,
+                    scope = QuietScope.ALLE_AUSSER,
+                    numbers = setOf("015123456789", "03012345678"),
+                    afterEventMinutes = 15,
+                    whileLocked = false,
+                    schedules = listOf(
+                        QuietSchedule(setOf(Calendar.MONDAY, Calendar.FRIDAY), 22 * 60, 6 * 60),
+                        QuietSchedule(setOf(Calendar.SUNDAY), 0, 12 * 60),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(profile, LockCodec.decodeProfiles(LockCodec.encodeProfiles(profile)))
+    }
+
+    @Test
+    fun `Atempause bleibt neben der Ruhe erhalten`() {
+        val profile = listOf(
+            Profile(
+                id = "p1",
+                name = "Arbeit",
+                pause = PauseSettings(
+                    enabled = true,
+                    stepMinutes = 7,
+                    baseSeconds = 9,
+                    resetMinutes = 11,
+                ),
+                quiet = QuietSettings(enabled = true),
+            ),
+        )
+
+        assertEquals(profile, LockCodec.decodeProfiles(LockCodec.encodeProfiles(profile)))
+    }
+
+    @Test
+    fun `Profilsatz mit Atempause aber ohne Ruhe bleibt lesbar`() {
+        // Elf Felder, wie vor der Ruhe abgelegt.
+        val alt = listOf("p1", "Arbeit", "com.a", "TIMER", "45", "", "0", "1", "20", "8", "12")
+            .joinToString("")
+
+        val zurueck = LockCodec.decodeProfiles(alt)
+
+        assertEquals(1, zurueck.size)
+        assertEquals(20, zurueck[0].pause.stepMinutes)
+        assertEquals(12, zurueck[0].pause.resetMinutes)
+        assertEquals(QuietSettings(), zurueck[0].quiet)
     }
 }

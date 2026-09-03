@@ -13,6 +13,16 @@ val keystoreProperties = Properties().apply {
     if (datei.exists()) datei.inputStream().use { load(it) }
 }
 
+// Der Rückfall auf den Debug-Schlüssel darf nicht stillschweigend passieren:
+// eine so signierte APK lässt sich nicht über eine bestehende Installation
+// legen, und der Geräteadministrator verweigert die dann nötige Deinstallation.
+if (keystoreProperties.getProperty("storeFile") == null) {
+    logger.warn(
+        "Riegel: key.properties fehlt - es wird mit dem Debug-Schluessel signiert. " +
+            "Diese APK laesst sich nicht ueber eine bestehende Installation legen.",
+    )
+}
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -52,16 +62,25 @@ android {
     }
 
     buildTypes {
+        // Fehlt key.properties — etwa auf einem frisch geklonten Rechner —
+        // bleibt es beim Debug-Schlüssel, damit der Build nicht scheitert.
+        val schluessel = if (keystoreProperties.getProperty("storeFile") != null) {
+            signingConfigs.getByName("release")
+        } else {
+            signingConfigs.getByName("debug")
+        }
+
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            // Fehlt key.properties — etwa auf einem frisch geklonten Rechner —
-            // bleibt es beim Debug-Schlüssel, damit der Build nicht scheitert.
-            signingConfig = if (keystoreProperties.getProperty("storeFile") != null) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig = schluessel
+        }
+
+        // Derselbe Schlüssel auch für den Debug-Build. Sonst unterscheiden sich
+        // die Signaturen, und Android verlangt beim Wechsel zwischen
+        // `flutter run` und der abgelegten APK eine Deinstallation — die der
+        // Geräteadministrator verweigert. Der Deinstallationsschutz stünde damit
+        // jedem Update im Weg, obwohl er nur die Deinstallation meint.
+        debug {
+            signingConfig = schluessel
         }
     }
 }

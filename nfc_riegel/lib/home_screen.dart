@@ -453,6 +453,25 @@ class _StatusTile extends StatelessWidget {
                   _subtitle(status),
                   style: const TextStyle(fontSize: 13, color: RiegelColors.fg2),
                 ),
+                // Ruhe steht unter der Sperre, nicht daneben: sie kann auch
+                // ohne Sperre gelten, ist aber nie die Hauptauskunft.
+                if (status.quietNow) ...[
+                  const SizedBox(height: 3),
+                  const Row(
+                    children: [
+                      Icon(
+                        Icons.notifications_off_rounded,
+                        size: 13,
+                        color: RiegelColors.fg3,
+                      ),
+                      SizedBox(width: RiegelSpacing.s1),
+                      Text(
+                        'Ruhe — Anrufe sind stumm',
+                        style: TextStyle(fontSize: 12, color: RiegelColors.fg3),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

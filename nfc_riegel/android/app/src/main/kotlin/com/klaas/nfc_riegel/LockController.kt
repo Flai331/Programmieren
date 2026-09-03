@@ -40,6 +40,24 @@ class LockController(private val context: Context) {
         applyEffects(engine.restoreAfterBoot(now))
     }
 
+    /**
+     * Profil speichern und die Wirkung sofort nachziehen. Eine geänderte Ruhe
+     * verschiebt den Wecker und schaltet den Rückfall an oder aus — ohne diesen
+     * Weg fiele das erst beim nächsten Ereignis auf.
+     */
+    fun updateProfile(profile: Profile, now: Long = System.currentTimeMillis()): Boolean {
+        val gespeichert = engine.updateProfile(profile, now)
+        if (gespeichert) applyEffects(engine.state(), now)
+        return gespeichert
+    }
+
+    /** Löschen aus demselben Grund über den Controller: die Ruhe muss mit weg. */
+    fun deleteProfile(id: String, now: Long = System.currentTimeMillis()): Boolean {
+        val geloescht = engine.deleteProfile(id, now)
+        if (geloescht) applyEffects(engine.state(), now)
+        return geloescht
+    }
+
     fun submitCode(code: String, now: Long = System.currentTimeMillis()): CodeResult {
         val result = engine.submitCode(code, now)
         applyEffects(result.state)
@@ -64,6 +82,14 @@ class LockController(private val context: Context) {
         } else {
             LockNotification.hide(context)
         }
+
+        // Ruhe: Erste Wahl ist der Anruffilter — er trifft genau die gewählten
+        // Nummern und lässt alles andere in Ruhe. Hat Riegel die Rolle, ist hier
+        // nichts zu tun; hat er sie nicht, bleibt „Bitte nicht stören" als
+        // grober Rückfall. Wechselt die Rolle, räumt derselbe Aufruf ihn ab.
+        QuietDnd(context).apply(
+            QuietPlanner.isQuiet(state, now) && !CallScreening.held(context),
+        )
     }
 
     /**
@@ -82,6 +108,9 @@ class LockController(private val context: Context) {
             CalendarPlanner.nextBoundary(state.calendar, now)?.let { kandidaten += it }
             kandidaten += now + AUFFRISCHUNG_MILLIS
         }
+        // Auch die Ruhe muss von allein anfangen und aufhören, ohne dass jemand
+        // die App öffnet — dafür derselbe Wecker.
+        QuietPlanner.nextBoundary(state, now)?.let { kandidaten += it }
         return kandidaten.minOrNull() ?: (now + AUFFRISCHUNG_MILLIS)
     }
 
