@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../services/database_service.dart';
 import '../models/models.dart';
-import '../utils/feedback_service.dart';
+import '../fehlerbericht.dart';
 import '../utils/utils.dart';
 import 'invoice_edit_screen.dart';
 
@@ -34,7 +34,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    FeedbackService.logScreenLoad('Dashboard');
+    Fehlerbericht.logSeite('Dashboard');
     _tiles = [
       _TileDef('revenue',   'Umsatz',      Icons.euro_outlined,         _C.accent),
       _TileDef('total',     'Rechnungen',  Icons.receipt_outlined,      _C.info),

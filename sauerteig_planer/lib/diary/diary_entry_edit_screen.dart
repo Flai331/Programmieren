@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import '../app_colors.dart';
-import '../untils/feedback_service.dart';
+import '../fehlerbericht.dart';
 import '../untils/temp_utils.dart';
 import 'diary_models.dart';
 import 'diary_storage.dart';
@@ -38,8 +38,8 @@ class _DiaryEntryEditScreenState extends State<DiaryEntryEditScreen> {
     _type = e?.type ?? DiaryEntryType.feeding;
     _timestamp = e?.timestamp ?? DateTime.now();
     _textController = TextEditingController(text: e?.text ?? '');
-    _tempController = TextEditingController(
-        text: e?.temperature?.toStringAsFixed(1) ?? '');
+    _tempController =
+        TextEditingController(text: e?.temperature?.toStringAsFixed(1) ?? '');
     _rating = e?.activityRating;
     _photoPath = e?.photoPath;
     _oldPhotoPath = e?.photoPath;
@@ -53,29 +53,31 @@ class _DiaryEntryEditScreenState extends State<DiaryEntryEditScreen> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
-    FeedbackService.log('Tagebuch: Foto aufnehmen via ${source == ImageSource.camera ? 'Kamera' : 'Galerie'}');
+    Fehlerbericht.log(
+        'Tagebuch: Foto aufnehmen via ${source == ImageSource.camera ? 'Kamera' : 'Galerie'}');
     try {
       final picker = ImagePicker();
       final xFile = await picker.pickImage(
           source: source, imageQuality: 80, maxWidth: 1200);
       if (xFile == null) {
-        FeedbackService.log('Tagebuch: Foto-Auswahl abgebrochen');
+        Fehlerbericht.log('Tagebuch: Foto-Auswahl abgebrochen');
         return;
       }
 
       // Speichere in App-Verzeichnis
       final savedPath = await DiaryStorage.savePhoto(xFile.path);
       if (savedPath != null) {
-        FeedbackService.log('Tagebuch: Foto gespeichert → $savedPath');
+        Fehlerbericht.log('Tagebuch: Foto gespeichert → $savedPath');
         setState(() {
           _photoPath = savedPath;
           _photoChanged = true;
         });
       } else {
-        FeedbackService.log('Tagebuch: Foto-Speichern fehlgeschlagen (savedPath null)');
+        Fehlerbericht.log(
+            'Tagebuch: Foto-Speichern fehlgeschlagen (savedPath null)');
       }
     } catch (e, stack) {
-      FeedbackService.log('Tagebuch: Fehler beim Foto-Aufnehmen: $e\n$stack');
+      Fehlerbericht.log('Tagebuch: Fehler beim Foto-Aufnehmen: $e\n$stack');
     }
   }
 
@@ -131,11 +133,12 @@ class _DiaryEntryEditScreenState extends State<DiaryEntryEditScreen> {
 
   Future<void> _save() async {
     final tempText = _tempController.text.trim();
-    final temp =
-        tempText.isEmpty ? null : double.tryParse(tempText.replaceAll(',', '.'));
+    final temp = tempText.isEmpty
+        ? null
+        : double.tryParse(tempText.replaceAll(',', '.'));
 
     final isNew = widget.entry == null;
-    FeedbackService.log(
+    Fehlerbericht.log(
       'Tagebuch-Eintrag ${isNew ? 'erstellt' : 'bearbeitet'}: '
       'Typ=${kEntryTypeLabel[_type]}, '
       'Temp=${temp != null ? '$temp°C' : 'keine'}, '
@@ -206,8 +209,7 @@ class _DiaryEntryEditScreenState extends State<DiaryEntryEditScreen> {
                 selected: selected,
                 selectedColor: color,
                 backgroundColor: AppColors.surface,
-                side: BorderSide(
-                    color: selected ? color : AppColors.border),
+                side: BorderSide(color: selected ? color : AppColors.border),
                 onSelected: (_) => setState(() => _type = t),
               );
             }).toList(),
@@ -221,8 +223,7 @@ class _DiaryEntryEditScreenState extends State<DiaryEntryEditScreen> {
             onTap: _pickDate,
             borderRadius: BorderRadius.circular(8),
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: BorderRadius.circular(8),
@@ -261,15 +262,12 @@ class _DiaryEntryEditScreenState extends State<DiaryEntryEditScreen> {
                         backgroundColor: AppColors.surface,
                         side: const BorderSide(color: AppColors.border),
                         onPressed: () {
-                          final current =
-                              _textController.text.trim();
-                          _textController.text = current.isEmpty
-                              ? chip
-                              : '$current\n$chip';
+                          final current = _textController.text.trim();
+                          _textController.text =
+                              current.isEmpty ? chip : '$current\n$chip';
                           _textController.selection =
                               TextSelection.fromPosition(
-                            TextPosition(
-                                offset: _textController.text.length),
+                            TextPosition(offset: _textController.text.length),
                           );
                         },
                       ))
@@ -307,8 +305,7 @@ class _DiaryEntryEditScreenState extends State<DiaryEntryEditScreen> {
           _sectionLabel('Temperatur (optional)'),
           TextField(
             controller: _tempController,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: const TextStyle(color: AppColors.text),
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
@@ -423,8 +420,7 @@ class _DiaryEntryEditScreenState extends State<DiaryEntryEditScreen> {
                     borderRadius: BorderRadius.circular(10)),
               ),
               child: const Text('Speichern',
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold)),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ),
           const SizedBox(height: 16),

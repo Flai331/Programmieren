@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 import '../app_colors.dart';
-import '../untils/feedback_service.dart';
+import '../fehlerbericht.dart';
 import '../starter/starter_storage.dart';
 
 // ═══════════════════════════════════════════════════════════════
@@ -107,7 +107,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: _toggleTutorial,
             title: const Text('Tutorial beim Start anzeigen',
                 style: TextStyle(color: AppColors.text)),
-            subtitle: const Text('Onboarding-Seiten beim nächsten App-Start zeigen',
+            subtitle: const Text(
+                'Onboarding-Seiten beim nächsten App-Start zeigen',
                 style: TextStyle(color: AppColors.text3, fontSize: 12)),
             activeThumbColor: AppColors.gold,
           ),
@@ -134,11 +135,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: TextStyle(color: AppColors.text)),
             subtitle: const Text('Direkt aus der App senden',
                 style: TextStyle(color: AppColors.text3, fontSize: 12)),
-            onTap: () => FeedbackService.showReportDialog(context),
+            onTap: () => Fehlerbericht.melden(context),
           ),
           const Divider(color: AppColors.border, height: 1),
           ListTile(
-            leading: const Icon(Icons.science_outlined, color: AppColors.orange),
+            leading:
+                const Icon(Icons.science_outlined, color: AppColors.orange),
             title: const Text('Testfehler auslösen',
                 style: TextStyle(color: AppColors.text)),
             subtitle: const Text('Testet die automatische Fehlererkennung',
@@ -148,8 +150,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(color: AppColors.border, height: 1),
           const ListTile(
             leading: Icon(Icons.info_outline, color: AppColors.text3),
-            title: Text('Version',
-                style: TextStyle(color: AppColors.text)),
+            title: Text('Version', style: TextStyle(color: AppColors.text)),
             subtitle: Text('1.0.0',
                 style: TextStyle(color: AppColors.text3, fontSize: 12)),
           ),

@@ -3,7 +3,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:timezone/timezone.dart' as tz;
 import '../app_colors.dart';
-import '../untils/feedback_service.dart';
+import '../fehlerbericht.dart';
 import 'starter_models.dart';
 import 'starter_storage.dart';
 import 'starter_day_screen.dart';
@@ -52,7 +52,8 @@ class _StarterScreenState extends State<StarterScreen> {
 
   Future<void> _startJourney() async {
     final name = _nameController.text.trim();
-    FeedbackService.log('Starter-Journey gestartet: "$name", Erinnerung=$_notifEnabled');
+    Fehlerbericht.log(
+        'Starter-Journey gestartet: "$name", Erinnerung=$_notifEnabled');
     final journey = StarterJourney.create(name);
     await StarterStorage.save(journey);
     if (_notifEnabled && !kIsWeb) {
@@ -63,7 +64,8 @@ class _StarterScreenState extends State<StarterScreen> {
 
   Future<void> _complete() async {
     if (_journey == null) return;
-    FeedbackService.log('Starter-Journey abgeschlossen: "${_journey!.starterName}", ${_journey!.days.length} Tage');
+    Fehlerbericht.log(
+        'Starter-Journey abgeschlossen: "${_journey!.starterName}", ${_journey!.days.length} Tage');
     final updated = _journey!.copyWith(
       isCompleted: true,
       completedAt: DateTime.now(),
@@ -103,7 +105,7 @@ class _StarterScreenState extends State<StarterScreen> {
       ),
     );
     if (confirm == true) {
-      FeedbackService.log('Starter-Journey gelöscht: "${_journey?.starterName}"');
+      Fehlerbericht.log('Starter-Journey gelöscht: "${_journey?.starterName}"');
       await StarterStorage.delete();
       _load();
     }
@@ -111,7 +113,8 @@ class _StarterScreenState extends State<StarterScreen> {
 
   Future<void> _addDay() async {
     if (_journey == null) return;
-    FeedbackService.log('Starter: Erweiterungstag hinzugefügt → jetzt ${_journey!.days.length + 1} Tage');
+    Fehlerbericht.log(
+        'Starter: Erweiterungstag hinzugefügt → jetzt ${_journey!.days.length + 1} Tage');
     final updated = _journey!.addExtensionDay();
     await StarterStorage.save(updated);
     setState(() => _journey = updated);
@@ -128,8 +131,7 @@ class _StarterScreenState extends State<StarterScreen> {
       ),
     );
     final now = tz.TZDateTime.now(tz.local);
-    var scheduled =
-        tz.TZDateTime(tz.local, now.year, now.month, now.day, 8);
+    var scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, 8);
     if (scheduled.isBefore(now)) {
       scheduled = scheduled.add(const Duration(days: 1));
     }
@@ -144,7 +146,8 @@ class _StarterScreenState extends State<StarterScreen> {
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
     );
-    FeedbackService.log('Starter-Erinnerung geplant für ${scheduled.hour}:${scheduled.minute.toString().padLeft(2, '0')} täglich');
+    Fehlerbericht.log(
+        'Starter-Erinnerung geplant für ${scheduled.hour}:${scheduled.minute.toString().padLeft(2, '0')} täglich');
   }
 
   @override
@@ -263,8 +266,7 @@ class _StarterScreenState extends State<StarterScreen> {
   // ── Aktiver Journey ─────────────────────────────────────────
   Widget _buildActive() {
     final journey = _journey!;
-    final completedDays =
-        journey.days.where((d) => d.isComplete).length;
+    final completedDays = journey.days.where((d) => d.isComplete).length;
     final progress = completedDays / journey.days.length;
 
     return Column(
@@ -301,8 +303,7 @@ class _StarterScreenState extends State<StarterScreen> {
               ),
               const SizedBox(height: 4),
               Text('$completedDays von ${journey.days.length} Tagen erledigt',
-                  style: const TextStyle(
-                      color: AppColors.text3, fontSize: 12)),
+                  style: const TextStyle(color: AppColors.text3, fontSize: 12)),
             ],
           ),
         ),
@@ -314,8 +315,7 @@ class _StarterScreenState extends State<StarterScreen> {
             itemBuilder: (_, i) {
               final day = journey.days[i];
               final isToday = day.dayNumber == journey.currentDayNumber;
-              final isFuture =
-                  day.dayNumber > journey.currentDayNumber;
+              final isFuture = day.dayNumber > journey.currentDayNumber;
 
               return _DayCard(
                 day: day,
@@ -466,12 +466,10 @@ class _DayCard extends StatelessWidget {
           child: day.isComplete
               ? const Icon(Icons.check, color: AppColors.bg, size: 18)
               : Text('${day.dayNumber}',
-                  style: TextStyle(
-                      color: color, fontWeight: FontWeight.bold)),
+                  style: TextStyle(color: color, fontWeight: FontWeight.bold)),
         ),
         title: Text('Tag ${day.dayNumber}',
-            style: TextStyle(
-                color: color, fontWeight: FontWeight.w600)),
+            style: TextStyle(color: color, fontWeight: FontWeight.w600)),
         subtitle: Text(
           isFuture ? 'Noch nicht verfügbar' : _subtitle(),
           style: const TextStyle(color: AppColors.text3, fontSize: 12),

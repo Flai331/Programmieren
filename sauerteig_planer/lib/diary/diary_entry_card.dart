@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../app_colors.dart';
-import '../untils/feedback_service.dart';
+import '../fehlerbericht.dart';
 import '../untils/temp_utils.dart';
 import 'diary_models.dart';
 import 'diary_storage.dart';
@@ -41,8 +41,7 @@ class DiaryEntryCard extends StatelessWidget {
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      DiaryEntryEditScreen(entry: entry),
+                  builder: (_) => DiaryEntryEditScreen(entry: entry),
                 ),
               );
               onChanged();
@@ -54,7 +53,8 @@ class DiaryEntryCard extends StatelessWidget {
                 const Text('Löschen', style: TextStyle(color: AppColors.red)),
             onTap: () async {
               Navigator.pop(context);
-              FeedbackService.log('Tagebuch-Eintrag gelöscht: Typ=${kEntryTypeLabel[entry.type]}, ${entry.timestamp}');
+              Fehlerbericht.log(
+                  'Tagebuch-Eintrag gelöscht: Typ=${kEntryTypeLabel[entry.type]}, ${entry.timestamp}');
               await DiaryStorage.delete(entry);
               onChanged();
             },
@@ -107,8 +107,7 @@ class DiaryEntryCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Text(emoji,
-                              style: const TextStyle(fontSize: 16)),
+                          Text(emoji, style: const TextStyle(fontSize: 16)),
                           const SizedBox(width: 6),
                           Text(label,
                               style: TextStyle(
@@ -185,8 +184,7 @@ class DiaryEntryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
-      child: Text(label,
-          style: TextStyle(color: color, fontSize: 11)),
+      child: Text(label, style: TextStyle(color: color, fontSize: 11)),
     );
   }
 }
