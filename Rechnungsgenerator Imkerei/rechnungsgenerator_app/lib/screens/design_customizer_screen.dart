@@ -5,8 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../services/services.dart';
 import '../models/models.dart';
-import '../utils/feedback_service.dart';
-import '../widgets/feedback_actions.dart';
+import '../fehlerbericht.dart';
 import '../widgets/invoice_layout_canvas.dart';
 
 class DesignCustomizerScreen extends StatefulWidget {
@@ -46,7 +45,7 @@ class _DesignCustomizerScreenState extends State<DesignCustomizerScreen> {
     _headerTextSizeController = TextEditingController(text: '16');
     _tableHeaderColorController = TextEditingController(text: '#fda085');
 
-    FeedbackService.logScreenLoad('Design & Vorlagen');
+    Fehlerbericht.logSeite('Design & Vorlagen');
     _loadDesignSettings();
   }
 
@@ -157,10 +156,10 @@ class _DesignCustomizerScreenState extends State<DesignCustomizerScreen> {
       final file = File('${imagesDir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
-      FeedbackService.log('🖼️ Bild gespeichert: ${file.path}');
+      Fehlerbericht.log('🖼️ Bild gespeichert: ${file.path}');
       return file.path;
     } catch (e) {
-      FeedbackService.logError('Bild speichern: $e', context: 'storage');
+      Fehlerbericht.logFehler('Bild speichern: $e', kontext: 'storage');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Fehler beim Speichern: $e')),
@@ -324,7 +323,6 @@ class _DesignCustomizerScreenState extends State<DesignCustomizerScreen> {
               ),
             ),
           ),
-          const FeedbackActions(),
         ],
       ),
       body: SingleChildScrollView(

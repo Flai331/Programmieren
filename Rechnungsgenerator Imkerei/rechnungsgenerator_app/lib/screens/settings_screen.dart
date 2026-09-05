@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../services/services.dart';
 import '../models/models.dart';
 import '../utils/utils.dart';
-import '../utils/feedback_service.dart';
+import '../fehlerbericht.dart';
 import 'company_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -27,7 +27,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _patternCtrl = TextEditingController();
     _patternCtrl.addListener(_updatePreview);
-    FeedbackService.logScreenLoad('Settings');
+    Fehlerbericht.logSeite('Settings');
     _loadCompany();
   }
 
@@ -78,8 +78,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           backgroundColor: Color(0xFF4ade80),
         ),
       );
-      FeedbackService.logUserAction('Rechnungsnummer-Pattern gespeichert',
-          context: {'pattern': pattern});
+      Fehlerbericht.logAktion('Rechnungsnummer-Pattern gespeichert',
+          kontext: {'pattern': pattern});
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

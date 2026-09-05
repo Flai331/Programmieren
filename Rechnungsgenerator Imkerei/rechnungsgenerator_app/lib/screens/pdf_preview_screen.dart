@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../widgets/feedback_actions.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart' show Share, XFile;
@@ -173,7 +172,6 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
               ],
             ),
           ),
-          const FeedbackActions(),
         ],
       ),
       body: FutureBuilder<pw.Document>(

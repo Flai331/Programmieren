@@ -43,9 +43,8 @@ dependencies:
   http: ^1.1.0
   connectivity_plus: ^5.0.0
 
-  # Feedback / Fehlerberichte
+  # Feedback / Fehlerberichte (siehe lib/fehlerbericht.dart)
   url_launcher: ^6.2.5
-  flutter_email_sender: ^6.0.3
 
   # Charts & Graphs
   fl_chart: ^0.65.0

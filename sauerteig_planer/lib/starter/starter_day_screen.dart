@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_colors.dart';
-import '../untils/feedback_service.dart';
+import '../fehlerbericht.dart';
 import '../untils/temp_utils.dart';
 import 'starter_models.dart';
 import 'starter_storage.dart';
@@ -58,11 +58,12 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
 
   Future<void> _save() async {
     final tempText = _tempController.text.trim();
-    final temp =
-        tempText.isEmpty ? null : double.tryParse(tempText.replaceAll(',', '.'));
+    final temp = tempText.isEmpty
+        ? null
+        : double.tryParse(tempText.replaceAll(',', '.'));
 
     final doneTasks = _day.checks.values.where((v) => v).length;
-    FeedbackService.log(
+    Fehlerbericht.log(
       'Starter Tag ${_day.dayNumber} gespeichert: $doneTasks/${_day.checks.length} Aufgaben, '
       'Temp=${temp != null ? '$temp°C' : 'keine'}, '
       'Notiz=${_noteController.text.trim().isNotEmpty ? 'ja' : 'nein'}',
@@ -101,7 +102,8 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
   }
 
   Future<void> _setFloatTest(bool passed) async {
-    FeedbackService.log('Starter Tag ${_day.dayNumber} Float-Test: ${passed ? 'geschwommen ✓' : 'gesunken ✗'}');
+    Fehlerbericht.log(
+        'Starter Tag ${_day.dayNumber} Float-Test: ${passed ? 'geschwommen ✓' : 'gesunken ✗'}');
     final updated = _day.copyWith(
       floatTestDone: true,
       floatTestPassed: passed,
@@ -119,8 +121,7 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
 
   void _addQuickChip(String text) {
     final current = _noteController.text.trim();
-    _noteController.text =
-        current.isEmpty ? text : '$current\n$text';
+    _noteController.text = current.isEmpty ? text : '$current\n$text';
     _noteController.selection = TextSelection.fromPosition(
       TextPosition(offset: _noteController.text.length),
     );
@@ -129,8 +130,8 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
   @override
   Widget build(BuildContext context) {
     final showFloatTest = _day.dayNumber >= 5;
-    final description =
-        kDayDescriptions[_day.dayNumber] ?? 'Kontrolliere deinen Starter heute.';
+    final description = kDayDescriptions[_day.dayNumber] ??
+        'Kontrolliere deinen Starter heute.';
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -162,8 +163,7 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
               border: Border.all(color: AppColors.border),
             ),
             child: Text(description,
-                style: const TextStyle(
-                    color: AppColors.text2, height: 1.5)),
+                style: const TextStyle(color: AppColors.text2, height: 1.5)),
           ),
           const SizedBox(height: 20),
 
@@ -190,12 +190,11 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
           _sectionTitle('Temperatur'),
           TextField(
             controller: _tempController,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: const TextStyle(color: AppColors.text),
             onChanged: (_) {
-              final t = double.tryParse(
-                  _tempController.text.replaceAll(',', '.'));
+              final t =
+                  double.tryParse(_tempController.text.replaceAll(',', '.'));
               if (t != null) setState(() {});
             },
             decoration: InputDecoration(
@@ -234,25 +233,22 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
             const SizedBox(height: 10),
             if (_day.floatTestDone) ...[
               Container(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 10, horizontal: 14),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
                 decoration: BoxDecoration(
                   color: _day.floatTestPassed
                       ? AppColors.green.withValues(alpha: 0.15)
                       : AppColors.red.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: _day.floatTestPassed
-                        ? AppColors.green
-                        : AppColors.red,
+                    color:
+                        _day.floatTestPassed ? AppColors.green : AppColors.red,
                   ),
                 ),
                 child: Row(
                   children: [
                     Icon(
-                      _day.floatTestPassed
-                          ? Icons.check_circle
-                          : Icons.cancel,
+                      _day.floatTestPassed ? Icons.check_circle : Icons.cancel,
                       color: _day.floatTestPassed
                           ? AppColors.green
                           : AppColors.red,

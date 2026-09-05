@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../services/database_service.dart';
-import '../utils/feedback_service.dart';
+import '../fehlerbericht.dart';
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({Key? key}) : super(key: key);
@@ -17,7 +17,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   @override
   void initState() {
     super.initState();
-    FeedbackService.logScreenLoad('Statistiken');
+    Fehlerbericht.logSeite('Statistiken');
     statisticsFuture = _loadDetailedStatistics();
   }
 

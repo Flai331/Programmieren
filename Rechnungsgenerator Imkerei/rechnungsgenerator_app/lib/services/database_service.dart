@@ -1,7 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/models.dart';
-import '../utils/feedback_service.dart';
+import '../fehlerbericht.dart';
 
 /// Lokale SQLite-Datenbank via sqflite (offline-only, Play-Store-ready).
 class DatabaseService {
@@ -14,7 +14,7 @@ class DatabaseService {
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDatabase();
-    FeedbackService.log('🗄️ SQLite-Datenbank bereit');
+    Fehlerbericht.log('🗄️ SQLite-Datenbank bereit');
     return _database!;
   }
 
@@ -200,7 +200,7 @@ class DatabaseService {
       )
     ''');
 
-    FeedbackService.log('🗄️ SQLite-Schema erstellt (v1)');
+    Fehlerbericht.log('🗄️ SQLite-Schema erstellt (v1)');
   }
 
   // ============ COMPANY OPERATIONS ============
@@ -213,9 +213,9 @@ class DatabaseService {
         company.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      FeedbackService.logDbOperation('INSERT', 'companies', id: company.id);
+      Fehlerbericht.logDb('INSERT', 'companies', id: company.id);
     } catch (e) {
-      FeedbackService.logError('insertCompany: $e', context: 'companies');
+      Fehlerbericht.logFehler('insertCompany: $e', kontext: 'companies');
       rethrow;
     }
   }
@@ -232,7 +232,7 @@ class DatabaseService {
       final result = await db.query('companies');
       return result.map((map) => CompanyModel.fromMap(map)).toList();
     } catch (e) {
-      FeedbackService.logApiCall('/companies', 'GET', error: e.toString());
+      Fehlerbericht.logApi('/companies', 'GET', fehler: e.toString());
       return [];
     }
   }
@@ -246,9 +246,9 @@ class DatabaseService {
         where: 'id = ?',
         whereArgs: [company.id],
       );
-      FeedbackService.logDbOperation('UPDATE', 'companies', id: company.id);
+      Fehlerbericht.logDb('UPDATE', 'companies', id: company.id);
     } catch (e) {
-      FeedbackService.logError('updateCompany: $e', context: 'companies');
+      Fehlerbericht.logFehler('updateCompany: $e', kontext: 'companies');
       rethrow;
     }
   }
@@ -256,7 +256,7 @@ class DatabaseService {
   Future<void> deleteCompany(String id) async {
     final db = await database;
     await db.delete('companies', where: 'id = ?', whereArgs: [id]);
-    FeedbackService.logDbOperation('DELETE', 'companies', id: id);
+    Fehlerbericht.logDb('DELETE', 'companies', id: id);
   }
 
   // ============ CUSTOMER OPERATIONS ============
@@ -274,9 +274,9 @@ class DatabaseService {
         data,
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      FeedbackService.logDbOperation('INSERT', 'customers', id: customer.id);
+      Fehlerbericht.logDb('INSERT', 'customers', id: customer.id);
     } catch (e) {
-      FeedbackService.logError('insertCustomer: $e', context: 'customers');
+      Fehlerbericht.logFehler('insertCustomer: $e', kontext: 'customers');
       rethrow;
     }
   }
@@ -305,7 +305,7 @@ class DatabaseService {
       final result = await db.query('customers');
       return result.map((map) => CustomerModel.fromMap(map)).toList();
     } catch (e) {
-      FeedbackService.logApiCall('/customers', 'GET', error: e.toString());
+      Fehlerbericht.logApi('/customers', 'GET', fehler: e.toString());
       return [];
     }
   }
@@ -318,13 +318,13 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [customer.id],
     );
-    FeedbackService.logDbOperation('UPDATE', 'customers', id: customer.id);
+    Fehlerbericht.logDb('UPDATE', 'customers', id: customer.id);
   }
 
   Future<void> deleteCustomer(String id) async {
     final db = await database;
     await db.delete('customers', where: 'id = ?', whereArgs: [id]);
-    FeedbackService.logDbOperation('DELETE', 'customers', id: id);
+    Fehlerbericht.logDb('DELETE', 'customers', id: id);
   }
 
   // ============ INVOICE OPERATIONS ============
@@ -337,9 +337,9 @@ class DatabaseService {
         invoice.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      FeedbackService.logDbOperation('INSERT', 'invoices', id: invoice.id);
+      Fehlerbericht.logDb('INSERT', 'invoices', id: invoice.id);
     } catch (e) {
-      FeedbackService.logError('insertInvoice: $e', context: 'invoices');
+      Fehlerbericht.logFehler('insertInvoice: $e', kontext: 'invoices');
       rethrow;
     }
   }
@@ -377,7 +377,7 @@ class DatabaseService {
       final result = await db.query('invoices', orderBy: 'date DESC');
       return result.map((map) => InvoiceModel.fromMap(map)).toList();
     } catch (e) {
-      FeedbackService.logApiCall('/invoices', 'GET', error: e.toString());
+      Fehlerbericht.logApi('/invoices', 'GET', fehler: e.toString());
       return [];
     }
   }
@@ -393,14 +393,14 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [invoice.id],
     );
-    FeedbackService.logDbOperation('UPDATE', 'invoices', id: invoice.id);
+    Fehlerbericht.logDb('UPDATE', 'invoices', id: invoice.id);
   }
 
   Future<void> deleteInvoice(String id) async {
     final db = await database;
     await db.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [id]);
     await db.delete('invoices', where: 'id = ?', whereArgs: [id]);
-    FeedbackService.logDbOperation('DELETE', 'invoices', id: id);
+    Fehlerbericht.logDb('DELETE', 'invoices', id: id);
   }
 
   Future<void> updateInvoiceStatus(String id, String status) async {
@@ -412,9 +412,9 @@ class DatabaseService {
         where: 'id = ?',
         whereArgs: [id],
       );
-      FeedbackService.logDbOperation('UPDATE_STATUS', 'invoices', id: id);
+      Fehlerbericht.logDb('UPDATE_STATUS', 'invoices', id: id);
     } catch (e) {
-      FeedbackService.logError('updateInvoiceStatus: $e', context: 'invoices');
+      Fehlerbericht.logFehler('updateInvoiceStatus: $e', kontext: 'invoices');
       rethrow;
     }
   }
@@ -487,7 +487,7 @@ class DatabaseService {
             'invoice_id': '',
           })).toList();
     } catch (e) {
-      FeedbackService.logError('getAllArticles: $e', context: 'articles');
+      Fehlerbericht.logFehler('getAllArticles: $e', kontext: 'articles');
       rethrow;
     }
   }
@@ -507,7 +507,7 @@ class DatabaseService {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    FeedbackService.logDbOperation('INSERT', 'articles', id: article.id);
+    Fehlerbericht.logDb('INSERT', 'articles', id: article.id);
   }
 
   Future<void> updateArticle(InvoiceItemModel article) async {
@@ -524,13 +524,13 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [article.id],
     );
-    FeedbackService.logDbOperation('UPDATE', 'articles', id: article.id);
+    Fehlerbericht.logDb('UPDATE', 'articles', id: article.id);
   }
 
   Future<void> deleteArticle(String id) async {
     final db = await database;
     await db.delete('articles', where: 'id = ?', whereArgs: [id]);
-    FeedbackService.logDbOperation('DELETE', 'articles', id: id);
+    Fehlerbericht.logDb('DELETE', 'articles', id: id);
   }
 
   // ============ DESIGN SETTINGS OPERATIONS ============
@@ -543,11 +543,11 @@ class DatabaseService {
         settings.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      FeedbackService.logDbOperation('UPSERT', 'design_settings',
+      Fehlerbericht.logDb('UPSERT', 'design_settings',
           id: settings.companyId);
     } catch (e) {
-      FeedbackService.logError('insertDesignSettings: $e',
-          context: 'design_settings');
+      Fehlerbericht.logFehler('insertDesignSettings: $e',
+          kontext: 'design_settings');
       rethrow;
     }
   }
@@ -570,7 +570,7 @@ class DatabaseService {
       where: 'company_id = ?',
       whereArgs: [settings.companyId],
     );
-    FeedbackService.logDbOperation('UPDATE', 'design_settings',
+    Fehlerbericht.logDb('UPDATE', 'design_settings',
         id: settings.companyId);
   }
 
@@ -620,7 +620,7 @@ class DatabaseService {
       final result = await db.query('letters', orderBy: 'created_at DESC');
       return result.map((map) => LetterModel.fromMap(map)).toList();
     } catch (e) {
-      FeedbackService.logError('getAllLetters: $e', context: 'letters');
+      Fehlerbericht.logFehler('getAllLetters: $e', kontext: 'letters');
       return [];
     }
   }
@@ -638,7 +638,7 @@ class DatabaseService {
       letter.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    FeedbackService.logDbOperation('INSERT', 'letters', id: letter.id);
+    Fehlerbericht.logDb('INSERT', 'letters', id: letter.id);
   }
 
   Future<void> updateLetter(LetterModel letter) async {
@@ -649,13 +649,13 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [letter.id],
     );
-    FeedbackService.logDbOperation('UPDATE', 'letters', id: letter.id);
+    Fehlerbericht.logDb('UPDATE', 'letters', id: letter.id);
   }
 
   Future<void> deleteLetter(String id) async {
     final db = await database;
     await db.delete('letters', where: 'id = ?', whereArgs: [id]);
-    FeedbackService.logDbOperation('DELETE', 'letters', id: id);
+    Fehlerbericht.logDb('DELETE', 'letters', id: id);
   }
 
   Future<void> updateLetterStatus(String id, String status) async {
@@ -676,7 +676,7 @@ class DatabaseService {
       final result = await db.query('hives', orderBy: 'number ASC');
       return result.map((m) => HiveModel.fromMap(m)).toList();
     } catch (e) {
-      FeedbackService.logError('getAllHives: $e', context: 'hives');
+      Fehlerbericht.logFehler('getAllHives: $e', kontext: 'hives');
       return [];
     }
   }
@@ -701,7 +701,7 @@ class DatabaseService {
       hive.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    FeedbackService.logDbOperation('INSERT', 'hives', id: hive.id);
+    Fehlerbericht.logDb('INSERT', 'hives', id: hive.id);
   }
 
   Future<void> updateHive(HiveModel hive) async {
@@ -712,13 +712,13 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [hive.id],
     );
-    FeedbackService.logDbOperation('UPDATE', 'hives', id: hive.id);
+    Fehlerbericht.logDb('UPDATE', 'hives', id: hive.id);
   }
 
   Future<void> deleteHive(String id) async {
     final db = await database;
     await db.delete('hives', where: 'id = ?', whereArgs: [id]);
-    FeedbackService.logDbOperation('DELETE', 'hives', id: id);
+    Fehlerbericht.logDb('DELETE', 'hives', id: id);
   }
 
   Future<int> getNextHiveNumber() async {
@@ -746,7 +746,7 @@ class DatabaseService {
     await db.delete('letters');
     await db.delete('hives');
     await db.delete('articles');
-    FeedbackService.log('🗄️ Alle Daten gelöscht');
+    Fehlerbericht.log('🗄️ Alle Daten gelöscht');
   }
 
   Future<void> closeDatabase() async {
