@@ -11,12 +11,19 @@ class ScanOutcome {
   /// Pfad der erzeugten PDF, relativ zum App-Dokumentenverzeichnis.
   final String relativePdfPath;
   final int pageCount;
+
+  /// OCR-Text aller Seiten (für Volltextsuche und Regel-Extraktion).
   final String ocrText;
+
+  /// OCR-Text nur der ERSTEN Seite (für das KI-Auslesen — dort stehen
+  /// Absender/Datum/Betreff, und weniger Text = schneller).
+  final String firstPageOcr;
 
   const ScanOutcome({
     required this.relativePdfPath,
     required this.pageCount,
     required this.ocrText,
+    required this.firstPageOcr,
   });
 }
 
@@ -55,7 +62,7 @@ class ScanService {
         raw.startsWith('file://') ? Uri.parse(raw).toFilePath() : raw,
     ];
 
-    final ocrText = await _runOcr(imagePaths);
+    final pages = await _runOcr(imagePaths);
     final relativePdfPath = await _buildPdf(imagePaths, docNumber);
 
     // Scanner-Zwischendateien aufräumen (liegen im Cache).
@@ -68,7 +75,8 @@ class ScanService {
     return ScanOutcome(
       relativePdfPath: relativePdfPath,
       pageCount: imagePaths.length,
-      ocrText: ocrText,
+      ocrText: pages.join('\n\n'),
+      firstPageOcr: pages.isNotEmpty ? pages.first : '',
     );
   }
 
@@ -88,7 +96,9 @@ class ScanService {
     if (await file.exists()) await file.delete();
   }
 
-  Future<String> _runOcr(List<String> imagePaths) async {
+  /// OCR pro Seite; liefert eine Liste mit einem Eintrag je Seite (in
+  /// Lesereihenfolge sortiert).
+  Future<List<String>> _runOcr(List<String> imagePaths) async {
     final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
     final pages = <String>[];
     try {
@@ -100,7 +110,7 @@ class ScanService {
     } finally {
       await recognizer.close();
     }
-    return pages.join('\n\n');
+    return pages;
   }
 
   /// ML Kit liefert Textblöcke in Erkennungs-, nicht in Lesereihenfolge.

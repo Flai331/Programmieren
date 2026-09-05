@@ -150,6 +150,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final password = await _askPassword(title: 'Backup verschlüsseln');
     if (password == null) return;
     setState(() => _busy = true);
+    // Teilen öffnet ein System-Sheet → App pausiert; Sperre kurz unterdrücken.
+    LockController.suppressAutoLock = true;
     try {
       final file = await services.backup.createBackup(password);
       await SharePlus.instance.share(ShareParams(
@@ -163,12 +165,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       _snack('Backup fehlgeschlagen: $e');
     } finally {
+      LockController.suppressAutoLock = false;
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _importBackup() async {
-    final picked = await FilePicker.platform.pickFiles();
+    // Datei-Auswahl ist eine eigene Activity → Sperre kurz unterdrücken.
+    LockController.suppressAutoLock = true;
+    final FilePickerResult? picked;
+    try {
+      picked = await FilePicker.platform.pickFiles();
+    } finally {
+      LockController.suppressAutoLock = false;
+    }
     final path = picked?.files.single.path;
     if (path == null) return;
     final password = await _askPassword(title: 'Backup-Passwort eingeben');

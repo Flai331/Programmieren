@@ -51,6 +51,30 @@ Hier ist das Ergebnis:
       expect(parseAiJson('{"absender": '), isNull);
       expect(parseAiJson('[1, 2]'), isNull);
     });
+
+    test('parst Tags als Liste', () {
+      final result = parseAiJson(
+          '{"absender": "Deutsche Rentenversicherung", "typ": "Mitteilung", '
+          '"tags": ["Rentenversicherung", "Rente"]}');
+      expect(result!.tags, ['Rentenversicherung', 'Rente']);
+    });
+
+    test('parst Tags auch als kommagetrennten String und entdoppelt', () {
+      final result =
+          parseAiJson('{"tags": "Auto, auto ,Versicherung"}');
+      expect(result!.tags, ['Auto', 'Versicherung']);
+    });
+
+    test('begrenzt auf 4 Tags und verwirft zu lange', () {
+      final result = parseAiJson(
+          '{"tags": ["a","b","c","d","e","${'x' * 40}"]}');
+      expect(result!.tags, ['a', 'b', 'c', 'd']);
+    });
+
+    test('tags null/fehlend ergibt leere Liste', () {
+      final result = parseAiJson('{"typ": "Mitteilung", "tags": null}');
+      expect(result!.tags, isEmpty);
+    });
   });
 
   group('applyAiToDraft', () {
@@ -103,6 +127,24 @@ Hier ist das Ergebnis:
       expect(d.docType, 'Rechnung');
       expect(d.retentionUntil, DateTime(2028, 12, 31));
     });
+
+    test('KI-Tags werden ergänzt, gelernte Tags bleiben, keine Dubletten', () {
+      final d = draft()..tagNames = ['Auto'];
+      applyAiToDraft(
+        d,
+        const AiDocumentData(tags: ['auto', 'Rentenversicherung']),
+      );
+      // 'auto' ist Dublette zu 'Auto' → nicht doppelt; neuer Tag ergänzt.
+      expect(d.tagNames, ['Auto', 'Rentenversicherung']);
+    });
+
+    test('KI setzt Tags für neue Mitteilung (Beispiel Rentenversicherung)', () {
+      final d = draft()
+        ..tagNames = []
+        ..docType = 'Mitteilung';
+      applyAiToDraft(d, const AiDocumentData(tags: ['Rentenversicherung']));
+      expect(d.tagNames, ['Rentenversicherung']);
+    });
   });
 
   group('buildPrompt', () {
@@ -111,6 +153,14 @@ Hier ist das Ergebnis:
       expect(prompt.length, lessThan(4000));
       expect(prompt, contains('Mitteilung'));
       expect(prompt, contains('JJJJ-MM-TT'));
+      expect(prompt, contains('tags'));
+    });
+
+    test('bietet vorhandene Tags zur Wiederverwendung an', () {
+      final prompt = AiExtractionService.buildPrompt('kurz',
+          knownTags: ['Rentenversicherung', 'Auto']);
+      expect(prompt, contains('Rentenversicherung'));
+      expect(prompt, contains('vorhandene Tags'));
     });
   });
 }

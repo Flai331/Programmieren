@@ -69,7 +69,12 @@ class DokuBoxApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: const LockGate(child: HomeScreen()),
+      // LockGate umschließt den gesamten Navigator, damit das Sperr-Overlay
+      // auch über gerade geöffnete Bildschirme (z. B. Bestätigen) legt und
+      // kein Bildschirm dafür verworfen wird.
+      builder: (context, child) =>
+          LockGate(child: child ?? const SizedBox.shrink()),
+      home: const HomeScreen(),
     );
   }
 }
