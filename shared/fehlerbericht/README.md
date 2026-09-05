@@ -26,8 +26,17 @@ App laufen, gibt es genau eine gemeinsame Notion-Integration:
 3. Prüfen, ob alles sitzt:
 
    ```bash
-   NOTION_TOKEN=ntn_… python3 tools/notion_selbsttest.py
+   # Linux/macOS
+   NOTION_TOKEN=DEIN_TOKEN python3 tools/notion_selbsttest.py
    ```
+
+   ```powershell
+   # Windows PowerShell
+   $env:NOTION_TOKEN = "DEIN_TOKEN"
+   python tools\notion_selbsttest.py
+   ```
+
+   `DEIN_TOKEN` durch das echte Token ersetzen — es beginnt mit `ntn_`.
 
    Das Skript geht genau die Aufrufe durch, die auch die App macht
    (Registry lesen, App-Seite und Datenbank anlegen, Bericht schreiben,

@@ -93,7 +93,21 @@ def main() -> int:
     behalten = "--behalten" in sys.argv
     if not TOKEN:
         print("NOTION_TOKEN ist nicht gesetzt.\n")
-        print("  NOTION_TOKEN=ntn_… python3 notion_selbsttest.py")
+        print("  Linux/macOS:  NOTION_TOKEN=DEIN_TOKEN python3 notion_selbsttest.py")
+        print('  PowerShell:   $env:NOTION_TOKEN = "DEIN_TOKEN"; python notion_selbsttest.py')
+        return 2
+
+    # Häufiger Stolperstein: der Platzhalter aus der Anleitung wurde
+    # wörtlich übernommen. Ohne diese Prüfung scheitert erst der
+    # HTTP-Header am Kodieren und die Meldung führt in die Irre.
+    if not TOKEN.isascii():
+        print("Das Token enthält Sonderzeichen (z. B. das Auslassungszeichen »…«).")
+        print("Offenbar wurde der Platzhalter aus der Anleitung übernommen.")
+        print("Bitte das echte Token aus notion.so/my-integrations einsetzen.")
+        return 2
+    if not TOKEN.startswith(("ntn_", "secret_")):
+        print(f"Das Token beginnt mit »{TOKEN[:6]}…« statt mit »ntn_« oder »secret_«.")
+        print("Bitte prüfen, ob wirklich das Integrations-Token eingesetzt wurde.")
         return 2
 
     print("\nFehlerzentrale — Selbsttest\n")
