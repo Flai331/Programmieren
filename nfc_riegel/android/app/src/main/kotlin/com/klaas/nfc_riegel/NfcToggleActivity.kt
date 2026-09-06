@@ -38,11 +38,29 @@ class NfcToggleActivity : Activity() {
             ?: state.timeLocks.filter { now < it.endsAt }.maxByOrNull { it.endsAt }?.profileId
         val profileName = profileId?.let { state.profileById(it)?.name } ?: "Riegel"
 
+        if (result.outcome == ScanOutcome.ASK_RELEASE) {
+            // Der Zustand ist unveraendert — gefragt wird erst, gesperrt bleibt es
+            // so lange. Das Profil steckt am Chip, nicht in der Sperre.
+            val chip = state.tagByUid(uid)
+            val gefragtesProfil = chip?.profileId?.let { state.profileById(it) }
+            startActivity(
+                Intent(this, ReleaseActivity::class.java)
+                    .putExtra(ReleaseActivity.EXTRA_PROFILE_ID, gefragtesProfil?.id ?: "")
+                    .putExtra(ReleaseActivity.EXTRA_PROFILE_NAME, gefragtesProfil?.name ?: "Riegel")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            finish()
+            return
+        }
+
         val message = when (result.outcome) {
             ScanOutcome.LOCKED -> "Riegel zu — $profileName"
-            ScanOutcome.RELOCKED -> "Riegel zu — $profileName"
+            ScanOutcome.RELOCKED -> "Riegel wieder zu — $profileName"
             ScanOutcome.SWITCHED -> "Gewechselt auf $profileName"
             ScanOutcome.UNLOCKED -> "Riegel offen"
+            // Wird nie erreicht: ASK_RELEASE steigt oben schon aus. Der Text
+            // waere aber auch dann nicht falsch, sollte der fruehe Ausstieg
+            // einmal fehlen.
             ScanOutcome.ASK_RELEASE -> "Riegel offen"
             ScanOutcome.MASTER_CLEARED -> "Alle Sperren beendet"
             ScanOutcome.EXTENDED -> "Sperre verlängert — $profileName"

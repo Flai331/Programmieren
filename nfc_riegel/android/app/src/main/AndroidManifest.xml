@@ -101,6 +101,19 @@
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"/>
 
+        <!--
+            Wie Sperr- und Pausenschirm eine eigene Aufgabe: der Dialog kommt aus
+            einem Chip-Scan heraus, nicht aus der App, und darf sie nicht in den
+            Vordergrund ziehen.
+        -->
+        <activity
+            android:name=".ReleaseActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"/>
+
         <service
             android:name=".BlockerService"
             android:exported="true"
