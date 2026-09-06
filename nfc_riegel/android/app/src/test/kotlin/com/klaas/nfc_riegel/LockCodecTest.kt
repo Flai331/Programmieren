@@ -254,4 +254,47 @@ class LockCodecTest {
         assertEquals(12, zurueck[0].pause.resetMinutes)
         assertEquals(QuietSettings(), zurueck[0].quiet)
     }
+
+    @Test
+    fun `Freigabe wird geschrieben und gelesen`() {
+        val roh = LockCodec.encodeRelease(Release("p1", 1_700_000_000_000L))
+
+        assertEquals(Release("p1", 1_700_000_000_000L), LockCodec.decodeRelease(roh))
+    }
+
+    @Test
+    fun `leerer Eintrag ist keine Freigabe`() {
+        assertNull(LockCodec.decodeRelease(""))
+        assertNull(LockCodec.decodeRelease(LockCodec.encodeRelease(null)))
+    }
+
+    @Test
+    fun `kaputter Eintrag ist keine Freigabe`() {
+        assertNull(LockCodec.decodeRelease("p1"))
+    }
+
+    @Test
+    fun `Freigabe auf Zeit ueberlebt Schreiben und Lesen`() {
+        val p = Profile(id = "p1", name = "Arbeit", timedRelease = true)
+
+        val gelesen = LockCodec.decodeProfiles(LockCodec.encodeProfiles(listOf(p)))
+
+        assertEquals(true, gelesen.single().timedRelease)
+    }
+
+    @Test
+    fun `Profil ohne das neue Feld liest sich als Freigabe aus`() {
+        // Siebzehn Felder — der Stand vor der Freigabe. Der Aufbau muss exakt dem
+        // von encodeProfiles entsprechen, deshalb hier aus einem Profil erzeugt
+        // und das letzte Feld abgeschnitten. '' ist FIELD aus LockCodec.
+        val mitFeld = LockCodec.encodeProfiles(
+            listOf(Profile(id = "p1", name = "Arbeit", timedRelease = true))
+        )
+        val ohneFeld = mitFeld.substringBeforeLast('')
+
+        val gelesen = LockCodec.decodeProfiles(ohneFeld)
+
+        assertEquals(1, gelesen.size)
+        assertEquals(false, gelesen.single().timedRelease)
+    }
 }

@@ -27,6 +27,12 @@ data class Profile(
      * dieses Profil greift.
      */
     val quiet: QuietSettings = QuietSettings(),
+    /**
+     * Freigabe auf Zeit: der Chip öffnet die Chipsperre nur für eine gewählte
+     * Spanne, danach sperrt dasselbe Profil von selbst wieder. Wirkt allein bei
+     * [LockMode.OPEN] — an Zeitsperren kommt der Chip ohnehin nicht.
+     */
+    val timedRelease: Boolean = false,
 )
 
 /** Womit gesperrt wird. Jeder Chip hat ein Profil — auch ein Generalschlüssel. */
@@ -56,3 +62,10 @@ data class TimeLock(
     val mode: LockMode,
     val endsAt: Long,
 )
+
+/**
+ * Eine laufende Freigabe. Hebt die Chipsperre nicht auf, sondern legt sie bis
+ * [endsAt] schlafen — fällt sie weg, sperrt dieselbe Chipsperre weiter. Genau
+ * deshalb steht sie neben [ChipLock] statt an ihrer Stelle.
+ */
+data class Release(val profileId: String, val endsAt: Long)

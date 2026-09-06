@@ -16,6 +16,8 @@ data class LockState(
     val tags: List<TagBinding> = emptyList(),
     val chipLock: ChipLock? = null,
     val timeLocks: List<TimeLock> = emptyList(),
+    /** Höchstens eine — es gibt höchstens eine Chipsperre. */
+    val release: Release? = null,
     val calendar: CalendarSettings = CalendarSettings(),
     val codeHash: String? = null,
     val failedAttempts: Int = 0,

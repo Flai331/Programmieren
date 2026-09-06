@@ -12,8 +12,8 @@ object LockCodec {
     private const val ITEM = ''
     private const val PAIR = ''
 
-    /** Feldzahlen, die je Ausbaustufe entstanden sind: 7, 10/11, 17. */
-    private val GUELTIGE_PROFILFELDER = setOf(7, 10, 11, 17)
+    /** Feldzahlen, die je Ausbaustufe entstanden sind: 7, 10/11, 17, 18. */
+    private val GUELTIGE_PROFILFELDER = setOf(7, 10, 11, 17, 18)
 
     fun encodeProfiles(profiles: List<Profile>): String =
         profiles.joinToString(RECORD.toString()) { p ->
@@ -35,6 +35,7 @@ object LockCodec {
                 p.quiet.afterEventMinutes.toString(),
                 if (p.quiet.whileLocked) "1" else "0",
                 encodeSchedules(p.quiet.schedules),
+                if (p.timedRelease) "1" else "0",
             ).joinToString(FIELD.toString())
         }
 
@@ -84,6 +85,7 @@ object LockCodec {
                 } else {
                     QuietSettings()
                 },
+                timedRelease = f.size >= 18 && f[17] == "1",
             )
         }
     }
@@ -117,6 +119,18 @@ object LockCodec {
         if (f.size == 1) return ChipLock(f[0])
         if (f.size != 3) return null
         return if (f[1] == LockMode.OPEN.name) ChipLock(f[0]) else null
+    }
+
+    /** Freigabe: Profil und Ende. Leer heißt: keine. */
+    fun encodeRelease(release: Release?): String =
+        release?.let { "${it.profileId}$FIELD${it.endsAt}" } ?: ""
+
+    fun decodeRelease(raw: String): Release? {
+        if (raw.isEmpty()) return null
+        val f = raw.split(FIELD)
+        if (f.size != 2) return null
+        val endsAt = f[1].toLongOrNull() ?: return null
+        return Release(f[0], endsAt)
     }
 
     /** Die Zeitsperre, die in einem v2-Datensatz steckt — oder null. */
