@@ -282,6 +282,28 @@ class LockEngineReleaseTest {
     }
 
     @Test
+    fun `Aufsperren raeumt eine abgelaufene Freigabe mit weg`() {
+        // Zwischen Ablauf und Weckerlauf steht die alte Freigabe noch im
+        // Speicher. Wer dann aufsperrt, darf sie nicht zurueckhalten -- sonst
+        // liegt eine Freigabe ohne Sperre herum.
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(arbeit.copy(timedRelease = false)),
+                tags = listOf(TagBinding("04AA", "Schreibtisch", "p1")),
+                chipLock = ChipLock("p1"),
+                release = Release("p1", now - 1),
+            )
+        )
+        val e = LockEngine(store)
+
+        val result = e.onTagScanned("04AA", now)
+
+        assertEquals(ScanOutcome.UNLOCKED, result.outcome)
+        assertNull(store.current.chipLock)
+        assertNull(store.current.release)
+    }
+
+    @Test
     fun `Scan ohne laufende Sperre sperrt wie bisher zu`() {
         val (e, store) = engine(chipLock = null)
 
