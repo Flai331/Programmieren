@@ -222,6 +222,7 @@ class LockEngine(private val store: LockStore) {
         val next = s.copy(
             chipLock = null,
             timeLocks = emptyList(),
+            release = null,
             failedAttempts = 0,
             codeLockedUntil = null,
             calendar = if (bisWann == null) s.calendar
@@ -232,24 +233,27 @@ class LockEngine(private val store: LockStore) {
     }
 
     /**
-     * Beendet nur die Chipsperre. Zeitsperren bleiben stehen — ein normaler Chip
-     * kommt an sie nicht heran.
+     * Beendet nur die Chipsperre. Eine Freigabe fällt mit weg — sie war die
+     * Aussetzung genau dieser Sperre. Zeitsperren bleiben stehen; ein normaler
+     * Chip kommt an sie nicht heran.
      */
     private fun clearChipLock(s: LockState): LockState {
-        val next = s.copy(chipLock = null)
+        val next = s.copy(chipLock = null, release = null)
         store.save(next)
         return next
     }
 
     /**
      * Vom Alarm gerufen. Räumt jede abgelaufene Zeitsperre ab — auch mehrere
-     * zugleich. Die Uhrzeit entscheidet, nicht das Feuern des Alarms.
+     * zugleich — und dazu eine abgelaufene Freigabe. Die Uhrzeit entscheidet,
+     * nicht das Feuern des Alarms.
      */
     fun onTimerElapsed(now: Long): LockState {
         val s = store.load()
         val verbleibend = s.timeLocks.filter { now < it.endsAt }
-        if (verbleibend.size == s.timeLocks.size) return s
-        val next = s.copy(timeLocks = verbleibend)
+        val freigabe = activeRelease(s, now)
+        if (verbleibend.size == s.timeLocks.size && freigabe == s.release) return s
+        val next = s.copy(timeLocks = verbleibend, release = freigabe)
         store.save(next)
         return next
     }

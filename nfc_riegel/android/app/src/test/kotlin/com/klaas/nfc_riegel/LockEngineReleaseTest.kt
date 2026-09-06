@@ -163,4 +163,81 @@ class LockEngineReleaseTest {
         assertFalse(e.hasActiveLock(now))
         assertNotNull(e.state().chipLock)
     }
+
+    @Test
+    fun `abgelaufene Freigabe faellt beim Weckerlauf weg`() {
+        val (e, store) = engine(release = Release("p1", now + 10 * minute))
+
+        e.onTimerElapsed(now + 11 * minute)
+
+        assertNull(store.current.release)
+        assertNotNull(store.current.chipLock)
+    }
+
+    @Test
+    fun `laufende Freigabe bleibt beim Weckerlauf stehen`() {
+        val (e, store) = engine(release = Release("p1", now + 10 * minute))
+
+        e.onTimerElapsed(now + 5 * minute)
+
+        assertEquals(Release("p1", now + 10 * minute), store.current.release)
+    }
+
+    @Test
+    fun `ein Neustart traegt die laufende Freigabe weiter`() {
+        val (e, store) = engine(release = Release("p1", now + 10 * minute))
+
+        e.restoreAfterBoot(now + 5 * minute)
+
+        assertEquals(Release("p1", now + 10 * minute), store.current.release)
+        assertFalse(e.isBlocked("com.instagram.android", now + 5 * minute))
+    }
+
+    @Test
+    fun `ein Neustart nach dem Ende sperrt wieder`() {
+        val (e, store) = engine(release = Release("p1", now + 10 * minute))
+
+        e.restoreAfterBoot(now + 20 * minute)
+
+        assertNull(store.current.release)
+        assertTrue(e.isBlocked("com.instagram.android", now + 20 * minute))
+    }
+
+    @Test
+    fun `der Notfall-Code raeumt Chipsperre und Freigabe zusammen weg`() {
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(arbeit),
+                chipLock = ChipLock("p1"),
+                release = Release("p1", now + 10 * minute),
+                codeHash = Hashing.sha256("FZ9HK39D"),
+            )
+        )
+        val e = LockEngine(store)
+
+        val result = e.submitCode("fz9hk39d", now)
+
+        assertEquals(CodeOutcome.UNLOCKED, result.outcome)
+        assertNull(store.current.chipLock)
+        assertNull(store.current.release)
+    }
+
+    @Test
+    fun `der Generalschluessel raeumt die Freigabe mit weg`() {
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(arbeit),
+                tags = listOf(TagBinding("04CC", "Schlüsselbund", "p1", isMaster = true)),
+                chipLock = ChipLock("p1"),
+                timeLocks = listOf(TimeLock("p1", LockMode.TIMER, now + 30 * minute)),
+                release = Release("p1", now + 10 * minute),
+            )
+        )
+        val e = LockEngine(store)
+
+        val result = e.onTagScanned("04CC", now)
+
+        assertEquals(ScanOutcome.MASTER_CLEARED, result.outcome)
+        assertNull(store.current.release)
+    }
 }
