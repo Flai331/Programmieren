@@ -1,5 +1,10 @@
 # Einbau in eine neue App
 
+> Zum Weiterreichen an eine andere Claude-Sitzung gibt es diese Anleitung
+> auch als PDF: **[Fehlermelde-Modul-einbauen.pdf](Fehlermelde-Modul-einbauen.pdf)**
+> — einfach als Anhang in den Chat hängen. Neu erzeugen mit
+> `python3 tools/anleitung_pdf_bauen.py` (braucht `reportlab`).
+
 Diese Datei ist zum Weiterreichen gedacht: Wer in einem anderen Chat eine
 App um Fehlerberichte erweitern soll, bekommt hier alles, was nötig ist.
 
