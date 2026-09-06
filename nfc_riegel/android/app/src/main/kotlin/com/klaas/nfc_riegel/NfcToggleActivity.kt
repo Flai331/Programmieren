@@ -39,7 +39,7 @@ class NfcToggleActivity : Activity() {
         val profileName = profileId?.let { state.profileById(it)?.name } ?: "Riegel"
 
         if (result.outcome == ScanOutcome.ASK_RELEASE) {
-            // Der Zustand ist unveraendert — gefragt wird erst, gesperrt bleibt es
+            // Der Zustand ist unverändert — gefragt wird erst, gesperrt bleibt es
             // so lange. Das Profil steckt am Chip, nicht in der Sperre.
             val chip = state.tagByUid(uid)
             val gefragtesProfil = chip?.profileId?.let { state.profileById(it) }
@@ -58,10 +58,10 @@ class NfcToggleActivity : Activity() {
             ScanOutcome.RELOCKED -> "Riegel wieder zu — $profileName"
             ScanOutcome.SWITCHED -> "Gewechselt auf $profileName"
             ScanOutcome.UNLOCKED -> "Riegel offen"
-            // Wird nie erreicht: ASK_RELEASE steigt oben schon aus. Der Text
-            // waere aber auch dann nicht falsch, sollte der fruehe Ausstieg
-            // einmal fehlen.
-            ScanOutcome.ASK_RELEASE -> "Riegel offen"
+            // Wird nie erreicht: ASK_RELEASE steigt oben schon aus. Fehlte der
+            // Ausstieg einmal, wäre „offen" die falsche Auskunft — bei
+            // ASK_RELEASE bleibt gesperrt, bis jemand eine Dauer wählt.
+            ScanOutcome.ASK_RELEASE -> "Riegel bleibt zu — $profileName"
             ScanOutcome.MASTER_CLEARED -> "Alle Sperren beendet"
             ScanOutcome.EXTENDED -> "Sperre verlängert — $profileName"
             ScanOutcome.TIME_LOCK_RUNNING -> "Zeitsperre läuft — nur ein Generalschlüssel öffnet"
