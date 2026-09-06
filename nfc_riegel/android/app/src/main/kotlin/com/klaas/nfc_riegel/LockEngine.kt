@@ -37,6 +37,15 @@ enum class StartOutcome {
 
 data class StartResult(val state: LockState, val outcome: StartOutcome)
 
+enum class ReleaseOutcome {
+    RELEASED,
+
+    /** Keine Chipsperre dieses Profils läuft — es gibt nichts freizugeben. */
+    NO_LOCK,
+}
+
+data class ReleaseResult(val state: LockState, val outcome: ReleaseOutcome)
+
 /**
  * Alle Zustandsübergänge des Riegels. Kennt nur [LockStore] — keine Android-Klassen,
  * keine Nebenwirkungen. Alarm und Benachrichtigung setzt [LockController] anhand des
@@ -151,6 +160,22 @@ class LockEngine(private val store: LockStore) {
         return StartResult(next, StartOutcome.STARTED)
     }
 
+    /**
+     * Freigabe auf Zeit. Legt die laufende Chipsperre bis [minutes] Minuten in
+     * der Zukunft schlafen. Gelöscht wird sie nicht — deshalb sperrt sie danach
+     * ohne weiteres Zutun wieder.
+     */
+    fun startRelease(profileId: String, minutes: Int, now: Long): ReleaseResult {
+        val s = store.load()
+        if (s.chipLock?.profileId != profileId) {
+            return ReleaseResult(s, ReleaseOutcome.NO_LOCK)
+        }
+        val geklemmt = minutes.coerceIn(MIN_RELEASE_MINUTES, MAX_RELEASE_MINUTES)
+        val next = s.copy(release = Release(profileId, now + geklemmt * 60_000L))
+        store.save(next)
+        return ReleaseResult(next, ReleaseOutcome.RELEASED)
+    }
+
     /** Die Chipsperre. Sie läuft nicht ab — nur ein Scan oder der Code beendet sie. */
     private fun activeChipLock(s: LockState, now: Long): ChipLock? = s.chipLock
 
@@ -158,12 +183,22 @@ class LockEngine(private val store: LockStore) {
     private fun activeTimeLocks(s: LockState, now: Long): List<TimeLock> =
         s.timeLocks.filter { now < it.endsAt }
 
+    /** Die laufende Freigabe, oder null. Eine abgelaufene zählt nicht. */
+    private fun activeRelease(s: LockState, now: Long): Release? =
+        s.release?.takeIf { now < it.endsAt }
+
     /**
      * Profile, die gerade sperren — über die Chipsperre, eine Zeitsperre oder ein
      * laufendes Terminfenster. Grundlage der Blockliste und aller Wächter.
+     *
+     * Hier und nur hier wirkt die Freigabe: die Chipsperre bleibt stehen, zählt
+     * aber nicht, solange eine Freigabe für ihr Profil läuft.
      */
     private fun lockedProfileIds(s: LockState, now: Long): Set<String> = buildSet {
-        activeChipLock(s, now)?.let { add(it.profileId) }
+        val freigabe = activeRelease(s, now)
+        activeChipLock(s, now)
+            ?.takeIf { it.profileId != freigabe?.profileId }
+            ?.let { add(it.profileId) }
         activeTimeLocks(s, now).forEach { add(it.profileId) }
         addAll(CalendarPlanner.lockedProfileIds(s.calendar, now))
     }
@@ -415,5 +450,8 @@ class LockEngine(private val store: LockStore) {
         const val LOCKOUT_MILLIS = 60_000L
         /** Ohne 0/O und 1/I — der Code wird abgeschrieben. */
         const val CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        /** Kürzer als eine Minute ist keine Freigabe, länger als vier Stunden keine kurze. */
+        const val MIN_RELEASE_MINUTES = 1
+        const val MAX_RELEASE_MINUTES = 240
     }
 }
