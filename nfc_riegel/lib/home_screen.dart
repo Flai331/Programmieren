@@ -481,6 +481,17 @@ class _StatusTile extends StatelessWidget {
   }
 
   String _subtitle(LockStatus status) {
+    // Die Freigabe geht allem voraus: sie ist der Grund, aus dem gerade nichts
+    // sperrt, und nennt zugleich den Zeitpunkt, ab dem es wieder sperrt.
+    final freigabe = status.releaseEndsAt;
+    if (freigabe != null) {
+      final profil = status.profiles
+          .where((p) => p.id == status.releaseProfileId)
+          .map((p) => p.name)
+          .join(', ');
+      return '$profil — frei bis ${_hhmm(freigabe)}';
+    }
+
     // Ein laufender Termin ist die aussagekräftigste Auskunft: er nennt den
     // Grund, nicht nur die Uhrzeit.
     final termine = status.calendar.activeWindows;

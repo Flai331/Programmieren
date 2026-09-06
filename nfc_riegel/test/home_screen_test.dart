@@ -21,6 +21,7 @@ void main() {
     bool hasMasterTag = true,
     bool hasCode = true,
     Map<String, dynamic>? calendar,
+    Map<String, dynamic>? release,
   }) {
     gestartetesProfil = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -48,6 +49,7 @@ void main() {
                   },
                 ],
                 'chipLock': chipLock,
+                'release': release,
                 'timeLocks': timeLocks,
                 'hasMasterTag': hasMasterTag,
                 'hasCode': hasCode,
@@ -214,4 +216,23 @@ void main() {
     // null, was zu false wird.
     expect(find.text('Zugriff erlauben'), findsOneWidget);
   });
+
+  testWidgets('laufende Freigabe steht in der Statuskachel', (tester) async {
+    final ende = DateTime.now().add(const Duration(minutes: 12));
+    stub(
+      accessibility: true,
+      defaultMode: 'OPEN',
+      chipLock: {'profileId': 'p1'},
+      release: {
+        'profileId': 'p1',
+        'endsAt': ende.millisecondsSinceEpoch,
+      },
+    );
+    await zeige(tester);
+
+    expect(find.textContaining('frei bis'), findsOneWidget);
+    expect(find.text('Riegel offen'), findsOneWidget);
+    expect(find.text('Riegel zu'), findsNothing);
+  });
+
 }
