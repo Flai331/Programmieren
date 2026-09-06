@@ -178,8 +178,12 @@ class LockCodecTest {
     fun `Atempause-Einstellungen ueberstehen Kodieren und Dekodieren`() {
         val profile = listOf(
             Profile(
-                "p1", "Arbeit", setOf("com.a"), LockMode.TIMER, 45, null, false,
-                PauseSettings(enabled = true, stepMinutes = 20, baseSeconds = 8),
+                id = "p1",
+                name = "Arbeit",
+                blockedPackages = setOf("com.a"),
+                defaultMode = LockMode.TIMER,
+                durationMinutes = 45,
+                pause = PauseSettings(enabled = true, stepMinutes = 20, baseSeconds = 8),
             ),
         )
 

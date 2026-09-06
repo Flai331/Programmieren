@@ -16,6 +16,12 @@ data class Profile(
      */
     val pinCalendarEnd: Boolean = false,
     /**
+     * Freigabe auf Zeit: der Chip öffnet die Chipsperre nur für eine gewählte
+     * Spanne, danach sperrt dasselbe Profil von selbst wieder. Wirkt allein bei
+     * [LockMode.OPEN] — an Zeitsperren kommt der Chip ohnehin nicht.
+     */
+    val timedRelease: Boolean = false,
+    /**
      * Atempause gegen Doomscrolling. Keine Sperre — sie hält kurz auf und lässt
      * dann weiter. Steht am Profil, gilt aber je App: man doomscrollt in einer
      * App, nicht in einem Profil.
@@ -27,12 +33,6 @@ data class Profile(
      * dieses Profil greift.
      */
     val quiet: QuietSettings = QuietSettings(),
-    /**
-     * Freigabe auf Zeit: der Chip öffnet die Chipsperre nur für eine gewählte
-     * Spanne, danach sperrt dasselbe Profil von selbst wieder. Wirkt allein bei
-     * [LockMode.OPEN] — an Zeitsperren kommt der Chip ohnehin nicht.
-     */
-    val timedRelease: Boolean = false,
 )
 
 /** Womit gesperrt wird. Jeder Chip hat ein Profil — auch ein Generalschlüssel. */
