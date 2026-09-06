@@ -98,11 +98,7 @@ class LockEngine(private val store: LockStore) {
             return ScanResult(clearChipLock(s), ScanOutcome.UNLOCKED)
         }
 
-        // Eine neue Chipsperre faengt ohne Freigabe an. Bliebe die alte stehen,
-        // waere ein Rueckwechsel auf ihr Profil sofort wieder offen -- man legt
-        // den Chip auf und nichts sperrt.
-        val next = s.copy(chipLock = ChipLock(profile.id), release = null)
-        store.save(next)
+        val next = assignChipLock(s, profile.id)
         return ScanResult(
             next,
             if (active != null) ScanOutcome.SWITCHED else ScanOutcome.LOCKED,
@@ -170,12 +166,26 @@ class LockEngine(private val store: LockStore) {
      * eine gibt es nicht.
      */
     private fun startChipLock(s: LockState, profileId: String): StartResult {
-        if (s.chipLock?.profileId == profileId) {
+        // Ausnahme von „laeuft schon": laeuft fuer dieses Profil eine Freigabe,
+        // ist der Riegel gerade offen. Dann ist „Sperren" ein echter Auftrag und
+        // beendet sie, statt zu antworten, es laufe ja schon etwas.
+        val freigegeben = s.release?.profileId == profileId
+        if (s.chipLock?.profileId == profileId && !freigegeben) {
             return StartResult(s, StartOutcome.ALREADY_RUNNING)
         }
-        val next = s.copy(chipLock = ChipLock(profileId))
+        return StartResult(assignChipLock(s, profileId), StartOutcome.STARTED)
+    }
+
+    /**
+     * Setzt die Chipsperre und räumt dabei jede Freigabe weg. Beides gehört
+     * zusammen: eine neue Sperre fängt ohne Freigabe an, sonst hebt eine alte
+     * sie sofort wieder auf — die App bestätigte dann eine Sperre, die nicht
+     * wirkt. Einziger Weg, eine Chipsperre zu setzen.
+     */
+    private fun assignChipLock(s: LockState, profileId: String): LockState {
+        val next = s.copy(chipLock = ChipLock(profileId), release = null)
         store.save(next)
-        return StartResult(next, StartOutcome.STARTED)
+        return next
     }
 
     /**

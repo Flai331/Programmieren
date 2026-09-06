@@ -304,6 +304,38 @@ class LockEngineReleaseTest {
     }
 
     @Test
+    fun `Sperren ueber die Schaltflaeche beendet eine laufende Freigabe`() {
+        // Waehrend der Freigabe zeigt die App das Profil als offen an und bietet
+        // "Sperren" an. Der Knopf muss dann auch sperren -- vorher meldete die
+        // Engine "laeuft schon" und liess den Riegel offen.
+        val (e, store) = engine(release = Release("p1", now + 10 * minute))
+
+        val outcome = e.startLock("p1", now).outcome
+
+        assertEquals(StartOutcome.STARTED, outcome)
+        assertNull(store.current.release)
+        assertTrue(e.isBlocked("com.instagram.android", now))
+    }
+
+    @Test
+    fun `Sperren eines anderen Profils laesst keine alte Freigabe stehen`() {
+        val nacht = Profile(id = "p2", name = "Nacht", defaultMode = LockMode.OPEN)
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(arbeit, nacht),
+                chipLock = ChipLock("p1"),
+                release = Release("p1", now + 10 * minute),
+            )
+        )
+        val e = LockEngine(store)
+
+        e.startLock("p2", now)
+
+        assertEquals(ChipLock("p2"), store.current.chipLock)
+        assertNull(store.current.release)
+    }
+
+    @Test
     fun `ein Chipwechsel laesst keine alte Freigabe stehen`() {
         // Freigabe fuer Arbeit laeuft, der Chip der Nacht uebernimmt. Bliebe die
         // Freigabe stehen, waere Arbeit beim Zurueckwechseln sofort wieder offen.
