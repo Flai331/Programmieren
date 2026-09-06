@@ -73,6 +73,16 @@ class LockEngineReleaseTest {
     }
 
     @Test
+    fun `die Chipsperre eines anderen Profils gibt nichts frei`() {
+        val (e, store) = engine(chipLock = ChipLock("p2"))
+
+        val result = e.startRelease("p1", 15, now)
+
+        assertEquals(ReleaseOutcome.NO_LOCK, result.outcome)
+        assertNull(store.current.release)
+    }
+
+    @Test
     fun `zu kurze und zu lange Dauer werden geklemmt`() {
         val (e, store) = engine()
 
