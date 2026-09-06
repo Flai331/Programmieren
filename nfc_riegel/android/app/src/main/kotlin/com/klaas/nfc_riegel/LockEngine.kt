@@ -252,7 +252,15 @@ class LockEngine(private val store: LockStore) {
         val s = store.load()
         val verbleibend = s.timeLocks.filter { now < it.endsAt }
         val freigabe = activeRelease(s, now)
-        if (verbleibend.size == s.timeLocks.size && freigabe == s.release) return s
+
+        // Zwei Fragen, die nichts miteinander zu tun haben: ist eine Zeitsperre
+        // abgelaufen, und ist die Freigabe abgelaufen? Nur wenn beide Antworten
+        // nein lauten, gibt es nichts zu schreiben. Ohne Freigabe steht auf
+        // beiden Seiten null, das ist ebenfalls „unveraendert".
+        val zeitsperrenUnveraendert = verbleibend.size == s.timeLocks.size
+        val freigabeUnveraendert = freigabe == s.release
+        if (zeitsperrenUnveraendert && freigabeUnveraendert) return s
+
         val next = s.copy(timeLocks = verbleibend, release = freigabe)
         store.save(next)
         return next
