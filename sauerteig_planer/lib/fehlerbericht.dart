@@ -668,7 +668,7 @@ class _FehlerberichtOverlay extends StatelessWidget {
           if (Fehlerbericht._buttonEnabled)
             ValueListenableBuilder<bool>(
               valueListenable: Fehlerbericht._buttonSichtbar,
-              builder: (_, sichtbar, __) => sichtbar
+              builder: (context, sichtbar, child) => sichtbar
                   ? const _DraggableBugButton()
                   : const SizedBox.shrink(),
             ),

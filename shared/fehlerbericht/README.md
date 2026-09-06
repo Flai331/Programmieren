@@ -44,6 +44,10 @@ App laufen, gibt es genau eine gemeinsame Notion-Integration:
 
 ## Einbau in eine neue App
 
+> Kurzfassung zum Weiterreichen an andere Chats: **[EINBAU.md](EINBAU.md)** —
+> dort steht der Einzeiler, der den kompletten Einbau automatisch erledigt.
+
+
 1. **Datei kopieren.** `lib/fehlerbericht.dart` unverändert in das
    `lib/`-Verzeichnis der neuen App kopieren.
 
