@@ -118,6 +118,35 @@ class LockEngineReleaseTest {
     }
 
     @Test
+    fun `eine Freigabe fuer ein anderes Profil oeffnet die Chipsperre nicht`() {
+        // Der Fall entsteht, wenn die Chipsperre gewechselt hat, waehrend eine
+        // Freigabe des vorherigen Profils noch lief. Ohne den Vergleich der
+        // Kennungen wuerde sie die neue Sperre mit aufmachen.
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(arbeit),
+                chipLock = ChipLock("p1"),
+                release = Release("p2", now + 10 * minute),
+            )
+        )
+        val e = LockEngine(store)
+
+        assertTrue(e.isBlocked("com.instagram.android", now))
+        assertTrue(e.hasActiveLock(now))
+    }
+
+    @Test
+    fun `Dauer an den Grenzen bleibt unveraendert`() {
+        val (e, store) = engine()
+
+        e.startRelease("p1", 1, now)
+        assertEquals(now + 1 * minute, store.current.release?.endsAt)
+
+        e.startRelease("p1", 240, now)
+        assertEquals(now + 240 * minute, store.current.release?.endsAt)
+    }
+
+    @Test
     fun `eine laufende Freigabe zaehlt als aktive Sperre nicht`() {
         val (e, _) = engine(release = Release("p1", now + 10 * minute))
 
