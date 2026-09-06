@@ -31,6 +31,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   late int _duration = widget.profile.durationMinutes;
   late DateTime? _untilAt = widget.profile.untilAt;
   late bool _pin = widget.profile.pinCalendarEnd;
+  late bool _timedRelease = widget.profile.timedRelease;
   late bool _pause = widget.profile.pauseEnabled;
   late int _pauseStep = widget.profile.pauseStepMinutes;
   late int _pauseBase = widget.profile.pauseBaseSeconds;
@@ -221,9 +222,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         durationMinutes: _duration,
         untilAt: _untilAt,
         pinCalendarEnd: _pin,
-        // Der Schalter dafür kommt im nächsten Schritt; bis dahin bleibt der
-        // gespeicherte Wert unangetastet.
-        timedRelease: widget.profile.timedRelease,
+        timedRelease: _timedRelease,
         pauseEnabled: _pause,
         pauseStepMinutes: _pauseStep,
         pauseBaseSeconds: _pauseBase,
@@ -331,6 +330,19 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ],
           const SizedBox(height: RiegelSpacing.s6),
+          // Nur bei „Offen": eine Zeitsperre laesst sich ohnehin nicht per Chip
+          // aufmachen, ein Schalter dafuer waere eine leere Zusage.
+          if (_mode == LockMode.open)
+            SwitchListTile(
+              value: _timedRelease,
+              onChanged: (v) => setState(() => _timedRelease = v),
+              title: const Text('Freigabe auf Zeit'),
+              subtitle: const Text(
+                'Der Chip öffnet nur für eine gewählte Zeit. Danach sperrt es '
+                'von selbst wieder.',
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
           SwitchListTile(
             value: _pin,
             onChanged: (v) => setState(() => _pin = v),

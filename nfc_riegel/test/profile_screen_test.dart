@@ -55,6 +55,33 @@ void main() {
     quietSchedules: [],
   );
 
+  /// Dasselbe Profil im Modus „Offen" — nur dort gibt es die Freigabe.
+  Widget offenerSchirm() => MaterialApp(
+    home: ProfileScreen(
+      profile: const ProfileInfo(
+        id: 'p1',
+        name: 'Arbeit',
+        blockedPackages: [],
+        mode: LockMode.open,
+        durationMinutes: 60,
+        untilAt: null,
+        pinCalendarEnd: false,
+        timedRelease: false,
+        pauseEnabled: false,
+        pauseStepMinutes: 15,
+        pauseBaseSeconds: 5,
+        pauseResetMinutes: 15,
+        quietEnabled: false,
+        quietScope: QuietScope.alle,
+        quietNumbers: [],
+        quietAfterEventMinutes: 0,
+        quietWhileLocked: true,
+        quietSchedules: [],
+      ),
+      channel: RiegelChannel(channel),
+    ),
+  );
+
   Widget screen() => MaterialApp(
     home: ProfileScreen(profile: profil, channel: RiegelChannel(channel)),
   );
@@ -138,4 +165,43 @@ void main() {
 
     expect(find.text('480 Minuten'), findsOneWidget);
   });
+
+  testWidgets('bei Modus Offen erscheint der Schalter der Freigabe', (
+    tester,
+  ) async {
+    stub(usageGranted: true);
+    await tester.pumpWidget(offenerSchirm());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Freigabe auf Zeit'), findsOneWidget);
+  });
+
+  testWidgets('bei Modus Auf Zeit fehlt der Schalter der Freigabe', (
+    tester,
+  ) async {
+    stub(usageGranted: true);
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Freigabe auf Zeit'), findsNothing);
+  });
+
+  testWidgets('eingeschaltete Freigabe landet im Kanalaufruf', (tester) async {
+    stub(usageGranted: true);
+    await tester.pumpWidget(offenerSchirm());
+    await tester.pumpAndSettle();
+
+    final schalter = find.widgetWithText(SwitchListTile, 'Freigabe auf Zeit');
+    await tester.ensureVisible(schalter);
+    await tester.pumpAndSettle();
+    await tester.tap(schalter);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Sichern'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sichern'));
+    await tester.pumpAndSettle();
+
+    expect(gespeichert!['timedRelease'], isTrue);
+  });
+
 }
