@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Netzwerkzugriff für Fehlerberichte an Notion.
+         Muss hier stehen, nicht nur im Debug-Manifest: Release-Builds
+         erben die Berechtigung sonst nicht und jeder HTTP-Aufruf
+         scheitert mit "Failed host lookup ... errno = 7". -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Benachrichtigungen anzeigen (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Exakte Alarme für geplante Benachrichtigungen (Android 12+) -->

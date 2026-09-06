@@ -59,7 +59,21 @@ App laufen, gibt es genau eine gemeinsame Notion-Integration:
    kein `image_picker`, kein `flutter_email_sender`, kein
    `shared_preferences`.
 
-3. **`main.dart` umstellen:**
+3. **Android: Internet-Berechtigung sicherstellen.** In
+   `android/app/src/main/AndroidManifest.xml` muss stehen:
+
+   ```xml
+   <uses-permission android:name="android.permission.INTERNET"/>
+   ```
+
+   Das ist die häufigste Stolperfalle: Flutters Vorlage legt diese Zeile
+   nur in `src/debug/` und `src/profile/` ab. Debug-Builds funktionieren
+   dadurch, **Release-Builds nicht** — jeder Notion-Aufruf scheitert dann
+   mit `Failed host lookup: 'api.notion.com' … errno = 7`, und das Modul
+   wechselt still auf den E-Mail-Fallback. Steht die Zeile schon im
+   `main`-Manifest (viele Apps haben sie), ist nichts zu tun.
+
+4. **`main.dart` umstellen:**
 
    ```dart
    import 'package:flutter/material.dart';
@@ -98,7 +112,7 @@ App laufen, gibt es genau eine gemeinsame Notion-Integration:
    **`appKey` darf sich später nicht mehr ändern** — er identifiziert die
    App eindeutig in der Notion-Registry.
 
-4. **Bauen** — das Notion-Token wird zur Build-Zeit gesetzt, nicht im
+5. **Bauen** — das Notion-Token wird zur Build-Zeit gesetzt, nicht im
    Quellcode:
 
    ```bash
@@ -178,6 +192,10 @@ Manuelle Meldungen über den Fehler-Button sind davon nie betroffen.
 Token wechselt das Modul automatisch (und lautlos für den Nutzer) auf den
 E-Mail-Fallback. Im Protokoll (`Fehlerbericht.protokoll` bzw. Debug-Konsole)
 steht dazu die Zeile *"Kein NOTION_TOKEN gesetzt ... nutze E-Mail-Fallback."*
+
+**Release-Build meldet nichts, Debug-Build schon**
+→ Die INTERNET-Berechtigung fehlt im `main`-Manifest (siehe Einbau,
+Schritt 3). Im Protokoll steht dann `Failed host lookup` mit `errno = 7`.
 
 **HTTP 401 von Notion**
 → Das Token ist falsch, abgelaufen oder wurde bei der Notion-Integration
