@@ -140,27 +140,71 @@ def manifest_ergaenzen(app: Path) -> None:
 # ── 4. main.dart verdrahten ────────────────────────────────────────────
 
 
-def klammer_ende(text: str, auf: int) -> int:
-    """Index hinter der schließenden Klammer zu der bei `auf` geöffneten.
+def maskieren(text: str, zeichenketten: bool = True) -> str:
+    """Kopie gleicher Länge, in der Kommentare und Zeichenketten durch
+    Leerzeichen ersetzt sind.
 
-    Beachtet Zeichenketten, damit Klammern in Texten nicht mitzählen.
+    Alle Suchen laufen über diese Maske, alle Einfügungen über das
+    Original — weil beide gleich lang sind, stimmen die Indizes überein.
+    Ohne das trifft eine Suche nach `MaterialApp(` auch einen Kommentar,
+    der das Wort nur erwähnt, und das Ergebnis ist zerstörter Quellcode.
+    """
+    aus = list(text)
+    i, n = 0, len(text)
+    dreifach_zeichen = ("'''", '"""')
+    while i < n:
+        z = text[i]
+        if z == "/" and text[i + 1 : i + 2] == "/":
+            while i < n and text[i] != "\n":
+                aus[i] = " "
+                i += 1
+        elif z == "/" and text[i + 1 : i + 2] == "*":
+            while i < n and text[i : i + 2] != "*/":
+                if text[i] != "\n":
+                    aus[i] = " "
+                i += 1
+            for k in range(i, min(i + 2, n)):
+                aus[k] = " "
+            i += 2
+        elif z in "'\"" and zeichenketten:
+            ende = text[i : i + 3] if text[i : i + 3] in dreifach_zeichen else z
+            for k in range(i, i + len(ende)):
+                aus[k] = " "
+            i += len(ende)
+            while i < n:
+                if text[i] == "\\":
+                    for k in range(i, min(i + 2, n)):
+                        if text[k] != "\n":
+                            aus[k] = " "
+                    i += 2
+                    continue
+                if text[i : i + len(ende)] == ende:
+                    for k in range(i, i + len(ende)):
+                        aus[k] = " "
+                    i += len(ende)
+                    break
+                if text[i] != "\n":
+                    aus[i] = " "
+                i += 1
+        else:
+            i += 1
+    return "".join(aus)
+
+
+def klammer_ende(text: str, auf: int) -> int:
+    """Index der schließenden Klammer zu der bei `auf` geöffneten.
+
+    Erwartet maskierten Text — Klammern in Kommentaren und Zeichenketten
+    sind dort bereits entfernt.
     """
     tiefe = 0
-    i = auf
-    while i < len(text):
-        z = text[i]
-        if z in "'\"":
-            ende = z
-            i += 1
-            while i < len(text) and text[i] != ende:
-                i += 2 if text[i] == "\\" else 1
-        elif z == "(":
+    for i in range(auf, len(text)):
+        if text[i] == "(":
             tiefe += 1
-        elif z == ")":
+        elif text[i] == ")":
             tiefe -= 1
             if tiefe == 0:
                 return i
-        i += 1
     return -1
 
 
@@ -172,24 +216,32 @@ def main_verdrahten(app: Path, app_key: str, app_name: str) -> None:
     text = main.read_text(encoding="utf-8")
     original = text
 
+    # Gesucht wird stets in der Maske, eingefügt im Original.
+    maske = maskieren(text)
+
     # -- Import --
-    if "fehlerbericht.dart" not in text:
-        importe = list(re.finditer(r"^import .*;\n", text, re.M))
+    # Hier wird nur der Kommentar ausgeblendet, nicht die Zeichenketten:
+    # der Import-Pfad steht selbst in Anführungszeichen und wäre sonst
+    # bei jedem Lauf erneut "fehlend".
+    ohne_kommentare = maskieren(text, zeichenketten=False)
+    if "fehlerbericht.dart" not in ohne_kommentare:
+        importe = list(re.finditer(r"^import .*;\n", ohne_kommentare, re.M))
         if importe:
             stelle = importe[-1].end()
             text = text[:stelle] + "import 'fehlerbericht.dart';\n" + text[stelle:]
         else:
             text = "import 'fehlerbericht.dart';\n\n" + text
+        maske = maskieren(text)
 
     # -- runApp -> Fehlerbericht.runApp --
-    if "Fehlerbericht.runApp" not in text:
-        treffer = re.search(r"(?<![\w.])runApp\s*\(", text)
+    if "Fehlerbericht.runApp" not in maske:
+        treffer = re.search(r"(?<![\w.])runApp\s*\(", maske)
         if not treffer:
             offen("Kein runApp(...) in main.dart gefunden — bitte von Hand auf "
                   "Fehlerbericht.runApp(...) umstellen")
         else:
             auf = treffer.end() - 1
-            zu = klammer_ende(text, auf)
+            zu = klammer_ende(maske, auf)
             if zu < 0:
                 offen("runApp(...) nicht auswertbar — bitte von Hand umstellen")
             else:
@@ -202,6 +254,7 @@ def main_verdrahten(app: Path, app_key: str, app_name: str) -> None:
                     "  )"
                 )
                 text = text[: treffer.start()] + ersatz + text[zu + 1 :]
+                maske = maskieren(text)
 
     # -- MaterialApp-Parameter --
     fehlend = [
@@ -211,23 +264,39 @@ def main_verdrahten(app: Path, app_key: str, app_name: str) -> None:
             ("navigatorObservers", "[Fehlerbericht.observer]"),
             ("builder", "Fehlerbericht.wrap"),
         )
-        if wert not in text
+        if wert not in maske
     ]
     if fehlend:
-        stellen = list(re.finditer(r"(?<![\w.])(?:Material|Cupertino)App\s*\(", text))
+        stellen = list(re.finditer(r"(?<![\w.])(?:Material|Cupertino)App\s*\(", maske))
         if not stellen:
             offen("Keine MaterialApp gefunden — bitte navigatorKey, "
                   "navigatorObservers und builder von Hand ergänzen")
         else:
             if len(stellen) > 1:
                 offen(f"{len(stellen)} MaterialApp-Stellen gefunden — nur die erste "
-                      "wurde verdrahtet, bitte kurz prüfen")
+                      "wurde verdrahtet, bitte die übrigen prüfen")
             auf = stellen[0].end()
-            # Vorhandene Schlüssel in dieser MaterialApp nicht doppeln.
-            einschub = "".join(
-                f"\n      {schl}: {wert}," for schl, wert in fehlend
-                if not re.search(rf"\n\s*{schl}\s*:", text[auf : klammer_ende(text, auf - 1)])
-            )
+            zu = klammer_ende(maske, auf - 1)
+            rumpf = maske[auf:zu] if zu > auf else maske[auf:]
+
+            einschub = ""
+            for schl, wert in fehlend:
+                if re.search(rf"[\s(]{schl}\s*:", rumpf):
+                    # Der Parameter ist schon belegt — überschreiben wäre
+                    # Datenverlust, ein zweiter Eintrag wäre ein Syntaxfehler.
+                    if schl == "builder":
+                        offen(
+                            "Die MaterialApp hat bereits einen eigenen builder. "
+                            "Fehlerbericht.wrap muss ihn umschließen, damit "
+                            "Button und Screenshot funktionieren:  "
+                            "builder: (context, child) => Fehlerbericht.wrap("
+                            "context, <dein bisheriger Ausdruck>)"
+                        )
+                    else:
+                        offen(f"Die MaterialApp hat bereits ein eigenes {schl} — "
+                              f"bitte von Hand auf {wert} umstellen oder zusammenführen")
+                    continue
+                einschub += f"\n      {schl}: {wert},"
             if einschub:
                 text = text[:auf] + einschub + text[auf:]
 
