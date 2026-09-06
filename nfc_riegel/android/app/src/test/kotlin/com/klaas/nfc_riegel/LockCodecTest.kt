@@ -274,7 +274,9 @@ class LockCodecTest {
 
     @Test
     fun `kaputter Eintrag ist keine Freigabe`() {
+        // Beide Fehlerwege: zu wenige Felder und ein Ende, das keine Zahl ist.
         assertNull(LockCodec.decodeRelease("p1"))
+        assertNull(LockCodec.decodeRelease("p1\u0002irgendwann"))
     }
 
     @Test
@@ -287,7 +289,7 @@ class LockCodecTest {
     }
 
     @Test
-    fun `Profil ohne das neue Feld liest sich als Freigabe aus`() {
+    fun `Profil ohne das neue Feld hat keine Freigabe auf Zeit`() {
         // Siebzehn Felder — der Stand vor der Freigabe. Der Aufbau muss exakt dem
         // von encodeProfiles entsprechen, deshalb hier aus einem Profil erzeugt
         // und das letzte Feld abgeschnitten. '' ist FIELD aus LockCodec.
