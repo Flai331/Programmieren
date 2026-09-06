@@ -18,9 +18,11 @@ object LockNotification {
     private const val CHANNEL_ID = "riegel_lock"
     private const val NOTIFICATION_ID = 1
 
-    fun show(context: Context, state: LockState) {
+    fun show(context: Context, state: LockState, now: Long = System.currentTimeMillis()) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         ensureChannel(manager)
+
+        val freigabe = state.release?.takeIf { now < it.endsAt }
 
         val gesperrteProfile = buildSet {
             state.chipLock?.let { add(it.profileId) }
@@ -36,6 +38,7 @@ object LockNotification {
 
         val fruehestesEnde = state.timeLocks.minOfOrNull { it.endsAt }
         val text = when {
+            freigabe != null -> "Frei bis ${uhrzeit(freigabe.endsAt)} — danach wieder zu"
             fruehestesEnde != null && state.chipLock != null ->
                 "Frei ab ${uhrzeit(fruehestesEnde)}, der Rest nach erneutem Scan"
             fruehestesEnde != null ->
@@ -45,8 +48,12 @@ object LockNotification {
 
         val notification = Notification.Builder(context, CHANNEL_ID)
             .setContentTitle(
-                "Riegel aktiv — ${namen.joinToString(", ").ifEmpty { "Unbekannt" }}, " +
-                    "$anzahlApps Apps gesperrt"
+                if (freigabe != null) {
+                    "Freigabe läuft — ${namen.joinToString(", ").ifEmpty { "Unbekannt" }}"
+                } else {
+                    "Riegel aktiv — ${namen.joinToString(", ").ifEmpty { "Unbekannt" }}, " +
+                        "$anzahlApps Apps gesperrt"
+                }
             )
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_lock_lock)

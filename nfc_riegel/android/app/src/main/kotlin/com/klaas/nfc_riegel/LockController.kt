@@ -73,12 +73,27 @@ class LockController(private val context: Context) {
         return result.outcome
     }
 
+    /**
+     * Freigabe auf Zeit, gerufen aus der Oberfläche. Zieht Wecker und
+     * Benachrichtigung sofort nach — der Wecker ist es, der die Sperre später
+     * ohne Zutun wieder greifen lässt.
+     */
+    fun startRelease(
+        profileId: String,
+        minutes: Int,
+        now: Long = System.currentTimeMillis(),
+    ): ReleaseOutcome {
+        val result = engine.startRelease(profileId, minutes, now)
+        applyEffects(result.state, now)
+        return result.outcome
+    }
+
     private fun applyEffects(state: LockState, now: Long = System.currentTimeMillis()) {
         LockScheduler.schedule(context, naechsterWecker(state, now))
 
         val kalenderSperrt = CalendarPlanner.lockedProfileIds(state.calendar, now).isNotEmpty()
         if (state.chipLock != null || state.timeLocks.isNotEmpty() || kalenderSperrt) {
-            LockNotification.show(context, state)
+            LockNotification.show(context, state, now)
         } else {
             LockNotification.hide(context)
         }
@@ -104,6 +119,7 @@ class LockController(private val context: Context) {
     private fun naechsterWecker(state: LockState, now: Long): Long {
         val kandidaten = mutableListOf<Long>()
         state.timeLocks.minOfOrNull { it.endsAt }?.let { kandidaten += it }
+        state.release?.endsAt?.takeIf { now < it }?.let { kandidaten += it }
         if (state.calendar.enabled) {
             CalendarPlanner.nextBoundary(state.calendar, now)?.let { kandidaten += it }
             kandidaten += now + AUFFRISCHUNG_MILLIS
