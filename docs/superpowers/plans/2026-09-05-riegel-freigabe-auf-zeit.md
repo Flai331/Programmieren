@@ -23,7 +23,8 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 | Datei | Rolle |
 |---|---|
 | `android/app/src/main/kotlin/com/klaas/nfc_riegel/Profile.kt` | `Release`-Datenklasse, `Profile.timedRelease` |
-| `.../LockState.kt` | `LockState.release`, neue `ScanOutcome`-Werte, `ReleaseOutcome`/`ReleaseResult` |
+| `.../LockState.kt` | `LockState.release` |
+| `.../LockEngine.kt` (Kopf) | neue `ScanOutcome`-Werte, `ReleaseOutcome`/`ReleaseResult` — die Ergebnistypen stehen dort, nicht in `LockState.kt` |
 | `.../LockEngine.kt` | Wirkung, Start, Ablauf, Scan-Wege |
 | `.../LockCodec.kt` | Freigabe und neues Profilfeld speichern/lesen |
 | `.../SharedPrefsLockStore.kt` | Schlüssel `release` |
@@ -222,7 +223,6 @@ git commit -m "feat: Freigabe auf Zeit im Modell und im Speicher"
 ### Task 2: Freigabe wirkt und lässt sich starten
 
 **Files:**
-- Modify: `nfc_riegel/android/app/src/main/kotlin/com/klaas/nfc_riegel/LockState.kt`
 - Modify: `nfc_riegel/android/app/src/main/kotlin/com/klaas/nfc_riegel/LockEngine.kt`
 - Test: `nfc_riegel/android/app/src/test/kotlin/com/klaas/nfc_riegel/LockEngineReleaseTest.kt` (neu)
 
@@ -370,7 +370,7 @@ Erwartet: Übersetzungsfehler — `ReleaseOutcome` und `startRelease` gibt es ni
 
 - [ ] **Step 3: Ergebnistypen anlegen**
 
-In `LockState.kt` hinter `data class StartResult(...)` einfügen:
+In `LockEngine.kt` hinter `data class StartResult(...)` einfügen — die Ergebnistypen stehen im Kopf dieser Datei, nicht in `LockState.kt`:
 
 ```kotlin
 enum class ReleaseOutcome {
@@ -452,7 +452,7 @@ Erwartet: `BUILD SUCCESSFUL`.
 - [ ] **Step 6: Committen**
 
 ```bash
-git add nfc_riegel/android/app/src/main/kotlin/com/klaas/nfc_riegel/LockState.kt nfc_riegel/android/app/src/main/kotlin/com/klaas/nfc_riegel/LockEngine.kt nfc_riegel/android/app/src/test/kotlin/com/klaas/nfc_riegel/LockEngineReleaseTest.kt
+git add nfc_riegel/android/app/src/main/kotlin/com/klaas/nfc_riegel/LockEngine.kt nfc_riegel/android/app/src/test/kotlin/com/klaas/nfc_riegel/LockEngineReleaseTest.kt
 git commit -m "feat: Freigabe legt die Chipsperre auf Zeit schlafen"
 ```
 
@@ -617,7 +617,6 @@ git commit -m "feat: Freigabe laeuft ab und wird mit aufgeraeumt"
 ### Task 4: Die Scan-Wege
 
 **Files:**
-- Modify: `nfc_riegel/android/app/src/main/kotlin/com/klaas/nfc_riegel/LockState.kt`
 - Modify: `nfc_riegel/android/app/src/main/kotlin/com/klaas/nfc_riegel/LockEngine.kt`
 - Test: `nfc_riegel/android/app/src/test/kotlin/com/klaas/nfc_riegel/LockEngineReleaseTest.kt`
 
@@ -688,7 +687,7 @@ Erwartet: Übersetzungsfehler — `ASK_RELEASE` und `RELOCKED` gibt es in `ScanO
 
 - [ ] **Step 3: Ergebniswerte und Scan-Zweig einbauen**
 
-In `LockState.kt` in `enum class ScanOutcome` nach `UNLOCKED,` einfügen:
+In `LockEngine.kt` in `enum class ScanOutcome` (im Kopf der Datei) nach `UNLOCKED,` einfügen:
 
 ```kotlin
     /** Freigabe lief, der Scan hat sie beendet — es ist wieder zu. */
@@ -735,7 +734,7 @@ Erwartet: `BUILD SUCCESSFUL` — auch `LockEngineToggleTest` und `LockEngineBloc
 - [ ] **Step 5: Committen**
 
 ```bash
-git add nfc_riegel/android/app/src/main/kotlin/com/klaas/nfc_riegel/LockState.kt nfc_riegel/android/app/src/main/kotlin/com/klaas/nfc_riegel/LockEngine.kt nfc_riegel/android/app/src/test/kotlin/com/klaas/nfc_riegel/LockEngineReleaseTest.kt
+git add nfc_riegel/android/app/src/main/kotlin/com/klaas/nfc_riegel/LockEngine.kt nfc_riegel/android/app/src/test/kotlin/com/klaas/nfc_riegel/LockEngineReleaseTest.kt
 git commit -m "feat: Scan fragt nach der Freigabe und sperrt sie vorzeitig zu"
 ```
 
