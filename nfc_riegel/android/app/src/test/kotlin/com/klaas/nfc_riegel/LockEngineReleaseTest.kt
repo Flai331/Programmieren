@@ -304,6 +304,37 @@ class LockEngineReleaseTest {
     }
 
     @Test
+    fun `ein Chipwechsel laesst keine alte Freigabe stehen`() {
+        // Freigabe fuer Arbeit laeuft, der Chip der Nacht uebernimmt. Bliebe die
+        // Freigabe stehen, waere Arbeit beim Zurueckwechseln sofort wieder offen.
+        val nacht = Profile(
+            id = "p2",
+            name = "Nacht",
+            blockedPackages = setOf("com.zhiliaoapp.musically"),
+            defaultMode = LockMode.OPEN,
+        )
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(arbeit, nacht),
+                tags = listOf(
+                    TagBinding("04AA", "Schreibtisch", "p1"),
+                    TagBinding("04BB", "Bett", "p2"),
+                ),
+                chipLock = ChipLock("p1"),
+                release = Release("p1", now + 10 * minute),
+            )
+        )
+        val e = LockEngine(store)
+
+        val result = e.onTagScanned("04BB", now)
+
+        assertEquals(ScanOutcome.SWITCHED, result.outcome)
+        assertEquals(ChipLock("p2"), store.current.chipLock)
+        assertNull(store.current.release)
+        assertTrue(e.isBlocked("com.zhiliaoapp.musically", now))
+    }
+
+    @Test
     fun `Scan ohne laufende Sperre sperrt wie bisher zu`() {
         val (e, store) = engine(chipLock = null)
 

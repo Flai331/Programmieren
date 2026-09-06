@@ -98,7 +98,10 @@ class LockEngine(private val store: LockStore) {
             return ScanResult(clearChipLock(s), ScanOutcome.UNLOCKED)
         }
 
-        val next = s.copy(chipLock = ChipLock(profile.id))
+        // Eine neue Chipsperre faengt ohne Freigabe an. Bliebe die alte stehen,
+        // waere ein Rueckwechsel auf ihr Profil sofort wieder offen -- man legt
+        // den Chip auf und nichts sperrt.
+        val next = s.copy(chipLock = ChipLock(profile.id), release = null)
         store.save(next)
         return ScanResult(
             next,
