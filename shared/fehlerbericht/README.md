@@ -112,7 +112,19 @@ App laufen, gibt es genau eine gemeinsame Notion-Integration:
    **`appKey` darf sich später nicht mehr ändern** — er identifiziert die
    App eindeutig in der Notion-Registry.
 
-5. **Bauen** — das Notion-Token wird zur Build-Zeit gesetzt, nicht im
+5. **Vor dem Bauen prüfen** — ein Befehl, der alle bekannten
+   Stolperfallen auf einmal abklopft (Modul aktuell? Abhängigkeiten da?
+   main.dart verdrahtet? Manifest in Ordnung? Token gesetzt?):
+
+   ```bash
+   python3 shared/fehlerbericht/tools/app_pruefen.py <app-ordner>
+   ```
+
+   Rückgabewert 0 heißt startklar. Das lohnt sich besonders, weil die
+   häufigsten Fehler erst in der fertigen Release-APK auffallen — und
+   dort still, weil das Modul dann einfach auf E-Mail ausweicht.
+
+6. **Bauen** — das Notion-Token wird zur Build-Zeit gesetzt, nicht im
    Quellcode:
 
    ```bash

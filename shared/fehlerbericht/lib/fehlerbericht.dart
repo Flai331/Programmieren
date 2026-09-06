@@ -87,6 +87,11 @@ class Fehlerbericht {
   /// Alle bisher gesammelten Protokoll-Einträge (schreibgeschützt).
   static List<String> get protokoll => List.unmodifiable(_log);
 
+  /// Nur für Tests: liefert den Klartext-Hinweis zu einem Netzwerkfehler.
+  @visibleForTesting
+  static String? ursacheVermuten(Object fehler) =>
+      _Notion._ursacheVermuten(fehler);
+
   // ── Screenshot-Infrastruktur ─────────────────────────────────────────
   static final GlobalKey _repaintKey = GlobalKey();
   static final ValueNotifier<bool> _buttonSichtbar = ValueNotifier<bool>(true);
@@ -944,6 +949,39 @@ class _Notion {
         'Content-Type': 'application/json',
       };
 
+  /// Übersetzt typische Netzwerkfehler in einen konkreten Hinweis.
+  /// Ohne das steht im Protokoll nur eine rohe SocketException, und die
+  /// eigentliche Ursache (meist eine fehlende Berechtigung) bleibt
+  /// unerkannt — genau daran ist schon einmal eine Fehlersuche
+  /// vorbeigelaufen.
+  static String? _ursacheVermuten(Object fehler) {
+    final t = fehler.toString();
+    // errno 7 / EAI_NONAME beim Auflösen von api.notion.com ist auf
+    // Android praktisch immer die fehlende INTERNET-Berechtigung: ohne
+    // sie schlägt schon die Namensauflösung fehl, nicht erst die
+    // Verbindung. Debug-Builds bekommen sie von Flutter geschenkt,
+    // Release-Builds nicht.
+    if (t.contains('Failed host lookup')) {
+      if (t.contains('errno = 7') || t.contains('No address associated')) {
+        return 'Vermutlich fehlt <uses-permission '
+            'android:name="android.permission.INTERNET"/> in '
+            'android/app/src/main/AndroidManifest.xml. Steht sie nur '
+            'unter src/debug/, funktioniert der Debug-Build und der '
+            'Release-Build nicht.';
+      }
+      return 'Kein DNS — Gerät vermutlich offline.';
+    }
+    if (t.contains('SocketException') || t.contains('ClientException')) {
+      return 'Netzwerk nicht erreichbar — Gerät offline oder Zugriff '
+          'blockiert.';
+    }
+    if (t.contains('TimeoutException')) {
+      return 'Notion hat nicht rechtzeitig geantwortet — Verbindung sehr '
+          'langsam oder gestört.';
+    }
+    return null;
+  }
+
   // In-Memory-Cache: pro App-Prozess wird die Registry nur einmal
   // abgefragt bzw. eingerichtet.
   static String? _dbIdCache;
@@ -1013,6 +1051,8 @@ class _Notion {
             'Notion im Web nicht erreichbar (vermutlich CORS-Blockade): $e');
       } else {
         Fehlerbericht.log('Notion-Versand fehlgeschlagen: $e');
+        final rat = _ursacheVermuten(e);
+        if (rat != null) Fehlerbericht.log('→ $rat');
       }
       return false;
     }

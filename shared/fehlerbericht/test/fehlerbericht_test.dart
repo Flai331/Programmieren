@@ -1,6 +1,8 @@
 // Prüft die Kernversprechen des Drop-in-Moduls:
 // Button erscheint von allein, Dialog geht auf, Protokoll wird geführt.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fehlerbericht/fehlerbericht.dart';
@@ -101,5 +103,38 @@ void main() {
       Fehlerbericht.protokoll.where((z) => z.contains('FEHLER [')).length,
       1,
     );
+  });
+
+  group('Ursachen-Diagnose übersetzt Netzwerkfehler in Klartext', () {
+    test('fehlende INTERNET-Berechtigung wird benannt', () {
+      final rat = Fehlerbericht.ursacheVermuten(
+        "ClientException with SocketException: Failed host lookup: "
+        "'api.notion.com' (OS Error: No address associated with hostname, "
+        "errno = 7)",
+      );
+      expect(rat, isNotNull);
+      expect(rat, contains('android.permission.INTERNET'));
+      expect(rat, contains('src/debug'));
+    });
+
+    test('reiner DNS-Ausfall wird nicht mit der Berechtigung verwechselt', () {
+      final rat = Fehlerbericht.ursacheVermuten(
+        "SocketException: Failed host lookup: 'api.notion.com'",
+      );
+      expect(rat, isNotNull);
+      expect(rat, isNot(contains('INTERNET')));
+      expect(rat, contains('offline'));
+    });
+
+    test('Zeitüberschreitung wird erkannt', () {
+      expect(
+        Fehlerbericht.ursacheVermuten(TimeoutException('zu langsam')),
+        contains('nicht rechtzeitig'),
+      );
+    });
+
+    test('unbekannter Fehler bekommt keinen erfundenen Hinweis', () {
+      expect(Fehlerbericht.ursacheVermuten(const FormatException('kaputt')), isNull);
+    });
   });
 }
