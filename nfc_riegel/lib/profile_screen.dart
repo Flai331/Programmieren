@@ -221,6 +221,9 @@ class _ProfileScreenState extends State<ProfileScreen>
         durationMinutes: _duration,
         untilAt: _untilAt,
         pinCalendarEnd: _pin,
+        // Der Schalter dafür kommt im nächsten Schritt; bis dahin bleibt der
+        // gespeicherte Wert unangetastet.
+        timedRelease: widget.profile.timedRelease,
         pauseEnabled: _pause,
         pauseStepMinutes: _pauseStep,
         pauseBaseSeconds: _pauseBase,

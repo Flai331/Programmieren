@@ -61,6 +61,7 @@ void main() {
         durationMinutes: 60,
         untilAt: null,
         pinCalendarEnd: false,
+        timedRelease: false,
         pauseEnabled: true,
         pauseStepMinutes: 15,
         pauseBaseSeconds: 5,

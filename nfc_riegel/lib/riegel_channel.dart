@@ -51,6 +51,7 @@ class RiegelChannel {
       '${profile.blockedPackages.length} Apps, '
       'Modus ${modeToNative(profile.mode)}, '
       'Atempause ${profile.pauseEnabled ? "an" : "aus"}, '
+      'Freigabe ${profile.timedRelease ? "an" : "aus"}, '
       'Ruhe ${profile.quietEnabled ? "an" : "aus"} '
       '(${profile.quietNumbers.length} Nummern, '
       '${profile.quietSchedules.length} Zeitfenster)',
@@ -63,6 +64,7 @@ class RiegelChannel {
           'durationMinutes': profile.durationMinutes,
           'untilAt': profile.untilAt?.millisecondsSinceEpoch,
           'pinCalendarEnd': profile.pinCalendarEnd,
+          'timedRelease': profile.timedRelease,
           'pauseEnabled': profile.pauseEnabled,
           'pauseStepMinutes': profile.pauseStepMinutes,
           'pauseBaseSeconds': profile.pauseBaseSeconds,

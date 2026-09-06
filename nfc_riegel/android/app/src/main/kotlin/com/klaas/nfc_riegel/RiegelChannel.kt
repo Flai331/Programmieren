@@ -38,6 +38,7 @@ class RiegelChannel(private val activity: Activity) {
                         durationMinutes = call.argument<Int>("durationMinutes") ?: 60,
                         untilAt = call.argument<Long>("untilAt"),
                         pinCalendarEnd = call.argument<Boolean>("pinCalendarEnd") ?: false,
+                        timedRelease = call.argument<Boolean>("timedRelease") ?: false,
                         pause = PauseSettings(
                             enabled = call.argument<Boolean>("pauseEnabled") ?: false,
                             stepMinutes = call.argument<Int>("pauseStepMinutes") ?: 15,
@@ -294,6 +295,7 @@ class RiegelChannel(private val activity: Activity) {
                     "durationMinutes" to p.durationMinutes,
                     "untilAt" to p.untilAt,
                     "pinCalendarEnd" to p.pinCalendarEnd,
+                    "timedRelease" to p.timedRelease,
                     "pauseEnabled" to p.pause.enabled,
                     "pauseStepMinutes" to p.pause.stepMinutes,
                     "pauseBaseSeconds" to p.pause.baseSeconds,
@@ -321,6 +323,11 @@ class RiegelChannel(private val activity: Activity) {
                 )
             },
             "chipLock" to s.chipLock?.let { mapOf("profileId" to it.profileId) },
+            // Abgelaufene Freigaben gehen gar nicht erst raus — die Oberfläche
+            // soll die Uhrzeitrechnung nicht ein zweites Mal machen.
+            "release" to s.release?.takeIf { now < it.endsAt }?.let {
+                mapOf("profileId" to it.profileId, "endsAt" to it.endsAt)
+            },
             // Damit die Oberfläche zeigen kann, dass gerade still gestellt ist,
             // ohne die Fensterrechnung noch einmal in Dart nachzubauen.
             "quietNow" to QuietPlanner.isQuiet(s, now),

@@ -116,6 +116,7 @@ class ProfileInfo {
     required this.durationMinutes,
     required this.untilAt,
     required this.pinCalendarEnd,
+    required this.timedRelease,
     required this.pauseEnabled,
     required this.pauseStepMinutes,
     required this.pauseBaseSeconds,
@@ -135,6 +136,10 @@ class ProfileInfo {
   final int durationMinutes;
   final DateTime? untilAt;
   final bool pinCalendarEnd;
+
+  /// Der Chip öffnet dieses Profil nur für eine gewählte Spanne; danach sperrt
+  /// es von selbst wieder.
+  final bool timedRelease;
 
   /// Atempause gegen Doomscrolling. Keine Sperre — sie hält kurz auf.
   final bool pauseEnabled;
@@ -171,6 +176,7 @@ class ProfileInfo {
           ? null
           : DateTime.fromMillisecondsSinceEpoch(until),
       pinCalendarEnd: map['pinCalendarEnd'] as bool? ?? false,
+      timedRelease: map['timedRelease'] as bool? ?? false,
       pauseEnabled: map['pauseEnabled'] as bool? ?? false,
       pauseStepMinutes: map['pauseStepMinutes'] as int? ?? 15,
       pauseBaseSeconds: map['pauseBaseSeconds'] as int? ?? 5,
@@ -387,6 +393,8 @@ class LockStatus {
     required this.profiles,
     required this.tags,
     required this.chipLockProfileId,
+    required this.releaseProfileId,
+    required this.releaseEndsAt,
     required this.timeLocks,
     required this.calendar,
     required this.hasMasterTag,
@@ -399,6 +407,13 @@ class LockStatus {
 
   /// Profil der Chipsperre, oder null. Sie hat kein Ende.
   final String? chipLockProfileId;
+
+  /// Profil der laufenden Freigabe, oder null. Abgelaufene schickt die native
+  /// Seite gar nicht erst mit.
+  final String? releaseProfileId;
+
+  /// Wann die Freigabe endet und das Profil wieder sperrt.
+  final DateTime? releaseEndsAt;
 
   /// Laufende Zeitsperren. Die native Seite filtert abgelaufene bereits heraus.
   final List<TimeLockInfo> timeLocks;
@@ -416,6 +431,7 @@ class LockStatus {
 
   factory LockStatus.fromMap(Map<dynamic, dynamic> map) {
     final chipLock = map['chipLock'] as Map<dynamic, dynamic>?;
+    final release = map['release'] as Map<dynamic, dynamic>?;
     return LockStatus(
       profiles: (map['profiles'] as List<dynamic>? ?? [])
           .map((e) => ProfileInfo.fromMap(e as Map<dynamic, dynamic>))
@@ -424,6 +440,10 @@ class LockStatus {
           .map((e) => TagInfo.fromMap(e as Map<dynamic, dynamic>))
           .toList(),
       chipLockProfileId: chipLock?['profileId'] as String?,
+      releaseProfileId: release?['profileId'] as String?,
+      releaseEndsAt: release?['endsAt'] == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(release!['endsAt'] as int),
       timeLocks: (map['timeLocks'] as List<dynamic>? ?? [])
           .map((e) => TimeLockInfo.fromMap(e as Map<dynamic, dynamic>))
           .toList(),
@@ -436,14 +456,14 @@ class LockStatus {
     );
   }
 
-  bool get locked =>
-      chipLockProfileId != null ||
-      timeLocks.isNotEmpty ||
-      calendar.activeWindows.isNotEmpty;
+  bool get locked => lockedProfileIds.isNotEmpty;
 
-  /// Alle Profile, die gerade sperren — über alle drei Quellen.
+  /// Alle Profile, die gerade sperren — über alle drei Quellen. Die Chipsperre
+  /// zählt nicht, solange ihr Profil freigegeben ist; dieselbe Ausnahme wie in
+  /// `LockEngine.lockedProfileIds`.
   Set<String> get lockedProfileIds => {
-    ?chipLockProfileId,
+    if (chipLockProfileId != null && chipLockProfileId != releaseProfileId)
+      chipLockProfileId!,
     ...timeLocks.map((l) => l.profileId),
     ...calendar.activeWindows.map((w) => w.profileId),
   };

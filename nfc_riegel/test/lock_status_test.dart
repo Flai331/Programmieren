@@ -8,6 +8,8 @@ void main() {
     List<Map<String, dynamic>>? tags,
     bool hasMasterTag = true,
     bool hasCode = true,
+    Map<String, dynamic>? release,
+    bool timedRelease = false,
   }) => {
     'profiles': [
       {
@@ -18,6 +20,7 @@ void main() {
         'durationMinutes': 45,
         'untilAt': null,
         'pinCalendarEnd': false,
+        'timedRelease': timedRelease,
       },
       {
         'id': 'p2',
@@ -34,6 +37,7 @@ void main() {
           {'uid': '04AA', 'label': 'Schreibtisch', 'profileId': 'p1', 'isMaster': true},
         ],
     'chipLock': chipLock,
+    'release': release,
     'timeLocks': timeLocks ?? <Map<String, dynamic>>[],
     'hasMasterTag': hasMasterTag,
     'hasCode': hasCode,
@@ -222,4 +226,57 @@ void main() {
     expect(status.profiles.first.pauseStepMinutes, 15);
     expect(status.profiles.first.pauseBaseSeconds, 5);
   });
+
+  test('Freigabe auf Zeit kommt am Profil an', () {
+    final status = LockStatus.fromMap(stateMap(timedRelease: true));
+
+    expect(status.profiles.first.timedRelease, isTrue);
+  });
+
+  test('ohne Freigabe sperrt die Chipsperre', () {
+    final status = LockStatus.fromMap(stateMap(chipLock: {'profileId': 'p1'}));
+
+    expect(status.locked, isTrue);
+    expect(status.isProfileLocked('p1'), isTrue);
+    expect(status.releaseEndsAt, isNull);
+  });
+
+  test('mit laufender Freigabe gilt das Profil als offen', () {
+    final ende = DateTime.now().add(const Duration(minutes: 10));
+
+    final status = LockStatus.fromMap(
+      stateMap(
+        chipLock: {'profileId': 'p1'},
+        release: {'profileId': 'p1', 'endsAt': ende.millisecondsSinceEpoch},
+      ),
+    );
+
+    expect(status.isProfileLocked('p1'), isFalse);
+    expect(status.locked, isFalse);
+    expect(status.releaseProfileId, 'p1');
+    expect(status.releaseEndsAt, isNotNull);
+  });
+
+  test('eine Freigabe oeffnet keine fremde Zeitsperre', () {
+    final ende = DateTime.now().add(const Duration(minutes: 10));
+
+    final status = LockStatus.fromMap(
+      stateMap(
+        chipLock: {'profileId': 'p1'},
+        release: {'profileId': 'p1', 'endsAt': ende.millisecondsSinceEpoch},
+        timeLocks: [
+          {
+            'profileId': 'p2',
+            'mode': 'TIMER',
+            'endsAt': ende.millisecondsSinceEpoch,
+          },
+        ],
+      ),
+    );
+
+    expect(status.isProfileLocked('p1'), isFalse);
+    expect(status.isProfileLocked('p2'), isTrue);
+    expect(status.locked, isTrue);
+  });
+
 }
