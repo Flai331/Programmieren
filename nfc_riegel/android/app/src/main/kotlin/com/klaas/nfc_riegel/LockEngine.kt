@@ -3,6 +3,12 @@ package com.klaas.nfc_riegel
 enum class ScanOutcome {
     LOCKED,
     UNLOCKED,
+    /** Freigabe lief, der Scan hat sie beendet — es ist wieder zu. */
+    RELOCKED,
+
+    /** Chipsperre ließe sich öffnen, das Profil will aber vorher nach der Dauer gefragt werden. */
+    ASK_RELEASE,
+
     /** Anderer Chip hat übernommen: alte Sperre beendet, neue gestartet. */
     SWITCHED,
     /** Generalschlüssel hat alle Sperren beendet. */
@@ -80,6 +86,15 @@ class LockEngine(private val store: LockStore) {
 
         val active = activeChipLock(s, now)
         if (active != null && active.profileId == profile.id) {
+            // Reihenfolge zählt: erst die laufende Freigabe beenden, dann erst
+            // fragen. Andersherum käme mitten in der Freigabe wieder der Dialog,
+            // statt dass der Riegel zugeht.
+            if (activeRelease(s, now)?.profileId == profile.id) {
+                val next = s.copy(release = null)
+                store.save(next)
+                return ScanResult(next, ScanOutcome.RELOCKED)
+            }
+            if (profile.timedRelease) return ScanResult(s, ScanOutcome.ASK_RELEASE)
             return ScanResult(clearChipLock(s), ScanOutcome.UNLOCKED)
         }
 

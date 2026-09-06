@@ -40,8 +40,10 @@ class NfcToggleActivity : Activity() {
 
         val message = when (result.outcome) {
             ScanOutcome.LOCKED -> "Riegel zu — $profileName"
+            ScanOutcome.RELOCKED -> "Riegel zu — $profileName"
             ScanOutcome.SWITCHED -> "Gewechselt auf $profileName"
             ScanOutcome.UNLOCKED -> "Riegel offen"
+            ScanOutcome.ASK_RELEASE -> "Riegel offen"
             ScanOutcome.MASTER_CLEARED -> "Alle Sperren beendet"
             ScanOutcome.EXTENDED -> "Sperre verlängert — $profileName"
             ScanOutcome.TIME_LOCK_RUNNING -> "Zeitsperre läuft — nur ein Generalschlüssel öffnet"

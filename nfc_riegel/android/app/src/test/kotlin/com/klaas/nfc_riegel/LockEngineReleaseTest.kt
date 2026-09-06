@@ -240,4 +240,55 @@ class LockEngineReleaseTest {
         assertEquals(ScanOutcome.MASTER_CLEARED, result.outcome)
         assertNull(store.current.release)
     }
+
+    @Test
+    fun `Scan bei eingeschaltetem Schalter fragt statt zu oeffnen`() {
+        val (e, store) = engine()
+
+        val result = e.onTagScanned("04AA", now)
+
+        assertEquals(ScanOutcome.ASK_RELEASE, result.outcome)
+        assertNotNull(store.current.chipLock)
+        assertNull(store.current.release)
+    }
+
+    @Test
+    fun `Scan bei ausgeschaltetem Schalter oeffnet wie bisher`() {
+        val store = FakeLockStore(
+            LockState(
+                profiles = listOf(arbeit.copy(timedRelease = false)),
+                tags = listOf(TagBinding("04AA", "Schreibtisch", "p1")),
+                chipLock = ChipLock("p1"),
+            )
+        )
+        val e = LockEngine(store)
+
+        val result = e.onTagScanned("04AA", now)
+
+        assertEquals(ScanOutcome.UNLOCKED, result.outcome)
+        assertNull(store.current.chipLock)
+    }
+
+    @Test
+    fun `Scan waehrend der Freigabe sperrt sofort wieder`() {
+        val (e, store) = engine(release = Release("p1", now + 10 * minute))
+
+        val result = e.onTagScanned("04AA", now + 2 * minute)
+
+        assertEquals(ScanOutcome.RELOCKED, result.outcome)
+        assertNull(store.current.release)
+        assertNotNull(store.current.chipLock)
+        assertTrue(e.isBlocked("com.instagram.android", now + 2 * minute))
+    }
+
+    @Test
+    fun `Scan ohne laufende Sperre sperrt wie bisher zu`() {
+        val (e, store) = engine(chipLock = null)
+
+        val result = e.onTagScanned("04AA", now)
+
+        assertEquals(ScanOutcome.LOCKED, result.outcome)
+        assertEquals(ChipLock("p1"), store.current.chipLock)
+        assertNull(store.current.release)
+    }
 }
