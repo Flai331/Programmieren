@@ -12,7 +12,7 @@ class LockController(private val context: Context) {
 
     fun scan(uid: String, now: Long = System.currentTimeMillis()): ScanResult {
         val result = engine.onTagScanned(uid, now)
-        applyEffects(result.state)
+        applyEffects(result.state, now)
         return result
     }
 
@@ -37,7 +37,7 @@ class LockController(private val context: Context) {
     }
 
     fun restoreAfterBoot(now: Long = System.currentTimeMillis()) {
-        applyEffects(engine.restoreAfterBoot(now))
+        applyEffects(engine.restoreAfterBoot(now), now)
     }
 
     /**
@@ -60,7 +60,7 @@ class LockController(private val context: Context) {
 
     fun submitCode(code: String, now: Long = System.currentTimeMillis()): CodeResult {
         val result = engine.submitCode(code, now)
-        applyEffects(result.state)
+        applyEffects(result.state, now)
         return result
     }
 
@@ -69,7 +69,7 @@ class LockController(private val context: Context) {
         now: Long = System.currentTimeMillis(),
     ): StartOutcome {
         val result = engine.startLock(profileId, now)
-        applyEffects(result.state)
+        applyEffects(result.state, now)
         return result.outcome
     }
 
