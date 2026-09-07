@@ -82,6 +82,24 @@ MaterialApp(
 Mehr ist nicht nötig. Der Fehler-Button erscheint danach auf jedem
 Screen, Abstürze werden von allein gemeldet.
 
+## Wirklich testen, ohne Gerät
+
+Es gibt einen Live-Test, der den kompletten Sendeweg des Moduls in einer
+echten Dart-Laufzeit gegen das echte Notion ausführt — Registry lesen,
+Seite und Datenbank selbst anlegen, Bericht schreiben:
+
+```bash
+cd shared/fehlerbericht
+flutter test test/notion_live_test.dart --dart-define=NOTION_TOKEN=<token>
+```
+
+Ohne Token überspringt er sich. Er prüft mehr als ein Tastendruck auf dem
+Telefon: dass der Bericht nicht still über den E-Mail-Weg ging, dass keine
+fehlende Netzwerkberechtigung dahintersteckt, und dass die Erfolgszeile
+mit der Notion-URL im Protokoll landet. Was er nicht abdeckt, ist die
+Android-Seite — dass das Token in die APK gelangt und die Berechtigung
+greift, zeigt erst ein Bericht aus der gebauten App.
+
 ## Bauen
 
 ```bash

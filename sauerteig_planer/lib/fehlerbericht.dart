@@ -1094,7 +1094,7 @@ class _Notion {
         .timeout(_timeout);
 
     if (res.statusCode != 200) {
-      Fehlerbericht.log('Notion: Registry-Abfrage HTTP ${res.statusCode}');
+      Fehlerbericht.log('Notion: Registry-Abfrage ${_fehlerText(res)}');
       return (dbId: null, pageId: null);
     }
     final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -1157,7 +1157,7 @@ class _Notion {
 
     if (pageRes.statusCode != 200) {
       Fehlerbericht.log(
-          'Notion: Seite anlegen fehlgeschlagen (HTTP ${pageRes.statusCode})');
+          'Notion: Seite anlegen fehlgeschlagen (${_fehlerText(pageRes)})');
       return null;
     }
     final pageId =
@@ -1224,7 +1224,7 @@ class _Notion {
 
     if (dbRes.statusCode != 200) {
       Fehlerbericht.log(
-          'Notion: Datenbank anlegen fehlgeschlagen (HTTP ${dbRes.statusCode})');
+          'Notion: Datenbank anlegen fehlgeschlagen (${_fehlerText(dbRes)})');
       return null;
     }
     final dbId =
@@ -1260,7 +1260,7 @@ class _Notion {
 
     if (regRes.statusCode != 200) {
       Fehlerbericht.log(
-        'Notion: Registry-Eintrag anlegen fehlgeschlagen (HTTP ${regRes.statusCode}) '
+        'Notion: Registry-Eintrag anlegen fehlgeschlagen (${_fehlerText(regRes)}) '
         '— Datenbank wurde aber angelegt und wird trotzdem verwendet.',
       );
     } else {
@@ -1333,12 +1333,16 @@ class _Notion {
 
     if (res.statusCode != 200) {
       Fehlerbericht.log(
-          'Notion: Bericht anlegen fehlgeschlagen (HTTP ${res.statusCode})');
+          'Notion: Bericht anlegen fehlgeschlagen (${_fehlerText(res)})');
       return false;
     }
 
-    final pageId =
-        (jsonDecode(res.body) as Map<String, dynamic>)['id'] as String;
+    final antwort = jsonDecode(res.body) as Map<String, dynamic>;
+    final pageId = antwort['id'] as String;
+    // Auch der Erfolg gehört ins Protokoll: sonst lässt sich hinterher
+    // nicht unterscheiden, ob Notion geklappt hat oder ob nur zufällig
+    // keine Fehlermeldung kam. Die URL führt direkt zum Bericht.
+    Fehlerbericht.log('Notion: Bericht angelegt — ${antwort['url'] ?? pageId}');
 
     // ── Screenshot: strikt best-effort ──────────────────────────────
     if (screenshot != null && !kIsWeb) {
@@ -1508,6 +1512,23 @@ class _Notion {
           '');
     }
     return buf.toString();
+  }
+
+  /// Kurzfassung einer Notion-Fehlerantwort: Statuscode plus die
+  /// Meldung aus dem Antwortkörper. Ohne die Meldung steht im Protokoll
+  /// nur "HTTP 400" — daraus lässt sich die Ursache nicht ableiten.
+  static String _fehlerText(http.Response res) {
+    var meldung = '';
+    try {
+      final daten = jsonDecode(res.body);
+      if (daten is Map && daten['message'] is String) {
+        meldung = daten['message'] as String;
+      }
+    } catch (_) {
+      meldung = res.body;
+    }
+    if (meldung.length > 200) meldung = '${meldung.substring(0, 200)}…';
+    return 'HTTP ${res.statusCode}${meldung.isEmpty ? '' : ': $meldung'}';
   }
 
   /// Teilt Text in `rich_text`-Objekte à max. 1900 Zeichen (Notion-Limit:
