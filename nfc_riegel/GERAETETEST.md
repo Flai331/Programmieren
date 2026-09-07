@@ -340,3 +340,27 @@ nicht stören" — das stellt alles still, nicht nur die gewählten Nummern.
 - [ ] Unterdrückte Nummer: bei „Alle" still, bei „Auswahl" klingelt sie
 - [ ] Fehlerbericht enthält „Anruffilter", „Bitte nicht stören" und „Ruhe",
       aber **keine** Rufnummern
+
+## Freigabe auf Zeit
+
+- [ ] Profil im Modus „Offen", Schalter „Freigabe auf Zeit" an, Chip scannen →
+      es sperrt.
+- [ ] Erneut scannen → der Schirm „Wie lange offen?" kommt, die Sperre steht
+      weiter.
+- [ ] Abbrechen → es bleibt zu, die gesperrte App wird weiter geblockt.
+- [ ] Erneut scannen, 5 Minuten wählen → die gesperrte App geht auf, die
+      Benachrichtigung sagt „Freigabe läuft" und „Frei bis HH:MM", die
+      Statuskachel „frei bis HH:MM".
+- [ ] Bildschirm aus, fünf Minuten warten, gesperrte App öffnen → wieder
+      gesperrt (der Wecker greift auch im Doze).
+- [ ] Neue Freigabe starten, dann scannen → sofort wieder zu, Meldung „Riegel
+      wieder zu".
+- [ ] Neue Freigabe starten, Gerät neu starten → die Freigabe läuft weiter und
+      endet zur ursprünglichen Zeit.
+- [ ] Freigabe läuft, Chip eines anderen Profils auflegen → das andere Profil
+      sperrt, die alte Freigabe ist weg.
+- [ ] Freigabe läuft, in der App „Sperren" drücken → sofort wieder zu.
+- [ ] Freigabe läuft, Generalschlüssel scannen → alles auf.
+- [ ] Schalter aus, Chip scannen → öffnet dauerhaft wie bisher, kein Schirm.
+- [ ] Eigene Zahl eingeben (z. B. 45) → Freigabe läuft 45 Minuten.
+- [ ] „Öffnen" mit leerem Feld → Hinweis „Zahl eingeben", nichts passiert.
