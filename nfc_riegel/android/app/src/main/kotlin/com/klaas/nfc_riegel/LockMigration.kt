@@ -2,7 +2,7 @@ package com.klaas.nfc_riegel
 
 /**
  * Einmalige Überführung eines v1-Zustands. Der bestehende Chip wird
- * Generalschlüssel — sonst käme man nach dem Update an eine spätere
+ * gewöhnlicher Chip — sonst käme man nach dem Update an eine spätere
  * Kalendersperre nicht mehr heran.
  */
 object LockMigration {
@@ -26,7 +26,7 @@ object LockMigration {
             durationMinutes = durationMinutes,
         )
         val tags = if (tagUid.isNullOrEmpty()) emptyList()
-        else listOf(TagBinding(tagUid, "Chip 1", LEGACY_PROFILE_ID, isMaster = true))
+        else listOf(TagBinding(tagUid, "Chip 1", LEGACY_PROFILE_ID))
 
         val chipLock = if (locked && mode == LockMode.OPEN) ChipLock(LEGACY_PROFILE_ID) else null
         val timeLocks = if (locked && mode != LockMode.OPEN && endsAt != null) {

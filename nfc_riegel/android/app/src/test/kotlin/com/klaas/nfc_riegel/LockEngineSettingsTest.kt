@@ -109,7 +109,7 @@ class LockEngineSettingsTest {
     fun `Chip anlernen haengt ihn an`() {
         val (e, store) = engine()
 
-        val ok = e.enrollTag("04BB", "Bett", "p2", isMaster = false, now = now)
+        val ok = e.enrollTag("04BB", "Bett", "p2", now = now)
 
         assertTrue(ok)
         assertEquals(2, store.current.tags.size)
@@ -119,19 +119,18 @@ class LockEngineSettingsTest {
     fun `bekannte UID wird aktualisiert statt doppelt angelegt`() {
         val (e, store) = engine()
 
-        e.enrollTag("04aa", "Neu", "p2", isMaster = true, now = now)
+        e.enrollTag("04aa", "Neu", "p2", now = now)
 
         assertEquals(1, store.current.tags.size)
         assertEquals("Neu", store.current.tags.first().label)
         assertEquals("p2", store.current.tags.first().profileId)
-        assertTrue(store.current.tags.first().isMaster)
     }
 
     @Test
     fun `Chips sind waehrend einer Sperre gesperrt`() {
         val (e, store) = engine(ChipLock("p2"))
 
-        assertFalse(e.enrollTag("04BB", "Bett", "p1", isMaster = false, now = now))
+        assertFalse(e.enrollTag("04BB", "Bett", "p1", now = now))
         assertFalse(e.deleteTag("04AA", now))
         assertEquals(1, store.current.tags.size)
     }
@@ -194,7 +193,7 @@ class LockEngineSettingsTest {
     fun `waehrend einer Zeitsperre laesst sich kein Chip anlernen`() {
         val (e, _) = engineMitZeitsperre(TimeLock("p1", LockMode.TIMER, now + 60_000))
 
-        assertFalse(e.enrollTag("04BB", "Neu", "p1", isMaster = false, now = now))
+        assertFalse(e.enrollTag("04BB", "Neu", "p1", now = now))
     }
 
     @Test
@@ -213,7 +212,7 @@ class LockEngineSettingsTest {
     fun `abgelaufene Zeitsperre blockiert die Einstellungen nicht mehr`() {
         val (e, _) = engineMitZeitsperre(TimeLock("p1", LockMode.TIMER, now - 1))
 
-        assertTrue(e.enrollTag("04BB", "Neu", "p1", isMaster = false, now = now))
+        assertTrue(e.enrollTag("04BB", "Neu", "p1", now = now))
         assertTrue(e.updateProfile(arbeit.copy(name = "Neu"), now))
     }
 }

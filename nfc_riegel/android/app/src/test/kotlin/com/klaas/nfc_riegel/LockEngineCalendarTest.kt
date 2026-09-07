@@ -85,7 +85,7 @@ class LockEngineCalendarTest {
     fun `waehrend einer Kalendersperre laesst sich kein Chip anlernen`() {
         val (e, _) = engine(laufendesFenster())
 
-        assertFalse(e.enrollTag("04BB", "Neu", "p1", isMaster = false, now = jetzt))
+        assertFalse(e.enrollTag("04BB", "Neu", "p1", now = jetzt))
     }
 
     @Test
@@ -101,17 +101,18 @@ class LockEngineCalendarTest {
     }
 
     @Test
-    fun `Generalschluessel beendet die Kalendersperre und unterdrueckt sie`() {
+    fun `kein Chip beendet die Kalendersperre`() {
+        // Seit alle Chips gleich sind, kommt an einen laufenden Termin nur der
+        // Notfall-Code. Ein Scan legt hoechstens eine eigene Sperre obendrauf.
         val (e, store) = engine(
             laufendesFenster("p1"),
-            tags = listOf(TagBinding("04MM", "General", "p1", isMaster = true)),
+            tags = listOf(TagBinding("04MM", "Schluesselbund", "p1")),
         )
 
-        val ergebnis = e.onTagScanned("04MM", jetzt)
+        e.onTagScanned("04MM", jetzt)
 
-        assertEquals(ScanOutcome.MASTER_CLEARED, ergebnis.outcome)
-        assertEquals(jetzt + minute, store.current.calendar.suppressedUntil)
-        assertTrue(e.blockedPackages(jetzt).isEmpty())
+        assertNull(store.current.calendar.suppressedUntil)
+        assertEquals(setOf("com.a"), e.blockedPackages(jetzt))
     }
 
     @Test

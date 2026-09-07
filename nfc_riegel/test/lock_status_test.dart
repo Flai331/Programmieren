@@ -6,7 +6,6 @@ void main() {
     Map<String, dynamic>? chipLock,
     List<Map<String, dynamic>>? timeLocks,
     List<Map<String, dynamic>>? tags,
-    bool hasMasterTag = true,
     bool hasCode = true,
     Map<String, dynamic>? release,
     bool timedRelease = false,
@@ -34,12 +33,11 @@ void main() {
     ],
     'tags': tags ??
         [
-          {'uid': '04AA', 'label': 'Schreibtisch', 'profileId': 'p1', 'isMaster': true},
+          {'uid': '04AA', 'label': 'Schreibtisch', 'profileId': 'p1'},
         ],
     'chipLock': chipLock,
     'release': release,
     'timeLocks': timeLocks ?? <Map<String, dynamic>>[],
-    'hasMasterTag': hasMasterTag,
     'hasCode': hasCode,
   };
 
@@ -50,7 +48,6 @@ void main() {
     expect(status.profiles.first.durationMinutes, 45);
     expect(status.profiles.first.mode, LockMode.timer);
     expect(status.tags.single.label, 'Schreibtisch');
-    expect(status.tags.single.isMaster, isTrue);
   });
 
   test('ohne Sperre ist nichts gesperrt', () {
@@ -94,11 +91,6 @@ void main() {
     ));
 
     expect(status.earliestEnd, DateTime.fromMillisecondsSinceEpoch(1000));
-  });
-
-  test('hasMasterTag wird durchgereicht', () {
-    expect(LockStatus.fromMap(stateMap()).hasMasterTag, isTrue);
-    expect(LockStatus.fromMap(stateMap(hasMasterTag: false)).hasMasterTag, isFalse);
   });
 
   test('Einrichtung braucht Chip, Code und mindestens eine App', () {

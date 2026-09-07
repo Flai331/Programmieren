@@ -3,7 +3,7 @@ package com.klaas.nfc_riegel
 /**
  * OPEN = Chipsperre bis erneuter Scan. TIMER = Zeitsperre für eine Dauer,
  * UNTIL = Zeitsperre bis zu einem absoluten Zeitpunkt. Zeitsperren enden
- * vorzeitig nur durch Generalschlüssel oder Notfall-Code.
+ * vorzeitig nur durch den Notfall-Code.
  */
 enum class LockMode { OPEN, TIMER, UNTIL }
 

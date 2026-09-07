@@ -35,18 +35,20 @@ data class Profile(
     val quiet: QuietSettings = QuietSettings(),
 )
 
-/** Womit gesperrt wird. Jeder Chip hat ein Profil — auch ein Generalschlüssel. */
+/**
+ * Womit gesperrt wird. Jeder Chip hat ein Profil, und alle Chips sind gleich
+ * viel wert: keiner öffnet mehr als seine eigene Chipsperre. Der Weg an einer
+ * Zeitsperre vorbei ist allein der Notfall-Code.
+ */
 data class TagBinding(
     val uid: String,
     val label: String,
     val profileId: String,
-    /** Beendet jede laufende Sperre, auch Kalendersperren. */
-    val isMaster: Boolean = false,
 )
 
 /**
  * Die eine aktive Chipsperre. Höchstens eine gleichzeitig, immer unbefristet:
- * sie endet allein durch einen erneuten Scan, einen Generalschlüssel oder den
+ * sie endet allein durch einen erneuten Scan oder den
  * Notfall-Code. Alles Zeitgebundene steckt in [TimeLock].
  */
 data class ChipLock(val profileId: String)
@@ -54,7 +56,7 @@ data class ChipLock(val profileId: String)
 /**
  * Eine Zeitsperre. Startet ohne Chip — über die Schaltfläche, durch einen Scan
  * oder später durch einen Termin — und endet vorzeitig nur durch einen
- * Generalschlüssel oder den Notfall-Code. Höchstens eine je Profil.
+ * den Notfall-Code. Höchstens eine je Profil.
  */
 data class TimeLock(
     val profileId: String,

@@ -27,6 +27,15 @@ object Diagnostics {
             zeilen += "Zeit · $name · ${lock.mode.name} bis $ende"
         }
 
+        // Die Freigabe steht neben der Chipsperre, nicht an ihrer Stelle — im
+        // Bericht muss sie deshalb eigens auftauchen, sonst sieht ein
+        // freigegebener Riegel wie ein gesperrter aus.
+        state.release?.takeIf { now < it.endsAt }?.let { freigabe ->
+            val name = state.profileById(freigabe.profileId)?.name ?: "unbekanntes Profil"
+            val ende = SimpleDateFormat("dd.MM. HH:mm", Locale.GERMANY).format(Date(freigabe.endsAt))
+            zeilen += "Freigabe · $name · frei bis $ende"
+        }
+
         val lockLine = if (zeilen.isEmpty()) "offen" else "gesperrt · " + zeilen.joinToString(" + ")
 
         val profiles = if (state.profiles.isEmpty()) "keine"
@@ -35,13 +44,14 @@ object Diagnostics {
                 " bis " + SimpleDateFormat("dd.MM. HH:mm", Locale.GERMANY).format(Date(it))
             } ?: ""
             "${p.name}: ${p.blockedPackages.size} Apps, ${p.defaultMode.name}, " +
-                "${p.durationMinutes} min$ende"
+                "${p.durationMinutes} min$ende" +
+                (if (p.timedRelease) ", Freigabe auf Zeit" else "")
         }
 
         val chips = if (state.tags.isEmpty()) "keine"
         else state.tags.joinToString(" | ") { t ->
             val profil = state.profileById(t.profileId)?.name ?: "?"
-            "${t.label} → $profil${if (t.isMaster) " (General)" else ""}"
+            "${t.label} → $profil"
         }
 
         val packages = state.profiles

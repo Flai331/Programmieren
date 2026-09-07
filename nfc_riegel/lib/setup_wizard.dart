@@ -189,7 +189,6 @@ class _SetupWizardState extends State<SetupWizard> {
                     await widget.channel.startTagEnrollment(
                       label: 'Chip 1',
                       profileId: profileId,
-                      isMaster: true,
                     );
                     _startTagPolling();
                   },

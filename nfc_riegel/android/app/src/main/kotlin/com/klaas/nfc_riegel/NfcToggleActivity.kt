@@ -62,9 +62,8 @@ class NfcToggleActivity : Activity() {
             // Ausstieg einmal, wäre „offen" die falsche Auskunft — bei
             // ASK_RELEASE bleibt gesperrt, bis jemand eine Dauer wählt.
             ScanOutcome.ASK_RELEASE -> "Riegel bleibt zu — $profileName"
-            ScanOutcome.MASTER_CLEARED -> "Alle Sperren beendet"
             ScanOutcome.EXTENDED -> "Sperre verlängert — $profileName"
-            ScanOutcome.TIME_LOCK_RUNNING -> "Zeitsperre läuft — nur ein Generalschlüssel öffnet"
+            ScanOutcome.TIME_LOCK_RUNNING -> "Zeitsperre läuft — nur der Notfall-Code öffnet"
             ScanOutcome.UNKNOWN_TAG -> "Fremder Chip"
             ScanOutcome.NO_TAG_ENROLLED -> "Erst in der App einen Chip anlernen"
             ScanOutcome.NO_PROFILE -> "Profil dieses Chips existiert nicht mehr"

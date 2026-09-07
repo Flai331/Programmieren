@@ -223,25 +223,6 @@ class LockEngineReleaseTest {
     }
 
     @Test
-    fun `der Generalschluessel raeumt die Freigabe mit weg`() {
-        val store = FakeLockStore(
-            LockState(
-                profiles = listOf(arbeit),
-                tags = listOf(TagBinding("04CC", "Schlüsselbund", "p1", isMaster = true)),
-                chipLock = ChipLock("p1"),
-                timeLocks = listOf(TimeLock("p1", LockMode.TIMER, now + 30 * minute)),
-                release = Release("p1", now + 10 * minute),
-            )
-        )
-        val e = LockEngine(store)
-
-        val result = e.onTagScanned("04CC", now)
-
-        assertEquals(ScanOutcome.MASTER_CLEARED, result.outcome)
-        assertNull(store.current.release)
-    }
-
-    @Test
     fun `Scan bei eingeschaltetem Schalter fragt statt zu oeffnen`() {
         val (e, store) = engine()
 

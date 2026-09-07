@@ -52,12 +52,12 @@ class DiagnosticsTest {
     }
 
     @Test
-    fun `Chips werden mit Profil und Generalschluessel-Merkmal aufgelistet`() {
+    fun `Chips werden mit ihrem Profil aufgelistet`() {
         val state = LockState(
             profiles = listOf(arbeit),
             tags = listOf(
                 TagBinding("04AA", "Schreibtisch", "p1"),
-                TagBinding("04BB", "Bund", "p1", isMaster = true),
+                TagBinding("04BB", "Bund", "p1"),
             ),
         )
 
@@ -65,7 +65,32 @@ class DiagnosticsTest {
 
         assertTrue(chips.contains("Schreibtisch"))
         assertTrue(chips.contains("Bund"))
-        assertTrue(chips.contains("General"))
+        assertTrue(chips.contains("Arbeit"))
+    }
+
+    @Test
+    fun `eine laufende Freigabe steht im Bericht`() {
+        // Ohne diese Zeile sieht ein freigegebener Riegel im Bericht wie ein
+        // gesperrter aus — die Chipsperre steht ja weiterhin da.
+        val state = LockState(
+            profiles = listOf(arbeit),
+            chipLock = ChipLock("p1"),
+            release = Release("p1", now + 600_000),
+        )
+
+        val sperre = Diagnostics.summarize(state, now)["Sperre"]!!
+
+        assertTrue(sperre, sperre.contains("Freigabe"))
+        assertTrue(sperre, sperre.contains("frei bis"))
+    }
+
+    @Test
+    fun `die Freigabe eines Profils steht am Profil`() {
+        val state = LockState(profiles = listOf(arbeit.copy(timedRelease = true)))
+
+        val profile = Diagnostics.summarize(state, now)["Profile"]!!
+
+        assertTrue(profile, profile.contains("Freigabe auf Zeit"))
     }
 
     @Test

@@ -58,7 +58,7 @@ class NotificationTextTest {
         )!!
 
         assertEquals(
-            "Frei ab ${NotificationText.uhrzeit(ende)} — vorher nur mit Generalschlüssel",
+            "Frei ab ${NotificationText.uhrzeit(ende)} — vorher nur mit dem Notfall-Code",
             inhalt.text,
         )
     }

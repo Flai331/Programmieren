@@ -18,7 +18,6 @@ void main() {
     String defaultMode = 'TIMER',
     Map<String, dynamic>? chipLock,
     List<Map<String, dynamic>> timeLocks = const [],
-    bool hasMasterTag = true,
     bool hasCode = true,
     Map<String, dynamic>? calendar,
     Map<String, dynamic>? release,
@@ -45,13 +44,11 @@ void main() {
                     'uid': '04AA',
                     'label': 'Schreibtisch',
                     'profileId': 'p1',
-                    'isMaster': hasMasterTag,
                   },
                 ],
                 'chipLock': chipLock,
                 'release': release,
                 'timeLocks': timeLocks,
-                'hasMasterTag': hasMasterTag,
                 'hasCode': hasCode,
                 // Fehlt der Block, fällt LockStatus.fromMap auf CalendarInfo.empty —
                 // deshalb laufen alle Tests ohne Kalender unverändert weiter.
@@ -149,14 +146,16 @@ void main() {
     expect(find.text('Verlängern'), findsOneWidget);
   });
 
-  testWidgets('Bestaetigung warnt ohne Generalschluessel', (tester) async {
-    stub(accessibility: true, hasMasterTag: false);
+  testWidgets('Bestaetigung nennt den Notfall-Code als einzigen Ausweg', (
+    tester,
+  ) async {
+    stub(accessibility: true);
     await zeige(tester);
 
     await tester.tap(find.text('Sperren'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Kein Generalschlüssel'), findsOneWidget);
+    expect(find.textContaining('nur der Notfall-Code'), findsOneWidget);
   });
 
   testWidgets('Bestaetigen startet die Zeitsperre', (tester) async {

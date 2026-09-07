@@ -198,23 +198,20 @@ class TagInfo {
     required this.uid,
     required this.label,
     required this.profileId,
-    required this.isMaster,
   });
 
   final String uid;
   final String label;
   final String profileId;
-  final bool isMaster;
 
   factory TagInfo.fromMap(Map<dynamic, dynamic> map) => TagInfo(
     uid: map['uid'] as String? ?? '',
     label: map['label'] as String? ?? '',
     profileId: map['profileId'] as String? ?? '',
-    isMaster: map['isMaster'] as bool? ?? false,
   );
 }
 
-/// Eine laufende Zeitsperre. Endet vorzeitig nur durch Generalschlüssel oder Code.
+/// Eine laufende Zeitsperre. Endet vorzeitig nur durch den Notfall-Code.
 class TimeLockInfo {
   const TimeLockInfo({
     required this.profileId,
@@ -397,7 +394,6 @@ class LockStatus {
     required this.releaseEndsAt,
     required this.timeLocks,
     required this.calendar,
-    required this.hasMasterTag,
     required this.hasCode,
     required this.quietNow,
   });
@@ -421,8 +417,6 @@ class LockStatus {
   /// Kalendereinstellungen samt laufender Terminfenster.
   final CalendarInfo calendar;
 
-  /// Ob überhaupt ein Generalschlüssel angelernt ist — sonst öffnet nur der Code.
-  final bool hasMasterTag;
   final bool hasCode;
 
   /// Ob gerade Ruhe gilt — nativ gerechnet, damit die Fensterlogik nicht
@@ -450,7 +444,6 @@ class LockStatus {
       calendar: map['calendar'] == null
           ? CalendarInfo.empty
           : CalendarInfo.fromMap(map['calendar'] as Map<dynamic, dynamic>),
-      hasMasterTag: map['hasMasterTag'] as bool? ?? false,
       hasCode: map['hasCode'] as bool? ?? false,
       quietNow: map['quietNow'] as bool? ?? false,
     );

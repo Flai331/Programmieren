@@ -53,7 +53,7 @@ data class CalendarSettings(
     /** eventId → festgenageltes Ende, siehe [Profile.pinCalendarEnd]. */
     val pinnedEnds: Map<String, Long> = emptyMap(),
     /**
-     * Vom Generalschlüssel oder Notfall-Code gesetzt: bis hierhin sperrt der
+     * Vom Notfall-Code gesetzt: bis hierhin sperrt der
      * Kalender nicht. Ohne dieses Feld griffe die Sperre sofort wieder, weil sie
      * ja aus dem Kalender gerechnet wird.
      */

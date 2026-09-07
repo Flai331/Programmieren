@@ -233,9 +233,9 @@ class BlockActivity : Activity() {
                 "%02d:%02d".format(remaining / 60, remaining % 60)
             }
             hint.text = when {
-                termine.isNotEmpty() -> "Bis der Termin vorbei ist, öffnet nur ein Generalschlüssel"
+                termine.isNotEmpty() -> "Bis der Termin vorbei ist, öffnet nur der Notfall-Code"
                 state.chipLock != null -> "Chip scannen oder warten"
-                else -> "Vorher öffnet nur ein Generalschlüssel"
+                else -> "Vorher öffnet nur der Notfall-Code"
             }
         } else {
             countdown.visibility = View.GONE

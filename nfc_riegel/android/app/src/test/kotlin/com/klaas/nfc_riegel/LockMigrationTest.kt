@@ -43,7 +43,6 @@ class LockMigrationTest {
         val tag = state.tags.first()
         assertEquals("04AA", tag.uid)
         assertEquals("Chip 1", tag.label)
-        assertTrue(tag.isMaster)
         assertEquals(state.profiles.first().id, tag.profileId)
     }
 

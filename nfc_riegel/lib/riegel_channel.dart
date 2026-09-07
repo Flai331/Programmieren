@@ -102,16 +102,11 @@ class RiegelChannel {
   Future<void> startTagEnrollment({
     required String label,
     required String profileId,
-    required bool isMaster,
   }) {
-    FeedbackService.log(
-      'Chip anlernen gestartet: $label'
-      '${isMaster ? " (Generalschlüssel)" : ""}',
-    );
+    FeedbackService.log('Chip anlernen gestartet: $label');
     return channel.invokeMethod<void>('startTagEnrollment', {
       'label': label,
       'profileId': profileId,
-      'isMaster': isMaster,
     });
   }
 

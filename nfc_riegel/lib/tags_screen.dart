@@ -53,7 +53,6 @@ class _TagsScreenState extends State<TagsScreen> {
     await widget.channel.startTagEnrollment(
       label: result.label,
       profileId: result.profileId,
-      isMaster: result.isMaster,
     );
     _startPolling(_status.tags.length);
   }
@@ -83,14 +82,10 @@ class _TagsScreenState extends State<TagsScreen> {
           for (final tag in _status.tags)
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                tag.isMaster ? Icons.vpn_key : Icons.nfc,
-                color: tag.isMaster ? RiegelColors.locked : RiegelColors.accent,
-              ),
+              leading: const Icon(Icons.nfc, color: RiegelColors.accent),
               title: Text(tag.label),
               subtitle: Text(
-                _profileName(tag.profileId) +
-                    (tag.isMaster ? ' · Generalschlüssel' : ''),
+                _profileName(tag.profileId),
                 style: const TextStyle(fontSize: 12, color: RiegelColors.fg3),
               ),
               trailing: IconButton(
@@ -117,11 +112,10 @@ class _TagsScreenState extends State<TagsScreen> {
 }
 
 class _EnrollRequest {
-  const _EnrollRequest(this.label, this.profileId, this.isMaster);
+  const _EnrollRequest(this.label, this.profileId);
 
   final String label;
   final String profileId;
-  final bool isMaster;
 }
 
 class _EnrollDialog extends StatefulWidget {
@@ -136,7 +130,6 @@ class _EnrollDialog extends StatefulWidget {
 class _EnrollDialogState extends State<_EnrollDialog> {
   final _label = TextEditingController();
   late String _profileId = widget.profiles.first.id;
-  bool _isMaster = false;
 
   @override
   void dispose() {
@@ -165,13 +158,6 @@ class _EnrollDialogState extends State<_EnrollDialog> {
             ],
             onChanged: (v) => setState(() => _profileId = v ?? _profileId),
           ),
-          SwitchListTile(
-            value: _isMaster,
-            onChanged: (v) => setState(() => _isMaster = v),
-            title: const Text('Generalschlüssel'),
-            subtitle: const Text('Beendet jede laufende Sperre'),
-            contentPadding: EdgeInsets.zero,
-          ),
         ],
       ),
       actions: [
@@ -185,7 +171,6 @@ class _EnrollDialogState extends State<_EnrollDialog> {
             _EnrollRequest(
               _label.text.trim().isEmpty ? 'Chip' : _label.text.trim(),
               _profileId,
-              _isMaster,
             ),
           ),
           child: const Text('Weiter'),

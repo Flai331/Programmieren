@@ -91,7 +91,6 @@ class RiegelChannel(private val activity: Activity) {
                     val intent = Intent(activity, TagWriteActivity::class.java)
                         .putExtra(TagWriteActivity.EXTRA_LABEL, call.argument<String>("label"))
                         .putExtra(TagWriteActivity.EXTRA_PROFILE_ID, call.argument<String>("profileId"))
-                        .putExtra(TagWriteActivity.EXTRA_IS_MASTER, call.argument<Boolean>("isMaster") ?: false)
                     activity.startActivity(intent)
                     result.success(true)
                 }
@@ -319,7 +318,6 @@ class RiegelChannel(private val activity: Activity) {
                     "uid" to t.uid,
                     "label" to t.label,
                     "profileId" to t.profileId,
-                    "isMaster" to t.isMaster,
                 )
             },
             "chipLock" to s.chipLock?.let { mapOf("profileId" to it.profileId) },
@@ -359,7 +357,6 @@ class RiegelChannel(private val activity: Activity) {
                 "activeWindows" to controller.engine.activeCalendarWindows(now)
                     .map { windowMap(it) },
             ),
-            "hasMasterTag" to s.tags.any { it.isMaster },
             "hasCode" to (s.codeHash != null),
         )
     }

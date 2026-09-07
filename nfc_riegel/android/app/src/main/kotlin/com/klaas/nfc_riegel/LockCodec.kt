@@ -92,16 +92,17 @@ object LockCodec {
 
     fun encodeTags(tags: List<TagBinding>): String =
         tags.joinToString(RECORD.toString()) { t ->
-            listOf(t.uid, t.label, t.profileId, if (t.isMaster) "1" else "0")
-                .joinToString(FIELD.toString())
+            listOf(t.uid, t.label, t.profileId).joinToString(FIELD.toString())
         }
 
     fun decodeTags(raw: String): List<TagBinding> {
         if (raw.isEmpty()) return emptyList()
         return raw.split(RECORD).mapNotNull { record ->
             val f = record.split(FIELD)
-            if (f.size != 4) return@mapNotNull null
-            TagBinding(uid = f[0], label = f[1], profileId = f[2], isMaster = f[3] == "1")
+            // Vier Felder: der alte Stand mit dem Generalschlüssel-Merkmal. Es
+            // wird gelesen und weggeworfen — alle Chips sind gleich.
+            if (f.size !in setOf(3, 4)) return@mapNotNull null
+            TagBinding(uid = f[0], label = f[1], profileId = f[2])
         }
     }
 

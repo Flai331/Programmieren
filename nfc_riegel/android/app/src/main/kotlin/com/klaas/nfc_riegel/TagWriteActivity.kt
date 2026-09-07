@@ -39,7 +39,6 @@ class TagWriteActivity : Activity() {
 
     private val label: String get() = intent.getStringExtra(EXTRA_LABEL) ?: "Chip"
     private val profileId: String get() = intent.getStringExtra(EXTRA_PROFILE_ID).orEmpty()
-    private val isMaster: Boolean get() = intent.getBooleanExtra(EXTRA_IS_MASTER, false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -136,7 +135,6 @@ class TagWriteActivity : Activity() {
                         NfcSupport.toHex(tag.id),
                         label,
                         profileId,
-                        isMaster,
                         System.currentTimeMillis(),
                     )
                 if (stored) {
@@ -158,6 +156,5 @@ class TagWriteActivity : Activity() {
     companion object {
         const val EXTRA_LABEL = "label"
         const val EXTRA_PROFILE_ID = "profileId"
-        const val EXTRA_IS_MASTER = "isMaster"
     }
 }

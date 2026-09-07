@@ -56,7 +56,7 @@ object NotificationText {
             fruehestesEnde != null && state.chipLock != null ->
                 "Frei ab ${uhrzeit(fruehestesEnde)}, der Rest nach erneutem Scan"
             fruehestesEnde != null ->
-                "Frei ab ${uhrzeit(fruehestesEnde)} — vorher nur mit Generalschlüssel"
+                "Frei ab ${uhrzeit(fruehestesEnde)} — vorher nur mit dem Notfall-Code"
             else -> "Chip scannen, um freizugeben"
         }
 

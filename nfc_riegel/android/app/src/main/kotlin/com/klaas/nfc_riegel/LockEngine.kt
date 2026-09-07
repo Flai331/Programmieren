@@ -11,11 +11,9 @@ enum class ScanOutcome {
 
     /** Anderer Chip hat übernommen: alte Sperre beendet, neue gestartet. */
     SWITCHED,
-    /** Generalschlüssel hat alle Sperren beendet. */
-    MASTER_CLEARED,
     /** Zeitsperre lief bereits, ihr Ende wurde nach hinten geschoben. */
     EXTENDED,
-    /** Zeitsperre läuft — nur ein Generalschlüssel öffnet sie vorzeitig. */
+    /** Zeitsperre läuft — nur der Notfall-Code öffnet sie vorzeitig. */
     TIME_LOCK_RUNNING,
     UNKNOWN_TAG,
     NO_TAG_ENROLLED,
@@ -63,18 +61,14 @@ class LockEngine(private val store: LockStore) {
 
     /**
      * Chip gescannt. Der Modus des Profils entscheidet, welche Spur entsteht:
-     * `OPEN` ergibt eine Chipsperre, `TIMER` und `UNTIL` eine Zeitsperre. Ein
-     * normaler Chip beendet nur seine eigene Chipsperre; an Zeitsperren kommt
-     * allein der Generalschlüssel.
+     * `OPEN` ergibt eine Chipsperre, `TIMER` und `UNTIL` eine Zeitsperre. Alle
+     * Chips sind gleich: jeder beendet nur seine eigene Chipsperre. An eine
+     * Zeitsperre kommt einzig der Notfall-Code.
      */
     fun onTagScanned(uid: String, now: Long): ScanResult {
         val s = store.load()
         if (s.tags.isEmpty()) return ScanResult(s, ScanOutcome.NO_TAG_ENROLLED)
         val tag = s.tagByUid(uid) ?: return ScanResult(s, ScanOutcome.UNKNOWN_TAG)
-
-        if (tag.isMaster && lockedProfileIds(s, now).isNotEmpty()) {
-            return ScanResult(clearAll(s, now), ScanOutcome.MASTER_CLEARED)
-        }
 
         val profile = s.profileById(tag.profileId)
             ?: return ScanResult(s, ScanOutcome.NO_PROFILE)
@@ -119,8 +113,7 @@ class LockEngine(private val store: LockStore) {
      * `OPEN` ergibt eine Chipsperre, `TIMER` und `UNTIL` eine Zeitsperre.
      *
      * Zumachen geht immer ohne Chip. Aufmachen nicht: eine so gestartete
-     * Chipsperre endet erst durch einen Scan, den Generalschlüssel oder den
-     * Notfall-Code. Genau darin liegt der Sinn — der Griff zum Riegel soll
+     * Chipsperre endet erst durch einen Scan oder den Notfall-Code. Genau darin liegt der Sinn — der Griff zum Riegel soll
      * leicht sein, der Weg zurück nicht.
      *
      * Bei den Zeitsperren gilt: strenger stellen ist immer erlaubt, verkürzen
@@ -235,8 +228,8 @@ class LockEngine(private val store: LockStore) {
     fun hasActiveLock(now: Long): Boolean = lockedProfileIds(store.load(), now).isNotEmpty()
 
     /**
-     * Beendet alles: Chipsperre und sämtliche Zeitsperren. Nur der Generalschlüssel
-     * und der Notfall-Code kommen hier hin.
+     * Beendet alles: Chipsperre und sämtliche Zeitsperren. Allein der
+     * Notfall-Code kommt hier hin.
      */
     private fun clearAll(s: LockState, now: Long): LockState {
         // Ohne Unterdrückung griffe die Kalendersperre sofort wieder — sie wird ja
@@ -389,12 +382,11 @@ class LockEngine(private val store: LockStore) {
         uid: String,
         label: String,
         profileId: String,
-        isMaster: Boolean,
         now: Long,
     ): Boolean {
         val s = store.load()
         if (lockedProfileIds(s, now).isNotEmpty()) return false
-        val binding = TagBinding(uid, label, profileId, isMaster)
+        val binding = TagBinding(uid, label, profileId)
         val existing = s.tagByUid(uid)
         val tags = if (existing == null) s.tags + binding
         else s.tags.map { if (it.uid.equals(uid, ignoreCase = true)) binding else it }

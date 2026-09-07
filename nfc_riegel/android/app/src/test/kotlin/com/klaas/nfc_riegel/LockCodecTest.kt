@@ -23,11 +23,20 @@ class LockCodecTest {
     @Test
     fun `Chips ueberstehen Kodieren und Dekodieren`() {
         val tags = listOf(
-            TagBinding("04AA", "Schreibtisch", "p1", false),
-            TagBinding("04BB", "Schlüsselbund", "p2", true),
+            TagBinding("04AA", "Schreibtisch", "p1"),
+            TagBinding("04BB", "Schlüsselbund", "p2"),
         )
 
         assertEquals(tags, LockCodec.decodeTags(LockCodec.encodeTags(tags)))
+    }
+
+    @Test
+    fun `alter Chipsatz mit Generalschluessel-Merkmal bleibt lesbar`() {
+        // Vier Felder, wie vor dem Wegfall des Generalschluessels abgelegt. Das
+        // Merkmal faellt weg, der Chip bleibt.
+        val alt = listOf("04BB", "Schlüsselbund", "p2", "1").joinToString("")
+
+        assertEquals(listOf(TagBinding("04BB", "Schlüsselbund", "p2")), LockCodec.decodeTags(alt))
     }
 
     @Test

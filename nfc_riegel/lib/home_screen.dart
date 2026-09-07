@@ -95,21 +95,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? 'Sperrt ${profile.name}, bis du den Chip erneut scannst.\n'
                         'Ohne Chip öffnet nur der Notfall-Code.'
                   : 'Sperrt ${profile.name} bis ${_uhrzeit(ende!)}.\n'
-                        'Vorher öffnet nur ein Generalschlüssel oder der Notfall-Code.',
+                        'Vorher öffnet nur der Notfall-Code.',
             ),
-            // Bei einer Chipsperre öffnet jeder Chip dieses Profils, nicht nur
-            // der Generalschlüssel — gewarnt wird erst, wenn gar keiner da ist.
+            // Bei einer Chipsperre öffnet jeder Chip dieses Profils — gewarnt
+            // wird erst, wenn gar keiner angelernt ist.
             if (chipsperre && status.tags.isEmpty) ...[
               const SizedBox(height: RiegelSpacing.s3),
               const Text(
                 'Kein Chip angelernt — dann öffnet nur der Notfall-Code.',
-                style: TextStyle(color: RiegelColors.danger),
-              ),
-            ],
-            if (!chipsperre && !status.hasMasterTag) ...[
-              const SizedBox(height: RiegelSpacing.s3),
-              const Text(
-                'Kein Generalschlüssel angelernt — dann öffnet nur der Notfall-Code.',
                 style: TextStyle(color: RiegelColors.danger),
               ),
             ],

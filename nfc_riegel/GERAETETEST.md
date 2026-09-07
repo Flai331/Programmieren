@@ -44,7 +44,7 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
 ## v2 — Profile, mehrere Chips, Sperre bis Zeitpunkt
 
 ### Migration
-- [ ] Update über eine bestehende v1-Installation: Profil „Standard" ist da, der alte Chip erscheint als Generalschlüssel
+- [ ] Update über eine bestehende v1-Installation: Profil „Standard" ist da, der alte Chip ist ein gewöhnlicher Chip
 - [ ] Eine beim Update laufende Sperre besteht weiter
 
 ### Profile
@@ -57,8 +57,9 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
 - [ ] Zweiten Chip anlernen, Label und Profil vergeben
 - [ ] Chip A sperrt Profil A, erneuter Scan von A gibt frei
 - [ ] Chip B während laufender A-Sperre: wechselt auf Profil B
-- [ ] Generalschlüssel beendet die laufende Sperre
-- [ ] Generalschlüssel bei freiem Riegel: sperrt sein eigenes Profil
+- [ ] Chip eines anderen Profils beendet die laufende Sperre **nicht**
+- [ ] Zweiter Chip desselben Profils öffnet die Sperre ebenfalls (alle Chips gleich)
+- [ ] Chip bei freiem Riegel: sperrt sein eigenes Profil
 - [ ] Chip löschen, danach Scan: „Fremder Chip"
 
 ### Sperre bis Zeitpunkt
@@ -94,7 +95,7 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
 - [ ] Normalen Chip dieses Profils scannen — Sperre bleibt bestehen, Meldung
       „Zeitsperre läuft"
 - [ ] Chip eines anderen `OPEN`-Profils scannen — beide Sperren gelten gleichzeitig
-- [ ] Generalschlüssel scannen — beide Sperren enden
+- [ ] Notfall-Code eingeben — beide Sperren enden
 - [ ] Erneut sperren, „Verlängern" drücken — Ende rückt nach hinten, nie nach vorn
 - [ ] Profil auf `UNTIL` mit einem Zeitpunkt in der Vergangenheit stellen,
       „Sperren" drücken — Meldung statt Sperre
@@ -103,7 +104,7 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
 - [ ] Handy neu starten, während eine Zeitsperre läuft — Sperre gilt weiter,
       Benachrichtigung wieder da
 - [ ] Timer ablaufen lassen — Sperre endet von selbst, Benachrichtigung verschwindet
-- [ ] Ohne angelernten Generalschlüssel sperren — Dialog warnt in Rot
+- [ ] Ohne angelernten Chip sperren — Dialog warnt in Rot
 - [ ] Update über eine laufende v2-`UNTIL`-Sperre — sie läuft nach dem Update weiter
 
 ## Benachrichtigungsberechtigung
@@ -148,7 +149,7 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
 - [ ] Bei `pinCalendarEnd` im Profil: laufenden Termin löschen — Sperre bleibt bis zum
       ursprünglichen Ende
 - [ ] Normalen Chip während einer Kalendersperre scannen — sperrt weiter
-- [ ] Generalschlüssel während einer Kalendersperre — gibt frei, und der Termin
+- [ ] Notfall-Code während einer Kalendersperre — gibt frei, und der Termin
       sperrt bis zu seinem Ende nicht erneut
 - [ ] Nächster Termin sperrt danach wieder normal
 - [ ] Notfall-Code während einer Kalendersperre — gibt ebenfalls frei
@@ -360,7 +361,7 @@ nicht stören" — das stellt alles still, nicht nur die gewählten Nummern.
 - [ ] Freigabe läuft, Chip eines anderen Profils auflegen → das andere Profil
       sperrt, die alte Freigabe ist weg.
 - [ ] Freigabe läuft, in der App „Sperren" drücken → sofort wieder zu.
-- [ ] Freigabe läuft, Generalschlüssel scannen → alles auf.
+- [ ] Freigabe läuft, Notfall-Code eingeben → alles auf.
 - [ ] Schalter aus, Chip scannen → öffnet dauerhaft wie bisher, kein Schirm.
 - [ ] Eigene Zahl eingeben (z. B. 45) → Freigabe läuft 45 Minuten.
 - [ ] „Öffnen" mit leerem Feld → Hinweis „Zahl eingeben", nichts passiert.
