@@ -105,6 +105,11 @@ class LockController(private val context: Context) {
         QuietDnd(context).apply(
             QuietPlanner.isQuiet(state, now) && !CallScreening.held(context),
         )
+
+        // Der Klingelmodus ist die zweite Hälfte der Ruhe: der Anruffilter trifft
+        // einzelne Nummern, der Modus das ganze Telefon. Beides an derselben
+        // Stelle, damit es nicht auseinanderlaufen kann.
+        QuietRinger(context).apply(QuietPlanner.ringerMode(state, now))
     }
 
     /**
