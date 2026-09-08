@@ -44,6 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   late List<QuietScheduleInfo> _quietSchedules = List.of(
     widget.profile.quietSchedules,
   );
+  late RingerMode _quietRinger = widget.profile.quietRinger;
   bool? _usageGranted;
   bool _screeningVerfuegbar = false;
   bool? _screeningGehalten;
@@ -233,6 +234,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         quietAfterEventMinutes: _quietAfter,
         quietWhileLocked: _quietWhileLocked,
         quietSchedules: _quietSchedules,
+        quietRinger: _quietRinger,
       ),
     );
     if (!mounted) return;
@@ -461,6 +463,26 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
           if (_quiet) ...[
             const SizedBox(height: RiegelSpacing.s3),
+            const Text('Klingelmodus während der Ruhe'),
+            DropdownButton<RingerMode>(
+              value: _quietRinger,
+              isExpanded: true,
+              items: [
+                for (final m in RingerMode.values)
+                  DropdownMenuItem(value: m, child: Text(ringerLabel(m))),
+              ],
+              onChanged: (m) =>
+                  setState(() => _quietRinger = m ?? RingerMode.unveraendert),
+            ),
+            const Text(
+              'Gilt fürs ganze Telefon, also auch für Benachrichtigungen.',
+              style: TextStyle(fontSize: 13, color: RiegelColors.fg2),
+            ),
+            if (_quietRinger == RingerMode.lautlos && _dndErlaubt == false)
+              const Text(
+                'Ohne „Bitte nicht stören" bleibt es beim Vibrieren.',
+                style: TextStyle(fontSize: 13, color: RiegelColors.fg2),
+              ),
             SizedBox(
               width: double.infinity,
               child: SegmentedButton<QuietScope>(
@@ -502,11 +524,18 @@ class _ProfileScreenState extends State<ProfileScreen>
                   onPressed: _frageAnruffilter,
                   child: const Text('Riegel zum Anruffilter machen'),
                 ),
-              if (_dndErlaubt == false)
-                OutlinedButton(
-                  onPressed: widget.channel.openDndSettings,
-                  child: const Text('„Bitte nicht stören" erlauben'),
-                ),
+            ],
+            // Der Zugriff wird an zwei Stellen gebraucht: als Rückfall für den
+            // Anruffilter und für „Lautlos". Deshalb steht der Knopf hier
+            // einmal für beide statt zweimal.
+            if (_dndErlaubt == false &&
+                (_screeningGehalten == false ||
+                    _quietRinger == RingerMode.lautlos)) ...[
+              const SizedBox(height: RiegelSpacing.s2),
+              OutlinedButton(
+                onPressed: widget.channel.openDndSettings,
+                child: const Text('„Bitte nicht stören" erlauben'),
+              ),
             ],
             const SizedBox(height: RiegelSpacing.s4),
             SwitchListTile(

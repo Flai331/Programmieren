@@ -34,6 +34,20 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
+  /// `ensureVisible` allein reicht bei der langen Liste nicht: Elemente weit
+  /// unten (etwa im Abschnitt RUHE) sind ausserhalb der Vorbau-Reichweite der
+  /// Sliver-Liste noch gar nicht im Baum. Erst dorthin scrollen, dann sichtbar
+  /// machen.
+  Future<void> scrolleZu(WidgetTester tester, Finder finder) async {
+    final scrollable = find
+        .descendant(of: find.byType(ListView), matching: find.byType(Scrollable))
+        .first;
+    await tester.scrollUntilVisible(finder, 300, scrollable: scrollable);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+  }
+
   const profil = ProfileInfo(
     id: 'p1',
     name: 'Arbeit',
@@ -204,4 +218,71 @@ void main() {
     expect(gespeichert!['timedRelease'], isTrue);
   });
 
+  testWidgets('der Klingelmodus erscheint erst mit eingeschalteter Ruhe', (
+    tester,
+  ) async {
+    stub(usageGranted: true);
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Klingelmodus während der Ruhe'), findsNothing);
+
+    final ruheSchalter = find.widgetWithText(
+      SwitchListTile,
+      'Anrufe stumm schalten',
+    );
+    await scrolleZu(tester, ruheSchalter);
+    await tester.tap(ruheSchalter);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Klingelmodus während der Ruhe'), findsOneWidget);
+  });
+
+  testWidgets('der gewaehlte Klingelmodus wird gespeichert', (tester) async {
+    stub(usageGranted: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileScreen(
+          profile: const ProfileInfo(
+            id: 'p1',
+            name: 'Arbeit',
+            blockedPackages: [],
+            mode: LockMode.timer,
+            durationMinutes: 60,
+            untilAt: null,
+            pinCalendarEnd: false,
+            timedRelease: false,
+            pauseEnabled: false,
+            pauseStepMinutes: 15,
+            pauseBaseSeconds: 5,
+            pauseResetMinutes: 15,
+            quietEnabled: true,
+            quietScope: QuietScope.alle,
+            quietNumbers: [],
+            quietAfterEventMinutes: 0,
+            quietWhileLocked: true,
+            quietSchedules: [],
+          ),
+          channel: RiegelChannel(channel),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final auswahl = find.byType(DropdownButton<RingerMode>);
+    await scrolleZu(tester, auswahl);
+    await tester.tap(auswahl);
+    await tester.pumpAndSettle();
+    // Der geöffnete Klapp-Vorhang zeigt jeden Eintrag ein zweites Mal; der
+    // letzte Treffer gehört zum Vorhang, nicht zum geschlossenen Knopf.
+    await tester.tap(find.text('Vibrieren').last);
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Sichern'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sichern'));
+    await tester.pumpAndSettle();
+
+    expect(gespeichert!['quietRinger'], 'VIBRIEREN');
+  });
 }
