@@ -29,6 +29,15 @@ data class QuietSchedule(
 )
 
 /**
+ * Der Klingelmodus, den die Ruhe setzt. [UNVERAENDERT] heißt: das Telefon wird
+ * nicht angefasst — die Vorgabe, damit bestehende Profile bleiben, wie sie sind.
+ *
+ * Die Reihenfolge ist die Rangfolge: weiter unten heißt leiser und gewinnt in
+ * [QuietPlanner.ringerMode]. Nicht umsortieren.
+ */
+enum class RingerMode { UNVERAENDERT, LAUT, VIBRIEREN, LAUTLOS }
+
+/**
  * Ruhe am Profil — Anrufe stumm schalten, ohne die App zu sperren. Steht neben
  * [PauseSettings] am selben Ort, weil beides dieselbe Frage beantwortet: was
  * passiert, während dieses Profil gilt.
@@ -48,4 +57,6 @@ data class QuietSettings(
     /** Ruhe auch, solange eine Sperre dieses Profils läuft. */
     val whileLocked: Boolean = true,
     val schedules: List<QuietSchedule> = emptyList(),
+    /** Klingelmodus, solange diese Ruhe greift. */
+    val ringer: RingerMode = RingerMode.UNVERAENDERT,
 )

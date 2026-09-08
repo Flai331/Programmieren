@@ -12,8 +12,8 @@ object LockCodec {
     private const val ITEM = ''
     private const val PAIR = ''
 
-    /** Feldzahlen, die je Ausbaustufe entstanden sind: 7, 10/11, 17, 18. */
-    private val GUELTIGE_PROFILFELDER = setOf(7, 10, 11, 17, 18)
+    /** Feldzahlen, die je Ausbaustufe entstanden sind: 7, 10/11, 17, 18, 19. */
+    private val GUELTIGE_PROFILFELDER = setOf(7, 10, 11, 17, 18, 19)
 
     fun encodeProfiles(profiles: List<Profile>): String =
         profiles.joinToString(RECORD.toString()) { p ->
@@ -36,6 +36,7 @@ object LockCodec {
                 if (p.quiet.whileLocked) "1" else "0",
                 encodeSchedules(p.quiet.schedules),
                 if (p.timedRelease) "1" else "0",
+                p.quiet.ringer.name,
             ).joinToString(FIELD.toString())
         }
 
@@ -81,6 +82,13 @@ object LockCodec {
                         afterEventMinutes = f[14].toIntOrNull() ?: 0,
                         whileLocked = f[15] == "1",
                         schedules = decodeSchedules(f[16]),
+                        // Feld 19 kam mit dem Klingelmodus dazu.
+                        ringer = if (f.size >= 19) {
+                            runCatching { RingerMode.valueOf(f[18]) }
+                                .getOrDefault(RingerMode.UNVERAENDERT)
+                        } else {
+                            RingerMode.UNVERAENDERT
+                        },
                     )
                 } else {
                     QuietSettings()

@@ -8,6 +8,22 @@ import org.junit.Test
 
 class LockCodecTest {
 
+    /** FIELD aus LockCodec. */
+    private val FELD = ""
+
+    /**
+     * Ein Profilsatz mit genau [felder] Feldern — der Stand einer früheren
+     * Ausbaustufe. Aus `encodeProfiles` erzeugt statt von Hand geschrieben,
+     * damit der Aufbau nicht auseinanderläuft, und über die Feldzahl
+     * abgeschnitten statt über „das letzte Feld weg": sonst bricht jedes neu
+     * angehängte Feld die älteren Fälle.
+     */
+    private fun satzMit(profil: Profile, felder: Int): String =
+        LockCodec.encodeProfiles(listOf(profil))
+            .split(FELD)
+            .take(felder)
+            .joinToString(FELD)
+
     @Test
     fun `Profile ueberstehen Kodieren und Dekodieren`() {
         val profiles = listOf(
@@ -200,6 +216,48 @@ class LockCodecTest {
     }
 
     @Test
+    fun `Klingelmodus uebersteht Kodieren und Dekodieren`() {
+        val profile = listOf(
+            Profile(
+                id = "p1",
+                name = "Nacht",
+                quiet = QuietSettings(enabled = true, ringer = RingerMode.VIBRIEREN),
+            ),
+        )
+
+        assertEquals(profile, LockCodec.decodeProfiles(LockCodec.encodeProfiles(profile)))
+    }
+
+    @Test
+    fun `ein Profilsatz ohne Klingelmodus liest sich als unveraendert`() {
+        // Achtzehn Felder — der Stand aus Build 18.
+        val alt = satzMit(
+            Profile(id = "p1", name = "Nacht", quiet = QuietSettings(enabled = true)),
+            felder = 18,
+        )
+
+        val zurueck = LockCodec.decodeProfiles(alt).single()
+
+        assertEquals(RingerMode.UNVERAENDERT, zurueck.quiet.ringer)
+    }
+
+    @Test
+    fun `ein unbekannter Klingelmodus liest sich als unveraendert`() {
+        val roh = satzMit(
+            Profile(
+                id = "p1",
+                name = "Nacht",
+                quiet = QuietSettings(enabled = true, ringer = RingerMode.LAUTLOS),
+            ),
+            felder = 18,
+        ) + FELD + "FLUESTERN"
+
+        val zurueck = LockCodec.decodeProfiles(roh).single()
+
+        assertEquals(RingerMode.UNVERAENDERT, zurueck.quiet.ringer)
+    }
+
+    @Test
     fun `alter Profilsatz ohne Atempause bleibt lesbar`() {
         // Sieben Felder, wie vor der Atempause abgelegt.
         val alt = listOf("p1", "Arbeit", "com.a", "TIMER", "45", "", "0")
@@ -299,13 +357,11 @@ class LockCodecTest {
 
     @Test
     fun `Profil ohne das neue Feld hat keine Freigabe auf Zeit`() {
-        // Siebzehn Felder — der Stand vor der Freigabe. Der Aufbau muss exakt dem
-        // von encodeProfiles entsprechen, deshalb hier aus einem Profil erzeugt
-        // und das letzte Feld abgeschnitten. '' ist FIELD aus LockCodec.
-        val mitFeld = LockCodec.encodeProfiles(
-            listOf(Profile(id = "p1", name = "Arbeit", timedRelease = true))
+        // Siebzehn Felder — der Stand vor der Freigabe auf Zeit.
+        val ohneFeld = satzMit(
+            Profile(id = "p1", name = "Arbeit", timedRelease = true),
+            felder = 17,
         )
-        val ohneFeld = mitFeld.substringBeforeLast('')
 
         val gelesen = LockCodec.decodeProfiles(ohneFeld)
 
