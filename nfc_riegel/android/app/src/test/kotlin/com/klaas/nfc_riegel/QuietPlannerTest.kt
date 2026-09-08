@@ -242,4 +242,75 @@ class QuietPlannerTest {
 
         assertTrue(QuietPlanner.silences(profile, nummer))
     }
+
+    // -------------------------------------------------------------- Klingelmodus
+
+    /** Ruhe, die an die Sperre gebunden ist. */
+    private fun immerRuhe(ringer: RingerMode) =
+        QuietSettings(enabled = true, whileLocked = true, ringer = ringer)
+
+    /** Ruhe, die an einem Montagsfenster von 8 bis 20 Uhr hängt. */
+    private fun tagsueber(ringer: RingerMode, id: String) = Profile(
+        id = id,
+        name = "Zweites",
+        quiet = QuietSettings(
+            enabled = true,
+            whileLocked = false,
+            ringer = ringer,
+            schedules = listOf(
+                QuietSchedule(
+                    days = setOf(Calendar.MONDAY),
+                    startMinute = 8 * 60,
+                    endMinute = 20 * 60,
+                ),
+            ),
+        ),
+    )
+
+    private fun gesperrt(vararg profile: Profile) =
+        LockState(profiles = profile.toList(), chipLock = ChipLock(profile.first().id))
+
+    @Test
+    fun `ein Profil in Ruhe gibt seinen Klingelmodus vor`() {
+        val state = gesperrt(profil(immerRuhe(RingerMode.VIBRIEREN)))
+
+        assertEquals(RingerMode.VIBRIEREN, QuietPlanner.ringerMode(state, am(24, 12), zone))
+    }
+
+    @Test
+    fun `bei zwei Profilen in Ruhe gewinnt der leisere`() {
+        val state = gesperrt(
+            profil(immerRuhe(RingerMode.LAUT), id = "p1"),
+            tagsueber(RingerMode.LAUTLOS, id = "p2"),
+        )
+
+        assertEquals(RingerMode.LAUTLOS, QuietPlanner.ringerMode(state, am(24, 12), zone))
+    }
+
+    @Test
+    fun `ein ausdruecklicher Modus schlaegt unveraendert`() {
+        val state = gesperrt(
+            profil(immerRuhe(RingerMode.UNVERAENDERT), id = "p1"),
+            tagsueber(RingerMode.LAUT, id = "p2"),
+        )
+
+        assertEquals(RingerMode.LAUT, QuietPlanner.ringerMode(state, am(24, 12), zone))
+    }
+
+    @Test
+    fun `ohne laufende Ruhe bleibt der Klingelmodus unveraendert`() {
+        // Das Profil will lautlos, aber nichts löst die Ruhe gerade aus.
+        val state = zustand(profil(immerRuhe(RingerMode.LAUTLOS)))
+
+        assertEquals(RingerMode.UNVERAENDERT, QuietPlanner.ringerMode(state, am(24, 12), zone))
+    }
+
+    @Test
+    fun `ein Profil mit ausgeschalteter Ruhe zaehlt nicht mit`() {
+        val aus = profil(
+            QuietSettings(enabled = false, whileLocked = true, ringer = RingerMode.LAUTLOS),
+        )
+
+        assertEquals(RingerMode.UNVERAENDERT, QuietPlanner.ringerMode(gesperrt(aus), am(24, 12), zone))
+    }
 }

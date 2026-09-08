@@ -36,6 +36,22 @@ object QuietPlanner {
     ): Boolean = quietProfiles(state, now, zone).isNotEmpty()
 
     /**
+     * Welcher Klingelmodus jetzt gilt.
+     *
+     * Der leiseste gewinnt — dieselbe Doktrin wie bei [silences]: ein Profil kann
+     * die Ruhe eines anderen nicht aufheben. [RingerMode.UNVERAENDERT] steht in
+     * der Aufzählung ganz vorn und damit im Rang ganz unten, damit „egal" jeder
+     * ausdrücklichen Wahl weicht.
+     */
+    fun ringerMode(
+        state: LockState,
+        now: Long,
+        zone: TimeZone = TimeZone.getDefault(),
+    ): RingerMode = quietProfiles(state, now, zone)
+        .maxOfOrNull { it.quiet.ringer }
+        ?: RingerMode.UNVERAENDERT
+
+    /**
      * Bleibt dieser Anruf stumm?
      *
      * Gilt Ruhe für mehrere Profile gleichzeitig, genügt **ein** Profil, das
