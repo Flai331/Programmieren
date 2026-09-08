@@ -27,6 +27,31 @@ String scopeToNative(QuietScope scope) => switch (scope) {
   QuietScope.alleAusser => 'ALLE_AUSSER',
 };
 
+/// Klingelmodus, den die Ruhe setzt. Reihenfolge wie im Kotlin-Enum.
+enum RingerMode { unveraendert, laut, vibrieren, lautlos }
+
+RingerMode _ringerFrom(String? raw) => switch (raw) {
+  'LAUT' => RingerMode.laut,
+  'VIBRIEREN' => RingerMode.vibrieren,
+  'LAUTLOS' => RingerMode.lautlos,
+  _ => RingerMode.unveraendert,
+};
+
+String ringerToNative(RingerMode mode) => switch (mode) {
+  RingerMode.unveraendert => 'UNVERAENDERT',
+  RingerMode.laut => 'LAUT',
+  RingerMode.vibrieren => 'VIBRIEREN',
+  RingerMode.lautlos => 'LAUTLOS',
+};
+
+/// Beschriftung für die Auswahl im Profilschirm.
+String ringerLabel(RingerMode mode) => switch (mode) {
+  RingerMode.unveraendert => 'Unverändert',
+  RingerMode.laut => 'Laut',
+  RingerMode.vibrieren => 'Vibrieren',
+  RingerMode.lautlos => 'Lautlos',
+};
+
 /// Kürzel der Wochentage nach `Calendar.DAY_OF_WEEK`: Sonntag ist die 1.
 const Map<int, String> kTagKuerzel = {
   2: 'Mo',
@@ -127,6 +152,7 @@ class ProfileInfo {
     required this.quietAfterEventMinutes,
     required this.quietWhileLocked,
     required this.quietSchedules,
+    this.quietRinger = RingerMode.unveraendert,
   });
 
   final String id;
@@ -163,6 +189,9 @@ class ProfileInfo {
   final bool quietWhileLocked;
   final List<QuietScheduleInfo> quietSchedules;
 
+  /// Klingelmodus des Telefons, solange die Ruhe dieses Profils greift.
+  final RingerMode quietRinger;
+
   factory ProfileInfo.fromMap(Map<dynamic, dynamic> map) {
     final until = map['untilAt'] as int?;
     return ProfileInfo(
@@ -189,6 +218,7 @@ class ProfileInfo {
       quietSchedules: (map['quietSchedules'] as List<dynamic>? ?? [])
           .map((e) => QuietScheduleInfo.fromMap(e as Map<dynamic, dynamic>))
           .toList(),
+      quietRinger: _ringerFrom(map['quietRinger'] as String?),
     );
   }
 }

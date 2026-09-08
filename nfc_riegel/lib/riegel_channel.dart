@@ -77,6 +77,7 @@ class RiegelChannel {
           'quietSchedules': profile.quietSchedules
               .map((plan) => plan.toMap())
               .toList(),
+          'quietRinger': ringerToNative(profile.quietRinger),
         }) ??
         false;
   }

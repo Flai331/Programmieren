@@ -271,4 +271,30 @@ void main() {
     expect(status.locked, isTrue);
   });
 
+  test('der Klingelmodus kommt aus der Kanal-Antwort', () {
+    final profil = ProfileInfo.fromMap({
+      'id': 'p1',
+      'name': 'Nacht',
+      'quietRinger': 'VIBRIEREN',
+    });
+
+    expect(profil.quietRinger, RingerMode.vibrieren);
+  });
+
+  test('ohne Angabe bleibt der Klingelmodus unveraendert', () {
+    final profil = ProfileInfo.fromMap({'id': 'p1', 'name': 'Nacht'});
+
+    expect(profil.quietRinger, RingerMode.unveraendert);
+  });
+
+  test('ein unbekannter Klingelmodus faellt auf unveraendert zurueck', () {
+    final profil = ProfileInfo.fromMap({
+      'id': 'p1',
+      'name': 'Nacht',
+      'quietRinger': 'FLUESTERN',
+    });
+
+    expect(profil.quietRinger, RingerMode.unveraendert);
+  });
+
 }

@@ -61,6 +61,11 @@ class RiegelChannel(private val activity: Activity) {
                             afterEventMinutes = call.argument<Int>("quietAfterEventMinutes") ?: 0,
                             whileLocked = call.argument<Boolean>("quietWhileLocked") ?: true,
                             schedules = wochenplaene(call.argument("quietSchedules")),
+                            ringer = runCatching {
+                                RingerMode.valueOf(
+                                    call.argument<String>("quietRinger") ?: "UNVERAENDERT",
+                                )
+                            }.getOrDefault(RingerMode.UNVERAENDERT),
                         ),
                     )
                     result.success(
@@ -311,6 +316,7 @@ class RiegelChannel(private val activity: Activity) {
                             "endMinute" to plan.endMinute,
                         )
                     },
+                    "quietRinger" to p.quiet.ringer.name,
                 )
             },
             "tags" to s.tags.map { t ->
