@@ -42,9 +42,6 @@ class QuietRinger(context: Context) {
             return
         }
 
-        if (!prefs.contains(KEY_VORHER)) {
-            prefs.edit().putInt(KEY_VORHER, audio.ringerMode).apply()
-        }
         setze(machbar(mode))
     }
 
@@ -59,17 +56,28 @@ class QuietRinger(context: Context) {
             mode
         }
 
+    /**
+     * Erst schreiben, dann vergessen. Scheitert das Zurückstellen — etwa weil
+     * der Zugriff inzwischen entzogen wurde —, muss der gemerkte Modus stehen
+     * bleiben: sonst bliebe das Telefon still, und beim nächsten Mal merkte
+     * sich Riegel diese Stille als den Zustand, zu dem er zurückkehren soll.
+     */
     private fun zuruecksetzen() {
         if (!prefs.contains(KEY_VORHER)) return
         val vorher = prefs.getInt(KEY_VORHER, AudioManager.RINGER_MODE_NORMAL)
-        prefs.edit().remove(KEY_VORHER).apply()
         runCatching { audio.ringerMode = vorher }
+            .onSuccess { prefs.edit().remove(KEY_VORHER).apply() }
     }
 
     /**
      * `setRingerMode` wirft `SecurityException`, wenn der Wechsel lautlos
      * berührt und der Zugriff fehlt. Ein Fehlschlag darf die übrige Wirkung
      * einer Sperre nicht abbrechen.
+     *
+     * Gemerkt wird erst nach dem geglückten Wechsel, und nur beim ersten: hat
+     * Riegel nichts verändert, gibt es auch nichts zurückzustellen, und bei
+     * mehreren Ruhen hintereinander soll der Zustand von ganz vorher erhalten
+     * bleiben, nicht der von zwischendurch.
      */
     private fun setze(mode: RingerMode) {
         val wert = when (mode) {
@@ -78,8 +86,14 @@ class QuietRinger(context: Context) {
             RingerMode.LAUTLOS -> AudioManager.RINGER_MODE_SILENT
             RingerMode.UNVERAENDERT -> return
         }
-        if (audio.ringerMode == wert) return
-        runCatching { audio.ringerMode = wert }
+        val vorher = audio.ringerMode
+        if (vorher == wert) return
+
+        runCatching { audio.ringerMode = wert }.onSuccess {
+            if (!prefs.contains(KEY_VORHER)) {
+                prefs.edit().putInt(KEY_VORHER, vorher).apply()
+            }
+        }
     }
 
     private companion object {

@@ -288,6 +288,19 @@ class QuietPlannerTest {
     }
 
     @Test
+    fun `vibrieren ist leiser als laut`() {
+        // Ohne diesen Fall bliebe die Rangfolge zwischen den beiden mittleren
+        // Stufen ungeprüft, und ein Vertauschen der Aufzählung fiele niemandem
+        // auf — bis nachts das Telefon klingelt.
+        val state = gesperrt(
+            profil(immerRuhe(RingerMode.LAUT), id = "p1"),
+            tagsueber(RingerMode.VIBRIEREN, id = "p2"),
+        )
+
+        assertEquals(RingerMode.VIBRIEREN, QuietPlanner.ringerMode(state, am(24, 12), zone))
+    }
+
+    @Test
     fun `ein ausdruecklicher Modus schlaegt unveraendert`() {
         val state = gesperrt(
             profil(immerRuhe(RingerMode.UNVERAENDERT), id = "p1"),

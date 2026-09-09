@@ -41,7 +41,8 @@ object LockCodec {
         }
 
     /**
-     * Liest siebzehn Felder (mit Ruhe), elf und zehn (mit Atempause) und sieben
+     * Liest neunzehn Felder (mit Klingelmodus), achtzehn (mit Freigabe auf
+     * Zeit), siebzehn (mit Ruhe), elf und zehn (mit Atempause) und sieben
      * (davor). Ein alter Satz bekommt die Vorgaben — stillschweigend zu
      * verwerfen hieße, gesperrte Apps zu vergessen.
      */

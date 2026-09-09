@@ -18,11 +18,13 @@ class LockCodecTest {
      * abgeschnitten statt über „das letzte Feld weg": sonst bricht jedes neu
      * angehängte Feld die älteren Fälle.
      */
-    private fun satzMit(profil: Profile, felder: Int): String =
-        LockCodec.encodeProfiles(listOf(profil))
-            .split(FELD)
-            .take(felder)
-            .joinToString(FELD)
+    private fun satzMit(profil: Profile, felder: Int): String {
+        val teile = LockCodec.encodeProfiles(listOf(profil)).split(FELD)
+        require(felder <= teile.size) {
+            "Der Kodierer schreibt nur ${teile.size} Felder, verlangt sind $felder"
+        }
+        return teile.take(felder).joinToString(FELD)
+    }
 
     @Test
     fun `Profile ueberstehen Kodieren und Dekodieren`() {
@@ -230,15 +232,22 @@ class LockCodecTest {
 
     @Test
     fun `ein Profilsatz ohne Klingelmodus liest sich als unveraendert`() {
-        // Achtzehn Felder — der Stand aus Build 18.
-        val alt = satzMit(
-            Profile(id = "p1", name = "Nacht", quiet = QuietSettings(enabled = true)),
-            felder = 18,
+        // Achtzehn Felder — der Stand aus Build 18. Geprüft wird das ganze
+        // Profil, nicht nur der Modus: sonst stünde nirgends, dass ein solcher
+        // Satz auch sonst noch heil ankommt.
+        val quiet = QuietSettings(enabled = true, whileLocked = false, afterEventMinutes = 20)
+        val vorher = Profile(
+            id = "p1",
+            name = "Nacht",
+            blockedPackages = setOf("com.a"),
+            durationMinutes = 45,
+            timedRelease = true,
+            quiet = quiet,
         )
 
-        val zurueck = LockCodec.decodeProfiles(alt).single()
+        val zurueck = LockCodec.decodeProfiles(satzMit(vorher, felder = 18)).single()
 
-        assertEquals(RingerMode.UNVERAENDERT, zurueck.quiet.ringer)
+        assertEquals(vorher.copy(quiet = quiet.copy(ringer = RingerMode.UNVERAENDERT)), zurueck)
     }
 
     @Test
