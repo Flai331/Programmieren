@@ -186,6 +186,15 @@ class RiegelChannel(private val activity: Activity) {
                     } else {
                         "aus"
                     }
+                    // Weicht ist von soll ab, fehlt ein Recht. Genau der Fall aus
+                    // dem Fehlerbericht vom 6. September waere so sichtbar gewesen.
+                    map["Klingelmodus"] = "ist=${QuietRinger(activity).current()}, " +
+                        "soll=${
+                            QuietPlanner.ringerMode(
+                                controller.engine.state(),
+                                System.currentTimeMillis(),
+                            )
+                        }"
                     map["Nutzungsdaten"] =
                         if (AndroidUsageSource(activity).granted()) "erlaubt" else "VERWEIGERT"
                     map["Android"] = "SDK ${Build.VERSION.SDK_INT} (${Build.VERSION.RELEASE})"
