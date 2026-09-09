@@ -365,3 +365,23 @@ nicht stören" — das stellt alles still, nicht nur die gewählten Nummern.
 - [ ] Schalter aus, Chip scannen → öffnet dauerhaft wie bisher, kein Schirm.
 - [ ] Eigene Zahl eingeben (z. B. 45) → Freigabe läuft 45 Minuten.
 - [ ] „Öffnen" mit leerem Feld → Hinweis „Zahl eingeben", nichts passiert.
+
+## Klingelmodus in der Ruhe
+
+- [ ] Profil mit Ruhe an, Klingelmodus „Vibrieren“, „Auch während einer Sperre“ an.
+      Sperren — das Telefon vibriert nur noch. Auch ohne „Bitte nicht stören“-Recht.
+- [ ] Entsperren — der Klingelmodus von vorher steht wieder da.
+- [ ] Klingelmodus „Lautlos“ ohne „Bitte nicht stören“-Recht: der Hinweis
+      „Ohne ‚Bitte nicht stören‘ bleibt es beim Vibrieren.“ steht im Schirm, und
+      beim Sperren vibriert es tatsächlich, statt still zu sein.
+- [ ] „Bitte nicht stören“ erlauben, wieder sperren — jetzt ist es still.
+- [ ] Klingelmodus „Unverändert“: Sperren ändert am Telefon nichts.
+- [ ] Zwei Profile gleichzeitig in Ruhe, eines „Laut“, eines „Lautlos“ — es bleibt still.
+- [ ] Klingelmodus während der Ruhe von Hand umstellen, dann Ruhe enden lassen —
+      der gemerkte Wert kommt zurück (so gewollt, siehe Entwurf).
+- [ ] Ruhe läuft über den „Bitte nicht stören“-Rückfall (kein Anruffilter):
+      nach dem Ende steht wirklich der Modus von vor dem Beginn da, nicht der,
+      den der Rückfall gesetzt hatte.
+- [ ] Fehlerbericht schicken: die Zeile „Klingelmodus: ist=…, soll=…“ steht drin
+      und stimmt.
+- [ ] Nach einem Neustart des Telefons mit laufender Sperre: der Modus stimmt weiter.
