@@ -116,7 +116,7 @@ class _SetupWizardState extends State<SetupWizard> {
         : status.profiles.first.blockedPackages.length;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Riegel einrichten')),
+      appBar: AppBar(title: const Text('Anker einrichten')),
       body: Stepper(
         currentStep: _step,
         onStepContinue: () => setState(() => _step = (_step + 1).clamp(0, 3)),
@@ -142,8 +142,9 @@ class _SetupWizardState extends State<SetupWizard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Der Riegel braucht die Bedienungshilfe, um gesperrte Apps zu erkennen, '
-                  'und den Geräteadministrator gegen Deinstallation.',
+                  'Ohne die Bedienungshilfe kann Anker Apps nicht wirklich '
+                  'schließen — die Sperre wäre nur eine Anzeige. Dazu kommt '
+                  'der Geräteadministrator gegen Deinstallation.',
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton(

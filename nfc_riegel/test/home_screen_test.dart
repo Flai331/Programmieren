@@ -85,14 +85,14 @@ void main() {
     stub(accessibility: true);
     await zeige(tester);
 
-    expect(find.text('Riegel offen'), findsOneWidget);
+    expect(find.text('Anker gelichtet'), findsOneWidget);
   });
 
   testWidgets('zeigt Gesperrt-Status mit Profilnamen', (tester) async {
     stub(accessibility: true, timeLocks: laufendeSperre());
     await zeige(tester);
 
-    expect(find.text('Riegel zu'), findsOneWidget);
+    expect(find.text('Anker gesetzt'), findsOneWidget);
     expect(find.textContaining('Arbeit'), findsWidgets);
   });
 
@@ -230,8 +230,8 @@ void main() {
     await zeige(tester);
 
     expect(find.textContaining('frei bis'), findsOneWidget);
-    expect(find.text('Riegel offen'), findsOneWidget);
-    expect(find.text('Riegel zu'), findsNothing);
+    expect(find.text('Anker gelichtet'), findsOneWidget);
+    expect(find.text('Anker gesetzt'), findsNothing);
   });
 
 }

@@ -51,6 +51,15 @@ void main() {
   });
 
   Future<void> zeige(WidgetTester tester) async {
+    // Ein echtes Telefon ist hoeher als die 800x600 des Testfensters. Mit der
+    // Vorgabe liegt der letzte Knopf des Schritts unterhalb des Stepper-Endes
+    // und laesst sich nicht antippen — das ist eine Eigenheit des Fensters,
+    // kein Fehler der App.
+    tester.view.physicalSize = const Size(1000, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       MaterialApp(
         home: SetupWizard(

@@ -122,7 +122,7 @@ class _ContactPickerScreenState extends State<ContactPickerScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Ohne Zugriff auf die Kontakte kann Riegel keine Namen anzeigen. '
+          'Ohne Zugriff auf die Kontakte kann Anker keine Namen anzeigen. '
           'Gespeichert wird nur die Rufnummer.',
           style: TextStyle(fontSize: 13, color: RiegelColors.fg2),
         ),

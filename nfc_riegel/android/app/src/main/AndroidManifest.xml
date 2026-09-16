@@ -36,7 +36,7 @@
     <uses-feature android:name="android.hardware.nfc" android:required="true"/>
 
     <application
-        android:label="Riegel"
+        android:label="Anker"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
@@ -117,7 +117,7 @@
         <service
             android:name=".BlockerService"
             android:exported="true"
-            android:label="Riegel"
+            android:label="Anker"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService"/>

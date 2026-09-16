@@ -363,7 +363,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Ohne Zugriff auf die Nutzungsdaten kann Riegel nicht wissen, '
+                  'Ohne Zugriff auf die Nutzungsdaten kann Anker nicht wissen, '
                   'wie lange du in einer App warst.',
                   style: TextStyle(fontSize: 13, color: RiegelColors.fg2),
                 ),
@@ -457,7 +457,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             title: const Text('Anrufe stumm schalten'),
             subtitle: const Text(
               'Klingelt nicht und vibriert nicht. Der Anruf läuft weiter und '
-              'steht danach im Anrufprotokoll — Riegel legt nicht auf.',
+              'steht danach im Anrufprotokoll — Anker legt nicht auf.',
             ),
             contentPadding: EdgeInsets.zero,
           ),
@@ -513,7 +513,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             if (_screeningGehalten == false) ...[
               const SizedBox(height: RiegelSpacing.s3),
               const Text(
-                'Riegel ist nicht die Anruffilter-App. Ohne diese Rolle bleibt '
+                'Anker ist nicht die Anruffilter-App. Ohne diese Rolle bleibt '
                 'nur „Bitte nicht stören" — das stellt alles still, nicht nur '
                 'die gewählten Nummern.',
                 style: TextStyle(fontSize: 13, color: RiegelColors.fg2),
@@ -522,7 +522,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               if (_screeningVerfuegbar)
                 OutlinedButton(
                   onPressed: _frageAnruffilter,
-                  child: const Text('Riegel zum Anruffilter machen'),
+                  child: const Text('Anker zum Anruffilter machen'),
                 ),
             ],
             // Der Zugriff wird an zwei Stellen gebraucht: als Rückfall für den

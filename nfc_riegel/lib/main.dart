@@ -25,7 +25,7 @@ void main() {
   FeedbackService.configure(
     notionToken: Secrets.notionToken,
     notionDbId: Secrets.notionDatabaseId,
-    appName: 'Riegel',
+    appName: 'Anker',
     supportEmail: Secrets.supportEmail,
     buildNumber: kBuildNumber,
   );
@@ -59,7 +59,7 @@ class RiegelApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Riegel',
+      title: 'Anker',
       navigatorKey: navigatorKey,
       navigatorObservers: [FeedbackService.screenObserver],
       theme: buildRiegelTheme(),

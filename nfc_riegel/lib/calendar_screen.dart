@@ -81,7 +81,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: RiegelSpacing.s4),
               child: Text(
-                'Ohne Berechtigung für den Kalender kann Riegel keine Termine sehen.',
+                'Ohne Berechtigung für den Kalender kann Anker keine Termine sehen.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: RiegelColors.danger,
                 ),

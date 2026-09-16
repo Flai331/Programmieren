@@ -181,7 +181,7 @@ class _AccessHint extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const Text(
-            'Riegel darf die Nutzungsdaten noch nicht lesen. Ohne sie gibt es '
+            'Anker darf die Nutzungsdaten noch nicht lesen. Ohne sie gibt es '
             'keine Screenzeit.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: RiegelColors.fg2),

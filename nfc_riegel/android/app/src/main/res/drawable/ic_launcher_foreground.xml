@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- res/drawable/ic_launcher_foreground.xml
+     Siegelring: offener Bogen in Eisblau, geschlossen von einem
+     Bernstein-Bolzen. Kunstfläche 96x96, auf 108 skaliert und zentriert,
+     damit sie in der Android-Sicherheitszone bleibt. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.72"
+        android:scaleY="0.72"
+        android:translateX="19.44"
+        android:translateY="19.44">
+        <path
+            android:pathData="M48,20 a28,28 0 1 0 22,45"
+            android:strokeColor="#62D9E8"
+            android:strokeWidth="8.5"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M62.5,41 h17 a6.5,6.5 0 0 1 0,13 h-17 a6.5,6.5 0 0 1 0,-13 z"
+            android:fillColor="#F5A65B" />
+    </group>
+</vector>

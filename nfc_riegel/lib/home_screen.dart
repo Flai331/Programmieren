@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:feedback/feedback.dart';
 import 'package:flutter/material.dart';
 
+import 'brand.dart';
 import 'calendar_screen.dart';
 import 'lock_status.dart';
 import 'profile_screen.dart';
@@ -8,6 +11,8 @@ import 'riegel_channel.dart';
 import 'screen_time_tab.dart';
 import 'tags_screen.dart';
 import 'theme.dart';
+import 'ui/amber_slab.dart';
+import 'ui/anker_surfaces.dart';
 
 /// Status, Profile und Chips.
 class HomeScreen extends StatefulWidget {
@@ -24,10 +29,69 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _accessibility = true;
   bool _adminActive = false;
 
+  /// Der Countdown auf der Bernsteinkachel ist das größte Element der App —
+  /// er muss laufen, nicht bei jedem Neuladen springen. Der Takt läuft nur,
+  /// solange überhaupt etwas herunterzuzählen ist.
+  Timer? _takt;
+
   @override
   void initState() {
     super.initState();
     _refresh();
+  }
+
+  @override
+  void dispose() {
+    _takt?.cancel();
+    super.dispose();
+  }
+
+  /// Die Sperrfenster des heutigen Tages als Anteile 0..1.
+  ///
+  /// Gespeist allein aus dem Kalender: nur dort ist ein Anfang bekannt. Eine
+  /// Zeitsperre kennt nur ihr Ende, und ein Balken ohne Anfang wäre geraten.
+  /// Fenster, die über Mitternacht reichen, werden am Tagesrand beschnitten.
+  List<({double start, double end, bool active})> _tagesfenster(LockStatus status) {
+    final jetzt = DateTime.now();
+    final tagesbeginn = DateTime(jetzt.year, jetzt.month, jetzt.day);
+    final tagesende = tagesbeginn.add(const Duration(days: 1));
+    const tagInSekunden = 24 * 60 * 60;
+
+    double anteil(DateTime t) {
+      if (!t.isAfter(tagesbeginn)) return 0;
+      if (!t.isBefore(tagesende)) return 1;
+      return t.difference(tagesbeginn).inSeconds / tagInSekunden;
+    }
+
+    final fenster = <({double start, double end, bool active})>[];
+    for (final w in status.calendar.windows) {
+      if (!w.endsAt.isAfter(tagesbeginn) || !w.startsAt.isBefore(tagesende)) continue;
+      fenster.add((
+        start: anteil(w.startsAt),
+        end: anteil(w.endsAt),
+        active: !jetzt.isBefore(w.startsAt) && jetzt.isBefore(w.endsAt),
+      ));
+    }
+    return fenster;
+  }
+
+  static double _jetztAnteil() {
+    final jetzt = DateTime.now();
+    return (jetzt.hour * 3600 + jetzt.minute * 60 + jetzt.second) / (24 * 60 * 60);
+  }
+
+  /// Startet oder stoppt den Sekundentakt, je nachdem ob eine Sperre ein Ende
+  /// hat. Eine Chipsperre ohne Ende braucht keinen.
+  void _taktAnpassen(LockStatus? status) {
+    final zaehlt = status != null && (status.earliestEnd != null || status.releaseEndsAt != null);
+    if (zaehlt && _takt == null) {
+      _takt = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    } else if (!zaehlt) {
+      _takt?.cancel();
+      _takt = null;
+    }
   }
 
   Future<void> _refresh() async {
@@ -40,6 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _accessibility = accessibility;
         _adminActive = admin;
       });
+      _taktAnpassen(status);
     }
   }
 
@@ -155,7 +220,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Administratorrecht abgeben?'),
         content: const Text(
-          'Danach lässt sich Riegel wieder normal deinstallieren — der Schutz '
+          'Danach lässt sich Anker wieder normal deinstallieren — der Schutz '
           'davor entfällt. Du kannst das Recht in der Einrichtung jederzeit '
           'wieder erteilen.',
         ),
@@ -237,15 +302,26 @@ class _HomeScreenState extends State<HomeScreen> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Riegel'),
+          title: AnkerLockup(locked: status.locked),
           actions: [
+            // Die Pille sagt den Zustand auch dann, wenn die Kachel gerade
+            // weggescrollt ist.
+            Padding(
+              padding: const EdgeInsets.only(right: RiegelSpacing.s2),
+              child: Center(
+                child: StatusPill(
+                  label: status.locked ? 'AKTIV' : 'OFFEN',
+                  locked: status.locked,
+                ),
+              ),
+            ),
             IconButton(
               tooltip: 'Fehler melden',
               icon: const Icon(Icons.bug_report_outlined),
               onPressed: _reportProblem,
             ),
           ],
-          // Der erste Reiter heißt „Sperre", nicht „Riegel" — die Kopfzeile
+          // Der erste Reiter heißt „Sperre", nicht „Anker" — die Kopfzeile
           // trägt schon den Namen der App.
           bottom: const TabBar(
             tabs: [
@@ -268,19 +344,22 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: RiegelSpacing.s4),
                   ],
                   _StatusTile(status: status),
+                  // Das Band sagt auf einen Blick, was eine Liste von Uhrzeiten
+                  // nicht sagt: wo im Tag die Sperren liegen. Ohne Fenster
+                  // wäre es eine leere Schiene — dann bleibt es weg.
+                  if (_tagesfenster(status).isNotEmpty) ...[
+                    const SizedBox(height: RiegelSpacing.s5),
+                    SectionLabel('Heute'),
+                    const SizedBox(height: RiegelSpacing.s2),
+                    DayBand(windows: _tagesfenster(status), now: _jetztAnteil()),
+                  ],
                   const SizedBox(height: RiegelSpacing.s6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'PROFILE',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                      TextButton(
-                        onPressed: _addProfile,
-                        child: const Text('Neu'),
-                      ),
-                    ],
+                  SectionLabel(
+                    'Profile',
+                    trailing: TextButton(
+                      onPressed: _addProfile,
+                      child: const Text('Neu'),
+                    ),
                   ),
                   const SizedBox(height: RiegelSpacing.s2),
                   for (final profile in status.profiles) ...[
@@ -403,74 +482,30 @@ class _StatusTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final locked = status.locked;
-    return Container(
-      padding: const EdgeInsets.all(RiegelSpacing.s5),
-      decoration: BoxDecoration(
-        color: RiegelColors.bgElev1,
-        borderRadius: BorderRadius.circular(RiegelRadii.xl),
-        border: Border.all(
-          color: locked ? const Color(0x59F5A65B) : const Color(0x4762D9E8),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: locked ? RiegelColors.lockedTint : RiegelColors.accentTint,
-              borderRadius: BorderRadius.circular(RiegelRadii.lg),
-            ),
-            child: Icon(
-              locked ? Icons.lock_rounded : Icons.lock_open_rounded,
-              size: 24,
-              color: locked ? RiegelColors.locked : RiegelColors.accent,
-            ),
-          ),
-          const SizedBox(width: RiegelSpacing.s4),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  locked ? 'Riegel zu' : 'Riegel offen',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: locked
-                        ? RiegelColors.lockedBright
-                        : RiegelColors.fg1,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  _subtitle(status),
-                  style: const TextStyle(fontSize: 13, color: RiegelColors.fg2),
-                ),
-                // Ruhe steht unter der Sperre, nicht daneben: sie kann auch
-                // ohne Sperre gelten, ist aber nie die Hauptauskunft.
-                if (status.quietNow) ...[
-                  const SizedBox(height: 3),
-                  const Row(
-                    children: [
-                      Icon(
-                        Icons.notifications_off_rounded,
-                        size: 13,
-                        color: RiegelColors.fg3,
-                      ),
-                      SizedBox(width: RiegelSpacing.s1),
-                      Text(
-                        'Ruhe — Anrufe sind stumm',
-                        style: TextStyle(fontSize: 12, color: RiegelColors.fg3),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
+    final ende = status.releaseEndsAt ?? status.earliestEnd;
+
+    return AmberSlab(
+      locked: locked,
+      title: locked ? 'Anker gesetzt' : 'Anker gelichtet',
+      subtitle: _subtitle(status),
+      countdown: ende == null ? null : _restzeit(ende),
+      // Kein Fortschrittsbalken: der Zustand kennt nur das Ende einer Sperre,
+      // nicht ihren Anfang. Ein Balken müsste ihn erfinden.
+      footnote: status.quietNow ? 'Ruhe — Anrufe sind stumm' : null,
     );
+  }
+
+  /// Verbleibende Zeit als hh:mm:ss. Abgelaufenes zeigt Null statt negativer
+  /// Zahlen — die Kachel hängt am Sekundentakt und kann eine Sekunde vor dem
+  /// Neuladen über das Ende hinauslaufen.
+  static String _restzeit(DateTime ende) {
+    var rest = ende.difference(DateTime.now());
+    if (rest.isNegative) rest = Duration.zero;
+    final s = rest.inSeconds;
+    final hh = (s ~/ 3600).toString().padLeft(2, '0');
+    final mm = ((s % 3600) ~/ 60).toString().padLeft(2, '0');
+    final ss = (s % 60).toString().padLeft(2, '0');
+    return '$hh:$mm:$ss';
   }
 
   String _subtitle(LockStatus status) {
@@ -551,6 +586,7 @@ class _ProfileRow extends StatelessWidget {
       title: profile.name,
       subtitle: subtitle,
       enabled: !locked,
+      highlighted: locked,
       onTap: onTap,
       trailingText: locked && profile.mode == LockMode.open ? 'sperrt' : null,
       // Auch „Bis Scan" lässt sich ohne Chip zumachen — nur eben nicht ohne
@@ -580,6 +616,7 @@ class _NavRow extends StatelessWidget {
     required this.onTap,
     this.trailingText,
     this.action,
+    this.highlighted = false,
   });
 
   final String title;
@@ -589,21 +626,25 @@ class _NavRow extends StatelessWidget {
   final String? trailingText;
   final _RowAction? action;
 
+  /// Das laufende Profil bekommt die Bernstein-Tönung — Bernstein heißt in
+  /// dieser Oberfläche ausschließlich „gesperrt".
+  final bool highlighted;
+
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: RiegelColors.bgElev1,
-      borderRadius: BorderRadius.circular(RiegelRadii.lg),
-      child: InkWell(
-        onTap: enabled ? onTap : null,
+    // Die Fläche trägt den Verlauf, nicht das Material darunter — sonst läge
+    // eine flache Farbe über der Lichtkante.
+    return DecoratedBox(
+      decoration: highlighted ? ankerSurfaceLocked() : ankerSurface(),
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(RiegelRadii.lg),
-        child: Container(
-          padding: const EdgeInsets.all(RiegelSpacing.s4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(RiegelRadii.lg),
-            border: Border.all(color: RiegelColors.borderDefault),
-          ),
-          child: Row(
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(RiegelRadii.lg),
+          child: Padding(
+            padding: const EdgeInsets.all(RiegelSpacing.s4),
+            child: Row(
             children: [
               Expanded(
                 child: Column(
@@ -613,7 +654,10 @@ class _NavRow extends StatelessWidget {
                       title,
                       style: TextStyle(
                         fontSize: 14,
-                        color: enabled ? RiegelColors.fg1 : RiegelColors.fg4,
+                        fontWeight: highlighted ? FontWeight.w600 : FontWeight.w400,
+                        color: highlighted
+                            ? RiegelColors.lockedBright
+                            : (enabled ? RiegelColors.fg1 : RiegelColors.fg4),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -646,6 +690,7 @@ class _NavRow extends StatelessWidget {
                   color: enabled ? RiegelColors.fg3 : RiegelColors.fg4,
                 ),
             ],
+            ),
           ),
         ),
       ),
