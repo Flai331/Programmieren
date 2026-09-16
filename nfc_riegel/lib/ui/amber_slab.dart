@@ -45,7 +45,10 @@ class AmberSlab extends StatelessWidget {
       duration: const Duration(milliseconds: 480),
       curve: Curves.easeOutCubic,
       width: double.infinity,
-      padding: const EdgeInsets.all(RiegelSpacing.s5 + 2),
+      // Die Polsterung sitzt bewusst NICHT hier, sondern innen um den Inhalt:
+      // der Stack fuellt sonst nur das gepolsterte Innere, und die Lichtkante
+      // wird als sichtbares Kaestchen mitten in der Flaeche gezeichnet statt
+      // an ihrer Aussenkante.
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(RiegelRadii.xxl),
         gradient: locked
@@ -98,7 +101,9 @@ class AmberSlab extends StatelessWidget {
             Positioned.fill(
               child: const IgnorePointer(child: RepaintBoundary(child: GrainOverlay())),
             ),
-          Column(
+          Padding(
+            padding: const EdgeInsets.all(RiegelSpacing.s5 + 2),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -186,6 +191,7 @@ class AmberSlab extends StatelessWidget {
                 ),
               ],
             ],
+            ),
           ),
         ],
       ),
