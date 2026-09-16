@@ -466,10 +466,14 @@ class Fehlerbericht {
     return _emailFallback(text);
   }
 
+  /// Rückfallebene: Adresse, an die ein Bericht als E-Mail-Entwurf geht,
+  /// wenn Notion nicht erreichbar ist oder kein Token in der App steckt.
+  static const String _fallbackMail = 'error.404.found@outlook.de';
+
   static Future<bool> _emailFallback(String text) async {
     final uri = Uri(
       scheme: 'mailto',
-      path: 'klaasotte99@gmail.com',
+      path: _fallbackMail,
       queryParameters: {
         'subject': '[$_appName] Fehlerbericht',
         'body': text,

@@ -9,7 +9,8 @@ Alle Berichte landen automatisch in Notion. Jede App richtet sich beim
 allerersten Fehlerbericht selbst eine eigene Datenbank unter der
 gemeinsamen "🐞 Fehlerzentrale" ein. Ist kein Notion-Token gesetzt oder
 schlägt Notion endgültig fehl, öffnet sich stattdessen die E-Mail-App mit
-dem vollständigen Berichtstext.
+dem vollständigen Berichtstext — als Empfänger steht
+`error.404.found@outlook.de` fest im Modul (`_fallbackMail`).
 
 ## Einmalig (nur ein Mal für alle Apps)
 
