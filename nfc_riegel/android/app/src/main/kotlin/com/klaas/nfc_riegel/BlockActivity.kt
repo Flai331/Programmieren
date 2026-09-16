@@ -78,19 +78,21 @@ class BlockActivity : Activity() {
             setPadding(dp(32), dp(40), dp(32), dp(32))
         }
 
+        // Bernstein in voller Deckung, nicht als Tönung: auf diesem Schirm ist
+        // die Sperre die ganze Aussage, und Bernstein heißt „zu".
         val glyph = TextView(this).apply {
             text = "🔒"
-            textSize = 30f
+            textSize = 34f
             gravity = Gravity.CENTER
-            background = roundedRect(BlockColors.LOCKED_TINT, dp(24))
-            layoutParams = LinearLayout.LayoutParams(dp(76), dp(76)).apply {
-                bottomMargin = dp(24)
+            background = roundedRect(BlockColors.LOCKED, dp(28))
+            layoutParams = LinearLayout.LayoutParams(dp(88), dp(88)).apply {
+                bottomMargin = dp(30)
             }
         }
 
         val headline = TextView(this).apply {
             text = "Gesperrt"
-            textSize = 30f
+            textSize = 26f
             setTypeface(null, Typeface.BOLD)
             setTextColor(BlockColors.FG_1)
             gravity = Gravity.CENTER
@@ -100,12 +102,14 @@ class BlockActivity : Activity() {
         // Sekundenwechsel zappeln. Ohne Timer bleibt die View unsichtbar —
         // ein Platzhalter sähe aus, als lade sie noch.
         countdown = TextView(this).apply {
-            textSize = 42f
+            // Das größte Element des Schirms — die Restzeit ist die einzige
+            // Auskunft, die hier wirklich zählt.
+            textSize = 56f
             typeface = Typeface.MONOSPACE
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(BlockColors.LOCKED_BRIGHT)
             gravity = Gravity.CENTER
-            setPadding(0, dp(14), 0, dp(4))
+            setPadding(0, dp(22), 0, dp(6))
         }
 
         hint = TextView(this).apply {

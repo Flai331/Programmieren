@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'riegel_channel.dart';
 import 'screen_time.dart';
 import 'theme.dart';
+import 'ui/anker_surfaces.dart';
 
 /// Tagesnutzung ab Mitternacht. Zweiter Reiter des Hauptschirms.
 class ScreenTimeTab extends StatefulWidget {
@@ -99,6 +100,9 @@ class _ScreenTimeTabState extends State<ScreenTimeTab>
 
     final lang = apps.where((a) => a.duration >= kUsageThreshold).toList();
     final kurz = apps.length - lang.length;
+    // Ausdrücklich das Maximum bilden statt das erste Element zu nehmen: ob die
+    // native Seite absteigend liefert, ist nirgends zugesichert.
+    final laengste = lang.fold<int>(0, (m, a) => a.duration.inSeconds > m ? a.duration.inSeconds : m);
     final summe = apps.fold<Duration>(
       Duration.zero,
       (acc, a) => acc + a.duration,
@@ -113,8 +117,7 @@ class _ScreenTimeTabState extends State<ScreenTimeTab>
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(RiegelSpacing.s4),
         children: [
-          Text('HEUTE', style: Theme.of(context).textTheme.labelSmall),
-          const SizedBox(height: RiegelSpacing.s2),
+          const SectionLabel('Heute'),
           Text(
             formatUsage(summe),
             style: const TextStyle(
@@ -126,31 +129,15 @@ class _ScreenTimeTabState extends State<ScreenTimeTab>
           const SizedBox(height: RiegelSpacing.s6),
           if (lang.isEmpty)
             const Text('Heute noch keine App länger als eine Minute benutzt.'),
+          // Der Balken misst an der längsten App des Tages, nicht an der Summe:
+          // sonst wäre an einem vollen Tag jeder Balken ein Strich.
           for (final app in lang)
             Padding(
               padding: const EdgeInsets.only(bottom: RiegelSpacing.s3),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      app.name,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: RiegelColors.fg1,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    formatUsage(app.duration),
-                    style: const TextStyle(
-                      fontFamily: kMonoFamily,
-                      fontSize: 13,
-                      color: RiegelColors.fg2,
-                    ),
-                  ),
-                ],
+              child: UsageRow(
+                app: app.name,
+                fraction: laengste == 0 ? 0 : app.duration.inSeconds / laengste,
+                time: formatUsage(app.duration),
               ),
             ),
           if (kurz > 0) ...[

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'lock_status.dart';
 import 'riegel_channel.dart';
 import 'theme.dart';
+import 'ui/anker_surfaces.dart';
 
 /// Angelernte Chips anzeigen, neue anlernen, alte löschen.
 class TagsScreen extends StatefulWidget {
@@ -79,18 +80,63 @@ class _TagsScreenState extends State<TagsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(RiegelSpacing.s4),
         children: [
+          // Die Anlernfläche steht oben und ist der Weg, nicht eine Zeile in
+          // der Liste. Gestrichelt, weil sie auf etwas wartet, das noch fehlt.
+          _AnlernFlaeche(onTap: _enroll),
+          const SizedBox(height: RiegelSpacing.s6),
+          SectionLabel('Angelernt · ${_status.tags.length}'),
           for (final tag in _status.tags)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.nfc, color: RiegelColors.accent),
-              title: Text(tag.label),
-              subtitle: Text(
-                _profileName(tag.profileId),
-                style: const TextStyle(fontSize: 12, color: RiegelColors.fg3),
-              ),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () => _delete(tag),
+            Padding(
+              padding: const EdgeInsets.only(bottom: RiegelSpacing.s2),
+              child: Container(
+                decoration: ankerSurface(radius: RiegelRadii.xl),
+                padding: const EdgeInsets.all(RiegelSpacing.s4),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: RiegelColors.accentTint,
+                        borderRadius: BorderRadius.circular(RiegelRadii.md + 2),
+                      ),
+                      child: const Icon(
+                        Icons.nfc,
+                        size: 19,
+                        color: RiegelColors.accent,
+                      ),
+                    ),
+                    const SizedBox(width: RiegelSpacing.s3),
+                    // Der Ort steht groß, das Profil klein darunter: ein Chip
+                    // ist ein Ort — „Schreibtisch", „Nachttisch" —, kein Knopf.
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tag.label,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: RiegelColors.fg1,
+                            ),
+                          ),
+                          Text(
+                            _profileName(tag.profileId),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: RiegelColors.fg3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => _delete(tag),
+                    ),
+                  ],
+                ),
               ),
             ),
           if (_status.tags.isEmpty)
@@ -108,6 +154,60 @@ class _TagsScreenState extends State<TagsScreen> {
       if (p.id == id) return p.name;
     }
     return 'Unbekannt';
+  }
+}
+
+/// Die Fläche zum Anlernen: gestrichelter Rahmen, pulsierender NFC-Ring.
+class _AnlernFlaeche extends StatelessWidget {
+  const _AnlernFlaeche({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(RiegelRadii.xxl - 4),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(
+          vertical: RiegelSpacing.s8 - 4,
+          horizontal: RiegelSpacing.s5,
+        ),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(RiegelRadii.xxl - 4),
+          color: RiegelColors.accent.withValues(alpha: 0.06),
+          border: Border.all(
+            color: RiegelColors.accent.withValues(alpha: 0.4),
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          children: [
+            const NfcPulse(),
+            const SizedBox(height: RiegelSpacing.s4),
+            const Text(
+              'Neuen Chip anlernen',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: RiegelColors.fg1,
+              ),
+            ),
+            const SizedBox(height: RiegelSpacing.s1 + 2),
+            const Text(
+              'Chip an die Rückseite halten und den Ort benennen.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.5,
+                color: RiegelColors.fg2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
