@@ -120,8 +120,11 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            ProfileScreen(profile: profile, channel: widget.channel),
+        builder: (_) => ProfileScreen(
+          profile: profile,
+          channel: widget.channel,
+          calendar: _status?.calendar ?? CalendarInfo.empty,
+        ),
       ),
     );
     await _refresh();

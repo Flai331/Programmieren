@@ -12,7 +12,10 @@ void main() {
 
   Map<dynamic, dynamic>? gespeichert;
 
-  void stub({required bool usageGranted}) {
+  void stub({
+    required bool usageGranted,
+    List<Map<String, String>> kalender = const [],
+  }) {
     gespeichert = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -24,6 +27,8 @@ void main() {
               return true;
             case 'openUsageAccessSettings':
               return true;
+            case 'deviceCalendars':
+              return kalender;
           }
           return null;
         });
@@ -100,11 +105,32 @@ void main() {
     home: ProfileScreen(profile: profil, channel: RiegelChannel(channel)),
   );
 
+  Widget kalenderSchirm({
+    bool an = true,
+    ProfileInfo profile = profil,
+  }) => MaterialApp(
+    home: ProfileScreen(
+      profile: profile,
+      channel: RiegelChannel(channel),
+      calendar: CalendarInfo.fromMap({
+        'enabled': an,
+        'permissionGranted': true,
+        'keywordMarker': '[Riegel]',
+      }),
+    ),
+  );
+
+  const privat = {'id': 'cal1', 'name': 'Privat', 'account': 'ich@example.com'};
+
   testWidgets('mit Berechtigung erscheint der Schalter', (tester) async {
     stub(usageGranted: true);
     await tester.pumpWidget(screen());
     await tester.pumpAndSettle();
 
+    // Der neue Abschnitt KALENDER schiebt die Atempause aus dem
+    // Anfangsfenster der Liste — ohne Scrollen ist der Schalter noch gar
+    // nicht aufgebaut.
+    await scrolleZu(tester, find.text('Atempause'));
     expect(find.text('Atempause'), findsOneWidget);
   });
 
@@ -115,6 +141,9 @@ void main() {
     await tester.pumpWidget(screen());
     await tester.pumpAndSettle();
 
+    // Wie oben: der Abschnitt KALENDER davor schiebt den Hinweis aus dem
+    // Anfangsfenster der Liste.
+    await scrolleZu(tester, find.textContaining('Nutzungsdaten'));
     expect(find.textContaining('Nutzungsdaten'), findsOneWidget);
     expect(find.text('Zugriff erlauben'), findsOneWidget);
     // Nicht auf `Slider` prüfen: das Profil steht auf „Auf Zeit" und zeigt
@@ -132,8 +161,7 @@ void main() {
     // Den Schalter ueber seinen Titel suchen: unter der Atempause stehen
     // inzwischen die Schalter der Ruhe.
     final pause = find.widgetWithText(SwitchListTile, 'Atempause');
-    await tester.ensureVisible(pause);
-    await tester.pumpAndSettle();
+    await scrolleZu(tester, pause);
     await tester.tap(pause);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Sichern'));
@@ -284,5 +312,75 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(gespeichert!['quietRinger'], 'VIBRIEREN');
+  });
+
+  testWidgets('ausgeschalteter Kalender zeigt nur den Hinweis', (tester) async {
+    stub(usageGranted: true, kalender: [privat]);
+    await tester.pumpWidget(kalenderSchirm(an: false));
+    await tester.pumpAndSettle();
+
+    await scrolleZu(tester, find.text('Die Kalenderfunktion ist aus.'));
+    expect(find.text('Zum Kalender'), findsOneWidget);
+    expect(find.text('Privat'), findsNothing);
+  });
+
+  testWidgets('gespeicherte Auswahl steht in der Kalenderzeile', (tester) async {
+    stub(usageGranted: true, kalender: [privat]);
+    await tester.pumpWidget(
+      kalenderSchirm(
+        profile: const ProfileInfo(
+          id: 'p1',
+          name: 'Arbeit',
+          blockedPackages: [],
+          mode: LockMode.timer,
+          durationMinutes: 60,
+          untilAt: null,
+          pinCalendarEnd: false,
+          timedRelease: false,
+          pauseEnabled: false,
+          pauseStepMinutes: 15,
+          pauseBaseSeconds: 5,
+          pauseResetMinutes: 15,
+          quietEnabled: false,
+          quietScope: QuietScope.alle,
+          quietNumbers: [],
+          quietAfterEventMinutes: 0,
+          quietWhileLocked: true,
+          quietSchedules: [],
+          calendars: {'cal1': CalendarMatch.all},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await scrolleZu(tester, find.byKey(const ValueKey('kalender-cal1')));
+    expect(find.text('Privat'), findsOneWidget);
+    expect(find.text('alle Termine'), findsOneWidget);
+  });
+
+  testWidgets('Kalenderauswahl und Stichwort ueberall werden gesichert', (
+    tester,
+  ) async {
+    stub(usageGranted: true, kalender: [privat]);
+    await tester.pumpWidget(kalenderSchirm());
+    await tester.pumpAndSettle();
+
+    final auswahl = find.byKey(const ValueKey('kalender-cal1'));
+    await scrolleZu(tester, auswahl);
+    await tester.tap(auswahl);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('nur Stichwort').last);
+    await tester.pumpAndSettle();
+
+    final ueberall = find.textContaining('in jedem Kalender');
+    await scrolleZu(tester, ueberall);
+    await tester.tap(ueberall);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Sichern'));
+    await tester.pumpAndSettle();
+
+    expect(gespeichert!['calendars'], {'cal1': 'KEYWORD'});
+    expect(gespeichert!['keywordEverywhere'], isTrue);
   });
 }

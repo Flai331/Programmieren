@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_picker_screen.dart';
+import 'calendar_screen.dart';
 import 'contact_picker_screen.dart';
 import 'lock_status.dart';
 import 'riegel_channel.dart';
@@ -12,10 +13,15 @@ class ProfileScreen extends StatefulWidget {
     super.key,
     required this.profile,
     required this.channel,
+    this.calendar = CalendarInfo.empty,
   });
 
   final ProfileInfo profile;
   final RiegelChannel channel;
+
+  /// Hauptschalter, Berechtigung und Stichwort — gelten für alle Profile und
+  /// entscheiden, ob der Abschnitt KALENDER Auswahl oder Hinweis zeigt.
+  final CalendarInfo calendar;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -45,6 +51,12 @@ class _ProfileScreenState extends State<ProfileScreen>
     widget.profile.quietSchedules,
   );
   late RingerMode _quietRinger = widget.profile.quietRinger;
+  late final Map<String, CalendarMatch> _kalenderAuswahl = Map.of(
+    widget.profile.calendars,
+  );
+  late bool _stichwortUeberall = widget.profile.keywordEverywhere;
+  late CalendarInfo _kalender = widget.calendar;
+  List<DeviceCalendarInfo> _geraeteKalender = const [];
   bool? _usageGranted;
   bool _screeningVerfuegbar = false;
   bool? _screeningGehalten;
@@ -55,6 +67,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _ladeBerechtigung();
+    _ladeKalender();
   }
 
   /// Rolle und Berechtigungen werden in Systemdialogen vergeben. Zurueck in der
@@ -76,6 +89,30 @@ class _ProfileScreenState extends State<ProfileScreen>
       _screeningGehalten = gehalten;
       _dndErlaubt = dnd;
     });
+  }
+
+  Future<void> _ladeKalender() async {
+    if (!_kalender.enabled || !_kalender.permissionGranted) return;
+    final liste = await widget.channel.deviceCalendars();
+    if (mounted) setState(() => _geraeteKalender = liste);
+  }
+
+  /// Hauptschalter und Berechtigung liegen im Kalender-Schirm. Beim Zurückkommen
+  /// den neuen Stand holen — sonst stünde der Hinweis noch da, obwohl der
+  /// Kalender längst an ist.
+  Future<void> _oeffneKalender() async {
+    final status = await widget.channel.getState();
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CalendarScreen(status: status, channel: widget.channel),
+      ),
+    );
+    final neu = await widget.channel.getState();
+    if (!mounted) return;
+    setState(() => _kalender = neu.calendar);
+    await _ladeKalender();
   }
 
   @override
@@ -235,6 +272,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         quietWhileLocked: _quietWhileLocked,
         quietSchedules: _quietSchedules,
         quietRinger: _quietRinger,
+        calendars: _kalenderAuswahl,
+        keywordEverywhere: _stichwortUeberall,
       ),
     );
     if (!mounted) return;
@@ -259,6 +298,70 @@ class _ProfileScreenState extends State<ProfileScreen>
         ),
       );
     }
+  }
+
+  List<Widget> _kalenderAbschnitt() {
+    if (!_kalender.enabled || !_kalender.permissionGranted) {
+      return [
+        const Text(
+          'Die Kalenderfunktion ist aus.',
+          style: TextStyle(fontSize: 13, color: RiegelColors.fg2),
+        ),
+        const SizedBox(height: RiegelSpacing.s3),
+        OutlinedButton(
+          onPressed: _oeffneKalender,
+          child: const Text('Zum Kalender'),
+        ),
+      ];
+    }
+    return [
+      SwitchListTile(
+        value: _stichwortUeberall,
+        onChanged: (v) => setState(() => _stichwortUeberall = v),
+        title: Text('Stichwort „${_kalender.keywordMarker}" in jedem Kalender'),
+        subtitle: const Text(
+          'Termine mit dem Stichwort im Titel sperren dieses Profil, egal in '
+          'welchem Kalender sie stehen',
+        ),
+        contentPadding: EdgeInsets.zero,
+      ),
+      if (_geraeteKalender.isEmpty)
+        const Text(
+          'Kein Kalender auf diesem Gerät gefunden.',
+          style: TextStyle(fontSize: 13, color: RiegelColors.fg3),
+        ),
+      // Kalender, die das Gerät nicht mehr kennt, bleiben in der Auswahl
+      // gespeichert, erscheinen hier aber nicht — ändern lässt sich an ihnen
+      // ohnehin nichts.
+      for (final k in _geraeteKalender)
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(k.name),
+          subtitle: Text(k.account),
+          trailing: DropdownButton<CalendarMatch?>(
+            key: ValueKey('kalender-${k.id}'),
+            value: _kalenderAuswahl[k.id],
+            items: const [
+              DropdownMenuItem<CalendarMatch?>(value: null, child: Text('aus')),
+              DropdownMenuItem<CalendarMatch?>(
+                value: CalendarMatch.all,
+                child: Text('alle Termine'),
+              ),
+              DropdownMenuItem<CalendarMatch?>(
+                value: CalendarMatch.keyword,
+                child: Text('nur Stichwort'),
+              ),
+            ],
+            onChanged: (art) => setState(() {
+              if (art == null) {
+                _kalenderAuswahl.remove(k.id);
+              } else {
+                _kalenderAuswahl[k.id] = art;
+              }
+            }),
+          ),
+        ),
+    ];
   }
 
   @override
@@ -355,6 +458,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
             contentPadding: EdgeInsets.zero,
           ),
+          const SizedBox(height: RiegelSpacing.s6),
+          Text('KALENDER', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: RiegelSpacing.s2),
+          ..._kalenderAbschnitt(),
           const SizedBox(height: RiegelSpacing.s6),
           Text('ATEMPAUSE', style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: RiegelSpacing.s2),
