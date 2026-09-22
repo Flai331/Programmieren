@@ -302,4 +302,58 @@ void main() {
     expect(profil.quietRinger, RingerMode.unveraendert);
   });
 
+  // withBlockedPackages ist eine eigene Methode statt Feld-fuer-Feld-Kopie
+  // beim Aufrufer (Setup-Wizard): dort ging jedes neue Feld still verloren,
+  // etwa die Kalenderauswahl und der Klingelmodus.
+  test('withBlockedPackages behaelt alle anderen Felder des Profils', () {
+    const voll = ProfileInfo(
+      id: 'p1',
+      name: 'Arbeit',
+      blockedPackages: ['com.a'],
+      mode: LockMode.until,
+      durationMinutes: 77,
+      untilAt: null,
+      pinCalendarEnd: true,
+      timedRelease: true,
+      pauseEnabled: true,
+      pauseStepMinutes: 33,
+      pauseBaseSeconds: 9,
+      pauseResetMinutes: 44,
+      quietEnabled: true,
+      quietScope: QuietScope.ausgewaehlte,
+      quietNumbers: ['0176123'],
+      quietAfterEventMinutes: 12,
+      quietWhileLocked: false,
+      quietSchedules: [
+        QuietScheduleInfo(days: {2, 3}, startMinute: 60, endMinute: 120),
+      ],
+      quietRinger: RingerMode.vibrieren,
+      calendars: {'cal1': CalendarMatch.keyword},
+      keywordEverywhere: true,
+    );
+
+    final neu = voll.withBlockedPackages(['x']);
+
+    expect(neu.blockedPackages, ['x']);
+    expect(neu.id, voll.id);
+    expect(neu.name, voll.name);
+    expect(neu.mode, voll.mode);
+    expect(neu.durationMinutes, voll.durationMinutes);
+    expect(neu.untilAt, voll.untilAt);
+    expect(neu.pinCalendarEnd, voll.pinCalendarEnd);
+    expect(neu.timedRelease, voll.timedRelease);
+    expect(neu.pauseEnabled, voll.pauseEnabled);
+    expect(neu.pauseStepMinutes, voll.pauseStepMinutes);
+    expect(neu.pauseBaseSeconds, voll.pauseBaseSeconds);
+    expect(neu.pauseResetMinutes, voll.pauseResetMinutes);
+    expect(neu.quietEnabled, voll.quietEnabled);
+    expect(neu.quietScope, voll.quietScope);
+    expect(neu.quietNumbers, voll.quietNumbers);
+    expect(neu.quietAfterEventMinutes, voll.quietAfterEventMinutes);
+    expect(neu.quietWhileLocked, voll.quietWhileLocked);
+    expect(neu.quietSchedules, voll.quietSchedules);
+    expect(neu.quietRinger, voll.quietRinger);
+    expect(neu.calendars, voll.calendars);
+    expect(neu.keywordEverywhere, voll.keywordEverywhere);
+  });
 }

@@ -203,6 +203,32 @@ class ProfileInfo {
   /// Ob überhaupt ein Termin dieses Profil sperren kann.
   bool get usesCalendar => calendars.isNotEmpty || keywordEverywhere;
 
+  /// Dasselbe Profil mit anderer App-Auswahl. Eigene Methode statt Feld-für-
+  /// Feld-Kopie beim Aufrufer: dort geht jedes neue Feld still verloren.
+  ProfileInfo withBlockedPackages(List<String> packages) => ProfileInfo(
+    id: id,
+    name: name,
+    blockedPackages: packages,
+    mode: mode,
+    durationMinutes: durationMinutes,
+    untilAt: untilAt,
+    pinCalendarEnd: pinCalendarEnd,
+    timedRelease: timedRelease,
+    pauseEnabled: pauseEnabled,
+    pauseStepMinutes: pauseStepMinutes,
+    pauseBaseSeconds: pauseBaseSeconds,
+    pauseResetMinutes: pauseResetMinutes,
+    quietEnabled: quietEnabled,
+    quietScope: quietScope,
+    quietNumbers: quietNumbers,
+    quietAfterEventMinutes: quietAfterEventMinutes,
+    quietWhileLocked: quietWhileLocked,
+    quietSchedules: quietSchedules,
+    quietRinger: quietRinger,
+    calendars: calendars,
+    keywordEverywhere: keywordEverywhere,
+  );
+
   factory ProfileInfo.fromMap(Map<dynamic, dynamic> map) {
     final until = map['untilAt'] as int?;
     return ProfileInfo(

@@ -72,28 +72,7 @@ class _SetupWizardState extends State<SetupWizard> {
       ),
     );
     if (picked != null) {
-      await widget.channel.updateProfile(
-        ProfileInfo(
-          id: first.id,
-          name: first.name,
-          blockedPackages: picked,
-          mode: first.mode,
-          durationMinutes: first.durationMinutes,
-          untilAt: first.untilAt,
-          pinCalendarEnd: first.pinCalendarEnd,
-          timedRelease: first.timedRelease,
-          pauseEnabled: first.pauseEnabled,
-          pauseStepMinutes: first.pauseStepMinutes,
-          pauseBaseSeconds: first.pauseBaseSeconds,
-          pauseResetMinutes: first.pauseResetMinutes,
-          quietEnabled: first.quietEnabled,
-          quietScope: first.quietScope,
-          quietNumbers: first.quietNumbers,
-          quietAfterEventMinutes: first.quietAfterEventMinutes,
-          quietWhileLocked: first.quietWhileLocked,
-          quietSchedules: first.quietSchedules,
-        ),
-      );
+      await widget.channel.updateProfile(first.withBlockedPackages(picked));
       await _refresh();
     }
   }
