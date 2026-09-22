@@ -377,4 +377,54 @@ class LockCodecTest {
         assertEquals(1, gelesen.size)
         assertEquals(false, gelesen.single().timedRelease)
     }
+
+    @Test
+    fun `Kalenderauswahl am Profil uebersteht Kodieren und Dekodieren`() {
+        val profil = Profile(
+            "p1",
+            "Arbeit",
+            calendars = mapOf("3" to CalendarMatch.ALL, "7" to CalendarMatch.KEYWORD),
+            keywordEverywhere = true,
+        )
+
+        val zurueck = LockCodec.decodeProfiles(LockCodec.encodeProfiles(listOf(profil))).single()
+
+        assertEquals(profil, zurueck)
+    }
+
+    @Test
+    fun `Profil mit neunzehn Feldern bekommt keine Kalenderauswahl`() {
+        val profil = Profile(
+            "p1",
+            "Arbeit",
+            calendars = mapOf("3" to CalendarMatch.ALL),
+            keywordEverywhere = true,
+        )
+
+        val zurueck = LockCodec.decodeProfiles(satzMit(profil, felder = 19)).single()
+
+        assertEquals(profil.copy(calendars = emptyMap(), keywordEverywhere = false), zurueck)
+    }
+
+    @Test
+    fun `Profil mit zwanzig Feldern ist kein gueltiger Satz`() {
+        val profil = Profile("p1", "Arbeit", calendars = mapOf("3" to CalendarMatch.ALL))
+
+        assertTrue(LockCodec.decodeProfiles(satzMit(profil, felder = 20)).isEmpty())
+    }
+
+    @Test
+    fun `unbekannte Trefferart am Profil wird verworfen`() {
+        val profil = Profile(
+            "p1",
+            "Arbeit",
+            calendars = mapOf("3" to CalendarMatch.ALL, "7" to CalendarMatch.KEYWORD),
+        )
+        val roh = LockCodec.encodeProfiles(listOf(profil)).replace("KEYWORD", "QUATSCH")
+
+        assertEquals(
+            mapOf("3" to CalendarMatch.ALL),
+            LockCodec.decodeProfiles(roh).single().calendars,
+        )
+    }
 }

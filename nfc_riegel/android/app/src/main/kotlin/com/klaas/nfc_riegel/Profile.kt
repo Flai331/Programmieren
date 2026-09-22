@@ -33,6 +33,15 @@ data class Profile(
      * dieses Profil greift.
      */
     val quiet: QuietSettings = QuietSettings(),
+    /**
+     * Welche Kalender des Geräts dieses Profil sperren: Kalender-ID → welche
+     * Termine. Fehlt ein Kalender, sperrt er dieses Profil nicht. Steht am
+     * Profil und nicht zentral, damit derselbe Kalender mehrere Profile
+     * sperren kann.
+     */
+    val calendars: Map<String, CalendarMatch> = emptyMap(),
+    /** Termine mit dem Stichwort im Titel sperren dieses Profil, egal in welchem Kalender. */
+    val keywordEverywhere: Boolean = false,
 )
 
 /**

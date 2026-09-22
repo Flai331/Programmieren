@@ -12,8 +12,8 @@ object LockCodec {
     private const val ITEM = ''
     private const val PAIR = ''
 
-    /** Feldzahlen, die je Ausbaustufe entstanden sind: 7, 10/11, 17, 18, 19. */
-    private val GUELTIGE_PROFILFELDER = setOf(7, 10, 11, 17, 18, 19)
+    /** Feldzahlen, die je Ausbaustufe entstanden sind: 7, 10/11, 17, 18, 19, 21. */
+    private val GUELTIGE_PROFILFELDER = setOf(7, 10, 11, 17, 18, 19, 21)
 
     fun encodeProfiles(profiles: List<Profile>): String =
         profiles.joinToString(RECORD.toString()) { p ->
@@ -37,14 +37,16 @@ object LockCodec {
                 encodeSchedules(p.quiet.schedules),
                 if (p.timedRelease) "1" else "0",
                 p.quiet.ringer.name,
+                encodeCalendarMatches(p.calendars),
+                if (p.keywordEverywhere) "1" else "0",
             ).joinToString(FIELD.toString())
         }
 
     /**
-     * Liest neunzehn Felder (mit Klingelmodus), achtzehn (mit Freigabe auf
-     * Zeit), siebzehn (mit Ruhe), elf und zehn (mit Atempause) und sieben
-     * (davor). Ein alter Satz bekommt die Vorgaben — stillschweigend zu
-     * verwerfen hieße, gesperrte Apps zu vergessen.
+     * Liest einundzwanzig Felder (mit Kalenderauswahl), neunzehn (mit
+     * Klingelmodus), achtzehn (mit Freigabe auf Zeit), siebzehn (mit Ruhe), elf
+     * und zehn (mit Atempause) und sieben (davor). Ein alter Satz bekommt die
+     * Vorgaben — stillschweigend zu verwerfen hieße, gesperrte Apps zu vergessen.
      */
     fun decodeProfiles(raw: String): List<Profile> {
         if (raw.isEmpty()) return emptyList()
@@ -95,6 +97,9 @@ object LockCodec {
                     QuietSettings()
                 },
                 timedRelease = f.size >= 18 && f[17] == "1",
+                // Felder 20 und 21 kamen gemeinsam mit der Kalenderauswahl am Profil.
+                calendars = if (f.size >= 21) decodeCalendarMatches(f[19]) else emptyMap(),
+                keywordEverywhere = f.size >= 21 && f[20] == "1",
             )
         }
     }
@@ -239,6 +244,16 @@ object LockCodec {
             if (teile.size != 2) null else teile[0] to teile[1]
         }.toMap()
     }
+
+    /** Kalenderauswahl eines Profils als `id PAIR ALL|KEYWORD`, durch ITEM getrennt. */
+    private fun encodeCalendarMatches(auswahl: Map<String, CalendarMatch>): String =
+        encodeMap(auswahl.mapValues { it.value.name })
+
+    /** Ein unbekannter Wert fällt weg — „alle Termine" zu raten sperrte womöglich zu viel. */
+    private fun decodeCalendarMatches(raw: String): Map<String, CalendarMatch> =
+        decodeMap(raw).mapNotNull { (id, art) ->
+            runCatching { CalendarMatch.valueOf(art) }.getOrNull()?.let { id to it }
+        }.toMap()
 
     /**
      * Eine Kalenderregel als `id PAIR profilId PAIR trefferart`, Regeln durch
