@@ -106,13 +106,7 @@ void main() {
       'timeLocks': <dynamic>[],
       'calendar': {
         'enabled': true,
-        'calendarRules': {
-          'cal1': {'profileId': 'p1', 'match': 'ALL'},
-          'cal2': {'profileId': 'p2', 'match': 'KEYWORD'},
-        },
         'keywordMarker': '[Fokus]',
-        'keywordProfileId': 'p2',
-        'keywordCalendarIds': ['cal3'],
         'permissionGranted': true,
         'windows': <dynamic>[],
         'activeWindows': <dynamic>[],
@@ -120,23 +114,34 @@ void main() {
     });
 
     expect(status.calendar.enabled, isTrue);
-    expect(status.calendar.calendarRules['cal1']!.profileId, 'p1');
-    expect(status.calendar.calendarRules['cal1']!.match, CalendarMatch.all);
-    expect(status.calendar.calendarRules['cal2']!.match, CalendarMatch.keyword);
     expect(status.calendar.keywordMarker, '[Fokus]');
-    expect(status.calendar.keywordCalendarIds, {'cal3'});
     expect(status.calendar.permissionGranted, isTrue);
   });
 
-  test('leere Stichwort-Kalenderliste heisst alle', () {
+  test('Profil liest seine Kalenderauswahl', () {
     final status = LockStatus.fromMap({
-      'profiles': <dynamic>[],
+      'profiles': [
+        {
+          'id': 'p1',
+          'name': 'Arbeit',
+          'calendars': {'cal1': 'ALL', 'cal2': 'KEYWORD'},
+          'keywordEverywhere': true,
+        },
+        {'id': 'p2', 'name': 'Nacht'},
+      ],
       'tags': <dynamic>[],
       'timeLocks': <dynamic>[],
-      'calendar': {'enabled': true},
     });
 
-    expect(status.calendar.keywordCalendarIds, isEmpty);
+    final arbeit = status.profiles.first;
+    expect(arbeit.calendars, {
+      'cal1': CalendarMatch.all,
+      'cal2': CalendarMatch.keyword,
+    });
+    expect(arbeit.keywordEverywhere, isTrue);
+    expect(arbeit.usesCalendar, isTrue);
+    expect(status.profiles.last.calendars, isEmpty);
+    expect(status.profiles.last.usesCalendar, isFalse);
   });
 
   test('fehlender Kalenderblock ergibt die Vorgaben', () {

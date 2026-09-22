@@ -54,7 +54,10 @@ class RiegelChannel {
       'Freigabe ${profile.timedRelease ? "an" : "aus"}, '
       'Ruhe ${profile.quietEnabled ? "an" : "aus"} '
       '(${profile.quietNumbers.length} Nummern, '
-      '${profile.quietSchedules.length} Zeitfenster)',
+      '${profile.quietSchedules.length} Zeitfenster), '
+      // Kalender-IDs und -Namen bleiben draußen, die Anzahl genügt.
+      '${profile.calendars.length} Kalender, '
+      'Stichwort überall ${profile.keywordEverywhere ? "an" : "aus"}',
     );
     return await channel.invokeMethod<bool>('updateProfile', {
           'id': profile.id,
@@ -78,6 +81,10 @@ class RiegelChannel {
               .map((plan) => plan.toMap())
               .toList(),
           'quietRinger': ringerToNative(profile.quietRinger),
+          'calendars': profile.calendars.map(
+            (id, art) => MapEntry(id, matchToNative(art)),
+          ),
+          'keywordEverywhere': profile.keywordEverywhere,
         }) ??
         false;
   }
@@ -175,26 +182,15 @@ class RiegelChannel {
     return ok;
   }
 
+  /// Nur was für alle Profile gilt. Welche Kalender sperren, steht am Profil.
   Future<void> setCalendarSettings({
     required bool enabled,
-    required Map<String, CalendarRuleInfo> calendarRules,
     required String keywordMarker,
-    String? keywordProfileId,
-    Set<String> keywordCalendarIds = const {},
   }) async {
-    // Zahlen statt Namen: Termintitel und Kalendernamen gehen niemanden etwas
-    // an, die Anzahl der Regeln beantwortet die Frage genauso.
-    FeedbackService.log(
-      'Kalender gespeichert: ${enabled ? "an" : "aus"}, '
-      '${calendarRules.length} Regeln, '
-      'Stichwortregel ${keywordProfileId == null ? "aus" : "an"}',
-    );
+    FeedbackService.log('Kalender gespeichert: ${enabled ? "an" : "aus"}');
     await channel.invokeMethod<bool>('setCalendarSettings', {
       'enabled': enabled,
-      'calendarRules': calendarRules.map((k, v) => MapEntry(k, v.toMap())),
       'keywordMarker': keywordMarker,
-      'keywordProfileId': keywordProfileId,
-      'keywordCalendarIds': keywordCalendarIds.toList(),
     });
   }
 

@@ -179,9 +179,7 @@ void main() {
       calendar: {
         'enabled': true,
         'permissionGranted': true,
-        'calendarRules': <dynamic, dynamic>{},
         'keywordMarker': '[Riegel]',
-        'keywordCalendarIds': <dynamic>[],
         'windows': <dynamic>[],
         'activeWindows': [
           {

@@ -13,13 +13,11 @@ void main() {
   /// Zuletzt an `setCalendarSettings` übergebene Argumente.
   Map<dynamic, dynamic>? gespeichert;
 
-  void stub({List<Map<String, String>> kalender = const []}) {
+  void stub() {
     gespeichert = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
           switch (call.method) {
-            case 'deviceCalendars':
-              return kalender;
             case 'setCalendarSettings':
               gespeichert = call.arguments as Map<dynamic, dynamic>;
               return true;
@@ -37,37 +35,46 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
+  Map<String, dynamic> profil(String id, String name) => {
+    'id': id,
+    'name': name,
+    'blockedPackages': <dynamic>[],
+    'defaultMode': 'TIMER',
+    'durationMinutes': 60,
+    'pinCalendarEnd': false,
+  };
+
   LockStatus status({
     bool enabled = false,
     bool permission = true,
-    Map<String, dynamic> rules = const {},
     List<Map<String, dynamic>> windows = const [],
   }) => LockStatus.fromMap({
-    'profiles': [
-      {
-        'id': 'p1',
-        'name': 'Arbeit',
-        'blockedPackages': <dynamic>[],
-        'defaultMode': 'TIMER',
-        'durationMinutes': 60,
-        'pinCalendarEnd': false,
-      },
-    ],
+    'profiles': [profil('p1', 'Arbeit'), profil('p2', 'Nacht')],
     'tags': <dynamic>[],
     'timeLocks': <dynamic>[],
     'calendar': {
       'enabled': enabled,
       'permissionGranted': permission,
-      'calendarRules': rules,
       'keywordMarker': '[Riegel]',
-      'keywordCalendarIds': <dynamic>[],
       'windows': windows,
       'activeWindows': <dynamic>[],
     },
   });
 
-  Widget screen(LockStatus s) =>
-      MaterialApp(home: CalendarScreen(status: s, channel: RiegelChannel(channel)));
+  Widget screen(LockStatus s) => MaterialApp(
+    home: CalendarScreen(status: s, channel: RiegelChannel(channel)),
+  );
+
+  Map<String, dynamic> fenster(String eventId, String profileId) {
+    final jetzt = DateTime.now();
+    return {
+      'eventId': eventId,
+      'title': 'Konzept schreiben',
+      'startsAt': jetzt.add(const Duration(hours: 1)).millisecondsSinceEpoch,
+      'endsAt': jetzt.add(const Duration(hours: 2)).millisecondsSinceEpoch,
+      'profileId': profileId,
+    };
+  }
 
   testWidgets('ohne Berechtigung erscheint der Hinweis', (tester) async {
     stub();
@@ -76,114 +83,50 @@ void main() {
     expect(find.textContaining('Berechtigung'), findsOneWidget);
   });
 
-  testWidgets('ausgeschaltet bleibt die Kalenderliste verborgen', (tester) async {
+  testWidgets('ausgeschaltet bleibt das Stichwort verborgen', (tester) async {
     stub();
     await tester.pumpWidget(screen(status()));
 
-    expect(find.text('KALENDER DES GERÄTS'), findsNothing);
+    expect(find.text('Stichwort im Termintitel'), findsNothing);
   });
 
-  testWidgets('eingeschaltet zeigt Kalenderliste und Stichwortabschnitt', (
+  testWidgets('eingeschaltet zeigt Stichwort und Verweis aufs Profil, keine Zuordnung', (
     tester,
   ) async {
-    stub(
-      kalender: [
-        {'id': 'cal1', 'name': 'Privat', 'account': 'ich@example.com'},
-      ],
-    );
-    await tester.pumpWidget(screen(status(enabled: true)));
-    await tester.pumpAndSettle();
-
-    expect(find.text('KALENDER DES GERÄTS'), findsOneWidget);
-    // Zweimal: in der Zuordnungsliste und als Ankreuzfeld der Stichwortregel.
-    expect(find.text('Privat'), findsNWidgets(2));
-    expect(find.text('STICHWORTREGEL'), findsOneWidget);
-  });
-
-  testWidgets('zugeordneter Kalender zeigt die Wahl der Trefferart', (
-    tester,
-  ) async {
-    stub(
-      kalender: [
-        {'id': 'cal1', 'name': 'Arbeit', 'account': 'ich@example.com'},
-      ],
-    );
-    await tester.pumpWidget(
-      screen(
-        status(
-          enabled: true,
-          rules: {
-            'cal1': {'profileId': 'p1', 'match': 'ALL'},
-          },
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('alle Termine'), findsOneWidget);
-    expect(find.text('nur Stichwort'), findsOneWidget);
-  });
-
-  testWidgets('nicht zugeordneter Kalender zeigt keine Trefferart', (
-    tester,
-  ) async {
-    stub(
-      kalender: [
-        {'id': 'cal1', 'name': 'Arbeit', 'account': 'ich@example.com'},
-      ],
-    );
-    await tester.pumpWidget(screen(status(enabled: true)));
-    await tester.pumpAndSettle();
-
-    expect(find.text('alle Termine'), findsNothing);
-  });
-
-  testWidgets('Umschalten auf nur Stichwort wird gespeichert', (tester) async {
-    stub(
-      kalender: [
-        {'id': 'cal1', 'name': 'Arbeit', 'account': 'ich@example.com'},
-      ],
-    );
-    await tester.pumpWidget(
-      screen(
-        status(
-          enabled: true,
-          rules: {
-            'cal1': {'profileId': 'p1', 'match': 'ALL'},
-          },
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('nur Stichwort'));
-    await tester.pumpAndSettle();
-
-    final regeln = gespeichert!['calendarRules'] as Map<dynamic, dynamic>;
-    expect((regeln['cal1'] as Map<dynamic, dynamic>)['match'], 'KEYWORD');
-  });
-
-  testWidgets('Vorschau nennt die naechsten Termine', (tester) async {
     stub();
-    final jetzt = DateTime.now();
+    await tester.pumpWidget(screen(status(enabled: true)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Stichwort im Termintitel'), findsOneWidget);
+    expect(find.textContaining('im jeweiligen Profil'), findsOneWidget);
+    expect(find.text('KALENDER DES GERÄTS'), findsNothing);
+    expect(find.text('STICHWORTREGEL'), findsNothing);
+  });
+
+  testWidgets('Stichwort speichern schickt nur Schalter und Stichwort', (
+    tester,
+  ) async {
+    stub();
+    await tester.pumpWidget(screen(status(enabled: true)));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '[Fokus]');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(gespeichert, {'enabled': true, 'keywordMarker': '[Fokus]'});
+  });
+
+  testWidgets('Vorschau nennt Termin einmal mit allen Profilen', (tester) async {
+    stub();
     await tester.pumpWidget(
       screen(
-        status(
-          enabled: true,
-          windows: [
-            {
-              'eventId': 'e1',
-              'title': 'Konzept schreiben',
-              'startsAt': jetzt.add(const Duration(hours: 1)).millisecondsSinceEpoch,
-              'endsAt': jetzt.add(const Duration(hours: 2)).millisecondsSinceEpoch,
-              'profileId': 'p1',
-            },
-          ],
-        ),
+        status(enabled: true, windows: [fenster('e1', 'p1'), fenster('e1', 'p2')]),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('Konzept schreiben'), findsOneWidget);
+    expect(find.textContaining('Arbeit, Nacht'), findsOneWidget);
   });
 }

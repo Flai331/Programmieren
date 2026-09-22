@@ -72,11 +72,14 @@ void main() {
         quietAfterEventMinutes: 0,
         quietWhileLocked: true,
         quietSchedules: [],
+        calendars: {'cal1': CalendarMatch.all},
+        keywordEverywhere: true,
       ),
     );
 
     expect(protokolliert('Profil gespeichert: Arbeit, 2 Apps'), isTrue);
     expect(protokolliert('Atempause an'), isTrue);
+    expect(protokolliert('1 Kalender, Stichwort überall an'), isTrue);
   });
 
   test('Sperrstart steht mit seinem Ausgang im Protokoll', () async {

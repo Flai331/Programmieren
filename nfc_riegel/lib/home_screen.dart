@@ -64,7 +64,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final fenster = <({double start, double end, bool active})>[];
+    // Ein Termin mit zwei Profilen kommt doppelt — im Band zählt er einmal.
+    final gesehen = <String>{};
     for (final w in status.calendar.windows) {
+      if (!gesehen.add(w.eventId)) continue;
       if (!w.endsAt.isAfter(tagesbeginn) || !w.startsAt.isBefore(tagesende)) continue;
       fenster.add((
         start: anteil(w.startsAt),
@@ -278,6 +281,15 @@ class _HomeScreenState extends State<HomeScreen> {
     await _refresh();
   }
 
+  static String _kalenderUntertitel(LockStatus status) {
+    final n = status.profiles.where((p) => p.usesCalendar).length;
+    return switch (n) {
+      0 => 'noch keinem Profil zugeordnet',
+      1 => '1 Profil mit Kalender',
+      _ => '$n Profile mit Kalender',
+    };
+  }
+
   Future<void> _openCalendar(LockStatus status) async {
     await Navigator.push(
       context,
@@ -383,7 +395,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _NavRow(
                     title: 'Kalender',
                     subtitle: status.calendar.enabled
-                        ? '${status.calendar.calendarRules.length} Kalender zugeordnet'
+                        ? _kalenderUntertitel(status)
                         : 'aus',
                     enabled: !status.locked,
                     onTap: () => _openCalendar(status),

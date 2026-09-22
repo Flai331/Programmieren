@@ -153,6 +153,8 @@ class ProfileInfo {
     required this.quietWhileLocked,
     required this.quietSchedules,
     this.quietRinger = RingerMode.unveraendert,
+    this.calendars = const {},
+    this.keywordEverywhere = false,
   });
 
   final String id;
@@ -192,6 +194,15 @@ class ProfileInfo {
   /// Klingelmodus des Telefons, solange die Ruhe dieses Profils greift.
   final RingerMode quietRinger;
 
+  /// Kalender-ID → welche Termine dieses Profil sperren. Fehlt = aus.
+  final Map<String, CalendarMatch> calendars;
+
+  /// Termine mit dem Stichwort sperren dieses Profil, egal in welchem Kalender.
+  final bool keywordEverywhere;
+
+  /// Ob überhaupt ein Termin dieses Profil sperren kann.
+  bool get usesCalendar => calendars.isNotEmpty || keywordEverywhere;
+
   factory ProfileInfo.fromMap(Map<dynamic, dynamic> map) {
     final until = map['untilAt'] as int?;
     return ProfileInfo(
@@ -219,6 +230,10 @@ class ProfileInfo {
           .map((e) => QuietScheduleInfo.fromMap(e as Map<dynamic, dynamic>))
           .toList(),
       quietRinger: _ringerFrom(map['quietRinger'] as String?),
+      calendars: (map['calendars'] as Map<dynamic, dynamic>? ?? {}).map(
+        (k, v) => MapEntry(k as String, _matchFrom(v as String?)),
+      ),
+      keywordEverywhere: map['keywordEverywhere'] as bool? ?? false,
     );
   }
 }
@@ -331,47 +346,18 @@ CalendarMatch _matchFrom(String? raw) =>
 String matchToNative(CalendarMatch m) =>
     m == CalendarMatch.keyword ? 'KEYWORD' : 'ALL';
 
-/// Regel für einen Kalender des Geräts.
-class CalendarRuleInfo {
-  const CalendarRuleInfo({required this.profileId, required this.match});
-
-  final String profileId;
-  final CalendarMatch match;
-
-  factory CalendarRuleInfo.fromMap(Map<dynamic, dynamic> map) =>
-      CalendarRuleInfo(
-        profileId: map['profileId'] as String? ?? '',
-        match: _matchFrom(map['match'] as String?),
-      );
-
-  Map<String, String> toMap() => {
-    'profileId': profileId,
-    'match': matchToNative(match),
-  };
-}
-
 /// Kalenderteil des Zustands.
 class CalendarInfo {
   const CalendarInfo({
     required this.enabled,
-    required this.calendarRules,
     required this.keywordMarker,
-    required this.keywordProfileId,
-    required this.keywordCalendarIds,
     required this.permissionGranted,
     required this.windows,
     required this.activeWindows,
   });
 
   final bool enabled;
-
-  /// Kalender-ID → Regel. Nicht enthaltene Kalender sperren nicht.
-  final Map<String, CalendarRuleInfo> calendarRules;
   final String keywordMarker;
-  final String? keywordProfileId;
-
-  /// In welchen Kalendern die eigenständige Stichwortregel sucht. Leer = alle.
-  final Set<String> keywordCalendarIds;
   final bool permissionGranted;
 
   /// Die nächsten drei Termine, für die Vorschau.
@@ -382,10 +368,7 @@ class CalendarInfo {
 
   static const empty = CalendarInfo(
     enabled: false,
-    calendarRules: {},
     keywordMarker: '[Riegel]',
-    keywordProfileId: null,
-    keywordCalendarIds: {},
     permissionGranted: false,
     windows: [],
     activeWindows: [],
@@ -393,17 +376,7 @@ class CalendarInfo {
 
   factory CalendarInfo.fromMap(Map<dynamic, dynamic> map) => CalendarInfo(
     enabled: map['enabled'] as bool? ?? false,
-    calendarRules: (map['calendarRules'] as Map<dynamic, dynamic>? ?? {}).map(
-      (k, v) => MapEntry(
-        k as String,
-        CalendarRuleInfo.fromMap(v as Map<dynamic, dynamic>),
-      ),
-    ),
     keywordMarker: map['keywordMarker'] as String? ?? '[Riegel]',
-    keywordProfileId: map['keywordProfileId'] as String?,
-    keywordCalendarIds: (map['keywordCalendarIds'] as List<dynamic>? ?? [])
-        .cast<String>()
-        .toSet(),
     permissionGranted: map['permissionGranted'] as bool? ?? false,
     windows: (map['windows'] as List<dynamic>? ?? [])
         .map((e) => CalendarWindowInfo.fromMap(e as Map<dynamic, dynamic>))
