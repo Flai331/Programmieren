@@ -118,8 +118,10 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
 
 - [ ] Kalenderfunktion einschalten — Berechtigungsabfrage erscheint
 - [ ] Abfrage ablehnen — Hinweis erscheint, Funktion bleibt aus
-- [ ] Abfrage erlauben — Kalender des Geräts erscheinen in der Liste
-- [ ] Einem Kalender ein Profil zuordnen, Trefferart „alle Termine"
+- [ ] Abfrage erlauben — Kalender-Schirm zeigt nur Schalter, Stichwort, Vorschau und den Satz „… im jeweiligen Profil ein"
+- [ ] Update von Build 20: vorher zugeordnete Kalender stehen jetzt im jeweiligen Profil, die Stichwortregel als „Stichwort in jedem Kalender" bzw. „nur Stichwort"
+- [ ] Profil öffnen — Abschnitt KALENDER listet die Kalender des Geräts
+- [ ] Einen Kalender auf „alle Termine", sichern
 - [ ] Termin in diesem Kalender anlegen, der in 2 Minuten beginnt und 5 Minuten dauert
 - [ ] Bei Terminbeginn sperren die Apps des Profils
 - [ ] Sperrschirm zeigt den Termintitel und „frei ab HH:MM"
@@ -128,19 +130,22 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
 
 ### Trefferart je Kalender
 
-- [ ] Denselben Kalender auf „nur Stichwort" umstellen
+- [ ] Denselben Kalender im Profil auf „nur Stichwort" umstellen
 - [ ] Termin **ohne** Stichwort im Titel sperrt jetzt **nicht** mehr
-- [ ] Termin **mit** `[Riegel]` im Titel sperrt weiterhin, mit dem Profil des Kalenders
+- [ ] Termin **mit** `[Riegel]` im Titel sperrt weiterhin
 
-### Eigenständige Stichwortregel
+### Stichwort in jedem Kalender
 
-- [ ] Stichwortregel ein Profil zuweisen, keinen Kalender ankreuzen
-- [ ] Termin mit `[Riegel]` im Titel in einem **nicht** zugeordneten Kalender sperrt
-- [ ] Jetzt nur einen bestimmten Kalender ankreuzen
-- [ ] Termin mit `[Riegel]` in **diesem** Kalender sperrt
-- [ ] Termin mit `[Riegel]` in einem **anderen** Kalender sperrt nicht mehr
-- [ ] Kalender auf „alle Termine" gestellt und Stichwortregel aktiv: der Termin
-      sperrt mit dem Profil des **Kalenders**, nicht dem der Stichwortregel
+- [ ] Im zweiten Profil „Stichwort in jedem Kalender" einschalten, keinen Kalender wählen
+- [ ] Termin mit `[Riegel]` in einem beliebigen Kalender sperrt dieses Profil
+
+### Ein Kalender, mehrere Profile
+
+- [ ] Denselben Kalender in zwei Profilen auf „alle Termine"
+- [ ] Laufender Termin sperrt die Apps **beider** Profile
+- [ ] Kalender-Schirm, Vorschau: Termin steht **einmal**, mit beiden Profilnamen
+- [ ] Hauptschirm: Kalender-Kachel sagt „2 Profile mit Kalender", Tagesband zeigt den Termin einmal
+- [ ] Fehlerbericht: Kalenderzeile nennt „2 Profile mit Kalender"
 
 ### Zusammenspiel mit den anderen Sperren
 
