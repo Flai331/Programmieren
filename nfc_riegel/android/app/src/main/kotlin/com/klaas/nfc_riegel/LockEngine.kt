@@ -449,25 +449,14 @@ class LockEngine(private val store: LockStore) {
     }
 
     /**
-     * Speichert die Kalendereinstellungen. Der Zwischenspeicher bleibt stehen —
-     * er wird gleich darauf ohnehin neu eingelesen.
+     * Speichert Hauptschalter und Stichwort — das, was für alle Profile gilt.
+     * Welche Kalender sperren, steht an den Profilen. Der Zwischenspeicher
+     * bleibt stehen, er wird gleich darauf ohnehin neu eingelesen.
      */
-    fun updateCalendarSettings(
-        enabled: Boolean,
-        calendarRules: Map<String, CalendarRule>,
-        keywordMarker: String,
-        keywordProfileId: String?,
-        keywordCalendarIds: Set<String>,
-    ): LockState {
+    fun updateCalendarSettings(enabled: Boolean, keywordMarker: String): LockState {
         val s = store.load()
         val next = s.copy(
-            calendar = s.calendar.copy(
-                enabled = enabled,
-                calendarRules = calendarRules,
-                keywordMarker = keywordMarker,
-                keywordProfileId = keywordProfileId,
-                keywordCalendarIds = keywordCalendarIds,
-            ),
+            calendar = s.calendar.copy(enabled = enabled, keywordMarker = keywordMarker),
         )
         store.save(next)
         return next

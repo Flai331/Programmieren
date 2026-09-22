@@ -169,22 +169,26 @@ class DiagnosticsTest {
     fun `Kalenderlage nennt Anzahl und naechste Grenze`() {
         val jetzt = 1_000_000L
         val zustand = LockState(
-            profiles = listOf(Profile("p1", "Arbeit")),
+            profiles = listOf(
+                Profile("p1", "Arbeit", calendars = mapOf("cal1" to CalendarMatch.KEYWORD)),
+                Profile("p2", "Nacht", keywordEverywhere = true),
+                Profile("p3", "Frei"),
+            ),
             calendar = CalendarSettings(
                 enabled = true,
-                calendarRules = mapOf("cal1" to CalendarRule("p1", CalendarMatch.KEYWORD)),
                 cachedWindows = listOf(
                     CalendarWindow("e1", "Konzept", jetzt - 1, jetzt + 60_000, "p1"),
                 ),
             ),
         )
 
-        val bericht = Diagnostics.summarize(zustand, jetzt)
+        val zeile = Diagnostics.summarize(zustand, jetzt).getValue("Kalender")
 
-        assertTrue(bericht.getValue("Kalender").contains("an"))
-        assertTrue(bericht.getValue("Kalender").contains("1 Kalender"))
-        assertTrue(bericht.getValue("Kalender").contains("1 nur Stichwort"))
-        assertTrue(bericht.getValue("Kalender").contains("1 Termin"))
+        assertTrue(zeile.contains("an"))
+        assertTrue(zeile.contains("2 Profile mit Kalender"))
+        assertTrue(zeile.contains("1 mit Stichwort überall"))
+        assertTrue(zeile.contains("1 Termin"))
+        assertFalse(zeile.contains("Stichwortregel"))
     }
 
     @Test

@@ -202,20 +202,45 @@ class LockEngineCalendarTest {
     fun `Einstellungen schreiben laesst den Zwischenspeicher stehen`() {
         val (e, store) = engine(laufendesFenster())
 
-        e.updateCalendarSettings(
-            enabled = true,
-            calendarRules = mapOf("cal1" to CalendarRule("p1", CalendarMatch.KEYWORD)),
-            keywordMarker = "[Fokus]",
-            keywordProfileId = "p2",
-            keywordCalendarIds = setOf("cal2"),
-        )
+        e.updateCalendarSettings(enabled = true, keywordMarker = "[Fokus]")
 
         assertEquals("[Fokus]", store.current.calendar.keywordMarker)
-        assertEquals(
-            mapOf("cal1" to CalendarRule("p1", CalendarMatch.KEYWORD)),
-            store.current.calendar.calendarRules,
-        )
-        assertEquals(setOf("cal2"), store.current.calendar.keywordCalendarIds)
         assertEquals(1, store.current.calendar.cachedWindows.size)
+    }
+
+    @Test
+    fun `Termin mit zwei Profilen sperrt beide`() {
+        val (e, _) = engine(
+            CalendarSettings(
+                enabled = true,
+                cachedWindows = listOf(
+                    CalendarWindow("e1", "Konzept", jetzt - minute, jetzt + minute, "p1"),
+                    CalendarWindow("e1", "Konzept", jetzt - minute, jetzt + minute, "p2"),
+                ),
+            ),
+        )
+
+        assertEquals(setOf("com.a", "com.b"), e.blockedPackages(jetzt))
+    }
+
+    @Test
+    fun `Nagel eines Profils haelt den Termin fuer beide Profile fest`() {
+        val nagler = Profile("p1", "Arbeit", setOf("com.a"), LockMode.OPEN, pinCalendarEnd = true)
+        val store = FakeLockStore(
+            LockState(profiles = listOf(nagler, nacht), calendar = CalendarSettings(enabled = true))
+        )
+        val e = LockEngine(store)
+
+        e.updateWindows(
+            listOf(
+                CalendarWindow("e1", "Konzept", jetzt - minute, jetzt + minute, "p1"),
+                CalendarWindow("e1", "Konzept", jetzt - minute, jetzt + minute, "p2"),
+            ),
+            jetzt,
+        )
+        // Termin im Kalender gelöscht.
+        e.updateWindows(emptyList(), jetzt)
+
+        assertEquals(setOf("com.a", "com.b"), e.blockedPackages(jetzt))
     }
 }

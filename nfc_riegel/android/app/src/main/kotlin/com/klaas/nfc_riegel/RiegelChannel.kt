@@ -67,10 +67,19 @@ class RiegelChannel(private val activity: Activity) {
                                 )
                             }.getOrDefault(RingerMode.UNVERAENDERT),
                         ),
+                        calendars = (call.argument<Map<String, String>>("calendars") ?: emptyMap())
+                            .mapNotNull { (id, art) ->
+                                runCatching { CalendarMatch.valueOf(art) }.getOrNull()
+                                    ?.let { id to it }
+                            }
+                            .toMap(),
+                        keywordEverywhere = call.argument<Boolean>("keywordEverywhere") ?: false,
                     )
-                    result.success(
-                        controller.updateProfile(profile, System.currentTimeMillis())
-                    )
+                    val gespeichert = controller.updateProfile(profile, System.currentTimeMillis())
+                    // Eine geänderte Kalenderauswahl soll sofort greifen, nicht
+                    // erst beim nächsten Wecker.
+                    if (gespeichert) controller.refreshCalendar()
+                    result.success(gespeichert)
                 }
 
                 "deleteProfile" ->
@@ -239,25 +248,9 @@ class RiegelChannel(private val activity: Activity) {
                 }
 
                 "setCalendarSettings" -> {
-                    val roh = call.argument<Map<String, Map<String, String>>>("calendarRules")
-                        ?: emptyMap()
-                    val regeln = roh.mapValues { (_, eintrag) ->
-                        CalendarRule(
-                            profileId = eintrag["profileId"] ?: "",
-                            match = runCatching {
-                                CalendarMatch.valueOf(eintrag["match"] ?: "ALL")
-                            }.getOrDefault(CalendarMatch.ALL),
-                        )
-                    }.filterValues { it.profileId.isNotEmpty() }
-
                     controller.engine.updateCalendarSettings(
                         enabled = call.argument<Boolean>("enabled") ?: false,
-                        calendarRules = regeln,
                         keywordMarker = call.argument<String>("keywordMarker") ?: "[Riegel]",
-                        keywordProfileId = call.argument<String>("keywordProfileId"),
-                        keywordCalendarIds =
-                            call.argument<List<String>>("keywordCalendarIds")?.toSet()
-                                ?: emptySet(),
                     )
                     controller.refreshCalendar()
                     result.success(true)
@@ -326,6 +319,8 @@ class RiegelChannel(private val activity: Activity) {
                         )
                     },
                     "quietRinger" to p.quiet.ringer.name,
+                    "calendars" to p.calendars.mapValues { it.value.name },
+                    "keywordEverywhere" to p.keywordEverywhere,
                 )
             },
             "tags" to s.tags.map { t ->
@@ -353,21 +348,17 @@ class RiegelChannel(private val activity: Activity) {
             },
             "calendar" to mapOf(
                 "enabled" to s.calendar.enabled,
-                // Als Karte von Kalender-ID auf eine kleine Karte — der
-                // MethodChannel überträgt keine eigenen Typen.
-                "calendarRules" to s.calendar.calendarRules.mapValues { (_, regel) ->
-                    mapOf(
-                        "profileId" to regel.profileId,
-                        "match" to regel.match.name,
-                    )
-                },
                 "keywordMarker" to s.calendar.keywordMarker,
-                "keywordProfileId" to s.calendar.keywordProfileId,
-                "keywordCalendarIds" to s.calendar.keywordCalendarIds.toList(),
                 "permissionGranted" to CalendarPermission.granted(activity),
+                // Die nächsten drei Termine. Ein Termin mit zwei Profilen steht
+                // zweimal im Speicher, zählt hier aber einmal — beide Fenster
+                // gehen mit, damit die Vorschau beide Profile nennen kann.
                 "windows" to s.calendar.cachedWindows
                     .sortedBy { it.startsAt }
-                    .take(3)
+                    .let { sortiert ->
+                        val naechste = sortiert.map { it.eventId }.distinct().take(3).toSet()
+                        sortiert.filter { it.eventId in naechste }
+                    }
                     .map { windowMap(it) },
                 "activeWindows" to controller.engine.activeCalendarWindows(now)
                     .map { windowMap(it) },

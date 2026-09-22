@@ -82,13 +82,11 @@ object Diagnostics {
 
         val laufend = CalendarPlanner.activeWindows(c, now).size
         val grenze = CalendarPlanner.nextBoundary(c, now)
-        val nurStichwort = c.calendarRules.values.count { it.match == CalendarMatch.KEYWORD }
-        val stichwortBereich =
-            if (c.keywordCalendarIds.isEmpty()) "alle" else "${c.keywordCalendarIds.size}"
+        val mitKalender = state.profiles.count { it.calendars.isNotEmpty() || it.keywordEverywhere }
+        val ueberall = state.profiles.count { it.keywordEverywhere }
         val teile = mutableListOf(
             "an",
-            "${c.calendarRules.size} Kalender zugeordnet ($nurStichwort nur Stichwort)",
-            "Stichwortregel in $stichwortBereich Kalendern",
+            "$mitKalender Profile mit Kalender ($ueberall mit Stichwort überall)",
             "${c.cachedWindows.size} Termine im Speicher",
             "$laufend Termin(e) sperren gerade",
         )
