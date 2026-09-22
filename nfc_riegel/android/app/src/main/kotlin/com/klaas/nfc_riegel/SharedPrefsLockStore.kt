@@ -26,7 +26,7 @@ class SharedPrefsLockStore(context: Context) : LockStore {
             ?.takeIf { System.currentTimeMillis() < it.endsAt }
             ?.takeIf { alt -> zeitsperren.none { it.profileId == alt.profileId } }
 
-        return LockState(
+        val gelesen = LockState(
             profiles = LockCodec.decodeProfiles(prefs.getString(KEY_PROFILES, "") ?: ""),
             tags = LockCodec.decodeTags(prefs.getString(KEY_TAGS, "") ?: ""),
             chipLock = LockCodec.decodeChipLock(rohChipLock),
@@ -37,6 +37,13 @@ class SharedPrefsLockStore(context: Context) : LockStore {
             codeLockedUntil = prefs.getLong(KEY_CODE_LOCKED_UNTIL, -1L).takeIf { it > 0 },
             calendar = LockCodec.decodeCalendar(prefs.getString(KEY_CALENDAR, "") ?: ""),
         )
+
+        // Kalenderregeln standen bis Build 20 zentral. Einmal an die Profile
+        // ziehen und sofort zurückschreiben, damit es beim nächsten Laden
+        // nichts mehr zu tun gibt.
+        val umgezogen = LockMigration.calendarRulesIntoProfiles(gelesen)
+        if (umgezogen !== gelesen) save(umgezogen)
+        return umgezogen
     }
 
     override fun save(state: LockState) {

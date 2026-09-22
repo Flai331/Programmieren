@@ -43,4 +43,52 @@ object LockMigration {
             codeHash = codeHash,
         )
     }
+
+    /**
+     * Zieht die früher zentralen Kalenderregeln an die Profile. Die Wirkung
+     * bleibt dieselbe — bis auf die Rangfolge: früher sperrte bei Kalender- und
+     * Stichworttreffer nur das Profil der Kalenderregel, jetzt sperren beide.
+     *
+     * Ist nichts umzuziehen, kommt **dasselbe Objekt** zurück; daran erkennt der
+     * Speicher, dass er nicht zurückschreiben muss.
+     */
+    fun calendarRulesIntoProfiles(state: LockState): LockState {
+        val c = state.calendar
+        if (c.calendarRules.isEmpty() &&
+            c.keywordProfileId == null &&
+            c.keywordCalendarIds.isEmpty()
+        ) {
+            return state
+        }
+
+        val profile = state.profiles.map { p ->
+            val auswahl = p.calendars.toMutableMap()
+            for ((kalender, regel) in c.calendarRules) {
+                if (regel.profileId == p.id) auswahl[kalender] = regel.match
+            }
+            var ueberall = p.keywordEverywhere
+            if (c.keywordProfileId == p.id) {
+                if (c.keywordCalendarIds.isEmpty()) {
+                    ueberall = true
+                } else {
+                    for (kalender in c.keywordCalendarIds) {
+                        // „Alle Termine" schließt die mit Stichwort schon ein.
+                        if (auswahl[kalender] != CalendarMatch.ALL) {
+                            auswahl[kalender] = CalendarMatch.KEYWORD
+                        }
+                    }
+                }
+            }
+            p.copy(calendars = auswahl, keywordEverywhere = ueberall)
+        }
+
+        return state.copy(
+            profiles = profile,
+            calendar = c.copy(
+                calendarRules = emptyMap(),
+                keywordProfileId = null,
+                keywordCalendarIds = emptySet(),
+            ),
+        )
+    }
 }

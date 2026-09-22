@@ -2,6 +2,7 @@ package com.klaas.nfc_riegel
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -93,5 +94,90 @@ class LockMigrationTest {
         )
 
         assertNull(state.chipLock)
+    }
+
+    private val arbeit = Profile("p1", "Arbeit")
+    private val nacht = Profile("p2", "Nacht")
+
+    private fun mitKalender(c: CalendarSettings) =
+        LockState(profiles = listOf(arbeit, nacht), calendar = c)
+
+    @Test
+    fun `ohne alte Regeln bleibt der Zustand dasselbe Objekt`() {
+        val zustand = mitKalender(CalendarSettings(enabled = true))
+
+        assertSame(zustand, LockMigration.calendarRulesIntoProfiles(zustand))
+    }
+
+    @Test
+    fun `Kalenderregeln ziehen mit Trefferart an ihr Profil`() {
+        val zustand = mitKalender(
+            CalendarSettings(
+                calendarRules = mapOf(
+                    "cal1" to CalendarRule("p1", CalendarMatch.ALL),
+                    "cal2" to CalendarRule("p1", CalendarMatch.KEYWORD),
+                    "cal3" to CalendarRule("p2", CalendarMatch.ALL),
+                ),
+            ),
+        )
+
+        val neu = LockMigration.calendarRulesIntoProfiles(zustand)
+
+        assertEquals(
+            mapOf("cal1" to CalendarMatch.ALL, "cal2" to CalendarMatch.KEYWORD),
+            neu.profileById("p1")!!.calendars,
+        )
+        assertEquals(mapOf("cal3" to CalendarMatch.ALL), neu.profileById("p2")!!.calendars)
+    }
+
+    @Test
+    fun `Stichwortregel ohne Kalenderauswahl wird Stichwort ueberall`() {
+        val zustand = mitKalender(CalendarSettings(keywordProfileId = "p2"))
+
+        val neu = LockMigration.calendarRulesIntoProfiles(zustand)
+
+        assertTrue(neu.profileById("p2")!!.keywordEverywhere)
+        assertEquals(false, neu.profileById("p1")!!.keywordEverywhere)
+    }
+
+    @Test
+    fun `Stichwortregel mit Kalenderauswahl wird nur Stichwort, alle Termine bleibt`() {
+        val zustand = mitKalender(
+            CalendarSettings(
+                calendarRules = mapOf("cal1" to CalendarRule("p2", CalendarMatch.ALL)),
+                keywordProfileId = "p2",
+                keywordCalendarIds = setOf("cal1", "cal2"),
+            ),
+        )
+
+        val neu = LockMigration.calendarRulesIntoProfiles(zustand)
+
+        assertEquals(
+            mapOf("cal1" to CalendarMatch.ALL, "cal2" to CalendarMatch.KEYWORD),
+            neu.profileById("p2")!!.calendars,
+        )
+        assertEquals(false, neu.profileById("p2")!!.keywordEverywhere)
+    }
+
+    @Test
+    fun `Regeln auf verschwundene Profile fallen weg und Altfelder sind danach leer`() {
+        val zustand = mitKalender(
+            CalendarSettings(
+                enabled = true,
+                keywordMarker = "[Fokus]",
+                calendarRules = mapOf("cal1" to CalendarRule("weg", CalendarMatch.ALL)),
+                keywordProfileId = "weg",
+                keywordCalendarIds = setOf("cal1"),
+            ),
+        )
+
+        val neu = LockMigration.calendarRulesIntoProfiles(zustand)
+
+        assertTrue(neu.profiles.all { it.calendars.isEmpty() && !it.keywordEverywhere })
+        assertTrue(neu.calendar.calendarRules.isEmpty())
+        assertNull(neu.calendar.keywordProfileId)
+        assertTrue(neu.calendar.keywordCalendarIds.isEmpty())
+        assertTrue(neu.calendar.enabled)
+        assertEquals("[Fokus]", neu.calendar.keywordMarker)
     }
 }

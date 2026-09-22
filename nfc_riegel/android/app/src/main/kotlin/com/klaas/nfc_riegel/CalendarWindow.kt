@@ -22,8 +22,9 @@ enum class CalendarMatch {
 }
 
 /**
- * Regel für einen Kalender des Geräts. Kalender ohne Regel sperren nicht — es
- * gibt bewusst kein „aus" als eigenen Wert, das Fehlen der Regel ist das Aus.
+ * Frühere zentrale Regel für einen Kalender. Wird nur noch gelesen, um sie mit
+ * [LockMigration.calendarRulesIntoProfiles] an die Profile zu ziehen; die
+ * Auswahl steht heute in [Profile.calendars].
  */
 data class CalendarRule(
     val profileId: String,
@@ -37,16 +38,12 @@ data class CalendarRule(
  */
 data class CalendarSettings(
     val enabled: Boolean = false,
-    /** Kalender-ID des Geräts → Regel. Nicht enthaltene Kalender sperren nicht. */
+    /** Nur noch für den Umzug, siehe [LockMigration.calendarRulesIntoProfiles]. */
     val calendarRules: Map<String, CalendarRule> = emptyMap(),
     val keywordMarker: String = "[Riegel]",
-    /** Profil für Treffer der eigenständigen Stichwortregel. */
+    /** Nur noch für den Umzug, siehe [LockMigration.calendarRulesIntoProfiles]. */
     val keywordProfileId: String? = null,
-    /**
-     * In welchen Kalendern die eigenständige Stichwortregel sucht.
-     * **Leer heißt: in allen.** Das ist die Vorgabe und der häufige Fall — wer
-     * einen Marker vergibt, will ihn meist überall wirken lassen.
-     */
+    /** Nur noch für den Umzug, siehe [LockMigration.calendarRulesIntoProfiles]. */
     val keywordCalendarIds: Set<String> = emptySet(),
     val cachedWindows: List<CalendarWindow> = emptyList(),
     val windowsFetchedAt: Long = 0L,
