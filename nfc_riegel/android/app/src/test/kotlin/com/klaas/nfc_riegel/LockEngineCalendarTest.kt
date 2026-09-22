@@ -243,4 +243,27 @@ class LockEngineCalendarTest {
 
         assertEquals(setOf("com.a", "com.b"), e.blockedPackages(jetzt))
     }
+
+    @Test
+    fun `Nagel haelt ein Profil fest, das der umbenannte Termin nicht mehr trifft`() {
+        val nagler = Profile("p1", "Arbeit", setOf("com.a"), LockMode.OPEN, pinCalendarEnd = true)
+        val store = FakeLockStore(
+            LockState(profiles = listOf(nagler, nacht), calendar = CalendarSettings(enabled = true))
+        )
+        val e = LockEngine(store)
+        e.updateWindows(
+            listOf(
+                CalendarWindow("e1", "[Riegel] Lernen", jetzt - minute, jetzt + minute, "p1"),
+                CalendarWindow("e1", "[Riegel] Lernen", jetzt - minute, jetzt + minute, "p2"),
+            ),
+            jetzt,
+        )
+        // Umbenannt: der Termin trifft nur noch p2, nicht mehr das nagelnde p1.
+        e.updateWindows(
+            listOf(CalendarWindow("e1", "Lernen", jetzt - minute, jetzt + minute, "p2")),
+            jetzt,
+        )
+
+        assertEquals(setOf("com.a", "com.b"), e.blockedPackages(jetzt))
+    }
 }

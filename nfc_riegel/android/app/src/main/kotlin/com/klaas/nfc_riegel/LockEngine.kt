@@ -429,10 +429,13 @@ class LockEngine(private val store: LockStore) {
         // Ein festgenageltes Fenster bleibt im Zwischenspeicher, auch wenn sein
         // Termin aus dem Kalender verschwunden ist. Ohne das verlöre es sein
         // Profil und sperrte nichts mehr — also genau das, wogegen das
-        // Festnageln gedacht ist.
-        val frisch = windows.map { it.eventId }.toSet()
+        // Festnageln gedacht ist. Geprüft wird das Paar (eventId, profileId),
+        // nicht nur die eventId: ein umbenannter Termin kann frisch nur noch
+        // einen Teil seiner früheren Profile treffen (z.B. verliert er sein
+        // Stichwort), und der Nagel muss trotzdem jedes betroffene Profil halten.
+        val frisch = windows.map { it.eventId to it.profileId }.toSet()
         val ueberlebende = s.calendar.cachedWindows.filter {
-            it.eventId in genagelt && it.eventId !in frisch
+            it.eventId in genagelt && (it.eventId to it.profileId) !in frisch
         }
 
         val mitFenstern = s.calendar.copy(
