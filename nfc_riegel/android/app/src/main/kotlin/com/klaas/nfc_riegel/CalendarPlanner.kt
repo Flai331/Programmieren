@@ -29,20 +29,13 @@ object CalendarPlanner {
         val bekannt = c.cachedWindows.map { it.eventId }.toSet()
         val verwaist = c.pinnedEnds
             .filter { (id, ende) -> id !in bekannt && now < ende }
-            .map { (id, ende) -> CalendarWindow(id, "Termin", 0L, ende, profileIdFor(c, id)) }
+            // Ohne gespeichertes Fenster ist das Profil nicht mehr bekannt.
+            // `updateWindows` behält genagelte Fenster deshalb im Speicher; dieser
+            // Rest sperrt kein Profil, hält aber die Grenze fest.
+            .map { (id, ende) -> CalendarWindow(id, "Termin", 0L, ende, "") }
 
         return ausKalender + verwaist
     }
-
-    /**
-     * Ein verwaistes Fenster kennt sein Profil nicht mehr — der Termin ist weg.
-     * Die Zuordnung stand im zwischengespeicherten Fenster, das mit ihm
-     * verschwunden ist; als Rückfall dient das Stichwortprofil.
-     */
-    private fun profileIdFor(c: CalendarSettings, eventId: String): String =
-        c.cachedWindows.firstOrNull { it.eventId == eventId }?.profileId
-            ?: c.keywordProfileId
-            ?: ""
 
     fun lockedProfileIds(c: CalendarSettings, now: Long): Set<String> =
         activeWindows(c, now).map { it.profileId }.filter { it.isNotEmpty() }.toSet()
@@ -85,32 +78,25 @@ object CalendarPlanner {
     }
 
     /**
-     * Welches Profil ein Termin bekommt. Zwei Regelarten in fester Rangfolge:
-     *
-     * 1. Die Regel des Kalenders, in dem der Termin steht — die spezifischere
-     *    Angabe. Steht sie auf [CalendarMatch.ALL], gilt sie für jeden Termin;
-     *    auf [CalendarMatch.KEYWORD] nur bei Treffer im Titel.
-     * 2. Die eigenständige Stichwortregel, sofern der Kalender in
-     *    [CalendarSettings.keywordCalendarIds] steht oder diese Menge leer ist.
-     *
-     * Trifft weder noch, sperrt der Termin nicht.
+     * Welche Profile ein Termin sperrt. Ein Profil trifft, wenn es den Kalender
+     * auf [CalendarMatch.ALL] gesetzt hat — oder wenn der Titel den Marker
+     * enthält und das Profil den Kalender auf [CalendarMatch.KEYWORD] oder
+     * [Profile.keywordEverywhere] gesetzt hat. Alle Treffer sperren; es gibt
+     * keine Rangfolge mehr.
      */
-    fun profileForEvent(c: CalendarSettings, calendarId: String, title: String): String? {
-        val trifftMarker = c.keywordMarker.isNotEmpty() && title.contains(c.keywordMarker)
-
-        val regel = c.calendarRules[calendarId]
-        if (regel != null) {
-            when (regel.match) {
-                CalendarMatch.ALL -> return regel.profileId
-                // Kein Treffer heißt nicht „fertig": die eigenständige Regel darf
-                // es noch versuchen. Nur wenn die Kalenderregel greift, hat sie
-                // Vorrang.
-                CalendarMatch.KEYWORD -> if (trifftMarker) return regel.profileId
+    fun profilesForEvent(
+        profiles: List<Profile>,
+        marker: String,
+        calendarId: String,
+        title: String,
+    ): Set<String> {
+        val trifftMarker = marker.isNotEmpty() && title.contains(marker)
+        return profiles.filter { p ->
+            when (p.calendars[calendarId]) {
+                CalendarMatch.ALL -> true
+                CalendarMatch.KEYWORD -> trifftMarker
+                null -> trifftMarker && p.keywordEverywhere
             }
-        }
-
-        if (!trifftMarker) return null
-        val imSuchbereich = c.keywordCalendarIds.isEmpty() || calendarId in c.keywordCalendarIds
-        return if (imSuchbereich) c.keywordProfileId else null
+        }.map { it.id }.toSet()
     }
 }

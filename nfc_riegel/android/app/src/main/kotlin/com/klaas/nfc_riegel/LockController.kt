@@ -32,7 +32,9 @@ class LockController(private val context: Context) {
         val zustand = engine.state()
         if (!zustand.calendar.enabled) return
         val quelle = ContentCalendarSource(context)
-        val fenster = quelle.windows(zustand.calendar, now, now + CALENDAR_LOOKAHEAD_MILLIS)
+        val fenster = quelle.windows(
+            zustand.calendar, zustand.profiles, now, now + CALENDAR_LOOKAHEAD_MILLIS,
+        )
         applyEffects(engine.updateWindows(fenster, now), now)
     }
 

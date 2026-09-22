@@ -15,7 +15,12 @@ data class DeviceCalendar(val id: String, val name: String, val account: String)
  */
 interface CalendarSource {
     fun calendars(): List<DeviceCalendar>
-    fun windows(settings: CalendarSettings, from: Long, to: Long): List<CalendarWindow>
+    fun windows(
+        settings: CalendarSettings,
+        profiles: List<Profile>,
+        from: Long,
+        to: Long,
+    ): List<CalendarWindow>
 }
 
 /** Lesezeitraum: so weit schaut Riegel in die Zukunft. */
@@ -53,7 +58,12 @@ class ContentCalendarSource(private val context: Context) : CalendarSource {
      * Fragt die `Instances`-Tabelle ab, nicht `Events`: sie liefert Wiederholungen
      * bereits als einzelne Termine mit konkreten Zeiten.
      */
-    override fun windows(settings: CalendarSettings, from: Long, to: Long): List<CalendarWindow> {
+    override fun windows(
+        settings: CalendarSettings,
+        profiles: List<Profile>,
+        from: Long,
+        to: Long,
+    ): List<CalendarWindow> {
         if (!darfLesen()) return emptyList()
 
         val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().let {
@@ -83,18 +93,25 @@ class ContentCalendarSource(private val context: Context) : CalendarSource {
 
                 val titel = c.getString(1) ?: ""
                 val kalenderId = c.getLong(4).toString()
-                val profil = CalendarPlanner.profileForEvent(settings, kalenderId, titel)
-                    ?: continue
+                val getroffen = CalendarPlanner.profilesForEvent(
+                    profiles, settings.keywordMarker, kalenderId, titel,
+                )
+                if (getroffen.isEmpty()) continue
 
                 // Beginn angehängt: eine wiederkehrende Serie hat für alle Termine
                 // dieselbe EVENT_ID, das Festnageln muss aber den einzelnen treffen.
-                ergebnis += CalendarWindow(
-                    eventId = "${c.getLong(0)}_$beginn",
-                    title = titel,
-                    startsAt = beginn,
-                    endsAt = ende,
-                    profileId = profil,
-                )
+                val eventId = "${c.getLong(0)}_$beginn"
+                // Ein Fenster je Profil, alle mit derselben eventId: so bleiben
+                // Nägel (nach eventId), Sperrmenge und Countdown wie sie sind.
+                for (profilId in getroffen) {
+                    ergebnis += CalendarWindow(
+                        eventId = eventId,
+                        title = titel,
+                        startsAt = beginn,
+                        endsAt = ende,
+                        profileId = profilId,
+                    )
+                }
             }
         }
         return ergebnis
