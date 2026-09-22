@@ -120,6 +120,7 @@ einen beschreibbaren NFC-Tag (NTAG213/215/216).
 - [ ] Abfrage ablehnen — Hinweis erscheint, Funktion bleibt aus
 - [ ] Abfrage erlauben — Kalender-Schirm zeigt nur Schalter, Stichwort, Vorschau und den Satz „… im jeweiligen Profil ein"
 - [ ] Update von Build 20: vorher zugeordnete Kalender stehen jetzt im jeweiligen Profil, die Stichwortregel als „Stichwort in jedem Kalender" bzw. „nur Stichwort"
+- [ ] Nicht zurück auf Build 20 installieren: der ältere Build kennt die neuen Profilfelder nicht und verwirft alle Profile
 - [ ] Profil öffnen — Abschnitt KALENDER listet die Kalender des Geräts
 - [ ] Einen Kalender auf „alle Termine", sichern
 - [ ] Termin in diesem Kalender anlegen, der in 2 Minuten beginnt und 5 Minuten dauert

@@ -144,6 +144,24 @@ void main() {
     expect(status.profiles.last.usesCalendar, isFalse);
   });
 
+  test('ein unbekannter Kalender-Treffertyp wird verworfen, nicht auf alle gesetzt', () {
+    // Wuerde ein unbekannter Wert auf ALL abgebildet, schriebe die naechste
+    // Sicherung diese staerkere Sperre zurueck — deshalb muss er ganz fehlen.
+    final status = LockStatus.fromMap({
+      'profiles': [
+        {
+          'id': 'p1',
+          'name': 'Arbeit',
+          'calendars': {'cal1': 'ALL', 'cal2': 'QUATSCH'},
+        },
+      ],
+      'tags': <dynamic>[],
+      'timeLocks': <dynamic>[],
+    });
+
+    expect(status.profiles.first.calendars, {'cal1': CalendarMatch.all});
+  });
+
   test('fehlender Kalenderblock ergibt die Vorgaben', () {
     final status = LockStatus.fromMap({
       'profiles': <dynamic>[],

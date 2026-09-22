@@ -199,6 +199,29 @@ class DiagnosticsTest {
     }
 
     @Test
+    fun `ein Termin mit zwei Profilen zaehlt einmal, nicht als zwei Fenster`() {
+        val jetzt = 1_000_000L
+        val zustand = LockState(
+            profiles = listOf(
+                Profile("p1", "Arbeit", calendars = mapOf("cal1" to CalendarMatch.ALL)),
+                Profile("p2", "Nacht", calendars = mapOf("cal1" to CalendarMatch.ALL)),
+            ),
+            calendar = CalendarSettings(
+                enabled = true,
+                cachedWindows = listOf(
+                    CalendarWindow("e1", "Konzept", jetzt - 1, jetzt + 60_000, "p1"),
+                    CalendarWindow("e1", "Konzept", jetzt - 1, jetzt + 60_000, "p2"),
+                ),
+            ),
+        )
+
+        val zeile = Diagnostics.summarize(zustand, jetzt).getValue("Kalender")
+
+        assertTrue(zeile, zeile.contains("1 Termine im Speicher"))
+        assertTrue(zeile, zeile.contains("1 Termin(e) sperren gerade"))
+    }
+
+    @Test
     fun `Bericht enthaelt keine Termintitel`() {
         val jetzt = 1_000_000L
         val zustand = LockState(

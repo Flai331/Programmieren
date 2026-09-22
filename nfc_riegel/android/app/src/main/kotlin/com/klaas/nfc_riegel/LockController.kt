@@ -53,10 +53,19 @@ class LockController(private val context: Context) {
         return gespeichert
     }
 
-    /** Löschen aus demselben Grund über den Controller: die Ruhe muss mit weg. */
+    /**
+     * Löschen aus demselben Grund über den Controller: die Ruhe muss mit weg.
+     * Zieht außerdem den Kalender neu — im Zwischenspeicher stehen sonst
+     * weiterhin künftige Fenster mit der gelöschten Profil-ID, und die würden
+     * ab ihrem Beginn eine nicht mehr existierende Sperre auslösen, die dann
+     * Einstellungen und Chip-Anlernen blockiert (siehe [lockedProfileIds]).
+     */
     fun deleteProfile(id: String, now: Long = System.currentTimeMillis()): Boolean {
         val geloescht = engine.deleteProfile(id, now)
-        if (geloescht) applyEffects(engine.state(), now)
+        if (geloescht) {
+            applyEffects(engine.state(), now)
+            refreshCalendar(now)
+        }
         return geloescht
     }
 

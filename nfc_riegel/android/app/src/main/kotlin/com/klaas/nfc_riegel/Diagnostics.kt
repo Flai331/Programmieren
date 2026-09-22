@@ -80,14 +80,17 @@ object Diagnostics {
         val c = state.calendar
         if (!c.enabled) return "aus"
 
-        val laufend = CalendarPlanner.activeWindows(c, now).size
+        // Ein Termin mit mehreren Profilen liegt als mehrere Fenster mit
+        // derselben eventId vor (siehe LockEngine.updateWindows) — gezählt wird
+        // die Zahl der Termine, nicht die der Fenster.
+        val laufend = CalendarPlanner.activeWindows(c, now).map { it.eventId }.distinct().size
         val grenze = CalendarPlanner.nextBoundary(c, now)
         val mitKalender = state.profiles.count { it.calendars.isNotEmpty() || it.keywordEverywhere }
         val ueberall = state.profiles.count { it.keywordEverywhere }
         val teile = mutableListOf(
             "an",
             "$mitKalender Profile mit Kalender ($ueberall mit Stichwort überall)",
-            "${c.cachedWindows.size} Termine im Speicher",
+            "${c.cachedWindows.map { it.eventId }.distinct().size} Termine im Speicher",
             "$laufend Termin(e) sperren gerade",
         )
         if (c.pinnedEnds.isNotEmpty()) teile += "${c.pinnedEnds.size} festgenagelt"

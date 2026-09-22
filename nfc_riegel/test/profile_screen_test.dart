@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nfc_riegel/calendar_screen.dart';
 import 'package:nfc_riegel/lock_status.dart';
 import 'package:nfc_riegel/profile_screen.dart';
 import 'package:nfc_riegel/riegel_channel.dart';
@@ -15,6 +16,7 @@ void main() {
   void stub({
     required bool usageGranted,
     List<Map<String, String>> kalender = const [],
+    Map<String, dynamic>? chipLock,
   }) {
     gespeichert = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -29,6 +31,15 @@ void main() {
               return true;
             case 'deviceCalendars':
               return kalender;
+            case 'getState':
+              // `_oeffneKalender` fragt den Zustand ab, bevor sie den
+              // Kalender-Schirm öffnet — ohne diesen Fall bliebe er null.
+              return {
+                'profiles': <dynamic>[],
+                'tags': <dynamic>[],
+                'timeLocks': <dynamic>[],
+                'chipLock': chipLock,
+              };
           }
           return null;
         });
@@ -383,4 +394,22 @@ void main() {
     expect(gespeichert!['calendars'], {'cal1': 'KEYWORD'});
     expect(gespeichert!['keywordEverywhere'], isTrue);
   });
+
+  testWidgets(
+    'waehrend einer Sperre oeffnet "Zum Kalender" den Kalender-Schirm nicht',
+    (tester) async {
+      // Der Hauptschirm schaltet den Kalender-Eintrag waehrend jeder Sperre
+      // ab; dieser Knopf im Profil darf das nicht umgehen.
+      stub(usageGranted: true, chipLock: {'profileId': 'p1'});
+      await tester.pumpWidget(kalenderSchirm(an: false));
+      await tester.pumpAndSettle();
+
+      await scrolleZu(tester, find.text('Zum Kalender'));
+      await tester.tap(find.text('Zum Kalender'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Während einer Sperre nicht möglich'), findsOneWidget);
+      expect(find.byType(CalendarScreen), findsNothing);
+    },
+  );
 }

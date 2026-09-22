@@ -256,8 +256,11 @@ class ProfileInfo {
           .map((e) => QuietScheduleInfo.fromMap(e as Map<dynamic, dynamic>))
           .toList(),
       quietRinger: _ringerFrom(map['quietRinger'] as String?),
-      calendars: (map['calendars'] as Map<dynamic, dynamic>? ?? {}).map(
-        (k, v) => MapEntry(k as String, _matchFrom(v as String?)),
+      calendars: Map.fromEntries(
+        (map['calendars'] as Map<dynamic, dynamic>? ?? {}).entries
+            .map((e) => MapEntry(e.key as String, _matchFrom(e.value as String?)))
+            .where((e) => e.value != null)
+            .map((e) => MapEntry(e.key, e.value!)),
       ),
       keywordEverywhere: map['keywordEverywhere'] as bool? ?? false,
     );
@@ -366,8 +369,14 @@ class DeviceCalendarInfo {
 /// Welche Termine eines Kalenders sperren.
 enum CalendarMatch { all, keyword }
 
-CalendarMatch _matchFrom(String? raw) =>
-    raw == 'KEYWORD' ? CalendarMatch.keyword : CalendarMatch.all;
+/// Null für alles Unbekannte statt eines Rückfalls auf [CalendarMatch.all]:
+/// eine unbekannte Kennung faelschlich als „alle Termine" zu lesen, wuerde bei
+/// der naechsten Sicherung genau diese staerkere Sperre zurueckschreiben.
+CalendarMatch? _matchFrom(String? raw) => switch (raw) {
+  'ALL' => CalendarMatch.all,
+  'KEYWORD' => CalendarMatch.keyword,
+  _ => null,
+};
 
 String matchToNative(CalendarMatch m) =>
     m == CalendarMatch.keyword ? 'KEYWORD' : 'ALL';

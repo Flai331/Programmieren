@@ -72,9 +72,17 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   /// Rolle und Berechtigungen werden in Systemdialogen vergeben. Zurueck in der
   /// App muss der Schirm den neuen Stand zeigen, ohne dass man ihn neu oeffnet.
+  /// Dasselbe gilt fuer die Kalenderberechtigung: wird sie in den
+  /// Systemeinstellungen erteilt, soll die Kalenderliste erscheinen, ohne dass
+  /// man den Schirm verlaesst und neu betritt.
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _ladeBerechtigung();
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    if (state != AppLifecycleState.resumed) return;
+    _ladeBerechtigung();
+    final status = await widget.channel.getState();
+    if (!mounted) return;
+    setState(() => _kalender = status.calendar);
+    await _ladeKalender();
   }
 
   Future<void> _ladeBerechtigung() async {
@@ -103,6 +111,14 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _oeffneKalender() async {
     final status = await widget.channel.getState();
     if (!mounted) return;
+    // Der Hauptschirm schaltet den Kalender-Eintrag während jeder Sperre ab —
+    // dieser Knopf hier darf das nicht umgehen.
+    if (status.locked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Während einer Sperre nicht möglich')),
+      );
+      return;
+    }
     await Navigator.push(
       context,
       MaterialPageRoute(
