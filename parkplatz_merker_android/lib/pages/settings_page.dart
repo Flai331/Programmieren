@@ -1,190 +1,221 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+
 import '../controller.dart';
 import '../native.dart';
-import 'search_page.dart';
 import 'diagnostics_page.dart';
+import 'search_page.dart';
+
+/// Stand der Einrichtung (Berechtigungen + Akku).
+class SetupState {
+  final bool location;
+  final bool locationAlways;
+  final bool activity;
+  final bool bluetooth;
+  final bool notifications;
+  final bool battery;
+
+  const SetupState({
+    required this.location,
+    required this.locationAlways,
+    required this.activity,
+    required this.bluetooth,
+    required this.notifications,
+    required this.battery,
+  });
+
+  /// Das Nötigste für die automatische Erkennung.
+  bool get essentialsOk =>
+      location && locationAlways && activity && notifications;
+
+  static Future<SetupState> load() async {
+    final status = await NativeBridge.getNativeStatus();
+    return SetupState(
+      location: await Permission.locationWhenInUse.isGranted,
+      locationAlways: await Permission.locationAlways.isGranted,
+      activity: await Permission.activityRecognition.isGranted,
+      bluetooth:
+          await Permission.bluetoothScan.isGranted &&
+          await Permission.bluetoothConnect.isGranted,
+      notifications: await Permission.notification.isGranted,
+      battery: status['ignoringBatteryOptimizations'] == true,
+    );
+  }
+}
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({Key? key}) : super(key: key);
+  const SettingsPage({super.key});
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage> {
-  Map<String, dynamic> _nativeStatus = {};
-  bool _isRegisteringTransitions = false;
+class _SettingsPageState extends State<SettingsPage>
+    with WidgetsBindingObserver {
+  SetupState? _setup;
 
   @override
   void initState() {
     super.initState();
-    _loadStatus();
+    WidgetsBinding.instance.addObserver(this);
+    _reload();
   }
 
-  Future<void> _loadStatus() async {
-    final status = await NativeBridge.getNativeStatus();
-    setState(() => _nativeStatus = status);
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
-  Future<void> _requestPermission(Permission permission) async {
-    final status = await permission.request();
-    if (mounted) {
-      await _loadStatus();
-      // Nach Berechtigungserteiling Transitions registrieren
-      if (status.isGranted) {
-        setState(() => _isRegisteringTransitions = true);
-        await NativeBridge.registerTransitions();
-        setState(() => _isRegisteringTransitions = false);
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Zurück aus den System-Einstellungen → Stand neu prüfen.
+    if (state == AppLifecycleState.resumed) _reload();
+  }
+
+  Future<void> _reload() async {
+    final setup = await SetupState.load();
+    if (!mounted) return;
+    setState(() => _setup = setup);
+    await context.read<AppController>().reloadConfig();
+  }
+
+  Future<void> _request(List<Permission> permissions) async {
+    for (final p in permissions) {
+      var status = await p.status;
+      if (!status.isGranted) status = await p.request();
+      if (status.isPermanentlyDenied) {
+        await openAppSettings();
+        break;
       }
+      if (!status.isGranted) break;
     }
+    await NativeBridge.registerTransitions();
+    await _reload();
   }
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.read<AppController>();
+    final controller = context.watch<AppController>();
     final config = controller.config;
-    final deviceMode = config['deviceMode'] ?? 'none';
-    final deviceAddress = config['deviceAddress'];
-    final deviceName = config['deviceName'];
+    final deviceMode = (config['deviceMode'] as String?) ?? 'none';
+    final deviceAddress = config['deviceAddress'] as String?;
+    final deviceName = config['deviceName'] as String?;
+    final setup = _setup;
+    final kind = deviceMode == 'beacon' ? 'Beacon' : 'Transmitter';
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Einstellungen'),
-      ),
+      appBar: AppBar(title: const Text('Einstellungen')),
       body: ListView(
         children: [
-          // Erkennung
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'Erkennung',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
+          const _Header('Erkennung'),
           SwitchListTile(
-            title: const Text('Aktivitätserkennung'),
-            subtitle: const Text('Aussteigen erkennen'),
-            value: config['activityEnabled'] ?? true,
-            onChanged: (value) {
-              NativeBridge.setConfig(activityEnabled: value);
-              controller.refresh();
-            },
+            title: const Text('Aktivitätserkennung (Aussteigen)'),
+            subtitle: const Text('Hauptweg: erkennt Fahrt und Aussteigen'),
+            value: config['activityEnabled'] != false,
+            onChanged: (v) => controller.updateConfig(activityEnabled: v),
           ),
           SwitchListTile(
             title: const Text('Ladekabel als Hinweis'),
-            subtitle: const Text('Verwendet Ladekabelabzug zur Parkplatzerkennung'),
-            value: config['chargerEnabled'] ?? true,
-            onChanged: (value) {
-              NativeBridge.setConfig(chargerEnabled: value);
-              controller.refresh();
-            },
+            subtitle: const Text(
+              'Kabel ab beim Aussteigen = genauer Zeitpunkt',
+            ),
+            value: config['chargerEnabled'] != false,
+            onChanged: (v) => controller.updateConfig(chargerEnabled: v),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text('Gerät im Auto', style: Theme.of(context).textTheme.titleSmall),
-          ),
+          const ListTile(title: Text('Gerät im Auto')),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SegmentedButton<String>(
               segments: const [
-                ButtonSegment(label: Text('Keins'), value: 'none'),
-                ButtonSegment(label: Text('Transmitter'), value: 'transmitter'),
-                ButtonSegment(label: Text('Beacon'), value: 'beacon'),
+                ButtonSegment(value: 'none', label: Text('Keins')),
+                ButtonSegment(value: 'transmitter', label: Text('Transmitter')),
+                ButtonSegment(value: 'beacon', label: Text('Beacon')),
               ],
               selected: {deviceMode},
-              onSelectionChanged: (Set<String> selected) {
-                NativeBridge.setConfig(deviceMode: selected.first);
-                controller.refresh();
-              },
+              onSelectionChanged: (sel) =>
+                  controller.updateConfig(deviceMode: sel.first),
             ),
           ),
           if (deviceMode != 'none')
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (deviceName != null) Text('Name: $deviceName'),
-                  if (deviceAddress != null) Text('Adresse: $deviceAddress'),
-                  const SizedBox(height: 8),
-                  FilledButton(
-                    onPressed: () {
-                      final mode = deviceMode == 'transmitter' ? 'Transmitter' : 'Beacon';
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => SearchPage(mode: mode),
-                        ),
-                      );
-                    },
-                    child: Text('$deviceMode suchen'),
+            ListTile(
+              leading: const Icon(Icons.bluetooth_searching),
+              title: Text(
+                deviceAddress == null
+                    ? 'Noch kein $kind gewählt'
+                    : ((deviceName == null || deviceName.isEmpty)
+                          ? '(ohne Namen)'
+                          : deviceName),
+              ),
+              subtitle: deviceAddress == null ? null : Text(deviceAddress),
+              trailing: FilledButton.tonal(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => SearchPage(mode: deviceMode),
                   ),
-                ],
+                ),
+                child: Text('$kind suchen'),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.all(16),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Text(
-              'Die App verbindet sich nie mit dem Gerät – sie schaut nur, ob es in der Nähe ist.',
-              style: Theme.of(context).textTheme.bodySmall,
+              'Die App verbindet sich nie mit dem Gerät – sie schaut nur, ob es in der Nähe ist. '
+              'Nur während einer Fahrt wird alle 2 Minuten kurz gesucht.',
             ),
           ),
           const Divider(),
-
-          // Einrichtung
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'Einrichtung',
-              style: Theme.of(context).textTheme.titleMedium,
+          const _Header('Einrichtung'),
+          if (setup == null)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: LinearProgressIndicator(),
+            )
+          else ...[
+            _PermTile(
+              title: '1. Standort',
+              ok: setup.location,
+              onFix: () => _request([Permission.locationWhenInUse]),
             ),
-          ),
-          _buildPermissionTile(
-            context,
-            'Standort (wenn in Nutzung)',
-            _nativeStatus['locationEnabled'] != true,
-            () => _requestPermission(Permission.locationWhenInUse),
-          ),
-          _buildPermissionTile(
-            context,
-            'Standort (immer zulassen)',
-            _nativeStatus['locationEnabled'] != true,
-            () => _requestPermission(Permission.locationAlways),
-          ),
-          _buildPermissionTile(
-            context,
-            'Aktivitätserkennung',
-            _nativeStatus['transitionsRegistered'] != true,
-            () => _requestPermission(Permission.activityRecognition),
-          ),
-          if (deviceMode != 'none')
-            _buildPermissionTile(
-              context,
-              'Bluetooth-Suche',
-              _nativeStatus['bluetoothEnabled'] != true,
-              () async {
-                await _requestPermission(Permission.bluetoothScan);
-                if (mounted) {
-                  await _requestPermission(Permission.bluetoothConnect);
-                }
-              },
+            _PermTile(
+              title: '2. Standort „Immer zulassen“',
+              hint: 'Im nächsten Fenster „Immer zulassen“ wählen – sonst klappt es nicht bei geschlossener App.',
+              ok: setup.locationAlways,
+              onFix: setup.location
+                  ? () => _request([Permission.locationAlways])
+                  : null,
             ),
-          _buildPermissionTile(
-            context,
-            'Benachrichtigungen',
-            false, // Hinweis: sollte richtig geprüft werden
-            () => _requestPermission(Permission.notification),
-          ),
-          _buildPermissionTile(
-            context,
-            'Akku (nicht eingeschränkt)',
-            _nativeStatus['ignoringBatteryOptimizations'] != true,
-            () => NativeBridge.openBatterySettings(),
-          ),
-          const Divider(),
-
-          // Hinweis
+            _PermTile(
+              title: '3. Aktivitätserkennung',
+              hint: 'Erkennt, ob du fährst oder gehst.',
+              ok: setup.activity,
+              onFix: () => _request([Permission.activityRecognition]),
+            ),
+            _PermTile(
+              title: '4. Bluetooth-Suche',
+              hint: deviceMode == 'none'
+                  ? 'Nur nötig mit Transmitter oder Beacon.'
+                  : 'Zum „Sehen“ des Geräts.',
+              ok: setup.bluetooth,
+              onFix: () => _request([
+                Permission.bluetoothScan,
+                Permission.bluetoothConnect,
+              ]),
+            ),
+            _PermTile(
+              title: '5. Benachrichtigungen',
+              hint: 'Für „Fahrt erkannt“ und die Parkschein-Erinnerung.',
+              ok: setup.notifications,
+              onFix: () => _request([Permission.notification]),
+            ),
+            _PermTile(
+              title: '6. Akku „Nicht eingeschränkt“',
+              hint: 'Sonst beendet Android die Erkennung im Hintergrund.',
+              ok: setup.battery,
+              onFix: () => NativeBridge.openBatterySettings(),
+            ),
+          ],
           Padding(
             padding: const EdgeInsets.all(16),
             child: Card(
@@ -193,16 +224,13 @@ class _SettingsPageState extends State<SettingsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Android blockiert manche Einstellungen',
-                      style: Theme.of(context).textTheme.titleSmall,
+                    const Text(
+                      'Schalter ausgegraut oder „Eingeschränkte Einstellung“? Android sperrt manche '
+                      'Einstellungen für Apps, die nicht aus dem Play Store kommen. Freigeben: '
+                      'App-Info öffnen → oben rechts ⋮ → „Eingeschränkte Einstellungen zulassen“.',
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Schalter ausgegraut oder „Eingeschränkte Einstellung"? App-Info öffnen → oben rechts ⋮ → „Eingeschränkte Einstellungen zulassen".',
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton(
+                    OutlinedButton(
                       onPressed: () => NativeBridge.openAppDetails(),
                       child: const Text('App-Info öffnen'),
                     ),
@@ -211,39 +239,62 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
           ),
-
-          // Diagnose
           const Divider(),
           ListTile(
+            leading: const Icon(Icons.bug_report_outlined),
             title: const Text('Diagnose'),
+            subtitle: const Text(
+              'Ereignisse, Berechtigungen, Gerät – zum Kopieren',
+            ),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const DiagnosticsPage(),
-                ),
-              );
-            },
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const DiagnosticsPage()),
+            ),
           ),
+          const SizedBox(height: 24),
         ],
       ),
     );
   }
+}
 
-  Widget _buildPermissionTile(
-    BuildContext context,
-    String title,
-    bool needsPermission,
-    VoidCallback onPressed,
-  ) {
+class _Header extends StatelessWidget {
+  final String text;
+  const _Header(this.text);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+    child: Text(text, style: Theme.of(context).textTheme.titleMedium),
+  );
+}
+
+class _PermTile extends StatelessWidget {
+  final String title;
+  final String? hint;
+  final bool ok;
+  final VoidCallback? onFix;
+
+  const _PermTile({
+    required this.title,
+    required this.ok,
+    this.hint,
+    this.onFix,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ListTile(
+      leading: Icon(
+        ok ? Icons.check_circle : Icons.error_outline,
+        color: ok ? Colors.green : scheme.error,
+      ),
       title: Text(title),
-      trailing: needsPermission
-          ? FilledButton(
-              onPressed: onPressed,
-              child: const Text('Erlauben'),
-            )
-          : Icon(Icons.check, color: Theme.of(context).colorScheme.primary),
+      subtitle: hint == null ? null : Text(hint!),
+      trailing: ok
+          ? null
+          : FilledButton(onPressed: onFix, child: const Text('Erlauben')),
     );
   }
 }

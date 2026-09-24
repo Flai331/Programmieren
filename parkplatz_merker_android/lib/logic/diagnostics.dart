@@ -34,15 +34,21 @@ List<RawEvent> diagnosticEvents(List<RawEvent> all, {int limit = 100}) {
 String describeEvent(RawEvent e) {
   final dateTime = DateTime.fromMillisecondsSinceEpoch(e.t);
   final dateStr = formatDateTime(dateTime);
-  final timeStr = '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}:${dateTime.second.toString().padLeft(2, '0')}';
+  final timeStr =
+      '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}:${dateTime.second.toString().padLeft(2, '0')}';
 
   return switch (e.type) {
-    'activity' => '$dateStr ${timeStr.substring(dateStr.length - 5)} Aktivität ${e.str('activity')} ${e.str('transition')}',
-    'loc' => '$dateStr Standort ${e.dbl('lat')}, ${e.dbl('lng')} ± ${e.dbl('acc')} m (${e.str('reason')})',
-    'service' => '$dateStr Service ${e.str('state')} (${e.str('mode')} ${e.str('target') ?? 'keins'})',
+    'activity' =>
+      '$dateStr ${timeStr.substring(dateStr.length - 5)} Aktivität ${e.str('activity')} ${e.str('transition')}',
+    'loc' =>
+      '$dateStr Standort ${e.dbl('lat')}, ${e.dbl('lng')} ± ${e.dbl('acc')} m (${e.str('reason')})',
+    'service' =>
+      '$dateStr Service ${e.str('state')} (${e.str('mode')} ${e.str('target') ?? 'keins'})',
     'scan' => _describeScan(dateStr, timeStr, e),
-    'beacon_bg' => '$dateStr Beacon-Hintergrund ${e.str('target')} (RSSI ${e.integer('rssi')})',
-    'power' => '$dateStr Laden: ${e.boolean('plugged') == true ? 'eingesteckt' : 'abgesteckt'} (${e.str('reason')})',
+    'beacon_bg' =>
+      '$dateStr Beacon-Hintergrund ${e.str('target')} (RSSI ${e.integer('rssi')})',
+    'power' =>
+      '$dateStr Laden: ${e.boolean('plugged') == true ? 'eingesteckt' : 'abgesteckt'} (${e.str('reason')})',
     'manual' => '$dateStr Manuell (${e.str('source')})',
     'info' => '$dateStr Info: ${e.str('msg')}',
     _ => '$dateStr ${e.toJson()}',
@@ -155,7 +161,9 @@ String buildDiagnosticText({
   buffer.writeln('Treffer: ${stats.hits}');
   if (stats.lastSeen != null) {
     final lastSeenDt = DateTime.fromMillisecondsSinceEpoch(stats.lastSeen!);
-    buffer.writeln('Zuletzt gesehen: ${formatDateTime(lastSeenDt)} (RSSI ${stats.lastRssi})');
+    buffer.writeln(
+      'Zuletzt gesehen: ${formatDateTime(lastSeenDt)} (RSSI ${stats.lastRssi})',
+    );
   } else {
     buffer.writeln('Zuletzt gesehen: noch nie');
   }
@@ -167,9 +175,13 @@ String buildDiagnosticText({
       ? tripResults.sublist(tripResults.length - 10)
       : tripResults;
   for (final result in recentTrips.reversed) {
-    buffer.writeln('Start: ${formatDateTime(DateTime.fromMillisecondsSinceEpoch(result.trip.start))}');
+    buffer.writeln(
+      'Start: ${formatDateTime(DateTime.fromMillisecondsSinceEpoch(result.trip.start))}',
+    );
     if (result.trip.exit != null) {
-      buffer.writeln('  Exit: ${formatDateTime(DateTime.fromMillisecondsSinceEpoch(result.trip.exit!))}');
+      buffer.writeln(
+        '  Exit: ${formatDateTime(DateTime.fromMillisecondsSinceEpoch(result.trip.exit!))}',
+      );
     }
     buffer.writeln('  Status: ${result.status}');
   }

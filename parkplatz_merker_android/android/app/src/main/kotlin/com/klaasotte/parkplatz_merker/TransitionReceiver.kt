@@ -4,7 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
-import com.google.android.gms.location.ActivityTransitionRequest
+import com.google.android.gms.location.ActivityTransition
 import com.google.android.gms.location.ActivityTransitionResult
 import com.google.android.gms.location.DetectedActivity
 import org.json.JSONObject
@@ -34,7 +34,7 @@ class TransitionReceiver : BroadcastReceiver() {
         // Jedes relevante Ereignis in zeitlicher Reihenfolge an den Service geben
         // (nicht nur das letzte – sonst ginge z. B. IN_VEHICLE EXIT vor STILL ENTER verloren).
         for (e in events) {
-            val enter = e.transitionType == ActivityTransitionRequest.ACTIVITY_TRANSITION_ENTER
+            val enter = e.transitionType == ActivityTransition.ACTIVITY_TRANSITION_ENTER
             when (e.activityType) {
                 DetectedActivity.IN_VEHICLE ->
                     TripService.start(context, if (enter) TripService.ACTION_ENTER else TripService.ACTION_EXIT)

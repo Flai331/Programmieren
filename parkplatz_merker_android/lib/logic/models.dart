@@ -5,11 +5,7 @@ class RawEvent {
   final int t;
   final Map<String, dynamic> data;
 
-  RawEvent({
-    required this.type,
-    required this.t,
-    required this.data,
-  });
+  RawEvent({required this.type, required this.t, required this.data});
 
   /// Versucht, eine JSON-Zeile zu parsen. Gibt null zurück, wenn ungültig.
   static RawEvent? tryParse(String line) {
@@ -35,6 +31,7 @@ class RawEvent {
     final v = data[k];
     return v is String ? v : null;
   }
+
   double? dbl(String k) {
     final v = data[k];
     if (v is num) return v.toDouble();
@@ -132,18 +129,18 @@ class ParkingSpot {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'time': time,
-        'lat': lat,
-        'lng': lng,
-        'acc': acc,
-        'sources': sources,
-        'manual': manual,
-        if (note != null) 'note': note,
-        if (photoPath != null) 'photoPath': photoPath,
-        if (address != null) 'address': address,
-        if (reminderAt != null) 'reminderAt': reminderAt,
-      };
+    'id': id,
+    'time': time,
+    'lat': lat,
+    'lng': lng,
+    'acc': acc,
+    'sources': sources,
+    'manual': manual,
+    if (note != null) 'note': note,
+    if (photoPath != null) 'photoPath': photoPath,
+    if (address != null) 'address': address,
+    if (reminderAt != null) 'reminderAt': reminderAt,
+  };
 
   factory ParkingSpot.fromJson(Map<String, dynamic> m) {
     return ParkingSpot(

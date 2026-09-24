@@ -10,7 +10,9 @@ List<ParkingSpot> mergeSpots(
   final result = <ParkingSpot>[];
 
   // IDs in deletedIds ignorieren
-  final existingFiltered = existing.where((s) => !deletedIds.contains(s.id)).toList();
+  final existingFiltered = existing
+      .where((s) => !deletedIds.contains(s.id))
+      .toList();
 
   // Erkannte Spots zusammenführen
   final merged = <String, ParkingSpot>{};
@@ -26,8 +28,10 @@ List<ParkingSpot> mergeSpots(
       final existingSpot = merged[detectedSpot.id]!;
 
       // Adresse nur behalten, wenn lat/lng gleich geblieben sind
-      final shouldClearAddress = existingSpot.address != null &&
-          (existingSpot.lat != detectedSpot.lat || existingSpot.lng != detectedSpot.lng);
+      final shouldClearAddress =
+          existingSpot.address != null &&
+          (existingSpot.lat != detectedSpot.lat ||
+              existingSpot.lng != detectedSpot.lng);
 
       final updatedSpot = existingSpot.copyWith(
         time: detectedSpot.time,

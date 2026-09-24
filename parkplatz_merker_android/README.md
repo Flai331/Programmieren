@@ -1,123 +1,118 @@
 # Parkplatz-Merker
 
-Eine Android-App, die automatisch erkennt, wo dein Auto abgestellt wurde – ohne ein Bluetooth-Gerät verbinden zu müssen.
+Android-App, die sich **automatisch** merkt, wo dein Auto steht. Wenn du die
+App später öffnest, siehst du „Dein Auto steht seit 14:32 hier“ mit Karte und
+dem Knopf „Navigation zum Auto“ (Fußweg in Google Maps).
+
+Dein Handy muss dafür **nicht** per Bluetooth mit dem Auto oder dem
+FM-Transmitter verbunden sein. Die App verbindet oder koppelt sich nie – sie
+schaut höchstens, ob der Transmitter in der Nähe ist.
 
 ## Download
 
-[Parkplatz-Merker.apk](https://github.com/Flai331/Programmieren/releases/download/parkplatz-merker-android/Parkplatz-Merker.apk)
+**[Parkplatz-Merker.apk](https://github.com/Flai331/Programmieren/releases/download/parkplatz-merker-android/Parkplatz-Merker.apk)**
 
-## Einrichtung
+Die Datei im Browser des Handys herunterladen und öffnen. Beim ersten Mal
+fragt Android, ob der Browser Apps installieren darf → erlauben. Updates
+lassen sich einfach über die alte Version installieren (gleicher Schlüssel);
+deine Parkplätze bleiben erhalten.
 
-Damit die App funktioniert, musst du folgende Berechtigungen erteilen:
+## Einrichtung (einmalig, ca. 2 Minuten)
 
-### 1. Standort (immer zulassen)
-- Öffne die App.
-- Tippe auf das Einstellungen-Symbol (⚙️).
-- Wähle „Standort (immer zulassen)" und tippe „Erlauben".
-- Im nächsten Dialog **wähle „Immer zulassen"** (nicht nur „Während der Nutzung").
+App öffnen → ⚙️ **Einstellungen** → Abschnitt **Einrichtung**. Jede Zeile mit
+rotem Symbol antippen → **Erlauben**:
 
-### 2. Aktivitätserkennung
-- Tippe in den Einstellungen auf „Aktivitätserkennung" und „Erlauben".
-- Dies hilft der App, zu erkennen, wann du aussteigst.
+1. **Standort** → „Bei Nutzung der App“.
+2. **Standort „Immer zulassen“** → im nächsten Fenster wirklich **„Immer
+   zulassen“** wählen. Ohne das klappt die Erkennung bei geschlossener App nicht.
+3. **Aktivitätserkennung** („Körperliche Aktivität“) → erlauben.
+4. **Bluetooth-Suche** („Geräte in der Nähe“) → erlauben (nur für Transmitter/Beacon nötig).
+5. **Benachrichtigungen** → erlauben.
+6. **Akku „Nicht eingeschränkt“** → im Fenster „Zulassen“; oder unter
+   Einstellungen → Apps → Parkplatz-Merker → Akku → „Nicht eingeschränkt“.
+   Bei Samsung zusätzlich: Akku → „Apps im Standby“ – Parkplatz-Merker dort
+   **nicht** eintragen.
 
-### 3. Bluetooth-Suche (optional, falls du einen Transmitter/Beacon nutzen möchtest)
-- Tippe auf „Bluetooth-Suche" und folge den Anweisungen.
-- Verbinde das Gerät **nicht** per Bluetooth mit dem Handy – die App schaut nur, ob es in der Nähe ist.
+**Schalter ausgegraut oder „Eingeschränkte Einstellung“?** Android sperrt
+manches für Apps, die nicht aus dem Play Store kommen. In der App auf
+„App-Info öffnen“ → oben rechts **⋮** → **„Eingeschränkte Einstellungen
+zulassen“** → bestätigen, dann den Schritt wiederholen.
 
-### 4. Benachrichtigungen
-- Tippe auf „Benachrichtigungen" und „Erlauben".
+Wenn alles grün ist, verschwindet auf der Startseite der Hinweis
+„Einrichtung unvollständig“. Mehr ist nicht zu tun – einfach losfahren.
 
-### 5. Akku (nicht eingeschränkt)
-- Tippe auf „Akku" und folge den Anweisungen.
-- Dies verhindert, dass Android die App drosselt.
+## Transmitter einrichten (optional, empfohlen)
 
-### 6. Eingeschränkte Einstellungen (falls der Schalter ausgegraut ist)
-- Öffne die App-Einstellungen.
-- Öffne die App-Info für „Parkplatz-Merker".
-- Tippe oben rechts auf ⋮ (drei Punkte).
-- Wähle „Eingeschränkte Einstellungen zulassen".
-- Öffne die App erneut und versuche es.
+Mit dem Transmitter weiß die App, dass du in **deinem** Auto sitzt (nicht im
+Bus oder Taxi) und wann der Motor aus ist.
 
-## So testest du, ob die App deinen Transmitter/Beacon sieht
+1. Auto an, Transmitter steckt und leuchtet. Handy **nicht** mit dem Transmitter verbinden.
+2. Einstellungen → **Gerät im Auto: Transmitter** → **„Transmitter suchen“** → **„Suche starten“**.
+3. Nach ca. 15 Sekunden erscheint eine Liste mit Name, Adresse und Signalstärke (RSSI).
+   Dein Transmitter ist meist der mit dem stärksten Signal (Zahl am nächsten an 0, z. B. −45 dBm).
+4. Eintrag antippen → **„Verwenden“**.
 
-### Mit Transmitter:
-1. **Auto anstellen**.
-2. **Handy NICHT** mit dem Transmitter verbinden.
-3. Öffne die App → Einstellungen → Gerät im Auto: Transmitter → „Transmitter suchen".
-4. Das Gerät sollte in der Liste erscheinen mit RSSI-Wert.
-5. **Gegenprobe**: Transmitter ausstecken → erneut suchen → sollte verschwinden.
+### So testest du, ob die App deinen Transmitter sieht
 
-### Nach einer Fahrt:
-1. Fahrt beenden und parken.
-2. Öffne die App → Einstellungen → „Diagnose".
-3. Scrolle zu „Zuletzt gesehen" – sollte die aktuelle Zeit zeigen.
+1. **Gegenprobe:** Transmitter kurz ausstecken → noch einmal suchen → er darf
+   **nicht** mehr in der Liste stehen. Wieder einstecken → noch mal suchen → er ist wieder da.
+   Dann ist es sicher der richtige.
+2. **Taucht er nie auf?** Manche Transmitter sind nur sichtbar, solange kein
+   Handy verbunden ist – prüfe, dass auch kein anderes Handy im Auto mit ihm
+   verbunden ist. Bluetooth und Standort (GPS) am Handy müssen an sein.
+3. **Nach der ersten Fahrt:** Einstellungen → **Diagnose**. Unter „Gerät“
+   muss „Zuletzt gesehen: …“ mit einer Uhrzeit während der Fahrt und einem
+   RSSI-Wert stehen. Steht dort „noch nie“, schick mir den Diagnose-Text
+   (Knopf „Kopieren“ oben rechts).
 
-## Widget & Schnelleinstellungs-Kachel hinzufügen
+Wichtig: Ist ein Transmitter eingerichtet und wurde er während einer Fahrt
+**nie** gesehen, speichert die App **keinen** Parkplatz (du warst dann
+vermutlich in einem anderen Auto). Wenn die Suche selbst nicht klappt (z. B.
+Bluetooth aus), gilt diese Regel nicht.
 
-### Widget (auf dem Homescreen):
-1. Langer Druck auf den Homescreen.
-2. Wähle „Widgets".
-3. Suche „Parkplatz-Merker".
-4. Tippe auf das Widget zum Hinzufügen.
-5. Das Widget zeigt die aktuelle Parkplatz-Koordinaten. Tippen speichert den Standort als Parkplatz.
+Alternativ kannst du einen kleinen **USB-BLE-Beacon** nehmen (Gerät im Auto:
+Beacon) – funktioniert genauso, nur stromsparender.
 
-### Schnelleinstellungs-Kachel:
-1. Wische von oben nach unten (oder zweimal) bis zur Schnelleinstellung.
-2. Tippe auf „Bearbeiten" oder das Plus-Symbol.
-3. Suche und aktiviere „Hier geparkt".
-4. Tippen speichert den aktuellen Standort als Parkplatz.
+## Widget und Schnelleinstellung
 
-## Funktionsweise
+- **Widget:** Startbildschirm lange drücken → Widgets → Parkplatz-Merker →
+  „Hier geparkt“ auf den Startbildschirm ziehen. Tippen merkt die aktuelle Position.
+- **Kachel:** Benachrichtigungsleiste ganz herunterziehen → Stift/Bearbeiten →
+  „Hier geparkt“ in die aktiven Kacheln ziehen.
+- In der App: großer Knopf **„Hier geparkt“** unten.
 
-### Automatische Erkennung:
-1. Die App nutzt die **Aktivitätserkennung**, um zu merken, wenn du aussteigst (IN_VEHICLE → WALKING/RUNNING/STILL).
-2. Sie speichert dann deinen **Standort** beim Aussteigen.
-3. Optional kannst du einen **Transmitter/Beacon** im Auto verwenden – die App prüft, ob dieser noch in der Nähe ist.
+## So funktioniert die Erkennung
 
-### Parkplatz-Kriterien:
-- **Aussteigen erkannt**: Aktivitätserkennung zeigt Übergang.
-- **Ladekabel ab**: Dein Handy wird abgestöpselt → kann ein Hinweis sein.
-- **Transmitter weg / Beacon weg**: Das Gerät verschwindet → dein Auto bleibt.
-- **Standort**: GPS-Position wird gespeichert.
+- **Aktivitätserkennung** (Google Play-Dienste) meldet „fährt“ und
+  „ausgestiegen/geht“. Während der Fahrt läuft ein Dienst mit dezenter
+  Benachrichtigung „Fahrt erkannt“: er merkt alle 30 s die Position, sucht
+  alle 2 Minuten kurz nach dem Transmitter und achtet aufs Ladekabel.
+  Nach dem Aussteigen beendet er sich selbst (spätestens nach 3 Minuten).
+- **Ausstiegszeitpunkt** = der genaueste verfügbare Hinweis:
+  Ladekabel abgezogen → Transmitter verschwunden (Motor aus) → Aussteigen erkannt.
+  Der Parkplatz ist die Position zu diesem Zeitpunkt.
+- **Ignoriert** werden Fahrten unter 3 Minuten und Halte unter 2 Minuten
+  (Ampel, Stau). Ein langer Stau ohne Aussteigen zählt auch nicht.
+- Unter dem Parkplatz steht, woran er erkannt wurde, z. B.
+  „erkannt über: Aussteigen + Transmitter weg“.
+- Wurde etwas falsch erkannt: **„Falsch erkannt“** löscht den Eintrag.
 
-Die App sagt dir, **wie** der Parkplatz erkannt wurde (z. B. „Aussteigen + Transmitter weg").
+## Weitere Funktionen
 
-### Manuelle Speicherung:
-1. Tippe auf „Hier geparkt" → die App speichert deinen Standort sofort.
-2. Alternativ: Nutze das Widget oder die Schnelleinstellungs-Kachel.
+- **Notiz und Foto** zum Parkplatz (z. B. „Parkhaus Ebene 3, Platz 112“).
+- **Parkschein:** Uhrzeit eingeben → 15 Minuten vorher kommt eine Erinnerung.
+- **Verlauf** der letzten 30 Parkplätze.
+- **Diagnose:** letzte 100 Ereignisse, Berechtigungen, Transmitter-Statistik –
+  mit „Kopieren“ zum Weiterschicken.
 
 ## Datenschutz
 
-- **Alles lokal**: Deine Standorte, Fahrtdaten und Fotos werden nur auf deinem Handy gespeichert.
-- **Keine Verbindung zum Internet**: Außer für Adressen-Umwandlung (Google Maps API, optional).
-- **Keine Anmeldung**: Die App braucht keinen Account.
-- **Kein Bluetooth-Verbinden**: Das Handy verbindet sich **nie** mit dem Transmitter/Beacon – es schaut nur, ob es in der Nähe ist.
+Alles bleibt auf dem Handy: kein Konto, kein Server. Nur die Kartenbilder
+kommen von OpenStreetMap, und für die Adresse wird der Android-Geocoder benutzt.
 
-## Diagnose
+## Für Entwickler
 
-Falls die App nicht wie erwartet funktioniert:
-
-1. Öffne die App.
-2. Tippe auf Einstellungen → „Diagnose".
-3. Tippe auf „Kopieren" (AppBar).
-4. Sende den Text an den Support.
-
-Die Diagnose zeigt:
-- Welche Berechtigungen du erteilt hast.
-- Den Status der Aktivitätserkennung und des Bluetooth.
-- Deine letzten Fahrten und deren Status.
-- Deine letzten 100 Ereignisse (Standorte, Scans, Fehler).
-
-## Häufig gestellte Fragen
-
-**F: Meine App erkennt den Parkplatz nicht automatisch.**
-A: Prüfe, dass die Aktivitätserkennung und der Standort (immer) erlaubt sind. Du kannst jederzeit „Hier geparkt" drücken.
-
-**F: Der Transmitter wird nicht gefunden.**
-A: Stelle sicher, dass das Auto an ist, der Transmitter lädt, und du ihn nicht mit Bluetooth verbunden hast. Versuche die Suche in den Einstellungen.
-
-**F: Die App wird vom System beendet.**
-A: Stelle sicher, dass die Akku-Optimierung deaktiviert ist (Einstellungen → Akku).
-
-**F: Kann ich mehrere Geräte nutzen?**
-A: Derzeit unterstützt die App nur ein Gerät (Transmitter oder Beacon).
+Flutter (nur Android). Plan und Aufbau: [PLAN.md](PLAN.md).
+Die APK baut GitHub Actions (`.github/workflows/parkplatz-merker-apk.yml`);
+auf `main` wird das Release `parkplatz-merker-android` aktualisiert.
+Tests: `flutter test` (Erkennungslogik in `lib/logic/`).

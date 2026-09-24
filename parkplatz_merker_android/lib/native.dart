@@ -8,7 +8,9 @@ class NativeBridge {
     try {
       final result = await _channel.invokeMethod('drainEvents');
       if (result is List) {
-        return List<String>.from(result.cast<Object?>().map((e) => e.toString()));
+        return List<String>.from(
+          result.cast<Object?>().map((e) => e.toString()),
+        );
       }
       return [];
     } on PlatformException catch (e) {

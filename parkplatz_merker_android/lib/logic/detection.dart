@@ -3,7 +3,8 @@ import 'models.dart';
 // Konstanten
 const minTripMs = 3 * 60 * 1000; // Fahrten < 3 min ignorieren
 const shortHaltMs = 2 * 60 * 1000; // Halte < 2 min gehören zur Fahrt
-const noWalkFinalizeMs = 15 * 60 * 1000; // ohne Gehen: nach 15 min trotzdem Parkplatz
+const noWalkFinalizeMs =
+    15 * 60 * 1000; // ohne Gehen: nach 15 min trotzdem Parkplatz
 const chargerBeforeExitMs = 10 * 60 * 1000;
 const afterExitMs = 5 * 60 * 1000;
 const locWindowMs = 2 * 60 * 1000;
@@ -21,11 +22,7 @@ class TripResult {
   final ParkingSpot? spot;
   final String status;
 
-  TripResult({
-    required this.trip,
-    required this.spot,
-    required this.status,
-  });
+  TripResult({required this.trip, required this.spot, required this.status});
 }
 
 /// Baut eine Liste von Fahrten aus Rohereignissen.
@@ -57,8 +54,12 @@ List<Trip> buildTrips(List<RawEvent> events) {
           currentTrip.walkedAfterExit = false;
         } else if (!currentTrip.walkedAfterExit) {
           // Prüfe auf starken Hinweis
-          final ev = _evidence(sorted, currentTrip.start - 2 * 60 * 1000,
-              event.t, currentTrip.exit!);
+          final ev = _evidence(
+            sorted,
+            currentTrip.start - 2 * 60 * 1000,
+            event.t,
+            currentTrip.exit!,
+          );
           final hasStrongHint = ev.chargerTime != null || ev.gone != null;
           if (!hasStrongHint) {
             // Gleiche Fahrt (langer Stau ohne Aussteigen)
@@ -159,32 +160,22 @@ List<TripResult> evaluateTrips(List<RawEvent> events, int now) {
   for (final trip in trips) {
     if (trip.exit == null) {
       // Laufende Fahrt
-      results.add(TripResult(
-        trip: trip,
-        spot: null,
-        status: 'läuft',
-      ));
+      results.add(TripResult(trip: trip, spot: null, status: 'läuft'));
       continue;
     }
 
     // Kurz?
     if (trip.exit! - trip.start < minTripMs) {
-      results.add(TripResult(
-        trip: trip,
-        spot: null,
-        status: 'zu kurz',
-      ));
+      results.add(TripResult(trip: trip, spot: null, status: 'zu kurz'));
       continue;
     }
 
     // Fertig?
     final isFinal = _isFinalizedTrip(trip, trips, sorted, now);
     if (!isFinal) {
-      results.add(TripResult(
-        trip: trip,
-        spot: null,
-        status: 'wartet auf Aussteigen',
-      ));
+      results.add(
+        TripResult(trip: trip, spot: null, status: 'wartet auf Aussteigen'),
+      );
       continue;
     }
 
@@ -192,17 +183,21 @@ List<TripResult> evaluateTrips(List<RawEvent> events, int now) {
     final windowStart = trip.start - 2 * 60 * 1000;
     final nextTripStart = _nextTripStart(trip, trips);
     final windowEnd = nextTripStart != null
-        ? (trip.exit! + afterExitMs < nextTripStart ? trip.exit! + afterExitMs : nextTripStart)
+        ? (trip.exit! + afterExitMs < nextTripStart
+              ? trip.exit! + afterExitMs
+              : nextTripStart)
         : trip.exit! + afterExitMs;
 
     // Gerät und Ladekabel
     final deviceInfo = _evidence(sorted, windowStart, windowEnd, trip.exit!);
     if (deviceInfo.checked && !deviceInfo.seen) {
-      results.add(TripResult(
-        trip: trip,
-        spot: null,
-        status: 'Gerät nie gesehen – vermutlich nicht dein Auto',
-      ));
+      results.add(
+        TripResult(
+          trip: trip,
+          spot: null,
+          status: 'Gerät nie gesehen – vermutlich nicht dein Auto',
+        ),
+      );
       continue;
     }
     final chargerTime = deviceInfo.chargerTime;
@@ -224,19 +219,17 @@ List<TripResult> evaluateTrips(List<RawEvent> events, int now) {
     final sources = <String>['Aussteigen'];
     if (chargerTime != null) sources.add('Ladekabel ab');
     if (deviceInfo.gone != null) {
-      sources.add(deviceInfo.deviceMode == 'transmitter'
-          ? 'Transmitter weg'
-          : 'Beacon weg');
+      sources.add(
+        deviceInfo.deviceMode == 'transmitter'
+            ? 'Transmitter weg'
+            : 'Beacon weg',
+      );
     }
 
     // Standort
     final locSample = pickLocation(allLocations, exitTime);
     if (locSample == null) {
-      results.add(TripResult(
-        trip: trip,
-        spot: null,
-        status: 'kein Standort',
-      ));
+      results.add(TripResult(trip: trip, spot: null, status: 'kein Standort'));
       continue;
     }
 
@@ -251,17 +244,18 @@ List<TripResult> evaluateTrips(List<RawEvent> events, int now) {
       manual: false,
     );
 
-    results.add(TripResult(
-      trip: trip,
-      spot: spot,
-      status: 'Parkplatz',
-    ));
+    results.add(TripResult(trip: trip, spot: spot, status: 'Parkplatz'));
   }
 
   return results;
 }
 
-bool _isFinalizedTrip(Trip trip, List<Trip> allTrips, List<RawEvent> events, int now) {
+bool _isFinalizedTrip(
+  Trip trip,
+  List<Trip> allTrips,
+  List<RawEvent> events,
+  int now,
+) {
   final nextTrip = allTrips.firstWhere(
     (t) => t.start > trip.exit!,
     orElse: () => Trip()..start = now + 1000000,
@@ -327,7 +321,11 @@ class _Evidence {
 }
 
 _Evidence _evidence(
-    List<RawEvent> sorted, int windowStart, int windowEnd, int exit) {
+  List<RawEvent> sorted,
+  int windowStart,
+  int windowEnd,
+  int exit,
+) {
   final ev = _Evidence();
   int? lastSeenT;
   int? firstMissT;
@@ -402,15 +400,17 @@ List<ParkingSpot> detectParkings(List<RawEvent> events, int now) {
         final source = event.str('source');
         final sourceLabel = _manualSourceLabel(source);
 
-        spots.add(ParkingSpot(
-          id: 'manual-${event.t}',
-          time: event.t,
-          lat: lat,
-          lng: lng,
-          acc: acc,
-          sources: [sourceLabel],
-          manual: true,
-        ));
+        spots.add(
+          ParkingSpot(
+            id: 'manual-${event.t}',
+            time: event.t,
+            lat: lat,
+            lng: lng,
+            acc: acc,
+            sources: [sourceLabel],
+            manual: true,
+          ),
+        );
       }
     }
   }

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+
 import 'logic/models.dart';
 import 'logic/detection.dart';
 import 'logic/spots.dart';
@@ -8,8 +10,9 @@ import 'native.dart';
 import 'storage.dart';
 
 class AppController extends ChangeNotifier {
-  final NativeBridge _native;
   final Storage _storage;
+  Future<void>? _refreshing;
+  bool _ready = false;
 
   List<RawEvent> _events = [];
   List<ParkingSpot> _spots = [];
@@ -19,11 +22,41 @@ class AppController extends ChangeNotifier {
   Timer? _refreshTimer;
   Timer? _statusTimer;
 
-  AppController({
-    NativeBridge? native,
-    Storage? storage,
-  })  : _native = native ?? NativeBridge(),
-        _storage = storage ?? Storage();
+  AppController({Storage? storage}) : _storage = storage ?? Storage();
+
+  Storage get storage => _storage;
+  bool get ready => _ready;
+
+  ParkingSpot? spotById(String id) {
+    for (final s in _spots) {
+      if (s.id == id) return s;
+    }
+    return null;
+  }
+
+  /// Einstellungen neu von der nativen Seite laden.
+  Future<void> reloadConfig() async {
+    _config = await NativeBridge.getConfig();
+    notifyListeners();
+  }
+
+  /// Einstellungen ändern (nur übergebene Werte) und neu laden.
+  Future<void> updateConfig({
+    bool? activityEnabled,
+    bool? chargerEnabled,
+    String? deviceMode,
+    String? deviceAddress,
+    String? deviceName,
+  }) async {
+    await NativeBridge.setConfig(
+      activityEnabled: activityEnabled,
+      chargerEnabled: chargerEnabled,
+      deviceMode: deviceMode,
+      deviceAddress: deviceAddress,
+      deviceName: deviceName,
+    );
+    await reloadConfig();
+  }
 
   List<RawEvent> get events => _events;
   List<ParkingSpot> get spots => _spots;
@@ -51,6 +84,12 @@ class AppController extends ChangeNotifier {
     _spots = await _storage.loadSpots();
     _deletedIds = await _storage.loadDeletedIds();
     _config = await NativeBridge.getConfig();
+    _ready = true;
+    notifyListeners();
+
+    // Bei jedem Start (neu) registrieren – die Registrierung kann nach
+    // Updates von Play-Diensten oder „Beenden erzwingen“ verloren gehen.
+    await NativeBridge.registerTransitions();
 
     await refresh();
 
@@ -62,19 +101,25 @@ class AppController extends ChangeNotifier {
     // Status wird in der UI aktualisiert
   }
 
-  Future<void> refresh() async {
+  /// Holt neue Rohereignisse ab und berechnet die Parkplätze neu.
+  /// Gleichzeitige Aufrufe teilen sich einen Durchlauf.
+  Future<void> refresh() {
+    if (!_ready) return Future.value();
+    return _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
+  }
+
+  Future<void> _doRefresh() async {
     try {
       final now = DateTime.now().millisecondsSinceEpoch;
 
       // Ereignisse holen
       final newLines = await NativeBridge.drainEvents();
-      for (final line in newLines) {
-        final event = RawEvent.tryParse(line);
-        if (event != null) {
-          // Duplikate vermeiden über JSON-String
-          final existsAlready =
-              _events.any((e) => jsonEncode(e.toJson()) == jsonEncode(event.toJson()));
-          if (!existsAlready) {
+      if (newLines.isNotEmpty) {
+        // Duplikate vermeiden über die JSON-Zeichenkette
+        final known = _events.map((e) => jsonEncode(e.toJson())).toSet();
+        for (final line in newLines) {
+          final event = RawEvent.tryParse(line);
+          if (event != null && known.add(jsonEncode(event.toJson()))) {
             _events.add(event);
           }
         }
@@ -99,10 +144,14 @@ class AppController extends ChangeNotifier {
 
       // Adresse für den neuesten Parkplatz abholen
       if (_spots.isNotEmpty && _spots.first.address == null) {
-        final addr =
-            await NativeBridge.reverseGeocode(_spots.first.lat, _spots.first.lng);
-        if (addr != null) {
-          _spots[0] = _spots[0].copyWith(address: addr);
+        final first = _spots.first;
+        final addr = await NativeBridge.reverseGeocode(first.lat, first.lng);
+        final idx = _spots.indexWhere((s) => s.id == first.id);
+        if (addr != null &&
+            idx != -1 &&
+            _spots[idx].lat == first.lat &&
+            _spots[idx].lng == first.lng) {
+          _spots[idx] = _spots[idx].copyWith(address: addr);
           await _storage.saveSpots(_spots);
         }
       }
@@ -113,7 +162,7 @@ class AppController extends ChangeNotifier {
         final lat = (lastLoc['lat'] as num?)?.toDouble();
         final lng = (lastLoc['lng'] as num?)?.toDouble();
         final acc = (lastLoc['acc'] as num?)?.toDouble();
-        final t = lastLoc['t'] as int? ?? 0;
+        final t = (lastLoc['t'] as num?)?.toInt() ?? 0;
         if (lat != null && lng != null && acc != null) {
           _myLocation = ParkingSpot(
             id: 'my-location',
@@ -129,7 +178,7 @@ class AppController extends ChangeNotifier {
 
       notifyListeners();
     } catch (e) {
-      print('refresh error: $e');
+      debugPrint('refresh error: $e');
     }
   }
 
@@ -183,10 +232,10 @@ class AppController extends ChangeNotifier {
         },
       );
 
+      // Nach einem evtl. laufenden Abholen einfügen, dann neu berechnen.
+      await refresh();
       _events.add(event);
       await _storage.saveEvents(_events);
-
-      // Neu berechnen
       await refresh();
       return null; // Kein Fehler
     } catch (e) {
@@ -198,17 +247,20 @@ class AppController extends ChangeNotifier {
     _deletedIds.add(id);
     await _storage.saveDeletedIds(_deletedIds);
 
-    final spot = _spots.firstWhere((s) => s.id == id, orElse: () {
-      return ParkingSpot(
-        id: '',
-        time: 0,
-        lat: 0,
-        lng: 0,
-        acc: 0,
-        sources: [],
-        manual: false,
-      );
-    });
+    final spot = _spots.firstWhere(
+      (s) => s.id == id,
+      orElse: () {
+        return ParkingSpot(
+          id: '',
+          time: 0,
+          lat: 0,
+          lng: 0,
+          acc: 0,
+          sources: [],
+          manual: false,
+        );
+      },
+    );
 
     if (spot.id.isNotEmpty && spot.photoPath != null) {
       await _storage.deletePhoto(spot.photoPath);
@@ -262,16 +314,20 @@ class AppController extends ChangeNotifier {
     final text =
         'Dein Parkschein läuft um ${until.hour.toString().padLeft(2, '0')}:${until.minute.toString().padLeft(2, '0')} ab.';
     final ok = await NativeBridge.scheduleReminder(atMs, text);
+    if (!ok) return 'Erinnerung konnte nicht gestellt werden.';
 
-    if (ok) {
-      final idx = _spots.indexWhere((s) => s.id == spotId);
-      if (idx != -1) {
-        _spots[idx] = _spots[idx].copyWith(reminderAt: until.millisecondsSinceEpoch);
-        await _storage.saveSpots(_spots);
-        notifyListeners();
+    // Es gibt nur eine Erinnerung: bei allen anderen Einträgen entfernen.
+    for (var i = 0; i < _spots.length; i++) {
+      if (_spots[i].id == spotId) {
+        _spots[i] = _spots[i].copyWith(
+          reminderAt: until.millisecondsSinceEpoch,
+        );
+      } else if (_spots[i].reminderAt != null) {
+        _spots[i] = _spots[i].copyWith(clearReminder: true);
       }
     }
-
+    await _storage.saveSpots(_spots);
+    notifyListeners();
     return null;
   }
 

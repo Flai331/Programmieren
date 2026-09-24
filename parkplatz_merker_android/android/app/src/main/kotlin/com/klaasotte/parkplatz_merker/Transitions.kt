@@ -39,23 +39,23 @@ object Transitions {
                 listOf(
                     ActivityTransition.Builder()
                         .setActivityType(DetectedActivity.IN_VEHICLE)
-                        .setActivityTransition(ActivityTransitionRequest.ACTIVITY_TRANSITION_ENTER)
+                        .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
                         .build(),
                     ActivityTransition.Builder()
                         .setActivityType(DetectedActivity.IN_VEHICLE)
-                        .setActivityTransition(ActivityTransitionRequest.ACTIVITY_TRANSITION_EXIT)
+                        .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_EXIT)
                         .build(),
                     ActivityTransition.Builder()
                         .setActivityType(DetectedActivity.WALKING)
-                        .setActivityTransition(ActivityTransitionRequest.ACTIVITY_TRANSITION_ENTER)
+                        .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
                         .build(),
                     ActivityTransition.Builder()
                         .setActivityType(DetectedActivity.RUNNING)
-                        .setActivityTransition(ActivityTransitionRequest.ACTIVITY_TRANSITION_ENTER)
+                        .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
                         .build(),
                     ActivityTransition.Builder()
                         .setActivityType(DetectedActivity.STILL)
-                        .setActivityTransition(ActivityTransitionRequest.ACTIVITY_TRANSITION_ENTER)
+                        .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
                         .build(),
                 )
             )
@@ -126,8 +126,8 @@ object Transitions {
     }
 
     fun transitionName(transition: Int): String = when (transition) {
-        ActivityTransitionRequest.ACTIVITY_TRANSITION_ENTER -> "ENTER"
-        ActivityTransitionRequest.ACTIVITY_TRANSITION_EXIT -> "EXIT"
+        ActivityTransition.ACTIVITY_TRANSITION_ENTER -> "ENTER"
+        ActivityTransition.ACTIVITY_TRANSITION_EXIT -> "EXIT"
         else -> "UNKNOWN($transition)"
     }
 }

@@ -1,69 +1,57 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-import '../controller.dart';
-import '../logic/models.dart';
-import '../logic/format.dart';
-import '../storage.dart';
 
-class SpotView extends StatefulWidget {
+import '../controller.dart';
+import '../logic/format.dart';
+import '../logic/models.dart';
+import '../native.dart';
+
+/// Karte und Details eines Parkplatzes (Startseite und Verlauf).
+class SpotView extends StatelessWidget {
   final ParkingSpot spot;
   final LocSample? myLocation;
 
+  /// Wird nach „Falsch erkannt“ aufgerufen (z. B. Detailseite schließen).
+  final VoidCallback? onDeleted;
+
   const SpotView({
-    Key? key,
+    super.key,
     required this.spot,
     this.myLocation,
-  }) : super(key: key);
-
-  @override
-  State<SpotView> createState() => _SpotViewState();
-}
-
-class _SpotViewState extends State<SpotView> {
-  final MapController _mapController = MapController();
+    this.onDeleted,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final spot = widget.spot;
-    final now = DateTime.now();
-    final headlineText = headline(spot, now);
-    final accuracy = accuracyText(spot.acc);
-
-    double? distance;
-    if (widget.myLocation != null) {
-      distance = haversineMeters(
-        widget.myLocation!.lat,
-        widget.myLocation!.lng,
-        spot.lat,
-        spot.lng,
-      );
-    }
+    final theme = Theme.of(context);
+    final carPoint = LatLng(spot.lat, spot.lng);
+    final me = myLocation;
+    final distance = me == null
+        ? null
+        : haversineMeters(me.lat, me.lng, spot.lat, spot.lng);
+    final reminderAt = spot.reminderAt;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Überschrift
         Text(
-          headlineText,
-          style: Theme.of(context).textTheme.headlineSmall,
+          headline(spot, DateTime.now()),
+          style: theme.textTheme.headlineSmall,
         ),
-        const SizedBox(height: 16),
-
-        // Karte
+        const SizedBox(height: 12),
         ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           child: SizedBox(
             height: 260,
             child: FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: LatLng(spot.lat, spot.lng),
-                initialZoom: 17,
-              ),
+              // Neuer Parkplatz → Karte neu zentrieren.
+              key: ValueKey('${spot.id}-${spot.lat}-${spot.lng}'),
+              options: MapOptions(initialCenter: carPoint, initialZoom: 17),
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -71,105 +59,77 @@ class _SpotViewState extends State<SpotView> {
                 ),
                 MarkerLayer(
                   markers: [
-                    // Auto-Marker
-                    Marker(
-                      point: LatLng(spot.lat, spot.lng),
-                      width: 40,
-                      height: 40,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        child: Icon(
-                          Icons.directions_car,
-                          color: Theme.of(context).colorScheme.onPrimary,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                    // Eigener Standort-Marker (falls bekannt)
-                    if (widget.myLocation != null)
+                    if (me != null)
                       Marker(
-                        point: LatLng(
-                          widget.myLocation!.lat,
-                          widget.myLocation!.lng,
-                        ),
+                        point: LatLng(me.lat, me.lng),
                         width: 20,
                         height: 20,
                         child: Container(
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: Colors.blue,
-                            border: Border.all(color: Colors.white, width: 2),
+                            border: Border.all(color: Colors.white, width: 3),
                           ),
                         ),
                       ),
+                    Marker(
+                      point: carPoint,
+                      width: 44,
+                      height: 44,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: theme.colorScheme.primary,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: Icon(
+                          Icons.directions_car,
+                          color: theme.colorScheme.onPrimary,
+                          size: 24,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-                RichAttributionWidget(
+                const RichAttributionWidget(
                   attributions: [
-                    TextSourceAttribution(
-                      'OpenStreetMap-Mitwirkende',
-                    ),
+                    TextSourceAttribution('OpenStreetMap-Mitwirkende'),
                   ],
                 ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 16),
-
-        // Adresse
-        if (spot.address != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              spot.address!,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'Adresse wird gesucht …',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-
-        // Genauigkeit
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(accuracy),
+        const SizedBox(height: 12),
+        _InfoRow(
+          icon: Icons.place,
+          text: spot.address ?? 'Adresse wird gesucht …',
         ),
-
-        // Entfernung
+        _InfoRow(icon: Icons.gps_fixed, text: accuracyText(spot.acc)),
         if (distance != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text('Entfernung: ${formatDistance(distance)}'),
+          _InfoRow(
+            icon: Icons.directions_walk,
+            text: 'Entfernung: ${formatDistance(distance)}',
           ),
-
-        // Quellen
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text('Erkannt über: ${spot.sourceLabel}'),
+        _InfoRow(
+          icon: Icons.sensors,
+          text: 'erkannt über: ${spot.sourceLabel}',
         ),
-        const SizedBox(height: 16),
-
-        // Navigation
+        if (reminderAt != null)
+          _InfoRow(
+            icon: Icons.alarm,
+            text:
+                'Parkschein bis ${formatClock(DateTime.fromMillisecondsSinceEpoch(reminderAt))}'
+                ' · Erinnerung ${formatClock(DateTime.fromMillisecondsSinceEpoch(reminderAt - 15 * 60 * 1000))}',
+          ),
+        const SizedBox(height: 12),
         FilledButton.icon(
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
           onPressed: () async {
-            final success = await context
-                .read<AppController>()
-                .parkHere(); // Sollte openNavigation sein
-            if (!context.mounted) return;
-            if (success != null) {
+            final ok = await NativeBridge.openNavigation(spot.lat, spot.lng);
+            if (!ok && context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Keine Karten-App gefunden'),
-                ),
+                const SnackBar(content: Text('Keine Karten-App gefunden')),
               );
             }
           },
@@ -177,227 +137,263 @@ class _SpotViewState extends State<SpotView> {
           label: const Text('Navigation zum Auto'),
         ),
         const SizedBox(height: 16),
-
-        // Notiz
-        if (spot.note != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(spot.note!),
+        if (spot.note != null && spot.note!.trim().isNotEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Icon(Icons.sticky_note_2_outlined),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(spot.note!, style: theme.textTheme.bodyLarge),
+                  ),
+                ],
               ),
             ),
           ),
-
-        // Foto
         if (spot.photoPath != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.only(top: 8),
             child: GestureDetector(
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (_) => Dialog(
+              onTap: () => showDialog<void>(
+                context: context,
+                builder: (_) => Dialog(
+                  child: InteractiveViewer(
                     child: Image.file(File(spot.photoPath!)),
                   ),
-                );
-              },
+                ),
+              ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.file(File(spot.photoPath!), height: 200),
+                borderRadius: BorderRadius.circular(12),
+                child: Image.file(
+                  File(spot.photoPath!),
+                  height: 200,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const Text('Foto nicht gefunden'),
+                ),
               ),
             ),
           ),
-
-        // Knöpfe
+        const SizedBox(height: 8),
         Wrap(
           spacing: 8,
+          runSpacing: 8,
           children: [
             FilledButton.tonalIcon(
-              onPressed: () {
-                _showNoteDialog(context, spot);
-              },
-              icon: const Icon(Icons.note),
+              onPressed: () => _editNote(context),
+              icon: const Icon(Icons.edit_note),
               label: const Text('Notiz'),
             ),
             FilledButton.tonalIcon(
-              onPressed: () {
-                _showPhotoSheet(context, spot);
-              },
-              icon: const Icon(Icons.photo),
+              onPressed: () => _photoSheet(context),
+              icon: const Icon(Icons.photo_camera),
               label: const Text('Foto'),
             ),
             FilledButton.tonalIcon(
-              onPressed: () {
-                _showReminderDialog(context, spot);
-              },
+              onPressed: () => _ticket(context),
               icon: const Icon(Icons.alarm),
               label: const Text('Parkschein'),
             ),
           ],
         ),
-        const SizedBox(height: 16),
-
-        // Falsch erkannt
-        TextButton.icon(
-          onPressed: () {
-            _showDeleteConfirmation(context, spot.id);
-          },
-          icon: const Icon(Icons.delete_forever),
-          label: const Text('Falsch erkannt'),
-          style: TextButton.styleFrom(
-            foregroundColor: Colors.red,
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => _confirmDelete(context),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Falsch erkannt'),
+            style: TextButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+            ),
           ),
         ),
       ],
     );
   }
 
-  void _showNoteDialog(BuildContext context, ParkingSpot spot) {
-    final controller = TextEditingController(text: spot.note ?? '');
-    showDialog(
+  Future<void> _editNote(BuildContext context) async {
+    final controller = context.read<AppController>();
+    final text = TextEditingController(text: spot.note ?? '');
+    final result = await showDialog<String>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Notiz'),
         content: TextField(
-          controller: controller,
+          controller: text,
+          autofocus: true,
+          maxLines: 3,
           decoration: const InputDecoration(
             hintText: 'z. B. Parkhaus Ebene 3, Platz 112',
           ),
-          maxLines: 3,
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Abbrechen'),
           ),
           FilledButton(
-            onPressed: () {
-              context.read<AppController>().setNote(spot.id, controller.text);
-              Navigator.pop(context);
-            },
+            onPressed: () => Navigator.pop(dialogContext, text.text),
             child: const Text('Speichern'),
           ),
         ],
       ),
     );
+    if (result != null) await controller.setNote(spot.id, result.trim());
   }
 
-  void _showPhotoSheet(BuildContext context, ParkingSpot spot) {
-    showModalBottomSheet(
+  Future<void> _photoSheet(BuildContext context) async {
+    final controller = context.read<AppController>();
+    final choice = await showModalBottomSheet<String>(
       context: context,
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(16),
+      builder: (sheetContext) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.camera_alt),
+              leading: const Icon(Icons.photo_camera),
               title: const Text('Kamera'),
-              onTap: () async {
-                Navigator.pop(context);
-                final image = await ImagePicker().pickImage(
-                  source: ImageSource.camera,
-                  maxWidth: 1600,
-                  imageQuality: 80,
-                );
-                if (image != null && context.mounted) {
-                  final photoPath =
-                      await context.read<Storage>().savePhoto(spot.id, File(image.path));
-                  if (photoPath != null) {
-                    context.read<AppController>().setPhoto(spot.id, photoPath);
-                  }
-                }
-              },
+              onTap: () => Navigator.pop(sheetContext, 'camera'),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library),
               title: const Text('Galerie'),
-              onTap: () async {
-                Navigator.pop(context);
-                final image = await ImagePicker().pickImage(
-                  source: ImageSource.gallery,
-                  maxWidth: 1600,
-                  imageQuality: 80,
-                );
-                if (image != null && context.mounted) {
-                  final photoPath =
-                      await context.read<Storage>().savePhoto(spot.id, File(image.path));
-                  if (photoPath != null) {
-                    context.read<AppController>().setPhoto(spot.id, photoPath);
-                  }
-                }
-              },
+              onTap: () => Navigator.pop(sheetContext, 'gallery'),
             ),
             if (spot.photoPath != null)
               ListTile(
-                leading: const Icon(Icons.delete),
+                leading: const Icon(Icons.delete_outline),
                 title: const Text('Foto entfernen'),
-                onTap: () {
-                  Navigator.pop(context);
-                  context.read<AppController>().removePhoto(spot.id);
-                },
+                onTap: () => Navigator.pop(sheetContext, 'remove'),
               ),
           ],
         ),
       ),
     );
-  }
-
-  void _showReminderDialog(BuildContext context, ParkingSpot spot) async {
-    final initialTime = TimeOfDay.now();
-    final time = await showTimePicker(
-      context: context,
-      initialTime: initialTime,
-    );
-
-    if (!context.mounted) return;
-
-    if (time != null) {
-      final now = DateTime.now();
-      final reminderTime = DateTime(now.year, now.month, now.day, time.hour, time.minute);
-      final nextDay = reminderTime.isBefore(now);
-      final until = nextDay ? reminderTime.add(const Duration(days: 1)) : reminderTime;
-
-      final error = await context.read<AppController>().setReminder(spot.id, until);
-
-      if (!context.mounted) return;
-
-      if (error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error)),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Parkschein bis ${formatClock(until)} · Erinnerung ${formatClock(until.subtract(const Duration(minutes: 15)))}',
-            ),
-          ),
-        );
+    if (choice == null) return;
+    if (choice == 'remove') {
+      await controller.removePhoto(spot.id);
+      return;
+    }
+    try {
+      final image = await ImagePicker().pickImage(
+        source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
+        maxWidth: 1600,
+        imageQuality: 80,
+      );
+      if (image == null) return;
+      // Alten Foto-Pfad erst nach dem Speichern des neuen löschen.
+      final old = spot.photoPath;
+      final saved = await controller.storage.savePhoto(
+        '${spot.id}-${DateTime.now().millisecondsSinceEpoch}',
+        File(image.path),
+      );
+      if (saved == null) throw Exception('Speichern fehlgeschlagen');
+      await controller.setPhoto(spot.id, saved);
+      if (old != null) await controller.storage.deletePhoto(old);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Foto nicht möglich: $e')));
       }
     }
   }
 
-  void _showDeleteConfirmation(BuildContext context, String id) {
-    showDialog(
+  Future<void> _ticket(BuildContext context) async {
+    final controller = context.read<AppController>();
+    if (spot.reminderAt != null) {
+      final clear = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Parkschein'),
+          content: Text(
+            'Parkschein bis ${formatClock(DateTime.fromMillisecondsSinceEpoch(spot.reminderAt!))}.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Neue Uhrzeit'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Erinnerung löschen'),
+            ),
+          ],
+        ),
+      );
+      if (clear == null) return;
+      if (clear) {
+        await controller.clearReminder(spot.id);
+        return;
+      }
+      if (!context.mounted) return;
+    }
+    final time = await showTimePicker(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Löschen?'),
+      helpText: 'Parkschein gültig bis',
+      initialTime: TimeOfDay.fromDateTime(
+        DateTime.now().add(const Duration(hours: 1)),
+      ),
+    );
+    if (time == null) return;
+    final now = DateTime.now();
+    var until = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+    if (until.isBefore(now)) until = until.add(const Duration(days: 1));
+    final error = await controller.setReminder(spot.id, until);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          error ??
+              'Parkschein bis ${formatClock(until)} · Erinnerung um '
+                  '${formatClock(until.subtract(const Duration(minutes: 15)))}',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final controller = context.read<AppController>();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Falsch erkannt?'),
         content: const Text('Diesen Eintrag löschen?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Abbrechen'),
           ),
           FilledButton(
-            onPressed: () {
-              context.read<AppController>().deleteSpot(id);
-              Navigator.pop(context);
-            },
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Löschen'),
           ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await controller.deleteSpot(spot.id);
+    onDeleted?.call();
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _InfoRow({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: Theme.of(context).colorScheme.outline),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text)),
         ],
       ),
     );

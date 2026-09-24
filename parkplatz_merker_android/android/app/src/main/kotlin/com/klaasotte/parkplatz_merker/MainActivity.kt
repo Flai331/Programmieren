@@ -133,7 +133,7 @@ class MainActivity : FlutterActivity() {
                                 "transitionsRegistered" to Config.transitionsRegistered,
                                 "transitionsError" to Config.transitionsError,
                                 "transitionsAt" to Config.transitionsAt,
-                                "bluetoothEnabled" to (getSystemService(android.content.Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter?.isEnabled == true,
+                                "bluetoothEnabled" to ((getSystemService(android.content.Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter?.isEnabled == true),
                                 "locationEnabled" to locationEnabled,
                                 "ignoringBatteryOptimizations" to batteryIgnored,
                                 "serviceRunning" to TripService.running,

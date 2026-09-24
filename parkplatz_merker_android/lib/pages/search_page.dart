@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+
 import 'dart:async';
+
 import '../controller.dart';
 import '../native.dart';
 
 class SearchPage extends StatefulWidget {
+  /// 'transmitter' oder 'beacon'
   final String mode;
 
   const SearchPage({Key? key, required this.mode}) : super(key: key);
@@ -19,6 +22,8 @@ class _SearchPageState extends State<SearchPage> {
   List<Map<String, dynamic>> _devices = [];
   Timer? _pollTimer;
   double _progress = 0;
+
+  String get _kind => widget.mode == 'beacon' ? 'Beacon' : 'Transmitter';
 
   @override
   void dispose() {
@@ -36,7 +41,9 @@ class _SearchPageState extends State<SearchPage> {
     if (!mounted) return;
 
     // Suche starten
+    _pollTimer?.cancel();
     final result = await NativeBridge.startDeviceSearch();
+    if (!mounted) return;
     if (result['ok'] != true) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Fehler: ${result['error'] ?? "Unbekannt"}')),
@@ -53,7 +60,9 @@ class _SearchPageState extends State<SearchPage> {
 
     // Alle 500 ms Ergebnisse abrufen
     int elapsed = 0;
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) async {
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 500), (
+      timer,
+    ) async {
       elapsed += 500;
       if (!mounted) {
         timer.cancel();
@@ -101,14 +110,12 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    final infoText = widget.mode == 'Transmitter'
+    final infoText = widget.mode == 'transmitter'
         ? 'Auto an, Handy NICHT mit dem Transmitter verbunden.'
         : 'Auto an, Beacon eingesteckt.';
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('${widget.mode} suchen'),
-      ),
+      appBar: AppBar(title: Text('$_kind suchen')),
       body: Column(
         children: [
           // Info-Karte
@@ -157,9 +164,10 @@ class _SearchPageState extends State<SearchPage> {
                     itemCount: _devices.length,
                     itemBuilder: (context, index) {
                       final device = _devices[index];
-                      final name = device['name'] ?? '(ohne Namen)';
-                      final address = device['address'] ?? '';
-                      final rssi = device['rssi'] as int? ?? 0;
+                      final rawName = device['name'] as String?;
+                      final name = rawName ?? '(ohne Namen)';
+                      final address = device['address'] as String? ?? '';
+                      final rssi = (device['rssi'] as num?)?.toInt() ?? 0;
                       final isClassic = device['classic'] == true;
                       final isBle = device['ble'] == true;
 
@@ -189,7 +197,10 @@ class _SearchPageState extends State<SearchPage> {
                                             .colorScheme
                                             .primaryContainer,
                                       ),
-                                      child: const Text('klassisch', style: TextStyle(fontSize: 10)),
+                                      child: const Text(
+                                        'klassisch',
+                                        style: TextStyle(fontSize: 10),
+                                      ),
                                     ),
                                   if (isBle)
                                     Container(
@@ -203,18 +214,19 @@ class _SearchPageState extends State<SearchPage> {
                                             .colorScheme
                                             .primaryContainer,
                                       ),
-                                      child: const Text('BLE', style: TextStyle(fontSize: 10)),
+                                      child: const Text(
+                                        'BLE',
+                                        style: TextStyle(fontSize: 10),
+                                      ),
                                     ),
                                 ],
                               ),
                             ],
                           ),
                         ),
-                        onTap: _isSearching
-                            ? null
-                            : () {
-                                _showConfirmDialog(context, name, address);
-                              },
+                        onTap: () {
+                          _showConfirmDialog(context, rawName, address);
+                        },
                       );
                     },
                   ),
@@ -224,7 +236,7 @@ class _SearchPageState extends State<SearchPage> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
-              'Tipp: Schalte den ${widget.mode.toLowerCase()} einmal aus und wieder an – das Gerät, das dann erscheint/verschwindet, ist deins.',
+              'Tipp: Steck den $_kind einmal aus und such noch mal – das Gerät, das dann verschwindet, ist deins. Das stärkste Signal (RSSI nahe 0) ist meist das nächste Gerät.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
@@ -233,40 +245,40 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
-  void _showConfirmDialog(BuildContext context, String name, String address) {
-    showDialog(
+  Future<void> _showConfirmDialog(
+    BuildContext context,
+    String? name,
+    String address,
+  ) async {
+    final controller = context.read<AppController>();
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Gerät verwenden?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Name: $name'),
-            Text('Adresse: $address'),
-          ],
-        ),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Dieses Gerät verwenden?'),
+        content: Text('${name ?? '(ohne Namen)'}\n$address'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Abbrechen'),
           ),
           FilledButton(
-            onPressed: () {
-              final deviceMode = widget.mode.toLowerCase();
-              NativeBridge.setConfig(
-                deviceMode: deviceMode,
-                deviceAddress: address,
-                deviceName: name,
-              );
-              Navigator.pop(context);
-              Navigator.pop(context);
-              context.read<AppController>().refresh();
-            },
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Verwenden'),
           ),
         ],
       ),
     );
+    if (ok != true) return;
+    await _stopSearch();
+    await controller.updateConfig(
+      deviceMode: widget.mode,
+      deviceAddress: address,
+      deviceName: name ?? '',
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$_kind gespeichert: ${name ?? address}')),
+    );
+    Navigator.pop(context);
   }
 }
