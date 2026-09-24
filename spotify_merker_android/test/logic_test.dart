@@ -614,4 +614,67 @@ void main() {
       expect(h.single.kind, 'spoken');
     });
   });
+
+  group('isSpoken – Hörbuch als Album mit kurzen Kapiteln', () {
+    Entry e({
+      String title = '',
+      String album = '',
+      String artist = '',
+      int dur = 200000,
+      String mediaId = '',
+      String ctx = '',
+    }) => Entry(
+      id: '1',
+      key: '',
+      title: title,
+      artist: artist,
+      album: album,
+      spotifyUri: null,
+      mediaId: mediaId,
+      artUri: '',
+      kind: 'music',
+      durationMs: dur,
+      startPositionMs: 0,
+      positionMs: 0,
+      startedAt: 0,
+      lastSeenAt: 0,
+      pinned: false,
+      contextUri: ctx,
+    );
+
+    test('„Kapitel 67 …“ mit 3 Minuten gilt als Hörbuch', () {
+      expect(
+        isSpoken(
+          e(
+            title: 'Kapitel 67 - Der heilige Tod - Thriller ( John Milton 2 ) Hörbuch',
+          ),
+        ),
+        isTrue,
+      );
+    });
+    test('normales Lied bleibt Musik', () {
+      expect(
+        isSpoken(
+          e(
+            title: 'Second & Sebring',
+            album: 'Of Mice & Men',
+            mediaId: 'spotify:track:3bdq',
+          ),
+        ),
+        isFalse,
+      );
+    });
+    test('Kontext Hörbuch zählt', () {
+      expect(
+        isSpoken(e(title: 'Teil A', ctx: 'spotify:audiobook:xyz')),
+        isTrue,
+      );
+    });
+    test('groupTitle nimmt Kontexttitel, sonst Album', () {
+      expect(
+        e(title: 'Kapitel 1', album: 'Der Hobbit').groupTitle,
+        'Der Hobbit',
+      );
+    });
+  });
 }
