@@ -1,0 +1,23 @@
+name: feedback
+description: "Reusable FeedbackService for Flutter apps – Notion, Backend, Telegram + E-Mail error reporting."
+version: 0.2.0
+
+environment:
+  sdk: ^3.0.0
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: any
+  url_launcher: any
+  path_provider: any
+  flutter_email_sender: any
+  image_picker: any
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
