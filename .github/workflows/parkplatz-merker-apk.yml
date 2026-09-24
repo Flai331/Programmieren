@@ -1,0 +1,97 @@
+name: Parkplatz-Merker APK Build
+
+# Baut die APK auf einem GitHub-Runner (lokal gibt es kein Android-SDK).
+# Auf main wird zusätzlich das Release "parkplatz-merker-android" aktualisiert:
+# https://github.com/Flai331/Programmieren/releases/download/parkplatz-merker-android/Parkplatz-Merker.apk
+
+on:
+  push:
+    branches:
+      - main
+      - claude/**
+    paths:
+      - 'parkplatz_merker_android/**'
+      - '.github/workflows/parkplatz-merker-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.1'
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        working-directory: parkplatz_merker_android
+        run: flutter pub get
+
+      - name: Run analyzer
+        working-directory: parkplatz_merker_android
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Run tests
+        working-directory: parkplatz_merker_android
+        run: flutter test
+
+      - name: Build APK
+        working-directory: parkplatz_merker_android
+        env:
+          MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
+        # Fortlaufende Versionsnummer, damit Android jede neue APK als Update sieht.
+        run: flutter build apk --release --build-number=${{ github.run_number }}
+
+      - name: Upload APK to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Parkplatz-Merker-${{ github.sha }}
+          path: parkplatz_merker_android/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Signatur prüfen
+        if: github.ref == 'refs/heads/main'
+        env:
+          MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
+        run: |
+          # Ohne festen Schlüssel ließe sich die APK nicht als Update installieren –
+          # dann lieber kein Release als ein unbrauchbares.
+          if [ -z "$MERKER_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Secret MERKER_KEYSTORE_PASSWORD fehlt – Release wird nicht aktualisiert."
+            exit 1
+          fi
+
+      - name: Rename APK for release
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cp parkplatz_merker_android/build/app/outputs/flutter-apk/app-release.apk Parkplatz-Merker.apk
+
+      - name: Create or update GitHub release
+        if: github.ref == 'refs/heads/main'
+        run: |
+          # Check if release exists
+          if gh release view parkplatz-merker-android > /dev/null 2>&1; then
+            # Release exists, upload with clobber
+            gh release upload parkplatz-merker-android Parkplatz-Merker.apk --clobber
+          else
+            # Release doesn't exist, create it
+            gh release create parkplatz-merker-android Parkplatz-Merker.apk --title "Parkplatz-Merker" --notes "Automatisch gebaut aus main. Installation: siehe parkplatz_merker_android/README.md"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}

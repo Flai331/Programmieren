@@ -15,27 +15,42 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.klaasotte.parkplatz_merker"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
-        // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
-        // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
-        // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
-        // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
-    buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+    // Fester Signaturschlüssel, damit sich jede neue APK als Update über die
+    // alte installieren lässt. Die Datei ist passwortgeschützt; das Passwort
+    // liegt nur als GitHub-Secret MERKER_KEYSTORE_PASSWORD vor. Fehlt es
+    // (z. B. lokal), wird mit dem Debug-Schlüssel signiert.
+    val keystorePassword = System.getenv("MERKER_KEYSTORE_PASSWORD")
+    signingConfigs {
+        create("release") {
+            storeFile = file("../../../spotify_merker_android/android/app/merker-release.p12")
+            storeType = "pkcs12"
+            storePassword = keystorePassword
+            keyAlias = "merker"
+            keyPassword = keystorePassword
         }
     }
+
+    buildTypes {
+        release {
+            signingConfig = if (keystorePassword.isNullOrEmpty()) {
+                signingConfigs.getByName("debug")
+            } else {
+                signingConfigs.getByName("release")
+            }
+        }
+    }
+}
+
+dependencies {
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation("androidx.core:core-ktx:1.16.0")
 }
 
 kotlin {
