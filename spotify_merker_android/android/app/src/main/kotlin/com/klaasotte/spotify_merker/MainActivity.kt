@@ -40,15 +40,16 @@ class MainActivity : FlutterActivity() {
                         "resume" -> {
                             // Zahlen kommen aus Dart je nach Größe als Integer oder Long.
                             val position = (call.argument<Any>("positionMs") as? Number)?.toLong() ?: 0L
-                            ResumeHelper.resume(
+                            val error = ResumeHelper.resume(
                                 this,
                                 call.argument<String>("title") ?: "",
                                 call.argument<String>("artist") ?: "",
                                 call.argument<String>("album") ?: "",
                                 call.argument<String>("spotifyUri"),
+                                call.argument<String>("mediaId"),
                                 position,
                             )
-                            result.success(mapOf("started" to true))
+                            result.success(mapOf("started" to (error == null), "error" to error))
                         }
                         "getDiagnostics" -> result.success(diagnostics())
                         else -> result.notImplemented()
