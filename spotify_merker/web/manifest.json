@@ -1,0 +1,26 @@
+{
+  "name": "Spotify-Merker",
+  "short_name": "Spotify-Merker",
+  "description": "Merke dir, was du auf Spotify hörst – inkl. Minutenstand für Hörbücher und Podcasts.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1DB954",
+  "orientation": "portrait-primary",
+  "scope": "./",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": []
+}
