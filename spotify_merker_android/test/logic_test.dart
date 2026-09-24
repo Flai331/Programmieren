@@ -544,6 +544,219 @@ void main() {
     });
   });
 
+  group('positionAt und entryAt', () {
+    test('positionAt berechnet Position bei Zeit ts', () {
+      final entry = Entry(
+        id: '1',
+        key: 'key1',
+        title: 'Chapter 1',
+        artist: 'Audiobook',
+        album: 'Album 1',
+        spotifyUri: null,
+        mediaId: '',
+        artUri: '',
+        kind: 'spoken',
+        durationMs: 3600000,
+        startPositionMs: 1000000,
+        positionMs: 1000000,
+        startedAt: 1000,
+        lastSeenAt: 5000,
+        pinned: false,
+      );
+      // Bei ts=3000 (2000ms nach startedAt): 1000000 + 2000 = 1002000
+      final pos = positionAt(entry, 3000);
+      expect(pos, 1002000);
+    });
+
+    test('entryAt findet Eintrag mit startedAt <= ts <= lastSeenAt', () {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final history = [
+        Entry(
+          id: '1',
+          key: 'key1',
+          title: 'Chapter 1',
+          artist: 'Audiobook',
+          album: 'Album 1',
+          spotifyUri: null,
+          mediaId: '',
+          artUri: '',
+          kind: 'spoken',
+          durationMs: 3600000,
+          startPositionMs: 0,
+          positionMs: 1800000,
+          startedAt: now - 5000,
+          lastSeenAt: now + 5000,
+          pinned: false,
+        ),
+      ];
+      final found = entryAt(history, now);
+      expect(found?.id, '1');
+    });
+
+    test('entryAt gibt null zurück, wenn ts außerhalb liegt', () {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final history = [
+        Entry(
+          id: '1',
+          key: 'key1',
+          title: 'Chapter 1',
+          artist: 'Audiobook',
+          album: 'Album 1',
+          spotifyUri: null,
+          mediaId: '',
+          artUri: '',
+          kind: 'spoken',
+          durationMs: 3600000,
+          startPositionMs: 0,
+          positionMs: 1800000,
+          startedAt: now,
+          lastSeenAt: now + 5000,
+          pinned: false,
+        ),
+      ];
+      final found = entryAt(history, now - 1000);
+      expect(found, isNull);
+    });
+  });
+
+  group('guessSleep – Bewegungs- und Bildschirm-Erkennung', () {
+    test(
+      'guessSleep mit nur Bildschirm: 15+ min Hörbuch danach → Vorschlag',
+      () {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final hourAgo = now - 60 * 60 * 1000;
+        final twoHoursAgo = now - 2 * 60 * 60 * 1000;
+
+        final history = [
+          Entry(
+            id: '1',
+            key: 'audio1',
+            title: 'Chapter 1',
+            artist: 'Audiobook',
+            album: 'Album 1',
+            spotifyUri: null,
+            mediaId: '',
+            artUri: '',
+            kind: 'spoken',
+            durationMs: 3600000,
+            startPositionMs: 0,
+            positionMs: 2400000,
+            startedAt: twoHoursAgo,
+            lastSeenAt: now - 5 * 60 * 1000, // 5 min ago still playing
+            pinned: false,
+          ),
+        ];
+
+        final activity = [
+          ActivityEvent(ts: hourAgo, type: 'screen', action: 'off'),
+          // Hörbuch lief 55 min danach weiter
+        ];
+
+        final guess = guessSleep(history, activity, now);
+        expect(guess, isNotNull);
+        expect(guess!.at, hourAgo);
+        expect(guess.playedAfterMin, greaterThanOrEqualTo(50)); // ≈55 min
+      },
+    );
+
+    test('guessSleep: < 15 min → kein Vorschlag', () {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final minutesAgo = now - 5 * 60 * 1000; // 5 min ago
+      final twoHoursAgo = now - 2 * 60 * 60 * 1000;
+
+      final history = [
+        Entry(
+          id: '1',
+          key: 'audio1',
+          title: 'Chapter 1',
+          artist: 'Audiobook',
+          album: 'Album 1',
+          spotifyUri: null,
+          mediaId: '',
+          artUri: '',
+          kind: 'spoken',
+          durationMs: 3600000,
+          startPositionMs: 0,
+          positionMs: 2400000,
+          startedAt: twoHoursAgo,
+          lastSeenAt: minutesAgo,
+          pinned: false,
+        ),
+      ];
+
+      final activity = [
+        ActivityEvent(
+          ts: minutesAgo - 10 * 60 * 1000,
+          type: 'screen',
+          action: 'off',
+        ),
+        // Lief nur 10 min weiter
+      ];
+
+      final guess = guessSleep(history, activity, now);
+      expect(guess, isNull);
+    });
+
+    test('guessSleep bevorzugt neuestes screen-/motion-Ereignis', () {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final screenOff = now - 30 * 60 * 1000;
+      final motionLater = now - 20 * 60 * 1000; // neuester
+      final twoHoursAgo = now - 2 * 60 * 60 * 1000;
+
+      final history = [
+        Entry(
+          id: '1',
+          key: 'audio1',
+          title: 'Chapter 1',
+          artist: 'Audiobook',
+          album: 'Album 1',
+          spotifyUri: null,
+          mediaId: '',
+          artUri: '',
+          kind: 'spoken',
+          durationMs: 3600000,
+          startPositionMs: 0,
+          positionMs: 2400000,
+          startedAt: twoHoursAgo,
+          lastSeenAt: now - 5 * 60 * 1000, // noch am Laufen
+          pinned: false,
+        ),
+      ];
+
+      final activity = [
+        ActivityEvent(ts: screenOff, type: 'screen', action: 'off'),
+        ActivityEvent(
+          ts: motionLater,
+          type: 'motion',
+          action: null,
+          level: 1.5,
+        ),
+      ];
+
+      final guess = guessSleep(history, activity, now);
+      expect(guess, isNotNull);
+      expect(guess!.at, motionLater); // neuestes Event
+      expect(guess.source, 'Bewegung');
+    });
+  });
+
+  group('splitEvents', () {
+    test('trennt Media- und Aktivitätsereignisse', () {
+      final events = [
+        {'ts': 1000, 'title': 'Song', 'artist': 'Artist'}, // Media (kein type)
+        {'ts': 2000, 'type': 'screen', 'action': 'off'}, // Aktivität
+        {'ts': 3000, 'type': 'motion', 'level': 1.5}, // Aktivität
+      ];
+
+      final split = splitEvents(events);
+      expect(split.media.length, 1);
+      expect(split.activity.length, 2);
+      expect(split.media[0].title, 'Song');
+      expect(split.activity[0].type, 'screen');
+      expect(split.activity[1].type, 'motion');
+    });
+  });
+
   group('applyEvents – Wechsel Hörbuch → Musik', () {
     RawEvent ev(
       int ts,
@@ -675,6 +888,72 @@ void main() {
         e(title: 'Kapitel 1', album: 'Der Hobbit').groupTitle,
         'Der Hobbit',
       );
+    });
+  });
+
+  group('guessSleep – realistische Nacht', () {
+    Entry ch(String title, int start, int end, {int startPos = 0}) => Entry(
+      id: title,
+      key: '',
+      title: title,
+      artist: 'Mark Dawson',
+      album: 'Der heilige Tod',
+      spotifyUri: null,
+      mediaId: 'spotify:track:$title',
+      artUri: '',
+      kind: 'spoken',
+      durationMs: 200000,
+      startPositionMs: startPos,
+      positionMs: startPos + end - start,
+      startedAt: start,
+      lastSeenAt: end,
+      pinned: false,
+    );
+    const min = 60 * 1000;
+    final t0 = DateTime(2026, 9, 24, 23, 0).millisecondsSinceEpoch;
+    // Kapitel à ~3 Min., 23:00 bis 00:00 durchgehend
+    final history = [
+      for (var i = 19; i >= 0; i--)
+        ch(
+          'Kapitel ${i + 1}',
+          t0 + i * 3 * min,
+          t0 + i * 3 * min + 3 * min - 1000,
+        ),
+    ];
+
+    test(
+      'Entsperren am Morgen zählt nicht, Stelle = Kapitel beim Weglegen',
+      () {
+        final activity = [
+          ActivityEvent(
+            ts: t0 + 10 * min,
+            type: 'screen',
+            action: 'off',
+          ), // 23:10 weggelegt
+          ActivityEvent(
+            ts: t0 + 8 * 60 * min,
+            type: 'screen',
+            action: 'unlock',
+          ), // 07:00
+        ];
+        final g = guessSleep(history, activity, t0 + 8 * 60 * min + 5 * min);
+        expect(g, isNotNull);
+        expect(g!.at, t0 + 10 * min);
+        expect(g.entry.title, 'Kapitel 4'); // 23:09–23:12
+        expect(g.entry.positionMs, 1 * min); // 1 Min. in Kapitel 4
+        expect(g.playedAfterMin, 49);
+      },
+    );
+
+    test('Bewegung nach dem Bildschirm-Aus verschiebt den Zeitpunkt', () {
+      final activity = [
+        ActivityEvent(ts: t0 + 10 * min, type: 'screen', action: 'off'),
+        ActivityEvent(ts: t0 + 30 * min, type: 'motion', level: 2.0),
+      ];
+      final g = guessSleep(history, activity, t0 + 2 * 60 * min);
+      expect(g!.at, t0 + 30 * min);
+      expect(g.source, 'Bewegung');
+      expect(g.entry.title, 'Kapitel 11');
     });
   });
 }

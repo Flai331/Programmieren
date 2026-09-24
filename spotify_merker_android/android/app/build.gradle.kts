@@ -29,11 +29,28 @@ android {
         versionName = flutter.versionName
     }
 
+    // Fester Signaturschlüssel, damit sich jede neue APK als Update über die
+    // alte installieren lässt. Die Datei ist passwortgeschützt; das Passwort
+    // liegt nur als GitHub-Secret MERKER_KEYSTORE_PASSWORD vor. Fehlt es
+    // (z. B. lokal), wird mit dem Debug-Schlüssel signiert.
+    val keystorePassword = System.getenv("MERKER_KEYSTORE_PASSWORD")
+    signingConfigs {
+        create("release") {
+            storeFile = file("merker-release.p12")
+            storeType = "pkcs12"
+            storePassword = keystorePassword
+            keyAlias = "merker"
+            keyPassword = keystorePassword
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keystorePassword.isNullOrEmpty()) {
+                signingConfigs.getByName("debug")
+            } else {
+                signingConfigs.getByName("release")
+            }
         }
     }
 }

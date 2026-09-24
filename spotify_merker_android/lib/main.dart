@@ -94,6 +94,9 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   Current? _current;
   Timer? _updateTimer;
   int _selectedTab = 0;
+  List<ActivityEvent> _activity = [];
+  SleepGuess? _sleepGuess;
+  int? _lastDismissedSleepAt;
 
   FilterRange _filterRange = FilterRange.all;
   FilterKind _filterKind = FilterKind.all;
@@ -164,13 +167,36 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
         _current = current;
       });
       var history = reclassify(await Storage.loadHistory());
-      final events = await Native.drainEvents();
-      if (events.isNotEmpty) {
-        history = applyEvents(history, events);
+      var activity = await Storage.loadActivity();
+      final eventMaps = await Native.drainEvents();
+
+      if (eventMaps.isNotEmpty) {
+        final split = splitEvents(eventMaps);
+        history = applyEvents(history, split.media);
+        activity = [...activity, ...split.activity];
+
+        // Nur letzte 14 Tage behalten
+        final cutoff =
+            DateTime.now().millisecondsSinceEpoch - 14 * 24 * 60 * 60 * 1000;
+        activity = activity.where((a) => a.ts >= cutoff).toList();
+
         await Storage.saveHistory(history);
+        await Storage.saveActivity(activity);
       }
+
+      // Sleep-Vorschlag berechnen
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final guess = guessSleep(history, activity, now);
+      _lastDismissedSleepAt ??= await Storage.loadDismissedSleepAt();
+
       if (!mounted) return;
-      setState(() => _history = history);
+      setState(() {
+        _history = history;
+        _activity = activity;
+        _sleepGuess = (guess != null && guess.at != _lastDismissedSleepAt)
+            ? guess
+            : null;
+      });
     } finally {
       _loadRunning = false;
     }
@@ -203,10 +229,22 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
         NowScreen(
           current: _current,
           history: _history,
+          activity: _activity,
+          sleepGuess: _sleepGuess,
+          onDismissSleep: (at) {
+            Storage.saveDismissedSleepAt(at);
+            setState(() {
+              _lastDismissedSleepAt = at;
+              _sleepGuess = null;
+            });
+          },
           onResume: () {
             _loadData();
           },
           onPinCurrent: _pinCurrent,
+          onReload: () {
+            _loadData();
+          },
         ),
         HistoryScreen(
           history: _history,
@@ -403,15 +441,23 @@ class SetupScreen extends StatelessWidget {
 class NowScreen extends StatefulWidget {
   final Current? current;
   final List<Entry> history;
+  final List<ActivityEvent> activity;
+  final SleepGuess? sleepGuess;
+  final void Function(int at) onDismissSleep;
   final VoidCallback onResume;
   final Future<bool> Function() onPinCurrent;
+  final VoidCallback onReload;
 
   const NowScreen({
     super.key,
     required this.current,
     required this.history,
+    required this.activity,
+    required this.sleepGuess,
+    required this.onDismissSleep,
     required this.onResume,
     required this.onPinCurrent,
+    required this.onReload,
   });
 
   @override
@@ -419,6 +465,11 @@ class NowScreen extends StatefulWidget {
 }
 
 class _NowScreenState extends State<NowScreen> {
+  String _formatTime(int ts) {
+    final dt = DateTime.fromMillisecondsSinceEpoch(ts);
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final resumeCandidate = findResumeCandidate(widget.history, widget.current);
@@ -426,6 +477,85 @@ class _NowScreenState extends State<NowScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // Sleep guess card
+        if (widget.sleepGuess != null) ...[
+          Card(
+            color: Colors.orange.withValues(alpha: 0.1),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '😴 Eingeschlafen?',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Vermutlich eingeschlafen um ${_formatTime(widget.sleepGuess!.at)}',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Letzte ${widget.sleepGuess!.source} um ${_formatTime(widget.sleepGuess!.at)}, danach lief es noch ${widget.sleepGuess!.playedAfterMin} Min.',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    widget.sleepGuess!.entry.groupTitle,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.sleepGuess!.entry.title,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'bei ${formatMs(widget.sleepGuess!.entry.positionMs)}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () async {
+                            await startResume(
+                              context,
+                              widget.sleepGuess!.entry,
+                            );
+                            widget.onResume();
+                          },
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('Dort weiterhören'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: spotifyGreen,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () =>
+                            widget.onDismissSleep(widget.sleepGuess!.at),
+                        child: const Text('Ausblenden'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+
         if (resumeCandidate != null) ...[
           Card(
             color: spotifyGreen.withValues(alpha: 0.1),

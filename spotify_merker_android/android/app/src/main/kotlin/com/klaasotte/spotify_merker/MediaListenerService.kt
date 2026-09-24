@@ -110,6 +110,7 @@ class MediaListenerService : NotificationListenerService() {
     private var lastSnapshot: Snapshot? = null
     private var receiverRegistered = false
     private var sessionsListenerRegistered = false
+    private var motionWatcher: MotionWatcher? = null
 
     /** Letzte Spotify-Broadcast-Daten (nur mit „Geräte-Broadcast-Status“). */
     @Volatile
@@ -121,6 +122,12 @@ class MediaListenerService : NotificationListenerService() {
 
     val spotifyController: MediaController? get() = controller
 
+    val lastMotionAt: Long?
+        get() = motionWatcher?.lastMotionAt?.takeIf { it > 0 }
+
+    val motionListening: Boolean
+        get() = motionWatcher?.listening == true
+
     private val sessionsListener =
         MediaSessionManager.OnActiveSessionsChangedListener { sessions ->
             onSessionsChanged(sessions ?: emptyList())
@@ -131,6 +138,7 @@ class MediaListenerService : NotificationListenerService() {
         override fun onPlaybackStateChanged(state: PlaybackState?) = onChange("state")
         override fun onSessionDestroyed() {
             record("end")
+            stopMotionWatcher()
             detach()
         }
     }
@@ -159,11 +167,32 @@ class MediaListenerService : NotificationListenerService() {
         }
     }
 
+    private var screenReceiverRegistered = false
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (context == null) return
+            val action = intent?.action ?: return
+            val ts = System.currentTimeMillis()
+            val screenAction = when (action) {
+                Intent.ACTION_SCREEN_ON -> "on"
+                Intent.ACTION_SCREEN_OFF -> "off"
+                Intent.ACTION_USER_PRESENT -> "unlock"
+                else -> return
+            }
+            EventLog.append(context, JSONObject(mapOf(
+                "ts" to ts,
+                "type" to "screen",
+                "action" to screenAction,
+            )))
+        }
+    }
+
     override fun onListenerConnected() {
         super.onListenerConnected()
         instance = this
         connected = true
         registerSpotifyReceiver()
+        registerScreenReceiver()
         try {
             val sm = getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
             sessionManager = sm
@@ -185,7 +214,9 @@ class MediaListenerService : NotificationListenerService() {
             sessionManager?.removeOnActiveSessionsChangedListener(sessionsListener)
             sessionsListenerRegistered = false
         }
+        stopMotionWatcher()
         unregisterSpotifyReceiver()
+        unregisterScreenReceiver()
         connected = false
         if (instance === this) instance = null
         super.onListenerDisconnected()
@@ -211,6 +242,7 @@ class MediaListenerService : NotificationListenerService() {
 
     private fun detach() {
         handler.removeCallbacks(tick)
+        stopMotionWatcher()
         controller?.unregisterCallback(callback)
         controller = null
         lastSnapshot = null
@@ -228,7 +260,12 @@ class MediaListenerService : NotificationListenerService() {
             emit(snap, if (prev == null) "start" else "state")
         }
         handler.removeCallbacks(tick)
-        if (snap.state == "PLAYING") handler.postDelayed(tick, TICK_MS)
+        if (snap.state == "PLAYING") {
+            handler.postDelayed(tick, TICK_MS)
+            startMotionWatcher()
+        } else {
+            stopMotionWatcher()
+        }
         Log.d(TAG, "Änderung ($cause): ${snap.title} ${snap.state} ${snap.positionMs}")
     }
 
@@ -332,5 +369,46 @@ class MediaListenerService : NotificationListenerService() {
             Log.e(TAG, "Receiver-Abmeldung fehlgeschlagen", e)
         }
         receiverRegistered = false
+    }
+
+    private fun registerScreenReceiver() {
+        if (screenReceiverRegistered) return
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                registerReceiver(screenReceiver, filter)
+            }
+            screenReceiverRegistered = true
+        } catch (e: Exception) {
+            Log.e(TAG, "Screen-Receiver-Registrierung fehlgeschlagen", e)
+        }
+    }
+
+    private fun unregisterScreenReceiver() {
+        if (!screenReceiverRegistered) return
+        try {
+            unregisterReceiver(screenReceiver)
+        } catch (e: Exception) {
+            Log.e(TAG, "Screen-Receiver-Abmeldung fehlgeschlagen", e)
+        }
+        screenReceiverRegistered = false
+    }
+
+    private fun startMotionWatcher() {
+        if (motionWatcher == null) {
+            motionWatcher = MotionWatcher(this)
+        }
+        motionWatcher?.start()
+    }
+
+    private fun stopMotionWatcher() {
+        motionWatcher?.stop()
     }
 }

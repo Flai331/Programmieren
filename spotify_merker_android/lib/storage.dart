@@ -93,4 +93,82 @@ class Storage {
       rethrow;
     }
   }
+
+  static Future<File> get _activityFile async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File('${dir.path}/activity.json');
+  }
+
+  static Future<List<ActivityEvent>> loadActivity() async {
+    try {
+      final file = await _activityFile;
+      if (!file.existsSync()) {
+        return [];
+      }
+
+      final content = file.readAsStringSync();
+      if (content.isEmpty) {
+        return [];
+      }
+
+      final jsonData = jsonDecode(content) as List;
+      return jsonData
+          .map((item) => ActivityEvent.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      // ignore: avoid_print
+      print('Error loading activity: $e');
+      return [];
+    }
+  }
+
+  static Future<void> saveActivity(List<ActivityEvent> activity) async {
+    try {
+      final file = await _activityFile;
+      final dir = file.parent;
+
+      if (!dir.existsSync()) {
+        dir.createSync(recursive: true);
+      }
+
+      final tmpFile = File('${dir.path}/activity.json.tmp');
+      final jsonData = activity.map((e) => e.toJson()).toList();
+      final content = jsonEncode(jsonData);
+
+      tmpFile.writeAsStringSync(content);
+
+      // Atomic rename
+      if (file.existsSync()) {
+        file.deleteSync();
+      }
+      tmpFile.renameSync(file.path);
+    } catch (e) {
+      // ignore: avoid_print
+      print('Error saving activity: $e');
+      rethrow;
+    }
+  }
+
+  /// Zeitpunkt des zuletzt ausgeblendeten „Eingeschlafen?“-Vorschlags.
+  static Future<File> get _dismissFile async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File('${dir.path}/sleep_dismissed.txt');
+  }
+
+  static Future<int?> loadDismissedSleepAt() async {
+    try {
+      final f = await _dismissFile;
+      if (!f.existsSync()) return null;
+      return int.tryParse(f.readAsStringSync().trim());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveDismissedSleepAt(int ts) async {
+    try {
+      final f = await _dismissFile;
+      f.writeAsStringSync('$ts');
+    } catch (_) {}
+  }
 }
