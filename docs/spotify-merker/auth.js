@@ -11,12 +11,14 @@ const SCOPES = [
   'user-library-read',
 ];
 
-// Generate a random code_verifier (64 characters)
+// Generate a random code_verifier (64 characters) using crypto.getRandomValues
 function generateCodeVerifier() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  const bytes = new Uint8Array(64);
+  crypto.getRandomValues(bytes);
   let result = '';
   for (let i = 0; i < 64; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    result += chars[bytes[i] % chars.length];
   }
   return result;
 }
@@ -35,9 +37,11 @@ async function generateCodeChallenge(verifier) {
   return base64ToBase64Url(b64);
 }
 
-// Generate a random state
+// Generate a random state using crypto.getRandomValues
 function generateState() {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // Get stored token
@@ -158,7 +162,7 @@ export async function refreshToken(clientId) {
       });
 
       if (!response.ok) {
-        storeToken(null);
+        localStorage.removeItem('sm.token');
         return null;
       }
 

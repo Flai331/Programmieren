@@ -1,5 +1,5 @@
 // Service Worker for Spotify-Merker
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `spotify-merker-${CACHE_VERSION}`;
 
 const ASSETS_TO_CACHE = [
@@ -37,39 +37,39 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch event: serve from cache, fallback to network
+// Fetch event: network-first for same-origin GET, ignore cross-origin
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Never cache Spotify API or auth requests
+  // Never cache Spotify API or auth requests - pass through
+  // (kein respondWith → der Browser lädt sie ganz normal, ohne Cache)
   if (url.hostname === 'api.spotify.com' || url.hostname === 'accounts.spotify.com') {
-    event.respondWith(fetch(event.request));
     return;
   }
 
-  // For app assets, try cache first
-  if (event.request.method === 'GET') {
+  // Same-origin GET: network-first, fall back to cache
+  if (event.request.method === 'GET' && url.origin === self.location.origin) {
     event.respondWith(
-      caches.match(event.request).then((response) => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request).then((response) => {
-          // Don't cache if not successful
-          if (!response || response.status !== 200 || response.type === 'error') {
-            return response;
-          }
-          // Cache successful responses for future use
+      fetch(event.request).then((response) => {
+        // Cache successful responses
+        if (response && response.status === 200) {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);
           });
-          return response;
-        });
+        }
+        return response;
+      }).catch(() => {
+        // Fall back to cache on network error
+        return caches.match(event.request, { ignoreSearch: true });
       })
     );
-  } else {
-    // For non-GET requests, just pass through
+    return;
+  }
+
+  // Cross-origin requests: ignore (don't call respondWith)
+  // For non-GET same-origin: pass through
+  if (event.request.method !== 'GET' && url.origin === self.location.origin) {
     event.respondWith(fetch(event.request));
   }
 });
