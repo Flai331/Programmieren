@@ -52,7 +52,10 @@ jobs:
 
       - name: Build APK
         working-directory: spotify_merker_android
-        run: flutter build apk --release
+        env:
+          MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
+        # Fortlaufende Versionsnummer, damit Android jede neue APK als Update sieht.
+        run: flutter build apk --release --build-number=${{ github.run_number }}
 
       - name: Upload APK to artifacts
         uses: actions/upload-artifact@v4
@@ -61,6 +64,18 @@ jobs:
           path: spotify_merker_android/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
           if-no-files-found: error
+
+      - name: Signatur prüfen
+        if: github.ref == 'refs/heads/main'
+        env:
+          MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
+        run: |
+          # Ohne festen Schlüssel ließe sich die APK nicht als Update installieren –
+          # dann lieber kein Release als ein unbrauchbares.
+          if [ -z "$MERKER_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Secret MERKER_KEYSTORE_PASSWORD fehlt – Release wird nicht aktualisiert."
+            exit 1
+          fi
 
       - name: Rename APK for release
         if: github.ref == 'refs/heads/main'
