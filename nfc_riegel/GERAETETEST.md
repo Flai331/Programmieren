@@ -355,6 +355,8 @@ nicht stören" — das stellt alles still, nicht nur die gewählten Nummern.
       es sperrt.
 - [ ] Erneut scannen → der Schirm „Wie lange offen?" kommt, die Sperre steht
       weiter.
+- [ ] Unter jeder Stufe steht die Uhrzeit, bis zu der frei wäre (Build 23);
+      eigene Minuten eintippen → darunter läuft „bis HH:MM" mit.
 - [ ] Abbrechen → es bleibt zu, die gesperrte App wird weiter geblockt.
 - [ ] Erneut scannen, 5 Minuten wählen → die gesperrte App geht auf, die
       Benachrichtigung sagt „Freigabe läuft" und „Frei bis HH:MM", die

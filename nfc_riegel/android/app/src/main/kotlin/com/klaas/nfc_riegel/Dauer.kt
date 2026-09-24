@@ -11,3 +11,10 @@ fun formatiereDauer(millis: Long): String {
     val minuten = millis / 60_000L
     return if (minuten < 60) "$minuten min" else "${minuten / 60} h ${minuten % 60} min"
 }
+
+/**
+ * Uhrzeit, zu der eine Freigabe von [minuten] ab [jetztMillis] endet — die
+ * Frage beim Aufsperren ist nicht „wie lange", sondern „bis wann".
+ */
+fun endeUhrzeit(jetztMillis: Long, minuten: Int): String =
+    NotificationText.uhrzeit(jetztMillis + minuten * 60_000L)

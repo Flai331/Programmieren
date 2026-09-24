@@ -5,7 +5,13 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.Editable
 import android.text.InputType
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.TextWatcher
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
@@ -71,9 +77,10 @@ class ReleaseActivity : Activity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             )
         }
+        val jetzt = System.currentTimeMillis()
         STUFEN.forEachIndexed { index, minuten ->
             val knopf = Button(this).apply {
-                text = minuten.toString()
+                text = mitEndzeit(minuten, jetzt)
                 textSize = 15f
                 isAllCaps = false
                 setTextColor(BlockColors.FG_1)
@@ -90,7 +97,7 @@ class ReleaseActivity : Activity() {
         }
 
         val erklaerung = TextView(this).apply {
-            text = "Minuten"
+            text = "Minuten — darunter steht, bis wann frei ist"
             textSize = 12f
             setTextColor(BlockColors.FG_4)
             gravity = Gravity.CENTER
@@ -111,6 +118,29 @@ class ReleaseActivity : Activity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             )
         }
+
+        // Eine eigene Zahl hat keinen Knopf, auf dem die Uhrzeit stehen könnte —
+        // also läuft sie beim Tippen mit.
+        val eigeneEndzeit = TextView(this).apply {
+            text = ""
+            textSize = 12f
+            setTextColor(BlockColors.FG_3)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(6), 0, 0)
+        }
+        eingabe.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) {
+                val zahl = s?.toString()?.toIntOrNull()
+                eigeneEndzeit.text = if (zahl == null || zahl <= 0) {
+                    ""
+                } else {
+                    "bis ${endeUhrzeit(System.currentTimeMillis(), zahl)}"
+                }
+            }
+
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+        })
 
         val oeffnen = Button(this).apply {
             text = "Öffnen"
@@ -154,9 +184,24 @@ class ReleaseActivity : Activity() {
         root.addView(stufenReihe)
         root.addView(erklaerung)
         root.addView(eingabe)
+        root.addView(eigeneEndzeit)
         root.addView(oeffnen)
         root.addView(abbrechen)
         return root
+    }
+
+    /** Die Minuten groß, darunter klein und blass „bis 16:24". */
+    private fun mitEndzeit(minuten: Int, jetzt: Long): CharSequence {
+        val kopf = minuten.toString()
+        return SpannableString("$kopf\nbis ${endeUhrzeit(jetzt, minuten)}").apply {
+            setSpan(RelativeSizeSpan(0.72f), kopf.length, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(
+                ForegroundColorSpan(BlockColors.FG_3),
+                kopf.length,
+                length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
