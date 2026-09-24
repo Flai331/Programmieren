@@ -57,7 +57,9 @@ List<Trip> buildTrips(List<RawEvent> events) {
           currentTrip.walkedAfterExit = false;
         } else if (!currentTrip.walkedAfterExit) {
           // Prüfe auf starken Hinweis
-          final hasStrongHint = _hasStrongHint(sorted, currentTrip.exit!, event.t);
+          final ev = _evidence(sorted, currentTrip.start - 2 * 60 * 1000,
+              event.t, currentTrip.exit!);
+          final hasStrongHint = ev.chargerTime != null || ev.gone != null;
           if (!hasStrongHint) {
             // Gleiche Fahrt (langer Stau ohne Aussteigen)
             currentTrip.exit = null;
@@ -95,24 +97,6 @@ List<Trip> buildTrips(List<RawEvent> events) {
   }
 
   return trips;
-}
-
-bool _hasStrongHint(List<RawEvent> events, int exitTime, int enterTime) {
-  for (final event in events) {
-    if (event.t < exitTime - chargerBeforeExitMs || event.t > enterTime) continue;
-
-    if (event.type == 'power') {
-      final plugged = event.boolean('plugged');
-      final reason = event.str('reason');
-      if (plugged == false && reason == 'change') return true;
-    }
-
-    if (event.type == 'scan') {
-      final found = event.boolean('found');
-      if (found == false && event.t > exitTime) return true;
-    }
-  }
-  return false;
 }
 
 /// Wählt den besten Standort aus einer Liste von Proben.
@@ -211,19 +195,17 @@ List<TripResult> evaluateTrips(List<RawEvent> events, int now) {
         ? (trip.exit! + afterExitMs < nextTripStart ? trip.exit! + afterExitMs : nextTripStart)
         : trip.exit! + afterExitMs;
 
-    // Gerät-Status
-    final deviceInfo = _analyzeDevice(sorted, windowStart, windowEnd);
-    if (deviceInfo.rejected != null) {
+    // Gerät und Ladekabel
+    final deviceInfo = _evidence(sorted, windowStart, windowEnd, trip.exit!);
+    if (deviceInfo.checked && !deviceInfo.seen) {
       results.add(TripResult(
         trip: trip,
         spot: null,
-        status: deviceInfo.rejected!,
+        status: 'Gerät nie gesehen – vermutlich nicht dein Auto',
       ));
       continue;
     }
-
-    // Ladekabel
-    final chargerTime = _findChargerTime(sorted, trip.exit!, windowEnd);
+    final chargerTime = deviceInfo.chargerTime;
 
     // Ausstiegszeitpunkt
     int exitTime = trip.exit!;
@@ -298,15 +280,11 @@ bool _isFinalizedTrip(Trip trip, List<Trip> allTrips, List<RawEvent> events, int
     return true;
   }
 
-  // Starker Hinweis?
-  for (final event in events) {
-    if (event.t < trip.exit! - chargerBeforeExitMs || event.t > now) continue;
-    if (event.type == 'power' && event.boolean('plugged') == false && event.str('reason') == 'change') {
-      return true;
-    }
-    if (event.type == 'scan' && event.t > trip.exit! && event.boolean('found') == false) {
-      return true;
-    }
+  // Starker Hinweis (Ladekabel ab / Gerät weg)?
+  final end = trip.exit! + afterExitMs < now ? trip.exit! + afterExitMs : now;
+  final ev = _evidence(events, trip.start - 2 * 60 * 1000, end, trip.exit!);
+  if (ev.chargerTime != null || ev.gone != null) {
+    return true;
   }
 
   if (now - trip.exit! >= noWalkFinalizeMs) {
@@ -325,100 +303,81 @@ int? _nextTripStart(Trip trip, List<Trip> allTrips) {
   return null;
 }
 
-class _DeviceInfo {
-  bool deviceChecked = false;
-  bool seen = false;
-  _Gone? gone;
-  String? rejected;
-  String deviceMode = 'transmitter';
-}
-
 class _Gone {
-  int lastSeen;
-  int firstMiss;
+  final int lastSeen;
+  final int firstMiss;
   _Gone({required this.lastSeen, required this.firstMiss});
 }
 
-_DeviceInfo _analyzeDevice(List<RawEvent> events, int windowStart, int windowEnd) {
-  final info = _DeviceInfo();
-  int? lastSeenT;
-  int? firstMissT;
-  bool foundInWindow = false;
+/// Hinweise aus Gerätesuche und Ladekabel im Fenster [windowStart, windowEnd].
+class _Evidence {
+  /// Mindestens eine Suche lief erfolgreich (ok == true).
+  bool checked = false;
 
-  for (final event in events) {
-    if (event.t < windowStart || event.t > windowEnd) continue;
+  /// Gerät wurde mindestens einmal gesehen.
+  bool seen = false;
 
-    if (event.type == 'scan') {
-      final ok = event.boolean('ok');
-      final found = event.boolean('found');
+  /// Gerät verschwunden: zuletzt gesehen / erste erfolglose Suche danach.
+  _Gone? gone;
 
-      if (ok == true) {
-        info.deviceChecked = true;
-        if (found == true) {
-          foundInWindow = true;
-          lastSeenT = event.t;
-        } else if (found == false && lastSeenT != null && firstMissT == null) {
-          firstMissT = event.t;
-        }
-      }
+  /// Zeitpunkt „Ladekabel ab“ nahe am Aussteigen.
+  int? chargerTime;
 
-      final mode = event.str('mode');
-      if (mode != null) info.deviceMode = mode;
-    }
-
-    if (event.type == 'beacon_bg') {
-      foundInWindow = true;
-    }
-  }
-
-  info.seen = foundInWindow;
-
-  if (info.deviceChecked && !info.seen) {
-    info.rejected = 'Gerät nie gesehen – vermutlich nicht dein Auto';
-    return info;
-  }
-
-  if (lastSeenT != null && firstMissT != null) {
-    info.gone = _Gone(lastSeen: lastSeenT, firstMiss: firstMissT);
-  }
-
-  return info;
+  String deviceMode = 'transmitter';
 }
 
-int? _findChargerTime(List<RawEvent> events, int exitTime, int windowEnd) {
-  int? lastPluggedTrueTime;
-  int? candidateTime;
+_Evidence _evidence(
+    List<RawEvent> sorted, int windowStart, int windowEnd, int exit) {
+  final ev = _Evidence();
+  int? lastSeenT;
+  int? firstMissT;
+  final power = <RawEvent>[];
 
-  for (final event in events) {
-    if (event.type != 'power') continue;
+  for (final event in sorted) {
+    if (event.t < windowStart || event.t > windowEnd) continue;
+    if (event.type == 'scan') {
+      final mode = event.str('mode');
+      if (mode != null) ev.deviceMode = mode;
+      if (event.boolean('ok') != true) continue;
+      ev.checked = true;
+      if (event.boolean('found') == true) {
+        ev.seen = true;
+        lastSeenT = event.t;
+        firstMissT = null; // wieder gesehen → frühere Lücke zählt nicht
+      } else if (lastSeenT != null && firstMissT == null) {
+        firstMissT = event.t;
+      }
+    } else if (event.type == 'beacon_bg') {
+      ev.seen = true;
+    } else if (event.type == 'power') {
+      power.add(event);
+    }
+  }
+  if (lastSeenT != null && firstMissT != null) {
+    ev.gone = _Gone(lastSeen: lastSeenT, firstMiss: firstMissT);
+  }
 
+  // Ladekabel: letztes Abziehen nahe am Aussteigen, vorher eingesteckt,
+  // danach bis Fensterende nicht wieder eingesteckt.
+  bool pluggedBefore = false;
+  int? candidate;
+  for (final event in power) {
     final plugged = event.boolean('plugged');
-    final reason = event.str('reason');
-
     if (plugged == true) {
-      lastPluggedTrueTime = event.t;
-    } else if (plugged == false && reason == 'change') {
-      if (event.t >= exitTime - chargerBeforeExitMs &&
-          event.t <= exitTime + afterExitMs &&
-          lastPluggedTrueTime != null) {
-        candidateTime = event.t;
+      pluggedBefore = true;
+      candidate = null;
+    } else if (plugged == false) {
+      if (event.str('reason') == 'change' &&
+          pluggedBefore &&
+          event.t >= exit - chargerBeforeExitMs &&
+          event.t <= exit + afterExitMs) {
+        candidate = event.t;
       }
+      pluggedBefore = false;
     }
   }
-
-  if (candidateTime != null) {
-    // Prüfe, ob kein plugged==true nach candidateTime kommt bis windowEnd
-    for (final event in events) {
-      if (event.type != 'power') continue;
-      if (event.t <= candidateTime || event.t > windowEnd) continue;
-      if (event.boolean('plugged') == true) {
-        return null;
-      }
-    }
-    return candidateTime;
-  }
-
-  return null;
+  ev.chargerTime = candidate;
+  return ev;
 }
 
 /// Erkennt Parkplätze aus Rohereignissen.
@@ -471,8 +430,11 @@ String _manualSourceLabel(String? source) {
 /// Prüft, ob eine Fahrt läuft.
 bool tripInProgress(List<RawEvent> events, int now) {
   final trips = buildTrips(events);
+  // Eine Fahrt ohne EXIT, die älter als 8 h ist, gilt nicht mehr als laufend
+  // (EXIT verpasst; der Service beendet sich spätestens nach 8 h).
+  const staleMs = 8 * 60 * 60 * 1000;
   for (final trip in trips) {
-    if (trip.exit == null) {
+    if (trip.exit == null && now - trip.start < staleMs) {
       return true;
     }
   }

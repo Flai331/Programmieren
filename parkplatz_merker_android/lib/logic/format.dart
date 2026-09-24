@@ -53,7 +53,7 @@ String sinceText(DateTime parked, DateTime now) {
 
   // Älter: „seit Mo., 22.09., 14:32"
   const weekdays = ['Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.', 'So.'];
-  final weekday = weekdays[parked.weekday % 7]; // Monday = 1, so weekday % 7
+  final weekday = weekdays[parked.weekday - 1]; // DateTime.monday == 1
   final day = parked.day.toString().padLeft(2, '0');
   final month = parked.month.toString().padLeft(2, '0');
 
@@ -67,8 +67,7 @@ bool _isSameDay(DateTime a, DateTime b) {
 /// Gibt die Überschrift „Dein Auto steht seit HH:MM hier" zurück.
 String headline(ParkingSpot s, DateTime now) {
   final parked = DateTime.fromMillisecondsSinceEpoch(s.time);
-  final clock = formatClock(parked);
-  return 'Dein Auto steht seit $clock hier';
+  return 'Dein Auto steht ${sinceText(parked, now)} hier';
 }
 
 /// Formatiert die Genauigkeit.

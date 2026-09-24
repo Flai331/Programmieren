@@ -201,6 +201,7 @@ void main() {
       final events = [
         act(0, 'IN_VEHICLE', 'ENTER'),
         act(20, 'IN_VEHICLE', 'EXIT'),
+        act(21, 'WALKING', 'ENTER'),
         scan(5, 'transmitter', 'AA:BB:CC', found: false),
         scan(10, 'transmitter', 'AA:BB:CC', found: false),
         scan(25, 'transmitter', 'AA:BB:CC', found: false),
@@ -392,6 +393,60 @@ void main() {
       final inProgress = tripInProgress(events, now);
 
       expect(inProgress, false);
+    });
+  });
+
+  group('Prüfung (Nachträge)', () {
+    test('Gerät kurz verpasst und wieder gesehen: nur die letzte Lücke zählt', () {
+      final events = [
+        act(0, 'IN_VEHICLE', 'ENTER'),
+        scan(2, 'transmitter', 'AA', found: true),
+        scan(4, 'transmitter', 'AA', found: false),
+        scan(6, 'transmitter', 'AA', found: true),
+        scan(18, 'transmitter', 'AA', found: true),
+        scan(20, 'transmitter', 'AA', found: false),
+        act(22, 'IN_VEHICLE', 'EXIT'),
+        act(23, 'WALKING', 'ENTER'),
+        loc(20, 1.0, 1.0, 5),
+        loc(4, 9.0, 9.0, 5),
+      ];
+      final spots = detectParkings(events, 30 * 60 * 1000);
+      expect(spots.length, 1);
+      expect(spots.first.time, 20 * 60 * 1000);
+      expect(spots.first.lat, 1.0);
+    });
+
+    test('Bus ohne Gehen: erfolglose Suche nach EXIT ist kein starker Hinweis', () {
+      final events = [
+        act(0, 'IN_VEHICLE', 'ENTER'),
+        scan(2, 'transmitter', 'AA', found: false),
+        act(20, 'IN_VEHICLE', 'EXIT'),
+        scan(21, 'transmitter', 'AA', found: false),
+        loc(20, 1.0, 1.0, 5),
+      ];
+      final results = evaluateTrips(events, 25 * 60 * 1000);
+      expect(results.single.status, 'wartet auf Aussteigen');
+    });
+
+    test('Altes Einstecken zählt nicht für das Ladekabel', () {
+      final events = [
+        power(-600, true, reason: 'initial'),
+        act(0, 'IN_VEHICLE', 'ENTER'),
+        power(19, false),
+        act(20, 'IN_VEHICLE', 'EXIT'),
+        act(21, 'WALKING', 'ENTER'),
+        loc(19, 1.0, 1.0, 5),
+        loc(20, 2.0, 2.0, 5),
+      ];
+      final spots = detectParkings(events, 30 * 60 * 1000);
+      expect(spots.single.time, 20 * 60 * 1000);
+      expect(spots.single.sources, ['Aussteigen']);
+    });
+
+    test('Fahrt ohne EXIT seit über 8 h läuft nicht mehr', () {
+      final events = [act(0, 'IN_VEHICLE', 'ENTER')];
+      expect(tripInProgress(events, 60 * 60 * 1000), isTrue);
+      expect(tripInProgress(events, 9 * 60 * 60 * 1000), isFalse);
     });
   });
 }

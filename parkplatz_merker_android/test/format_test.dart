@@ -23,13 +23,11 @@ void main() {
     });
 
     test('sinceText: older → "seit Mo., TT.MM., HH:MM"', () {
-      final parked = DateTime(2026, 9, 22, 14, 32); // Monday
+      final parked = DateTime(2026, 9, 22, 14, 32); // Dienstag
       final now = DateTime(2026, 9, 24, 15, 45);
 
-      final result = sinceText(parked, now);
-
-      expect(result.contains('22.09.'), true);
-      expect(result.contains('14:32'), true);
+      expect(sinceText(parked, now), 'seit Di., 22.09., 14:32');
+      expect(sinceText(DateTime(2026, 9, 21, 8, 5), now), 'seit Mo., 21.09., 08:05');
     });
 
     test('formatDistance: < 100 m, rounded to 5 m', () {

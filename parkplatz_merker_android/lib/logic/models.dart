@@ -23,7 +23,7 @@ class RawEvent {
 
   /// Erstellt eine RawEvent aus einer JSON-Map. Fehlendes 't' wird zu 0.
   factory RawEvent.fromJson(Map<String, dynamic> m) {
-    final type = m['type'] as String? ?? 'unknown';
+    final type = m['type'] is String ? m['type'] as String : 'unknown';
     final t = (m['t'] as num?)?.toInt() ?? 0;
     return RawEvent(type: type, t: t, data: Map.from(m));
   }
@@ -31,7 +31,10 @@ class RawEvent {
   /// Gibt die komplette JSON-Map zurück (= data).
   Map<String, dynamic> toJson() => data;
 
-  String? str(String k) => data[k] as String?;
+  String? str(String k) {
+    final v = data[k];
+    return v is String ? v : null;
+  }
   double? dbl(String k) {
     final v = data[k];
     if (v is num) return v.toDouble();
@@ -47,7 +50,10 @@ class RawEvent {
     return null;
   }
 
-  bool? boolean(String k) => data[k] as bool?;
+  bool? boolean(String k) {
+    final v = data[k];
+    return v is bool ? v : null;
+  }
 }
 
 class LocSample {
