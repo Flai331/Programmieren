@@ -1,0 +1,82 @@
+name: Spotify-Merker APK Build
+
+# Baut die APK auf einem GitHub-Runner (lokal gibt es kein Android-SDK).
+# Auf main wird zusätzlich das Release "spotify-merker-android" aktualisiert:
+# https://github.com/Flai331/Programmieren/releases/download/spotify-merker-android/Spotify-Merker.apk
+
+on:
+  push:
+    branches:
+      - main
+      - claude/**
+    paths:
+      - 'spotify_merker_android/**'
+      - '.github/workflows/spotify-merker-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.1'
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        working-directory: spotify_merker_android
+        run: flutter pub get
+
+      - name: Run analyzer
+        working-directory: spotify_merker_android
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Run tests
+        working-directory: spotify_merker_android
+        run: flutter test
+
+      - name: Build APK
+        working-directory: spotify_merker_android
+        run: flutter build apk --release
+
+      - name: Upload APK to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Spotify-Merker-${{ github.sha }}
+          path: spotify_merker_android/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Rename APK for release
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cp spotify_merker_android/build/app/outputs/flutter-apk/app-release.apk Spotify-Merker.apk
+
+      - name: Create or update GitHub release
+        if: github.ref == 'refs/heads/main'
+        run: |
+          # Check if release exists
+          if gh release view spotify-merker-android > /dev/null 2>&1; then
+            # Release exists, upload with clobber
+            gh release upload spotify-merker-android Spotify-Merker.apk --clobber
+          else
+            # Release doesn't exist, create it
+            gh release create spotify-merker-android Spotify-Merker.apk --title "Spotify-Merker" --notes "Automatisch gebaut aus main. Installation: siehe spotify_merker_android/README.md"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
