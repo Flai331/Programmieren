@@ -1,0 +1,63 @@
+name: Lese-Stadt APK Build
+
+# Baut die APK auf einem GitHub-Runner (lokal gibt es kein Android-SDK).
+# Die APK liegt danach als Artifact am Workflow-Lauf.
+
+on:
+  push:
+    branches:
+      - main
+      - claude/**
+    paths:
+      - 'lese_stadt/**'
+      - '.github/workflows/lese-stadt-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.1'
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        working-directory: lese_stadt
+        run: flutter pub get
+
+      - name: Run analyzer
+        working-directory: lese_stadt
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Run tests
+        working-directory: lese_stadt
+        run: flutter test
+
+      - name: Build APK
+        working-directory: lese_stadt
+        # Fortlaufende Versionsnummer, damit Android jede neue APK als Update sieht.
+        run: flutter build apk --release --build-number=${{ github.run_number }}
+
+      - name: Upload APK to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lese-Stadt-${{ github.sha }}
+          path: lese_stadt/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+          if-no-files-found: error
