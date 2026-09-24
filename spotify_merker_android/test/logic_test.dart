@@ -956,4 +956,37 @@ void main() {
       expect(g.entry.title, 'Kapitel 11');
     });
   });
+
+  group('Wachzeichen lesbar', () {
+    test('describeActivity', () {
+      expect(
+        describeActivity(
+          ActivityEvent(ts: 0, type: 'screen', action: 'unlock'),
+        ),
+        'Entsperrt',
+      );
+      expect(
+        describeActivity(ActivityEvent(ts: 0, type: 'screen', action: 'off')),
+        'Bildschirm aus',
+      );
+      expect(
+        describeActivity(ActivityEvent(ts: 0, type: 'motion', level: 2.3)),
+        'Bewegung (Stärke 2.3)',
+      );
+    });
+    test('formatClock', () {
+      final ts = DateTime(2026, 9, 25, 0, 3, 23).millisecondsSinceEpoch;
+      expect(formatClock(ts), '25.09. 00:03:23');
+    });
+    test('recentActivityLines: neueste zuerst, begrenzt', () {
+      final base = DateTime(2026, 9, 25, 0, 0).millisecondsSinceEpoch;
+      final events = [
+        for (var i = 0; i < 15; i++)
+          ActivityEvent(ts: base + i * 60000, type: 'motion'),
+      ];
+      final lines = recentActivityLines(events);
+      expect(lines.length, 10);
+      expect(lines.first, '25.09. 00:14:00 – Bewegung');
+    });
+  });
 }

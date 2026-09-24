@@ -600,3 +600,43 @@ SleepGuess? guessSleep(
     playedAfterMin: (sessionEnd - lastSign) ~/ (60 * 1000),
   );
 }
+
+String _two(int n) => n.toString().padLeft(2, '0');
+
+/// Uhrzeit lesbar, z. B. „25.09. 00:03:23“.
+String formatClock(int ts) {
+  final d = DateTime.fromMillisecondsSinceEpoch(ts);
+  return '${_two(d.day)}.${_two(d.month)}. '
+      '${_two(d.hour)}:${_two(d.minute)}:${_two(d.second)}';
+}
+
+/// Wachzeichen in Worten, z. B. „Entsperrt“ oder „Bewegung (2.3)“.
+String describeActivity(ActivityEvent a) {
+  if (a.type == 'motion') {
+    return a.level != null ? 'Bewegung (Stärke ${a.level})' : 'Bewegung';
+  }
+  if (a.type == 'screen') {
+    switch (a.action) {
+      case 'on':
+        return 'Bildschirm an';
+      case 'off':
+        return 'Bildschirm aus';
+      case 'unlock':
+        return 'Entsperrt';
+    }
+  }
+  return '${a.type} ${a.action ?? ''}'.trim();
+}
+
+/// Die letzten [count] Wachzeichen, neueste zuerst, als lesbare Zeilen.
+List<String> recentActivityLines(
+  List<ActivityEvent> activity, {
+  int count = 10,
+}) {
+  final sorted = List<ActivityEvent>.from(activity)
+    ..sort((a, b) => b.ts.compareTo(a.ts));
+  return [
+    for (final a in sorted.take(count))
+      '${formatClock(a.ts)} – ${describeActivity(a)}',
+  ];
+}
