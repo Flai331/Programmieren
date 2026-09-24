@@ -168,6 +168,15 @@ class MediaListenerService : NotificationListenerService() {
     }
 
     private var screenReceiverRegistered = false
+
+    /** Letztes Bildschirm-Ereignis (für die Diagnose). */
+    @Volatile
+    var lastScreenAt = 0L
+        private set
+
+    @Volatile
+    var lastScreenAction = ""
+        private set
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (context == null) return
@@ -179,6 +188,8 @@ class MediaListenerService : NotificationListenerService() {
                 Intent.ACTION_USER_PRESENT -> "unlock"
                 else -> return
             }
+            lastScreenAt = ts
+            lastScreenAction = screenAction
             EventLog.append(context, JSONObject(mapOf(
                 "ts" to ts,
                 "type" to "screen",

@@ -1115,6 +1115,17 @@ class DiagnosticsCard extends StatefulWidget {
   State<DiagnosticsCard> createState() => _DiagnosticsCardState();
 }
 
+/// Diagnose vom Handy plus lesbare Zeiten und die letzten Wachzeichen.
+Future<Map<String, dynamic>> collectDiagnostics() async {
+  final diag = Map<String, dynamic>.from(await Native.getDiagnostics());
+  for (final key in ['lastMotionAt', 'lastScreenAt']) {
+    final v = diag[key];
+    if (v is int) diag['${key}Lesbar'] = formatClock(v);
+  }
+  diag['letzteWachzeichen'] = recentActivityLines(await Storage.loadActivity());
+  return diag;
+}
+
 class _DiagnosticsCardState extends State<DiagnosticsCard> {
   Map<String, dynamic> _diagnostics = {};
   bool _loading = true;
@@ -1126,7 +1137,7 @@ class _DiagnosticsCardState extends State<DiagnosticsCard> {
   }
 
   Future<void> _loadDiagnostics() async {
-    final diag = await Native.getDiagnostics();
+    final diag = await collectDiagnostics();
     if (!mounted) return;
     setState(() {
       _diagnostics = diag;
@@ -1151,24 +1162,40 @@ class _DiagnosticsCardState extends State<DiagnosticsCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ..._diagnostics.entries.map((e) {
-              final key = e.key;
-              final value = e.value;
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  '$key: $value',
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                ),
-              );
-            }),
+            const Text(
+              'Letzte Wachzeichen',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            if ((_diagnostics['letzteWachzeichen'] as List?)?.isEmpty ?? true)
+              const Text('Noch keine aufgezeichnet.')
+            else
+              for (final line in _diagnostics['letzteWachzeichen'] as List)
+                Text('$line', style: const TextStyle(fontSize: 13)),
+            const Divider(height: 24),
+            ..._diagnostics.entries
+                .where((e) => e.key != 'letzteWachzeichen')
+                .map((e) {
+                  final key = e.key;
+                  final value = e.value;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      '$key: $value',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  );
+                }),
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
                 onPressed: () async {
                   final messenger = ScaffoldMessenger.of(context);
-                  final fresh = await Native.getDiagnostics();
+                  final fresh = await collectDiagnostics();
                   final text = const JsonEncoder.withIndent('  ')
                       .convert(fresh);
                   await Clipboard.setData(ClipboardData(text: text));

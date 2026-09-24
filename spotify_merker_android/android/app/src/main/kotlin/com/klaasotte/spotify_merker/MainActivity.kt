@@ -98,6 +98,8 @@ class MainActivity : FlutterActivity() {
             "lastResumeLog" to ResumeHelper.lastLog(),
             "lastMotionAt" to service?.lastMotionAt,
             "motionListening" to service?.motionListening,
+            "lastScreenAt" to service?.lastScreenAt?.takeIf { it > 0 },
+            "lastScreenAction" to service?.lastScreenAction?.takeIf { it.isNotEmpty() },
         )
     }
 }
