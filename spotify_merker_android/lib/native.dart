@@ -33,18 +33,15 @@ class Native {
     } catch (_) {}
   }
 
-  static Future<List<RawEvent>> drainEvents() async {
+  static Future<List<Map<String, dynamic>>> drainEvents() async {
     try {
       final result = await platform.invokeMethod<List>('drainEvents');
       if (result == null) return [];
 
       return result
           .cast<String>()
-          .map((eventStr) {
-            final json = _parseJson(eventStr);
-            return json != null ? RawEvent.fromJson(json) : null;
-          })
-          .whereType<RawEvent>()
+          .map((eventStr) => _parseJson(eventStr))
+          .whereType<Map<String, dynamic>>()
           .toList();
     } catch (e) {
       // ignore: avoid_print

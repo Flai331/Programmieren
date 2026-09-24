@@ -96,6 +96,8 @@ class MainActivity : FlutterActivity() {
             "actions" to actionNames,
             "lastBroadcast" to (service?.lastBroadcast ?: emptyMap<String, String>()),
             "lastResumeLog" to ResumeHelper.lastLog(),
+            "lastMotionAt" to service?.lastMotionAt,
+            "motionListening" to service?.motionListening,
         )
     }
 }

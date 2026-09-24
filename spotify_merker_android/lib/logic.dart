@@ -448,8 +448,9 @@ String formatAgo(int ts, int now) {
   if (diff < 1000) return 'gerade eben';
   if (diff < 60 * 1000) return 'vor ${(diff ~/ 1000)} s';
   if (diff < 60 * 60 * 1000) return 'vor ${(diff ~/ (60 * 1000))} Min.';
-  if (diff < 24 * 60 * 60 * 1000)
+  if (diff < 24 * 60 * 60 * 1000) {
     return 'vor ${(diff ~/ (60 * 60 * 1000))} Std.';
+  }
 
   final days = diff ~/ (24 * 60 * 60 * 1000);
   if (days == 1) return 'vor 1 Tag';
@@ -460,3 +461,142 @@ String formatAgo(int ts, int now) {
 List<Entry> reclassify(List<Entry> history) => [
   for (final e in history) e.copyWith(kind: isSpoken(e) ? 'spoken' : 'music'),
 ];
+
+/// Aktivitätsereignis (Bildschirm oder Bewegung).
+class ActivityEvent {
+  final int ts;
+  final String type; // 'screen', 'motion'
+  final String? action; // 'on', 'off', 'unlock' (für screen)
+  final double? level; // Bewegungsmagnitude (für motion)
+
+  ActivityEvent({
+    required this.ts,
+    required this.type,
+    this.action,
+    this.level,
+  });
+
+  factory ActivityEvent.fromJson(Map<String, dynamic> json) {
+    return ActivityEvent(
+      ts: json['ts'] as int? ?? 0,
+      type: json['type'] as String? ?? '',
+      action: json['action'] as String?,
+      level: (json['level'] as num?)?.toDouble(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'ts': ts,
+    'type': type,
+    if (action != null) 'action': action,
+    if (level != null) 'level': level,
+  };
+}
+
+/// Splittet Ereignisse in Medien- und Aktivitätsereignisse.
+({List<RawEvent> media, List<ActivityEvent> activity}) splitEvents(
+  List<Map<String, dynamic>> rawMaps,
+) {
+  final media = <RawEvent>[];
+  final activity = <ActivityEvent>[];
+
+  for (final map in rawMaps) {
+    final type = map['type'] as String?;
+    if (type == null || type.isEmpty) {
+      // Media-Ereignis (kein type-Feld)
+      final json = Map<String, dynamic>.from(map);
+      media.add(RawEvent.fromJson(json));
+    } else {
+      // Aktivitätsereignis
+      activity.add(ActivityEvent.fromJson(map));
+    }
+  }
+
+  return (media: media, activity: activity);
+}
+
+/// Position eines Eintrags zum Zeitpunkt ts.
+int positionAt(Entry e, int ts) {
+  final elapsed = ts - e.startedAt;
+  final pos = e.startPositionMs + elapsed;
+  return pos.clamp(0, e.durationMs > 0 ? e.durationMs : 0x7FFFFFFFFFFFFFFF);
+}
+
+/// Eintrag mit startedAt <= ts <= lastSeenAt, neuester zuerst.
+Entry? entryAt(List<Entry> history, int ts) {
+  for (final e in history) {
+    if (e.startedAt <= ts && ts <= e.lastSeenAt) {
+      return e;
+    }
+  }
+  return null;
+}
+
+/// Vermutete Einschlafstelle.
+class SleepGuess {
+  final Entry entry;
+  final int at; // Zeitpunkt des letzten Vorzeichens
+  final String source; // Beschreibung z.B. "Handy-Nutzung" oder "Bewegung"
+  final int playedAfterMin; // Minuten, die danach noch liefen
+
+  SleepGuess({
+    required this.entry,
+    required this.at,
+    required this.source,
+    required this.playedAfterMin,
+  });
+}
+
+/// Rät die Einschlafstelle aus Verlauf und Handy-Aktivität.
+///
+/// Betrachtet wird die jüngste Hörbuch-Sitzung der letzten 18 h. Letztes
+/// Wachzeichen = jüngstes Bildschirm- oder Bewegungsereignis **vor dem Ende**
+/// dieser Sitzung (spätere – etwa das Entsperren am Morgen – zählen nicht).
+/// Lief das Hörbuch danach noch ≥ 15 min, ist die Stelle zum Zeitpunkt des
+/// letzten Wachzeichens der Vorschlag.
+SleepGuess? guessSleep(
+  List<Entry> history,
+  List<ActivityEvent> activity,
+  int now,
+) {
+  const window = 18 * 60 * 60 * 1000;
+  const minPlayedAfter = 15 * 60 * 1000;
+
+  final spoken =
+      history
+          .where((e) => e.kind == 'spoken' && now - e.lastSeenAt < window)
+          .toList()
+        ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
+  if (spoken.isEmpty) return null;
+  final sessionEnd = spoken.first.lastSeenAt;
+
+  ActivityEvent? sign;
+  for (final a in activity) {
+    final relevant =
+        a.type == 'motion' || (a.type == 'screen' && a.action != null);
+    if (!relevant || a.ts > sessionEnd || now - a.ts >= window) continue;
+    if (sign == null || a.ts > sign.ts) sign = a;
+  }
+  if (sign == null) return null;
+  final lastSign = sign.ts;
+  if (sessionEnd - lastSign < minPlayedAfter) return null;
+
+  // Kapitel, das beim letzten Wachzeichen lief; lag das Zeichen in einer
+  // Lücke zwischen zwei Kapiteln, das nächste danach ab seinem Anfang.
+  var entry = entryAt(spoken, lastSign);
+  var pos = entry == null ? 0 : positionAt(entry, lastSign);
+  if (entry == null) {
+    final after = spoken.where((e) => e.startedAt >= lastSign).toList()
+      ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+    if (after.isEmpty) return null;
+    entry = after.first;
+    pos = entry.startPositionMs;
+  }
+
+  return SleepGuess(
+    entry: entry.copyWith(positionMs: pos),
+    at: lastSign,
+    source: sign.type == 'screen' ? 'Handy-Nutzung' : 'Bewegung',
+    playedAfterMin: (sessionEnd - lastSign) ~/ (60 * 1000),
+  );
+}
