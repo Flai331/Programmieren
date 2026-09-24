@@ -113,6 +113,15 @@ object ResumeHelper {
             seekAndPlay(controller, positionMs)
             return
         }
+        // Mit bekannter URI Spotify direkt beim Stück öffnen. Den Startbefehl
+        // über die Media-Session (playFromUri) ignoriert Spotify in der Praxis,
+        // das Warten darauf kostete nur Zeit (Diagnose vom Gerät, 24.09.2026).
+        if (uri != null && launchSpotify(context, uri)) {
+            note("Spotify bei $uri geöffnet – ggf. auf Play tippen, dann spule ich")
+            waitForTitleThenSeek(title, positionMs, gen)
+            return
+        }
+
         val actions = controller.playbackState?.actions ?: 0L
         val tc = controller.transportControls
         var triedDirect = true
