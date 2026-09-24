@@ -12,6 +12,8 @@ class RawEvent {
   final String state;
   final int actions;
   final String spotifyUri;
+  final String contextUri;
+  final String contextTitle;
 
   RawEvent({
     required this.ts,
@@ -27,6 +29,8 @@ class RawEvent {
     required this.state,
     required this.actions,
     required this.spotifyUri,
+    this.contextUri = '',
+    this.contextTitle = '',
   });
 
   factory RawEvent.fromJson(Map<String, dynamic> json) {
@@ -44,6 +48,8 @@ class RawEvent {
       state: json['state'] as String? ?? 'UNKNOWN',
       actions: json['actions'] as int? ?? 0,
       spotifyUri: json['spotifyUri'] as String? ?? '',
+      contextUri: json['contextUri'] as String? ?? '',
+      contextTitle: json['contextTitle'] as String? ?? '',
     );
   }
 
@@ -61,6 +67,8 @@ class RawEvent {
     'state': state,
     'actions': actions,
     'spotifyUri': spotifyUri,
+    'contextUri': contextUri,
+    'contextTitle': contextTitle,
   };
 }
 
@@ -80,6 +88,8 @@ class Entry {
   final int startedAt;
   final int lastSeenAt;
   final bool pinned;
+  final String contextUri;
+  final String contextTitle;
 
   Entry({
     required this.id,
@@ -97,7 +107,14 @@ class Entry {
     required this.startedAt,
     required this.lastSeenAt,
     required this.pinned,
+    this.contextUri = '',
+    this.contextTitle = '',
   });
+
+  /// Wozu gehört das Stück? Hörbuch/Album/Playlist-Name, sonst Interpret.
+  String get groupTitle => contextTitle.isNotEmpty
+      ? contextTitle
+      : (album.isNotEmpty && album != title ? album : artist);
 
   factory Entry.fromJson(Map<String, dynamic> json) {
     return Entry(
@@ -116,6 +133,8 @@ class Entry {
       startedAt: json['startedAt'] as int? ?? 0,
       lastSeenAt: json['lastSeenAt'] as int? ?? 0,
       pinned: json['pinned'] as bool? ?? false,
+      contextUri: json['contextUri'] as String? ?? '',
+      contextTitle: json['contextTitle'] as String? ?? '',
     );
   }
 
@@ -135,6 +154,8 @@ class Entry {
     'startedAt': startedAt,
     'lastSeenAt': lastSeenAt,
     'pinned': pinned,
+    'contextUri': contextUri,
+    'contextTitle': contextTitle,
   };
 
   Entry copyWith({
@@ -150,6 +171,8 @@ class Entry {
     int? positionMs,
     int? lastSeenAt,
     bool? pinned,
+    String? contextUri,
+    String? contextTitle,
   }) {
     return Entry(
       id: id,
@@ -167,6 +190,8 @@ class Entry {
       startedAt: startedAt,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
       pinned: pinned ?? this.pinned,
+      contextUri: contextUri ?? this.contextUri,
+      contextTitle: contextTitle ?? this.contextTitle,
     );
   }
 }
@@ -179,27 +204,21 @@ String entryKey(Entry e) {
   return "${e.title.toLowerCase().trim()}|${e.artist.toLowerCase().trim()}";
 }
 
+final RegExp _spokenWords = RegExp(
+  r'\b(kapitel|chapter|hörbuch|hoerbuch|audiobook|hörspiel|folge|episode|teil \d+)\b',
+  caseSensitive: false,
+);
+
+/// Hörbuch/Podcast oder Musik? Spotify-URIs zuerst, dann Kontext, dann
+/// typische Wörter („Kapitel 67“, „Hörbuch“), zuletzt die Länge.
 bool isSpoken(Entry e) {
-  final uri = e.spotifyUri ?? '';
-  final mediaId = e.mediaId;
-
-  if (uri.contains(':episode:') ||
-      uri.contains(':chapter:') ||
-      uri.contains(':audiobook:') ||
-      uri.contains(':show:') ||
-      mediaId.contains(':episode:') ||
-      mediaId.contains(':chapter:') ||
-      mediaId.contains(':audiobook:') ||
-      mediaId.contains(':show:')) {
-    return true;
+  final uris = '${e.spotifyUri ?? ''} ${e.mediaId} ${e.contextUri}';
+  for (final t in const [':episode:', ':chapter:', ':audiobook:', ':show:']) {
+    if (uris.contains(t)) return true;
   }
-
-  if (e.durationMs >= 15 * 60 * 1000) {
-    // 15 minutes
-    return true;
-  }
-
-  return false;
+  final text = '${e.title} ${e.album} ${e.artist} ${e.contextTitle}';
+  if (_spokenWords.hasMatch(text)) return true;
+  return e.durationMs >= 15 * 60 * 1000;
 }
 
 const int _sameSessionGapMs = 5 * 60 * 1000;
@@ -240,6 +259,12 @@ List<Entry> applyEvents(List<Entry> history, List<RawEvent> events) {
         spotifyUri: event.spotifyUri.isNotEmpty
             ? event.spotifyUri
             : e.spotifyUri,
+        contextUri: event.contextUri.isNotEmpty
+            ? event.contextUri
+            : e.contextUri,
+        contextTitle: event.contextTitle.isNotEmpty
+            ? event.contextTitle
+            : e.contextTitle,
       );
       // Art neu bestimmen, falls Dauer oder URI erst jetzt bekannt sind.
       updated[0] = merged.copyWith(kind: isSpoken(merged) ? 'spoken' : 'music');
@@ -265,6 +290,8 @@ List<Entry> applyEvents(List<Entry> history, List<RawEvent> events) {
       startedAt: event.ts,
       lastSeenAt: event.ts,
       pinned: false,
+      contextUri: event.contextUri,
+      contextTitle: event.contextTitle,
     );
     updated.insert(
       0,
@@ -428,3 +455,8 @@ String formatAgo(int ts, int now) {
   if (days == 1) return 'vor 1 Tag';
   return 'vor $days Tagen';
 }
+
+/// Art aller Einträge neu bestimmen (z. B. nach verbesserter Erkennung).
+List<Entry> reclassify(List<Entry> history) => [
+  for (final e in history) e.copyWith(kind: isSpoken(e) ? 'spoken' : 'music'),
+];

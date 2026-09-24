@@ -34,6 +34,8 @@ data class Snapshot(
     val artUri: String,
     val actions: Long,
     val spotifyUri: String,
+    val contextUri: String = "",
+    val contextTitle: String = "",
 ) {
     fun toMap(): Map<String, Any> = mapOf(
         "title" to title,
@@ -47,6 +49,8 @@ data class Snapshot(
         "artUri" to artUri,
         "actions" to actions,
         "spotifyUri" to spotifyUri,
+        "contextUri" to contextUri,
+        "contextTitle" to contextTitle,
     )
 
     fun toEvent(reason: String, ts: Long): JSONObject = JSONObject(toMap()).apply {
@@ -277,6 +281,8 @@ class MediaListenerService : NotificationListenerService() {
                 ?: md.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI) ?: "",
             actions = ps?.actions ?: 0L,
             spotifyUri = uri,
+            contextUri = md.getString("com.spotify.music.extra.CONTEXT_URI") ?: "",
+            contextTitle = md.getString("com.spotify.music.extra.CONTEXT_TITLE") ?: "",
         )
     }
 

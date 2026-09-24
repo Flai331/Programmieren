@@ -163,7 +163,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
         _permissionGranted = permission;
         _current = current;
       });
-      var history = await Storage.loadHistory();
+      var history = reclassify(await Storage.loadHistory());
       final events = await Native.drainEvents();
       if (events.isNotEmpty) {
         history = applyEvents(history, events);
@@ -440,7 +440,7 @@ class _NowScreenState extends State<NowScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    resumeCandidate.title,
+                    resumeCandidate.groupTitle,
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -450,8 +450,10 @@ class _NowScreenState extends State<NowScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    resumeCandidate.artist,
+                    resumeCandidate.title,
                     style: const TextStyle(fontSize: 14, color: Colors.grey),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 12),
                   Text(
