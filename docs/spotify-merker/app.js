@@ -505,7 +505,12 @@ function switchTab(tab) {
 function renderNow() {
   const content = document.getElementById('now-content');
   if (!isLoggedIn()) {
-    content.innerHTML = '<p>Bitte melde dich in den Einstellungen an.</p>';
+    content.innerHTML = `
+      <div class="banner">
+        <h3>Willkommen beim Spotify-Merker</h3>
+        <p>Einmalig einrichten (ca. 5 Minuten): Spotify-App anlegen, Client ID eintragen, anmelden. Die Anleitung steht in den Einstellungen.</p>
+        <button data-tab="settings">Zur Einrichtung</button>
+      </div>`;
     return;
   }
 
@@ -830,6 +835,44 @@ function renderSettings() {
 
   let html = `
     <div class="settings-form">
+
+      <details class="guide" ${connected ? '' : 'open'}>
+        <summary>Einrichtung Schritt für Schritt</summary>
+
+        <h4>1. Spotify-Dashboard öffnen</h4>
+        <p>Öffne das <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify Developer Dashboard</a> und melde dich mit deinem <strong>normalen Spotify-Konto</strong> an (dem, mit dem du hörst). Beim ersten Mal Nutzungsbedingungen akzeptieren und ggf. E-Mail bestätigen.</p>
+
+        <h4>2. App anlegen</h4>
+        <p>Klicke auf <strong>„Create app“</strong> und fülle aus:</p>
+        <ul>
+          <li><strong>App name:</strong> z. B. <code>Spotify-Merker</code></li>
+          <li><strong>App description:</strong> z. B. <code>Mein Hörverlauf</code></li>
+          <li><strong>Website:</strong> leer lassen</li>
+          <li><strong>Redirect URIs:</strong> diese Adresse eintragen und auf <strong>„Add“</strong> klicken:
+            <div class="copy-row"><code>${esc(redirectUri)}</code><button data-action="copy-redirect-uri">Kopieren</button></div>
+          </li>
+          <li><strong>Which API/SDKs…:</strong> Haken bei <strong>„Web API“</strong></li>
+        </ul>
+        <p>Bedingungen abhaken, <strong>„Save“</strong> klicken.</p>
+        <p class="hint">⚠️ Die Redirect URI muss <strong>exakt</strong> stimmen – inkl. <code>https://</code>, Groß-/Kleinschreibung und dem <code>/</code> am Ende. Am besten mit „Kopieren“ übernehmen.</p>
+
+        <h4>3. Client ID kopieren</h4>
+        <p>Auf der Seite deiner App oben rechts <strong>„Settings“</strong> öffnen. Unter <strong>„Basic Information“</strong> steht die <strong>Client ID</strong> (lange Zeichenkette). Kopieren und weiter unten unter „Spotify App“ einfügen → <strong>Speichern</strong>.</p>
+        <p class="hint">Das <strong>Client Secret</strong> brauchst du nicht – gib es nirgends ein.</p>
+
+        <h4>4. Dein Konto freischalten</h4>
+        <p>Neue Spotify-Apps sind im „Development mode“ – nur eingetragene Konten dürfen sie nutzen, auch dein eigenes. In den App-Settings den Reiter <strong>„User Management“</strong> öffnen, Namen und die <strong>E-Mail deines Spotify-Kontos</strong> eintragen (steht auf <a href="https://www.spotify.com/account" target="_blank" rel="noopener">spotify.com/account</a> unter „Profil“) → <strong>„Add user“</strong>.</p>
+
+        <h4>5. Anmelden</h4>
+        <p>Weiter unten auf <strong>Anmelden</strong> tippen, bei Spotify <strong>„Zustimmen“</strong>. Danach steht oben „✓ Verbunden“.</p>
+
+        <h4>Häufige Fehler</h4>
+        <ul>
+          <li><strong>„INVALID_CLIENT: Invalid redirect URI“</strong> → Redirect URI im Dashboard weicht ab (Schritt 2).</li>
+          <li><strong>„User not registered in the Developer Dashboard“ / Fehler 403</strong> → Schritt 4 fehlt oder falsche E-Mail.</li>
+          <li><strong>„Weiterhören“ tut nichts</strong> → Springen an eine Minute geht nur mit <strong>Spotify Premium</strong>, und Spotify muss auf einem Gerät offen sein.</li>
+        </ul>
+      </details>
       <h3>Spotify App</h3>
       <div class="form-group">
         <label for="clientId">Client ID:</label>
@@ -852,16 +895,6 @@ function renderSettings() {
         <button data-action="import-history">Verlauf importieren</button>
       </div>
       <input type="file" id="importFile" style="display:none" accept=".json">
-
-      <h3>Anleitung</h3>
-      <ol>
-        <li>Erstelle eine App im <a href="https://developer.spotify.com/dashboard" target="_blank">Spotify Developer Dashboard</a></li>
-        <li>Füge dein Spotify-Konto unter "User Management" hinzu und aktiviere "Web API"</li>
-        <li>Kopiere die Client ID oben ein</li>
-        <li>Gehe zu "Edit Settings" und setze die Redirect URI (siehe oben)</li>
-        <li>Klicke auf "Anmelden"</li>
-        <li>Die App speichert lokal, was du hörst. Premium ist erforderlich zum Steuern von Spotify.</li>
-      </ol>
 
       <h3>Grenzen</h3>
       <ul>
