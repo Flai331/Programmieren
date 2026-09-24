@@ -81,6 +81,7 @@ class Native {
     required String artist,
     required String album,
     required String? spotifyUri,
+    String? mediaId,
     required int positionMs,
   }) async {
     try {
@@ -89,6 +90,7 @@ class Native {
         'artist': artist,
         'album': album,
         'spotifyUri': spotifyUri,
+        'mediaId': mediaId,
         'positionMs': positionMs,
       });
       return result != null

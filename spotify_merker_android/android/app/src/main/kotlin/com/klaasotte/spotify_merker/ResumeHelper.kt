@@ -47,28 +47,32 @@ object ResumeHelper {
         artist: String,
         album: String,
         spotifyUri: String?,
+        mediaId: String?,
         positionMs: Long,
-    ) {
+    ): String? {
         val gen = ++generation // ein neuer Versuch bricht den alten ab
         synchronized(log) { log.clear() }
-        note("Start: „$title“ – $artist bei ${positionMs / 1000}s, URI=${spotifyUri ?: "-"}")
+        // Spotify legt die URI oft als Media-ID ab – dann taugt sie auch zum Öffnen.
+        val uri = spotifyUri?.takeIf { it.isNotBlank() }
+            ?: mediaId?.takeIf { it.startsWith("spotify:") }
+        note("Start: „$title“ – $artist bei ${positionMs / 1000}s, URI=${uri ?: "-"}, MediaId=${mediaId ?: "-"}")
 
         val service = MediaListenerService.instance
         if (service == null) {
             note("Fehler: Benachrichtigungszugriff nicht aktiv")
-            return
+            return "Benachrichtigungszugriff ist nicht aktiv – bitte in der Einrichtung erlauben."
         }
 
         val controller = service.spotifyController
         if (controller != null) {
-            startItem(context, controller, title, artist, album, spotifyUri, positionMs, gen)
-            return
+            startItem(context, controller, title, artist, album, uri, mediaId, positionMs, gen)
+            return null
         }
 
         note("Spotify-Session fehlt – starte Spotify")
-        if (!launchSpotify(context, spotifyUri)) {
+        if (!launchSpotify(context, uri)) {
             note("Fehler: Spotify ist nicht installiert")
-            return
+            return "Spotify konnte nicht gestartet werden."
         }
         val started = System.currentTimeMillis()
         handler.post(object : Runnable {
@@ -78,7 +82,7 @@ object ResumeHelper {
                 when {
                     c != null -> {
                         note("Spotify-Session gefunden")
-                        startItem(context, c, title, artist, album, spotifyUri, positionMs, gen)
+                        startItem(context, c, title, artist, album, uri, mediaId, positionMs, gen)
                     }
                     System.currentTimeMillis() - started < WAIT_FOR_SESSION_MS ->
                         handler.postDelayed(this, POLL_MS)
@@ -90,6 +94,7 @@ object ResumeHelper {
                 }
             }
         })
+        return null
     }
 
     private fun startItem(
@@ -98,7 +103,8 @@ object ResumeHelper {
         title: String,
         artist: String,
         album: String,
-        spotifyUri: String?,
+        uri: String?,
+        mediaId: String?,
         positionMs: Long,
         gen: Int,
     ) {
@@ -109,11 +115,16 @@ object ResumeHelper {
         }
         val actions = controller.playbackState?.actions ?: 0L
         val tc = controller.transportControls
+        var triedDirect = true
         try {
             when {
-                !spotifyUri.isNullOrBlank() && (actions and PlaybackState.ACTION_PLAY_FROM_URI) != 0L -> {
-                    note("playFromUri($spotifyUri)")
-                    tc.playFromUri(Uri.parse(spotifyUri), Bundle())
+                uri != null && (actions and PlaybackState.ACTION_PLAY_FROM_URI) != 0L -> {
+                    note("playFromUri($uri)")
+                    tc.playFromUri(Uri.parse(uri), Bundle())
+                }
+                !mediaId.isNullOrBlank() && (actions and PlaybackState.ACTION_PLAY_FROM_MEDIA_ID) != 0L -> {
+                    note("playFromMediaId($mediaId)")
+                    tc.playFromMediaId(mediaId, Bundle())
                 }
                 (actions and PlaybackState.ACTION_PLAY_FROM_SEARCH) != 0L -> {
                     note("playFromSearch(„$title $artist“)")
@@ -125,20 +136,37 @@ object ResumeHelper {
                     }
                     tc.playFromSearch("$title $artist", extras)
                 }
-                !spotifyUri.isNullOrBlank() -> {
-                    note("URI per Intent öffnen")
-                    launchSpotify(context, spotifyUri)
-                }
-                else -> {
-                    note("Kein direkter Weg – Spotify-Suche öffnen, bitte Titel antippen")
-                    openSearch(context, title, artist)
-                }
+                else -> triedDirect = false
             }
         } catch (e: Exception) {
-            note("Fehler beim Starten: ${e.javaClass.simpleName}: ${e.message}")
-            openSearch(context, title, artist)
+            note("Direktstart abgelehnt: ${e.javaClass.simpleName}: ${e.message}")
+            triedDirect = false
+        }
+
+        if (!triedDirect) {
+            openFallback(context, title, artist, uri)
+        } else {
+            // Reagiert Spotify nicht innerhalb weniger Sekunden, Spotify selbst öffnen.
+            handler.postDelayed({
+                if (gen != generation) return@postDelayed
+                val c = MediaListenerService.instance?.spotifyController
+                if (c == null || !titleMatches(c, title)) {
+                    note("Spotify hat nach 5 s nicht reagiert – öffne Spotify")
+                    openFallback(context, title, artist, uri)
+                }
+            }, 5000)
         }
         waitForTitleThenSeek(title, positionMs, gen)
+    }
+
+    /** Spotify beim Stück (URI) oder bei der Suche öffnen – der Nutzer tippt es an, wir spulen. */
+    private fun openFallback(context: Context, title: String, artist: String, uri: String?) {
+        if (uri != null && launchSpotify(context, uri)) {
+            note("Spotify bei $uri geöffnet – ggf. auf Play tippen, dann spule ich")
+        } else {
+            note("Spotify-Suche geöffnet – bitte Titel antippen, dann spule ich")
+            openSearch(context, title, artist)
+        }
     }
 
     private fun waitForTitleThenSeek(title: String, positionMs: Long, gen: Int) {

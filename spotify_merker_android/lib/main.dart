@@ -10,6 +10,49 @@ import 'dart:async';
 
 const spotifyGreen = Color(0xFF1DB954);
 
+/// Weiterhören mit sichtbarer Rückmeldung: Start-Hinweis, Fehler sofort,
+/// nach einigen Sekunden der letzte Schritt aus dem Protokoll.
+Future<void> startResume(BuildContext context, Entry e) async {
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(
+        'Spotify wird gestartet – springe zu ${formatMs(e.positionMs)} …',
+      ),
+      duration: const Duration(seconds: 3),
+    ),
+  );
+  final r = await Native.resume(
+    title: e.title,
+    artist: e.artist,
+    album: e.album,
+    spotifyUri: e.spotifyUri,
+    mediaId: e.mediaId,
+    positionMs: e.positionMs,
+  );
+  if (r['started'] != true) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          r['error']?.toString() ?? 'Weiterhören konnte nicht starten.',
+        ),
+      ),
+    );
+    return;
+  }
+  await Future<void>.delayed(const Duration(seconds: 8));
+  final d = await Native.getDiagnostics();
+  final log = d['lastResumeLog'];
+  if (log is List && log.isNotEmpty) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Status: ${log.last}'),
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+}
+
 void main() {
   runApp(const MyApp());
 }
@@ -420,21 +463,7 @@ class _NowScreenState extends State<NowScreen> {
                     width: double.infinity,
                     child: FilledButton.icon(
                       onPressed: () async {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Spotify wird gestartet – springe zu ${formatMs(resumeCandidate.positionMs)} …',
-                            ),
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
-                        await Native.resume(
-                          title: resumeCandidate.title,
-                          artist: resumeCandidate.artist,
-                          album: resumeCandidate.album,
-                          spotifyUri: resumeCandidate.spotifyUri,
-                          positionMs: resumeCandidate.positionMs,
-                        );
+                        await startResume(context, resumeCandidate);
                         widget.onResume();
                       },
                       icon: const Icon(Icons.play_arrow),
@@ -815,15 +844,7 @@ class HistoryEntryCard extends StatelessWidget {
               children: [
                 IconButton(
                   icon: const Icon(Icons.play_arrow),
-                  onPressed: () async {
-                    await Native.resume(
-                      title: entry.title,
-                      artist: entry.artist,
-                      album: entry.album,
-                      spotifyUri: entry.spotifyUri,
-                      positionMs: entry.positionMs,
-                    );
-                  },
+                  onPressed: () => startResume(context, entry),
                   iconSize: 20,
                 ),
                 IconButton(
