@@ -1,5 +1,6 @@
 package com.klaasotte.parkplatz_merker
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanFilter
@@ -8,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 
+@SuppressLint("MissingPermission")
 object BeaconBackground {
     fun start(ctx: Context) {
         if (Config.deviceMode != "beacon") return
@@ -17,12 +19,6 @@ object BeaconBackground {
         if (!adapter.isEnabled) return
 
         val scanner = adapter.bluetoothLeScanner ?: return
-        val filter = ScanFilter.Builder()
-            .setDeviceAddress(Config.deviceAddress)
-            .build()
-        val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
-            .build()
 
         val flags = if (Build.VERSION.SDK_INT >= 31) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
@@ -38,8 +34,14 @@ object BeaconBackground {
         )
 
         try {
-            @Suppress("MissingPermission")
-            scanner.startScan(listOf(filter), settings, pi)
+            val filter = ScanFilter.Builder()
+                .setDeviceAddress(Config.deviceAddress?.uppercase())
+                .build()
+            val settings = ScanSettings.Builder()
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
+                .build()
+            val code = scanner.startScan(listOf(filter), settings, pi)
+            if (code != 0) EventLog.info(ctx, "Hintergrund-Beacon-Scan Fehlercode $code")
         } catch (e: Exception) {
             EventLog.info(ctx, "BeaconBackground start Fehler: ${e.message}")
         }
@@ -63,7 +65,6 @@ object BeaconBackground {
         )
 
         try {
-            @Suppress("MissingPermission")
             scanner.stopScan(pi)
         } catch (e: Exception) {
             EventLog.info(ctx, "BeaconBackground stop Fehler: ${e.message}")

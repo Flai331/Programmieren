@@ -1,5 +1,6 @@
 package com.klaasotte.parkplatz_merker
 
+import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanResult
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -11,12 +12,12 @@ class BeaconScanReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val results = if (Build.VERSION.SDK_INT >= 33) {
             intent.getParcelableArrayListExtra(
-                "android.bluetooth.le.extra.LIST_SCAN_RESULT",
+                BluetoothLeScanner.EXTRA_LIST_SCAN_RESULT,
                 ScanResult::class.java
             ) ?: emptyList()
         } else {
             @Suppress("DEPRECATION")
-            intent.getParcelableArrayListExtra("android.bluetooth.le.extra.LIST_SCAN_RESULT") ?: emptyList()
+            intent.getParcelableArrayListExtra<ScanResult>(BluetoothLeScanner.EXTRA_LIST_SCAN_RESULT) ?: emptyList()
         }
 
         for (result in results) {

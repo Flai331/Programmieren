@@ -6,6 +6,10 @@ import android.content.Context
 import android.os.Build
 
 object Notifications {
+    const val CHANNEL_TRIP = "trip"
+    const val CHANNEL_PARKED = "parked"
+    const val CHANNEL_REMINDER = "reminder"
+
     fun ensureChannels(ctx: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return

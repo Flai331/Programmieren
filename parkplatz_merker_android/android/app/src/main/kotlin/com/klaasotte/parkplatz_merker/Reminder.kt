@@ -1,11 +1,13 @@
 package com.klaasotte.parkplatz_merker
 
+import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 
+@SuppressLint("MissingPermission", "ScheduleExactAlarm")
 object Reminder {
     fun schedule(ctx: Context, atMs: Long, text: String): Boolean {
         Config.reminderAt = atMs

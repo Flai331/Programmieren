@@ -4,26 +4,7 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <!-- Car body -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M3,10 L4,7 L8,5 L16,5 L20,7 L21,10 L21,14 Q21,16 19,16 L19,18 Q19,18.5 18.5,18.5 Q18,18.5 18,18 L18,16 L6,16 L6,18 Q6,18.5 5.5,18.5 Q5,18.5 5,18 L5,16 Q3,16 3,14 Z" />
-    <!-- Windows -->
-    <path
-        android:fillColor="#E3F2FD"
-        android:pathData="M5,7 L8,7 L8,10 L5,10 Z" />
-    <path
-        android:fillColor="#E3F2FD"
-        android:pathData="M16,7 L19,7 L19,10 L16,10 Z" />
-    <!-- Wheels -->
-    <circle
-        android:cx="7"
-        android:cy="16"
-        android:r="1.5"
-        android:fillColor="#FFFFFF" />
-    <circle
-        android:cx="17"
-        android:cy="16"
-        android:r="1.5"
-        android:fillColor="#FFFFFF" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M18.92,6.01C18.72,5.42 18.16,5 17.5,5h-11c-0.66,0 -1.21,0.42 -1.42,1.01L3,12v8c0,0.55 0.45,1 1,1h1c0.55,0 1,-0.45 1,-1v-1h12v1c0,0.55 0.45,1 1,1h1c0.55,0 1,-0.45 1,-1v-8l-2.08,-5.99zM6.5,16c-0.83,0 -1.5,-0.67 -1.5,-1.5S5.67,13 6.5,13s1.5,0.67 1.5,1.5S7.33,16 6.5,16zM17.5,16c-0.83,0 -1.5,-0.67 -1.5,-1.5s0.67,-1.5 1.5,-1.5 1.5,0.67 1.5,1.5 -0.67,1.5 -1.5,1.5zM5,11l1.5,-4.5h11L19,11H5z" />
 </vector>

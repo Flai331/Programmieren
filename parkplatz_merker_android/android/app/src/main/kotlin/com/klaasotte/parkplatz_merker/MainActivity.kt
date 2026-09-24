@@ -1,16 +1,15 @@
 package com.klaasotte.parkplatz_merker
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Address
 import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.core.content.ContextCompat
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -25,8 +24,6 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        Config.init(this)
-        Notifications.ensureChannels(this)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
@@ -65,95 +62,37 @@ class MainActivity : FlutterActivity() {
                             }
                         }
                         "getLastLocation" -> {
-                            try {
-                                val client = LocationServices.getFusedLocationProviderClient(this)
-                                @Suppress("MissingPermission")
-                                client.lastLocation.addOnSuccessListener { location ->
-                                    if (location != null) {
-                                        result.success(LocationHelper.toMap(location))
-                                    } else {
-                                        result.success(null)
-                                    }
-                                }
-                            } catch (e: SecurityException) {
-                                result.success(null)
+                            LocationHelper.last(this) { location ->
+                                runOnUiThread { result.success(location?.let { LocationHelper.toMap(it) }) }
                             }
                         }
                         "reverseGeocode" -> {
-                            val lat = (call.argument<Any>("lat") as? Number)?.toDouble() ?: return@setMethodCallHandler
-                            val lng = (call.argument<Any>("lng") as? Number)?.toDouble() ?: return@setMethodCallHandler
-
-                            if (!Geocoder.isPresent()) {
+                            val lat = (call.argument<Any>("lat") as? Number)?.toDouble()
+                            val lng = (call.argument<Any>("lng") as? Number)?.toDouble()
+                            if (lat == null || lng == null || !Geocoder.isPresent()) {
                                 result.success(null)
-                                return@setMethodCallHandler
-                            }
-
-                            if (Build.VERSION.SDK_INT >= 33) {
-                                val geocoder = Geocoder(this, Locale.GERMANY)
-                                geocoder.getFromLocation(lat, lng, 1) { addresses ->
-                                    runOnUiThread {
-                                        if (addresses.isNotEmpty()) {
-                                            val address = addresses[0]
-                                            val text = address.getAddressLine(0) ?: buildAddressText(address)
-                                            result.success(text)
-                                        } else {
-                                            result.success(null)
-                                        }
-                                    }
-                                }
                             } else {
-                                Thread {
-                                    try {
-                                        val geocoder = Geocoder(this, Locale.GERMANY)
-                                        @Suppress("DEPRECATION")
-                                        val addresses = geocoder.getFromLocation(lat, lng, 1)
-                                        runOnUiThread {
-                                            if (addresses != null && addresses.isNotEmpty()) {
-                                                val address = addresses[0]
-                                                val text = address.getAddressLine(0) ?: buildAddressText(address)
-                                                result.success(text)
-                                            } else {
-                                                result.success(null)
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        runOnUiThread { result.success(null) }
-                                    }
-                                }.start()
+                                reverseGeocode(lat, lng) { text -> runOnUiThread { result.success(text) } }
                             }
                         }
                         "openNavigation" -> {
-                            val lat = (call.argument<Any>("lat") as? Number)?.toDouble() ?: return@setMethodCallHandler
-                            val lng = (call.argument<Any>("lng") as? Number)?.toDouble() ?: return@setMethodCallHandler
-                            val ll = String.format(Locale.US, "%.7f,%.7f", lat, lng)
-
-                            try {
-                                val uri = Uri.parse("google.navigation:q=$ll&mode=w")
-                                val intent = Intent(Intent.ACTION_VIEW, uri)
-                                intent.setPackage("com.google.android.apps.maps")
-                                startActivity(intent)
-                                result.success(true)
-                            } catch (e: Exception) {
-                                try {
-                                    val encodedName = Uri.encode("Mein Auto")
-                                    val uri = Uri.parse("geo:$ll?q=$encodedName")
-                                    val intent = Intent(Intent.ACTION_VIEW, uri)
-                                    startActivity(intent)
-                                    result.success(true)
-                                } catch (e2: Exception) {
-                                    result.success(false)
-                                }
-                            }
+                            val lat = (call.argument<Any>("lat") as? Number)?.toDouble()
+                            val lng = (call.argument<Any>("lng") as? Number)?.toDouble()
+                            result.success(lat != null && lng != null && openNavigation(lat, lng))
                         }
                         "startDeviceSearch" -> {
-                            deviceSearcher?.stopSearch()
-                            deviceSearcher = DeviceScanner(this)
-                            deviceSearcher?.startSearch()
-                            result.success(mapOf("ok" to true, "error" to null))
+                            val scanner = deviceSearcher ?: DeviceScanner(this).also { deviceSearcher = it }
+                            val error = scanner.startSearch()
+                            result.success(mapOf("ok" to (error == null), "error" to error))
                         }
                         "getSearchResults" -> {
-                            val (running, devices) = deviceSearcher?.results() ?: (false to emptyList())
-                            result.success(mapOf("running" to running, "devices" to devices))
+                            val scanner = deviceSearcher
+                            result.success(
+                                mapOf(
+                                    "running" to (scanner?.searchRunning() ?: false),
+                                    "devices" to (scanner?.results() ?: emptyList()),
+                                )
+                            )
                         }
                         "stopDeviceSearch" -> {
                             deviceSearcher?.stopSearch()
@@ -231,12 +170,62 @@ class MainActivity : FlutterActivity() {
             }
     }
 
-    private fun buildAddressText(address: android.location.Address): String {
-        val parts = mutableListOf<String>()
-        address.thoroughfare?.let { parts.add(it) }
-        address.subThoroughfare?.let { parts.add(it) }
-        address.postalCode?.let { parts.add(it) }
-        address.locality?.let { parts.add(it) }
-        return parts.joinToString(", ")
+    private fun reverseGeocode(lat: Double, lng: Double, done: (String?) -> Unit) {
+        val geocoder = Geocoder(this, Locale.GERMANY)
+        if (Build.VERSION.SDK_INT >= 33) {
+            geocoder.getFromLocation(lat, lng, 1, object : Geocoder.GeocodeListener {
+                override fun onGeocode(addresses: MutableList<Address>) {
+                    done(addresses.firstOrNull()?.let { addressText(it) })
+                }
+
+                override fun onError(errorMessage: String?) {
+                    done(null)
+                }
+            })
+        } else {
+            Thread {
+                val text = try {
+                    @Suppress("DEPRECATION")
+                    geocoder.getFromLocation(lat, lng, 1)?.firstOrNull()?.let { addressText(it) }
+                } catch (e: Exception) {
+                    null
+                }
+                done(text)
+            }.start()
+        }
+    }
+
+    private fun addressText(address: Address): String? {
+        val line = address.getAddressLine(0)
+        if (!line.isNullOrBlank()) return line
+        val street = listOfNotNull(address.thoroughfare, address.subThoroughfare).joinToString(" ")
+        val town = listOfNotNull(address.postalCode, address.locality).joinToString(" ")
+        return listOf(street, town).filter { it.isNotBlank() }.joinToString(", ").ifBlank { null }
+    }
+
+    /** Fußweg-Navigation in Google Maps, sonst beliebige Karten-App über geo:. */
+    private fun openNavigation(lat: Double, lng: Double): Boolean {
+        // Locale.US: sonst Dezimalkomma im deutschen Gebietsschema.
+        val ll = String.format(Locale.US, "%.7f,%.7f", lat, lng)
+        try {
+            val nav = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$ll&mode=w"))
+                .setPackage("com.google.android.apps.maps")
+            startActivity(nav)
+            return true
+        } catch (e: ActivityNotFoundException) {
+            // weiter mit geo:
+        }
+        return try {
+            val label = Uri.encode("$ll(Mein Auto)")
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:$ll?q=$label")))
+            true
+        } catch (e: ActivityNotFoundException) {
+            false
+        }
+    }
+
+    override fun onDestroy() {
+        deviceSearcher?.stopSearch()
+        super.onDestroy()
     }
 }

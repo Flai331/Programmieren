@@ -1,9 +1,11 @@
 package com.klaasotte.parkplatz_merker
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
@@ -12,324 +14,392 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
-import kotlin.math.max
 
-class DeviceScanner(val ctx: Context) {
+/**
+ * Sucht Bluetooth-Geräte – nur „sehen“, NIE koppeln oder verbinden.
+ * Alle Aufrufe und Rückrufe laufen auf dem Main-Thread.
+ */
+@SuppressLint("MissingPermission")
+class DeviceScanner(context: Context) {
+    private val ctx: Context = context.applicationContext
+    private val handler = Handler(Looper.getMainLooper())
+
     private val adapter: BluetoothAdapter?
         get() = (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
 
-    data class DeviceInfo(
-        val address: String,
-        val name: String? = null,
-        var rssi: Int = Int.MIN_VALUE,
-        var classic: Boolean = false,
-        var ble: Boolean = false
-    )
-
-    private val searchResults = LinkedHashMap<String, DeviceInfo>()
-    private var searchRunning = false
-    private var discoveryReceiver: BroadcastReceiver? = null
-    private var searchScanCallback: ScanCallback? = null
+    // ---------- gemeinsame Hilfen ----------
 
     fun hasScanPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= 31) {
-            ContextCompat.checkSelfPermission(ctx, Manifest.permission.BLUETOOTH_SCAN) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val perm = if (Build.VERSION.SDK_INT >= 31) Manifest.permission.BLUETOOTH_SCAN else Manifest.permission.ACCESS_FINE_LOCATION
+        return ContextCompat.checkSelfPermission(ctx, perm) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun hasConnectPermission(): Boolean =
+        Build.VERSION.SDK_INT < 31 ||
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+
+    /** Fehlertext, wenn nicht gesucht werden kann, sonst null. */
+    private fun problem(): String? {
+        if (!hasScanPermission()) return "Berechtigung Bluetooth-Suche fehlt"
+        val a = adapter ?: return "Kein Bluetooth vorhanden"
+        if (!a.isEnabled) return "Bluetooth ist ausgeschaltet"
+        return null
+    }
+
+    private fun deviceFrom(intent: Intent): BluetoothDevice? =
+        if (Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
         } else {
-            ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
         }
+
+    private fun safeName(device: BluetoothDevice): String? {
+        if (!hasConnectPermission()) return null
+        return try {
+            device.name
+        } catch (e: SecurityException) {
+            null
+        }
+    }
+
+    private fun cancelDiscoverySafe() {
+        try {
+            adapter?.cancelDiscovery()
+        } catch (e: Exception) {
+            // ignorieren
+        }
+    }
+
+    private fun stopLeScanSafe(scanner: BluetoothLeScanner?, cb: ScanCallback?) {
+        if (scanner == null || cb == null) return
+        try {
+            scanner.stopScan(cb)
+        } catch (e: Exception) {
+            // ignorieren
+        }
+    }
+
+    private fun unregisterSafe(r: BroadcastReceiver?) {
+        if (r == null) return
+        try {
+            ctx.unregisterReceiver(r)
+        } catch (e: Exception) {
+            // ignorieren
+        }
+    }
+
+    private fun logScan(mode: String, target: String, start: Long, ok: Boolean, found: Boolean, rssi: Int?, error: String?) {
+        val obj = JSONObject()
+        obj.put("type", "scan")
+        obj.put("t", start)
+        obj.put("end", System.currentTimeMillis())
+        obj.put("mode", mode)
+        obj.put("target", target)
+        obj.put("ok", ok)
+        obj.put("found", found)
+        obj.put("rssi", rssi ?: JSONObject.NULL)
+        obj.put("error", error ?: JSONObject.NULL)
+        EventLog.append(ctx, obj)
+    }
+
+    // ---------- Transmitter: eine Suchrunde (klassisch ~12 s + BLE) ----------
+
+    private var roundActive = false
+    private var roundTarget = ""
+    private var roundStart = 0L
+    private var roundFound = false
+    private var roundRssi: Int? = null
+    private var roundReceiver: BroadcastReceiver? = null
+    private var roundLeScanner: BluetoothLeScanner? = null
+    private var roundLeCallback: ScanCallback? = null
+    private var roundOnDone: (() -> Unit)? = null
+    private val roundTimeout = Runnable { finishRound() }
+
+    private fun noteRssi(rssi: Int) {
+        val best = roundRssi
+        roundRssi = if (best == null || rssi > best) rssi else best
     }
 
     fun runTransmitterRound(target: String, onDone: () -> Unit) {
-        if (!hasScanPermission()) {
-            logScan(target, ok = false, error = "Berechtigung fehlt")
+        if (roundActive) {
+            // Runde läuft schon: nach ihrem Ende zusätzlich [onDone] aufrufen.
+            val previous = roundOnDone
+            roundOnDone = { previous?.invoke(); onDone() }
+            return
+        }
+        val start = System.currentTimeMillis()
+        val err = problem()
+        val a = adapter
+        if (err != null || a == null) {
+            logScan("transmitter", target, start, false, false, null, err ?: "Kein Bluetooth vorhanden")
             onDone()
             return
         }
+        roundActive = true
+        roundTarget = target
+        roundStart = start
+        roundFound = false
+        roundRssi = null
+        roundOnDone = onDone
 
-        val adapter = adapter
-        if (adapter == null) {
-            logScan(target, ok = false, error = "Bluetooth nicht verfügbar")
-            onDone()
-            return
-        }
-
-        if (!adapter.isEnabled) {
-            logScan(target, ok = false, error = "Bluetooth ausgeschaltet")
-            onDone()
-            return
-        }
-
-        var bestRssi: Int? = null
-        var found = false
-        var roundError: String? = null
-        var scanFinished = false
-
+        // Klassische Suche. ACTION_DISCOVERY_FINISHED wird bewusst NICHT genutzt:
+        // unser eigenes cancelDiscovery() löst es auch aus. Die Runde endet per Zeit.
         val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent?) {
-                if (intent == null) return
-                when (intent.action) {
-                    BluetoothDevice.ACTION_FOUND -> {
-                        val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= 33) {
-                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                        } else {
-                            @Suppress("DEPRECATION")
-                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                        }
-                        if (device?.address?.equals(target, ignoreCase = true) == true) {
-                            found = true
-                            val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE).toInt()
-                            if (rssi != Int.MIN_VALUE) {
-                                bestRssi = if (bestRssi == null) rssi else max(bestRssi!!, rssi)
-                            }
-                        }
-                    }
-                    BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
-                        finishRound()
-                    }
-                }
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action != BluetoothDevice.ACTION_FOUND) return
+                val device = deviceFrom(intent) ?: return
+                if (!device.address.equals(roundTarget, ignoreCase = true)) return
+                roundFound = true
+                val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE)
+                if (rssi != Short.MIN_VALUE) noteRssi(rssi.toInt())
             }
         }
-
-        val filter = IntentFilter().apply {
-            addAction(BluetoothDevice.ACTION_FOUND)
-            addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+        roundReceiver = receiver
+        ContextCompat.registerReceiver(ctx, receiver, IntentFilter(BluetoothDevice.ACTION_FOUND), ContextCompat.RECEIVER_EXPORTED)
+        var discoveryStarted = false
+        try {
+            a.cancelDiscovery()
+            discoveryStarted = a.startDiscovery()
+        } catch (e: Exception) {
+            EventLog.info(ctx, "Klassische Suche fehlgeschlagen: ${e.message}")
         }
 
+        // BLE-Suche mit Filter auf genau diese Adresse.
+        var leStarted = false
         try {
-            ContextCompat.registerReceiver(ctx, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
+            val scanner = a.bluetoothLeScanner
+            if (scanner != null) {
+                val filter = ScanFilter.Builder().setDeviceAddress(target.uppercase()).build()
+                val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_BALANCED).build()
+                val cb = object : ScanCallback() {
+                    override fun onScanResult(callbackType: Int, result: ScanResult) {
+                        if (result.device.address.equals(roundTarget, ignoreCase = true)) {
+                            roundFound = true
+                            noteRssi(result.rssi)
+                        }
+                    }
+                }
+                scanner.startScan(listOf(filter), settings, cb)
+                roundLeScanner = scanner
+                roundLeCallback = cb
+                leStarted = true
+            }
         } catch (e: Exception) {
-            roundError = "Receiver Fehler: ${e.message}"
-            logScan(target, ok = false, error = roundError!!)
+            EventLog.info(ctx, "BLE-Suche fehlgeschlagen: ${e.message}")
+        }
+
+        if (!discoveryStarted && !leStarted) {
+            unregisterSafe(receiver)
+            roundReceiver = null
+            roundActive = false
+            roundOnDone = null
+            logScan("transmitter", target, start, false, false, null, "Suche ließ sich nicht starten")
             onDone()
             return
         }
+        handler.postDelayed(roundTimeout, 12_000L)
+    }
 
+    private fun finishRound() {
+        if (!roundActive) return
+        roundActive = false
+        handler.removeCallbacks(roundTimeout)
+        cancelDiscoverySafe()
+        stopLeScanSafe(roundLeScanner, roundLeCallback)
+        roundLeScanner = null
+        roundLeCallback = null
+        unregisterSafe(roundReceiver)
+        roundReceiver = null
+        logScan("transmitter", roundTarget, roundStart, true, roundFound, roundRssi, null)
+        val done = roundOnDone
+        roundOnDone = null
+        done?.invoke()
+    }
+
+    // ---------- Beacon: dauerhafter, gefilterter BLE-Scan in 2-Min.-Fenstern ----------
+
+    private var beaconTarget: String? = null
+    private var beaconScanner: BluetoothLeScanner? = null
+    private var beaconCallback: ScanCallback? = null
+    private var windowStart = 0L
+    private var windowHit = false
+    private var windowRssi: Int? = null
+    private var beaconError: String? = null
+
+    fun startBeacon(target: String) {
+        if (beaconTarget != null) return
+        beaconTarget = target
+        windowStart = System.currentTimeMillis()
+        windowHit = false
+        windowRssi = null
+        beaconError = problem()
+        val a = adapter
+        if (beaconError != null || a == null) return
         try {
-            @Suppress("MissingPermission")
-            adapter.cancelDiscovery()
-            @Suppress("MissingPermission")
-            adapter.startDiscovery()
-        } catch (e: SecurityException) {
-            roundError = "Discovery Fehler"
-        }
+            val scanner = a.bluetoothLeScanner ?: run {
+                beaconError = "BLE-Scanner nicht verfügbar"
+                return
+            }
+            val filter = ScanFilter.Builder().setDeviceAddress(target.uppercase()).build()
+            val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_POWER).build()
+            val cb = object : ScanCallback() {
+                override fun onScanResult(callbackType: Int, result: ScanResult) {
+                    if (result.device.address.equals(beaconTarget, ignoreCase = true)) {
+                        windowHit = true
+                        val best = windowRssi
+                        windowRssi = if (best == null || result.rssi > best) result.rssi else best
+                    }
+                }
 
-        // BLE scan parallel
-        val scanner = adapter.bluetoothLeScanner
-        val filter = ScanFilter.Builder()
-            .setDeviceAddress(target)
-            .build()
-        val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
-            .build()
-
-        val bleScanCallback = object : ScanCallback() {
-            override fun onScanResult(callbackType: Int, result: ScanResult?) {
-                if (result != null && result.device?.address?.equals(target, ignoreCase = true) == true) {
-                    found = true
-                    val rssi = result.rssi
-                    bestRssi = if (bestRssi == null) rssi else max(bestRssi!!, rssi)
+                override fun onScanFailed(errorCode: Int) {
+                    beaconError = "BLE-Scan-Fehler $errorCode"
                 }
             }
-        }
-
-        try {
-            @Suppress("MissingPermission")
-            scanner?.startScan(listOf(filter), settings, bleScanCallback)
-        } catch (e: SecurityException) {
-            // ignore
+            scanner.startScan(listOf(filter), settings, cb)
+            beaconScanner = scanner
+            beaconCallback = cb
         } catch (e: Exception) {
-            // ignore
-        }
-
-        val h = Handler(Looper.getMainLooper())
-        val timeoutRunnable = Runnable {
-            finishRound()
-        }
-        h.postDelayed(timeoutRunnable, 12_000L)
-
-        fun finishRound() {
-            if (scanFinished) return
-            scanFinished = true
-            h.removeCallbacks(timeoutRunnable)
-            try {
-                @Suppress("MissingPermission")
-                adapter.cancelDiscovery()
-            } catch (e: Exception) {
-                // ignore
-            }
-            try {
-                @Suppress("MissingPermission")
-                scanner?.stopScan(bleScanCallback)
-            } catch (e: Exception) {
-                // ignore
-            }
-            try {
-                ctx.unregisterReceiver(receiver)
-            } catch (e: Exception) {
-                // ignore
-            }
-
-            logScan(target, ok = true, found = found, rssi = bestRssi)
-            onDone()
+            beaconError = "BLE-Scan fehlgeschlagen: ${e.message}"
         }
     }
 
-    fun startSearch() {
-        if (searchRunning) return
-        if (!hasScanPermission()) return
+    /** Aktuelles Fenster als `scan`-Ereignis abschließen und neues beginnen. */
+    fun closeBeaconWindow() {
+        val target = beaconTarget ?: return
+        val err = beaconError
+        logScan("beacon", target, windowStart, err == null, windowHit, windowRssi, err)
+        windowStart = System.currentTimeMillis()
+        windowHit = false
+        windowRssi = null
+    }
 
-        searchRunning = true
+    fun stopBeacon() {
+        stopLeScanSafe(beaconScanner, beaconCallback)
+        beaconScanner = null
+        beaconCallback = null
+        beaconTarget = null
+    }
+
+    // ---------- Einrichtung: alle Geräte in der Nähe (15 s) ----------
+
+    class DeviceInfo(val address: String) {
+        var name: String? = null
+        var rssi: Int = -127
+        var classic = false
+        var ble = false
+    }
+
+    private val searchResults = LinkedHashMap<String, DeviceInfo>()
+    private var searchRunning = false
+    private var searchReceiver: BroadcastReceiver? = null
+    private var searchLeScanner: BluetoothLeScanner? = null
+    private var searchLeCallback: ScanCallback? = null
+    private val searchTimeout = Runnable { stopSearch() }
+
+    private fun remember(address: String, name: String?, rssi: Int?, classic: Boolean) {
+        val info = searchResults.getOrPut(address.uppercase()) { DeviceInfo(address.uppercase()) }
+        if (!name.isNullOrBlank()) info.name = name
+        if (rssi != null && rssi > info.rssi) info.rssi = rssi
+        if (classic) info.classic = true else info.ble = true
+    }
+
+    /** Startet die Suche. Rückgabe: Fehlertext oder null. */
+    fun startSearch(): String? {
+        stopSearch()
         searchResults.clear()
+        val err = problem()
+        val a = adapter
+        if (err != null || a == null) return err ?: "Kein Bluetooth vorhanden"
 
-        val adapter = adapter ?: return
-        if (!adapter.isEnabled) {
-            searchRunning = false
-            return
-        }
-
-        // Discovery receiver
         val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent?) {
-                if (intent == null) return
-                when (intent.action) {
-                    BluetoothDevice.ACTION_FOUND -> {
-                        val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= 33) {
-                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                        } else {
-                            @Suppress("DEPRECATION")
-                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                        }
-                        if (device != null) {
-                            val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE).toInt()
-                            val name = intent.getStringExtra(BluetoothDevice.EXTRA_NAME)
-                            val info = searchResults.getOrPut(device.address) {
-                                DeviceInfo(device.address, name)
-                            }
-                            info.rssi = if (rssi != Int.MIN_VALUE) max(info.rssi, rssi) else info.rssi
-                            info.classic = true
-                            if (name != null) info.name = name
-                        }
-                    }
-                }
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action != BluetoothDevice.ACTION_FOUND) return
+                val device = deviceFrom(intent) ?: return
+                val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE)
+                val name = intent.getStringExtra(BluetoothDevice.EXTRA_NAME) ?: safeName(device)
+                remember(device.address, name, if (rssi == Short.MIN_VALUE) null else rssi.toInt(), true)
             }
         }
-
-        val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
+        searchReceiver = receiver
+        ContextCompat.registerReceiver(ctx, receiver, IntentFilter(BluetoothDevice.ACTION_FOUND), ContextCompat.RECEIVER_EXPORTED)
+        var anyStarted = false
         try {
-            ContextCompat.registerReceiver(ctx, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
+            a.cancelDiscovery()
+            anyStarted = a.startDiscovery()
         } catch (e: Exception) {
-            searchRunning = false
-            return
+            EventLog.info(ctx, "Einrichtungssuche klassisch fehlgeschlagen: ${e.message}")
         }
-
-        discoveryReceiver = receiver
-
         try {
-            @Suppress("MissingPermission")
-            adapter.cancelDiscovery()
-            @Suppress("MissingPermission")
-            adapter.startDiscovery()
-        } catch (e: SecurityException) {
-            // ignore
-        }
-
-        // BLE unfiltered scan
-        val scanner = adapter.bluetoothLeScanner
-        val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-            .build()
-
-        val bleScanCallback = object : ScanCallback() {
-            override fun onScanResult(callbackType: Int, result: ScanResult?) {
-                if (result != null) {
-                    val device = result.device
-                    val rssi = result.rssi
-                    val name = result.scanRecord?.deviceName
-                    val info = searchResults.getOrPut(device.address) {
-                        DeviceInfo(device.address, name)
+            val scanner = a.bluetoothLeScanner
+            if (scanner != null) {
+                val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
+                val cb = object : ScanCallback() {
+                    override fun onScanResult(callbackType: Int, result: ScanResult) {
+                        val name = result.scanRecord?.deviceName ?: safeName(result.device)
+                        remember(result.device.address, name, result.rssi, false)
                     }
-                    info.rssi = if (rssi != Int.MIN_VALUE) max(info.rssi, rssi) else info.rssi
-                    info.ble = true
-                    if (name != null) info.name = name
                 }
+                scanner.startScan(null, settings, cb)
+                searchLeScanner = scanner
+                searchLeCallback = cb
+                anyStarted = true
             }
-        }
-
-        searchScanCallback = bleScanCallback
-
-        try {
-            @Suppress("MissingPermission")
-            scanner?.startScan(emptyList(), settings, bleScanCallback)
         } catch (e: Exception) {
-            // ignore
+            EventLog.info(ctx, "Einrichtungssuche BLE fehlgeschlagen: ${e.message}")
         }
-
-        val h = Handler(Looper.getMainLooper())
-        h.postDelayed({
+        if (!anyStarted) {
             stopSearch()
-        }, 15_000L)
+            return "Suche ließ sich nicht starten"
+        }
+        searchRunning = true
+        handler.postDelayed(searchTimeout, 15_000L)
+        return null
     }
 
-    fun results(): Pair<Boolean, List<Map<String, Any?>>> {
-        val list = searchResults.values.map {
-            mapOf(
-                "address" to it.address,
-                "name" to it.name,
-                "rssi" to it.rssi,
-                "classic" to it.classic,
-                "ble" to it.ble
-            )
-        }
-        return searchRunning to list
+    fun searchRunning(): Boolean = searchRunning
+
+    fun results(): List<Map<String, Any?>> = searchResults.values.map {
+        mapOf(
+            "address" to it.address,
+            "name" to it.name,
+            "rssi" to it.rssi,
+            "classic" to it.classic,
+            "ble" to it.ble,
+        )
     }
 
     fun stopSearch() {
+        handler.removeCallbacks(searchTimeout)
         searchRunning = false
-        try {
-            if (discoveryReceiver != null) {
-                ctx.unregisterReceiver(discoveryReceiver)
-                discoveryReceiver = null
-            }
-        } catch (e: Exception) {
-            // ignore
-        }
-
-        val adapter = adapter ?: return
-        try {
-            @Suppress("MissingPermission")
-            adapter.cancelDiscovery()
-        } catch (e: Exception) {
-            // ignore
-        }
-
-        val scanner = adapter.bluetoothLeScanner
-        if (searchScanCallback != null) {
-            try {
-                @Suppress("MissingPermission")
-                scanner?.stopScan(searchScanCallback)
-            } catch (e: Exception) {
-                // ignore
-            }
-            searchScanCallback = null
-        }
+        unregisterSafe(searchReceiver)
+        searchReceiver = null
+        cancelDiscoverySafe()
+        stopLeScanSafe(searchLeScanner, searchLeCallback)
+        searchLeScanner = null
+        searchLeCallback = null
     }
 
-    private fun logScan(target: String, ok: Boolean, found: Boolean = false, rssi: Int? = null, error: String? = null) {
-        val obj = JSONObject()
-        obj.put("type", "scan")
-        obj.put("t", System.currentTimeMillis())
-        obj.put("mode", "transmitter")
-        obj.put("target", target)
-        obj.put("end", System.currentTimeMillis())
-        obj.put("ok", ok)
-        obj.put("found", found)
-        if (rssi != null && rssi != Int.MIN_VALUE) obj.put("rssi", rssi)
-        if (error != null) obj.put("error", error)
-        EventLog.append(ctx, obj)
+    /** Alles beenden, ohne Ereignisse zu schreiben. */
+    fun stopAll() {
+        if (roundActive) {
+            roundActive = false
+            handler.removeCallbacks(roundTimeout)
+            cancelDiscoverySafe()
+            stopLeScanSafe(roundLeScanner, roundLeCallback)
+            roundLeScanner = null
+            roundLeCallback = null
+            unregisterSafe(roundReceiver)
+            roundReceiver = null
+            roundOnDone = null
+        }
+        stopBeacon()
+        stopSearch()
     }
 }

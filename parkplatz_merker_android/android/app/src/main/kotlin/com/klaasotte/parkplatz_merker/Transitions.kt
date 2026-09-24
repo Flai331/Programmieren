@@ -1,5 +1,6 @@
 package com.klaasotte.parkplatz_merker
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -10,15 +11,21 @@ import com.google.android.gms.location.ActivityTransition
 import com.google.android.gms.location.ActivityTransitionRequest
 import com.google.android.gms.location.DetectedActivity
 
+@SuppressLint("MissingPermission")
 object Transitions {
     fun register(ctx: Context, callback: ((Boolean, String?) -> Unit)? = null) {
         if (!Config.activityEnabled) {
             unregister(ctx)
+            Config.transitionsError = "Aktivitätserkennung ausgeschaltet"
+            callback?.invoke(false, "Aktivitätserkennung ausgeschaltet")
             return
         }
 
-        val permission = ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.ACTIVITY_RECOGNITION)
-        if (permission != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        // Unter Android 10 gibt es die Laufzeit-Berechtigung nicht (Manifest reicht).
+        val granted = Build.VERSION.SDK_INT < 29 ||
+            ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.ACTIVITY_RECOGNITION) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!granted) {
             val error = "Berechtigung Aktivitätserkennung fehlt"
             Config.transitionsError = error
             Config.transitionsRegistered = false
@@ -69,11 +76,12 @@ object Transitions {
                     EventLog.info(ctx, "Aktivitätstransitionen Fehler: ${e.message}")
                     callback?.invoke(false, e.message)
                 }
-        } catch (e: SecurityException) {
-            Config.transitionsError = "Berechtigung Aktivitätserkennung fehlt"
+        } catch (e: Exception) {
+            val error = if (e is SecurityException) "Berechtigung Aktivitätserkennung fehlt" else "Registrierung fehlgeschlagen: ${e.message}"
+            Config.transitionsError = error
             Config.transitionsRegistered = false
-            EventLog.info(ctx, Config.transitionsError)
-            callback?.invoke(false, Config.transitionsError)
+            EventLog.info(ctx, error)
+            callback?.invoke(false, error)
         }
     }
 
