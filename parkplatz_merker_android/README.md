@@ -166,7 +166,8 @@ Mit dem Lautstärke-Profil stellst du dich automatisch auf feste Lautstärken um
 - **Ausstiegszeitpunkt** = der genaueste verfügbare Hinweis:
   Ladekabel abgezogen → Transmitter verschwunden (Motor aus) → Aussteigen erkannt.
   Der Parkplatz ist die Position zu diesem Zeitpunkt.
-- **Ignoriert** werden Fahrten unter 3 Minuten und Halte unter 2 Minuten
+- **Ignoriert** werden Halte unter 2 Minuten und Fahrten unter 3 Minuten – außer der
+  Transmitter war dabei oder du bist mindestens 200 m gefahren (Tankstelle → Parkplatz)
   (Ampel, Stau). Ein langer Stau ohne Aussteigen zählt auch nicht.
 - Unter dem Parkplatz steht, woran er erkannt wurde, z. B.
   „erkannt über: Aussteigen + Transmitter weg“.

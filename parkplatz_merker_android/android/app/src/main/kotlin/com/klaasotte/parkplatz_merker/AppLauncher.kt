@@ -127,7 +127,24 @@ object AppLauncher {
                 val closeActionTitle = obj.getString("closeActionTitle")
                 val closeActionIdx = obj.getInt("closeActionIndex")
                 nm.cancel((40 + i))
-                NotifListener.pressStop(pkg, closeActionTitle, closeActionIdx)
+                val pressed = NotifListener.pressStop(pkg, closeActionTitle, closeActionIdx)
+                val label = obj.optString("label", pkg)
+                if (pressed) {
+                    EventLog.info(appCtx, "Ausschaltknopf von $label gedrückt")
+                } else {
+                    // Für die Diagnose: welche Knöpfe hatte die Benachrichtigung?
+                    val titles = NotifListener.actions(pkg).map { a ->
+                        val t = (a["title"] as? String).orEmpty()
+                        if (t.isEmpty()) "Knopf ${((a["index"] as? Int) ?: 0) + 1} (nur Symbol)" else t
+                    }
+                    val why = when {
+                        NotifListener.instance == null -> "Benachrichtigungszugriff nicht verbunden"
+                        !NotifListener.hasNotification(pkg) -> "keine Benachrichtigung von $label"
+                        titles.isEmpty() -> "Benachrichtigung ohne Knöpfe"
+                        else -> "kein passender Knopf unter: " + titles.joinToString(", ")
+                    }
+                    EventLog.info(appCtx, "Ausschaltknopf von $label nicht gedrückt – $why")
+                }
             }
 
             if (fromForeground || Settings.canDrawOverlays(appCtx)) {
@@ -162,6 +179,7 @@ object AppLauncher {
                             val obj = ja.getJSONObject(i)
                             val pkg = obj.getString("package")
                             if (NotifListener.hasNotification(pkg)) {
+                                EventLog.info(appCtx, "${obj.optString("label", pkg)} läuft nach 4 s noch – Beenden erzwingen")
                                 ForceStopService.request(appCtx, pkg)
                             }
                         }
