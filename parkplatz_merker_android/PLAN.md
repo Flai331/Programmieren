@@ -13,6 +13,12 @@ kontrolliert.
 
 Oberfläche und Texte: Deutsch, Anrede „du“. Kein Server, alle Daten lokal.
 
+**Regel für jede neue Funktion:** Die Anleitung kommt immer auch in die App –
+neuer bzw. ergänzter Abschnitt in `lib/pages/help_page.dart` (Seite „Anleitung“,
+erreichbar über das ?-Symbol auf der Startseite und in den Einstellungen; passende
+Einstellungs-Abschnitte verlinken per `HelpPage.show(context, HelpTopic.…)`).
+Zusätzlich kurz im README.
+
 Ordner: `parkplatz_merker_android/` (bereits mit `flutter create` angelegt,
 Paket `parkplatz_merker`, Application-ID und Kotlin-Paket
 `com.klaasotte.parkplatz_merker`, App-Name „Parkplatz-Merker“).

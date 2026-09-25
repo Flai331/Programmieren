@@ -8,6 +8,11 @@ Dein Handy muss dafür **nicht** per Bluetooth mit dem Auto oder dem
 FM-Transmitter verbunden sein. Die App verbindet oder koppelt sich nie – sie
 schaut höchstens, ob der Transmitter in der Nähe ist.
 
+## Anleitung in der App
+
+Alle Anleitungen stehen auch in der App: **?**-Symbol oben auf der Startseite
+oder in den Einstellungen (dort je Abschnitt direkt zum passenden Thema).
+
 ## Download
 
 **[Parkplatz-Merker.apk](https://github.com/Flai331/Programmieren/releases/download/parkplatz-merker-android/Parkplatz-Merker.apk)**
