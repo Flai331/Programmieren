@@ -14,13 +14,26 @@ class CarPage extends StatefulWidget {
   State<CarPage> createState() => _CarPageState();
 }
 
-class _CarPageState extends State<CarPage> {
+class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
   Map<String, dynamic>? _volumeInfo;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadVolumeInfo();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Zurück aus den System-Einstellungen (z. B. Nicht-stören-Zugriff) → neu laden.
+    if (state == AppLifecycleState.resumed) _loadVolumeInfo();
   }
 
   Future<void> _loadVolumeInfo() async {
@@ -39,9 +52,7 @@ class _CarPageState extends State<CarPage> {
         .toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Im Auto: Apps & Lautstärke'),
-      ),
+      appBar: AppBar(title: const Text('Im Auto: Apps & Lautstärke')),
       body: ListView(
         children: [
           if (deviceMode == 'none')
@@ -63,9 +74,7 @@ class _CarPageState extends State<CarPage> {
           const Divider(),
           SectionHeader('Apps öffnen', help: HelpTopic.appInCar),
           if (launchApps.isEmpty)
-            const ListTile(
-              title: Text('Keine App ausgewählt'),
-            )
+            const ListTile(title: Text('Keine App ausgewählt'))
           else
             ...List.generate(launchApps.length, (i) {
               final app = launchApps[i];
@@ -93,14 +102,11 @@ class _CarPageState extends State<CarPage> {
           ),
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Text(
-              'Die letzte App in der Liste liegt danach vorn.',
-            ),
+            child: Text('Die letzte App in der Liste liegt danach vorn.'),
           ),
           PermTile(
             title: 'Über anderen Apps einblenden',
-            hint:
-                'Nötig, damit die App von selbst aufgeht. Ohne kommt eine Benachrichtigung zum Antippen.',
+            hint: 'Nötig, damit die App von selbst aufgeht. Ohne kommt eine Benachrichtigung zum Antippen.',
             ok: (config['overlayAllowed'] as bool?) ?? false,
             onFix: () => NativeBridge.openOverlaySettings(),
           ),
@@ -123,14 +129,15 @@ class _CarPageState extends State<CarPage> {
           if ((config['closeOnGone'] as bool?) ?? true)
             PermTile(
               title: 'Benachrichtigungszugriff',
-              hint:
-                  'Damit die Ausschaltknöpfe in den Benachrichtigungen gedrückt werden können.',
+              hint: 'Damit die Ausschaltknöpfe in den Benachrichtigungen gedrückt werden können.',
               ok: (config['notificationListener'] as bool?) ?? false,
               onFix: () => NativeBridge.openNotificationListenerSettings(),
             ),
           if ((config['closeOnGone'] as bool?) ?? true)
             SwitchListTile(
-              title: const Text('Notfalls „Beenden erzwingen" (Bedienungshilfe)'),
+              title: const Text(
+                'Notfalls „Beenden erzwingen" (Bedienungshilfe)',
+              ),
               subtitle: const Text(
                 'Öffnet kurz die App-Info und drückt „Beenden erzwingen". Nur bei entsperrtem Handy.',
               ),
@@ -141,8 +148,7 @@ class _CarPageState extends State<CarPage> {
             if ((config['forceStopFallback'] as bool?) ?? false)
               PermTile(
                 title: 'Bedienungshilfe',
-                hint:
-                    'Einstellungen → Bedienungshilfen → Installierte Apps → „Parkplatz-Merker: App beenden" einschalten.',
+                hint: 'Einstellungen → Bedienungshilfen → Installierte Apps → „Parkplatz-Merker: App beenden" einschalten.',
                 ok: (config['accessibility'] as bool?) ?? false,
                 onFix: () => NativeBridge.openAccessibilitySettings(),
               ),
@@ -162,26 +168,20 @@ class _CarPageState extends State<CarPage> {
           if ((config['volumeEnabled'] as bool?) ?? false) ...[
             _VolumeStreamTile(
               title: 'Medien',
-              stream: 'music',
               current: (config['volMusic'] as int?) ?? -1,
               max: (_volumeInfo?['musicMax'] as int?) ?? 15,
-              onChanged: (v) => controller.updateConfig(volMusic: v),
               onChangeEnd: (v) => controller.updateConfig(volMusic: v),
             ),
             _VolumeStreamTile(
               title: 'Klingelton',
-              stream: 'ring',
               current: (config['volRing'] as int?) ?? -1,
               max: (_volumeInfo?['ringMax'] as int?) ?? 7,
-              onChanged: (v) => controller.updateConfig(volRing: v),
               onChangeEnd: (v) => controller.updateConfig(volRing: v),
             ),
             _VolumeStreamTile(
               title: 'Benachrichtigungen',
-              stream: 'notification',
               current: (config['volNotification'] as int?) ?? -1,
               max: (_volumeInfo?['notificationMax'] as int?) ?? 7,
-              onChanged: (v) => controller.updateConfig(volNotification: v),
               onChangeEnd: (v) => controller.updateConfig(volNotification: v),
             ),
             Padding(
@@ -189,7 +189,10 @@ class _CarPageState extends State<CarPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Klingelmodus', style: Theme.of(context).textTheme.titleSmall),
+                  Text(
+                    'Klingelmodus',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
                   const SizedBox(height: 8),
                   SegmentedButton<String>(
                     segments: const [
@@ -210,8 +213,9 @@ class _CarPageState extends State<CarPage> {
               value: (config['volumeRestore'] as bool?) ?? true,
               onChanged: (v) => controller.updateConfig(volumeRestore: v),
             ),
-            if (((_volumeInfo?['ringNow'] as int?) ?? 0) == 0 ||
-                ((_volumeInfo?['notificationNow'] as int?) ?? 0) == 0 ||
+            // Nur nötig, wenn das Profil Klingelton/Benachrichtigungen auf 0 oder „Lautlos“ stellt.
+            if (((config['volRing'] as num?)?.toInt() ?? -1) == 0 ||
+                ((config['volNotification'] as num?)?.toInt() ?? -1) == 0 ||
                 ((config['ringerMode'] as String?) ?? 'keep') == 'silent')
               if (!((_volumeInfo?['dndAccess'] as bool?) ?? false))
                 PermTile(
@@ -226,7 +230,10 @@ class _CarPageState extends State<CarPage> {
                 children: [
                   Expanded(
                     child: FilledButton.tonal(
-                      onPressed: () => NativeBridge.applyVolumeNow(),
+                      onPressed: () async {
+                        await NativeBridge.applyVolumeNow();
+                        await _loadVolumeInfo();
+                      },
                       child: const Text('Jetzt anwenden'),
                     ),
                   ),
@@ -247,8 +254,10 @@ class _CarPageState extends State<CarPage> {
     );
   }
 
-  Future<void> _addApp(AppController controller,
-      List<Map<String, dynamic>> launchApps) async {
+  Future<void> _addApp(
+    AppController controller,
+    List<Map<String, dynamic>> launchApps,
+  ) async {
     if (!mounted) return;
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute<Map<String, dynamic>>(
@@ -271,22 +280,33 @@ class _CarPageState extends State<CarPage> {
     }
   }
 
-  void _removeApp(List<Map<String, dynamic>> launchApps, int index,
-      AppController controller) async {
+  void _removeApp(
+    List<Map<String, dynamic>> launchApps,
+    int index,
+    AppController controller,
+  ) async {
     final newList = List<Map<String, dynamic>>.from(launchApps);
     newList.removeAt(index);
     await controller.updateConfig(launchApps: newList);
   }
 
-  void _moveApp(List<Map<String, dynamic>> launchApps, int from, int to,
-      AppController controller) async {
+  void _moveApp(
+    List<Map<String, dynamic>> launchApps,
+    int from,
+    int to,
+    AppController controller,
+  ) async {
     final newList = List<Map<String, dynamic>>.from(launchApps);
     final app = newList.removeAt(from);
     newList.insert(to, app);
     await controller.updateConfig(launchApps: newList);
   }
 
-  Future<void> _showCloseActionDialog(AppController controller, String pkg, String label) async {
+  Future<void> _showCloseActionDialog(
+    AppController controller,
+    String pkg,
+    String label,
+  ) async {
     final actionList = await NativeBridge.listCloseActions(pkg);
     if (!mounted) return;
 
@@ -298,19 +318,25 @@ class _CarPageState extends State<CarPage> {
     if (!hasNotification) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Öffne zuerst $label, damit ihre Benachrichtigung da ist.')),
+        SnackBar(
+          content: Text(
+            'Öffne zuerst $label, damit ihre Benachrichtigung da ist.',
+          ),
+        ),
       );
       return;
     }
 
     final choices = [
       {'index': -1, 'title': 'Automatisch'},
-      ...actions.map((a) => {
-            'index': a['index'] as int,
-            'title': ((a['title'] as String?) ?? '').isEmpty
-                ? 'Knopf ${((a['index'] as int?) ?? 0) + 1} (nur Symbol)'
-                : 'Knopf ${((a['index'] as int?) ?? 0) + 1}: ${a['title']}',
-          }),
+      ...actions.map(
+        (a) => {
+          'index': a['index'] as int,
+          'title': ((a['title'] as String?) ?? '').isEmpty
+              ? 'Knopf ${((a['index'] as int?) ?? 0) + 1} (nur Symbol)'
+              : 'Knopf ${((a['index'] as int?) ?? 0) + 1}: ${a['title']}',
+        },
+      ),
     ];
 
     if (!mounted) return;
@@ -323,7 +349,9 @@ class _CarPageState extends State<CarPage> {
           child: ListView(
             shrinkWrap: true,
             children: [
-              const Text('Bei mehreren Knöpfen: Probier einen aus mit „Beenden jetzt testen".'),
+              const Text(
+                'Bei mehreren Knöpfen: Probier einen aus mit „Beenden jetzt testen".',
+              ),
               const SizedBox(height: 8),
               ...List.generate(choices.length, (idx) {
                 final choice = choices[idx];
@@ -336,18 +364,20 @@ class _CarPageState extends State<CarPage> {
                         ((config['launchApps'] as List?) ?? const [])
                             .whereType<Map<String, dynamic>>()
                             .toList();
-                    final appIndex =
-                        launchApps.indexWhere((a) => a['package'] == pkg);
+                    final appIndex = launchApps.indexWhere(
+                      (a) => a['package'] == pkg,
+                    );
                     if (appIndex != -1) {
                       launchApps[appIndex]['closeActionIndex'] =
                           choice['index'] as int;
                       launchApps[appIndex]['closeActionTitle'] =
                           ((choice['index'] as int) == -1)
-                              ? ''
-                              : (actions.firstWhere((a) =>
-                                      a['index'] == choice['index'],
-                                    )['title'] as String? ??
-                                  '');
+                          ? ''
+                          : (actions.firstWhere(
+                                      (a) => a['index'] == choice['index'],
+                                    )['title']
+                                    as String? ??
+                                '');
                       controller.updateConfig(launchApps: launchApps);
                     }
                     Navigator.pop(bctx);
@@ -426,63 +456,69 @@ class _AppListTile extends StatelessWidget {
   }
 }
 
-class _VolumeStreamTile extends StatelessWidget {
+class _VolumeStreamTile extends StatefulWidget {
   final String title;
-  final String stream;
-  final int current;
+  final int current; // -1 = nicht ändern
   final int max;
-  final ValueChanged<int> onChanged;
   final ValueChanged<int> onChangeEnd;
 
   const _VolumeStreamTile({
     required this.title,
-    required this.stream,
     required this.current,
     required this.max,
-    required this.onChanged,
     required this.onChangeEnd,
   });
 
   @override
+  State<_VolumeStreamTile> createState() => _VolumeStreamTileState();
+}
+
+class _VolumeStreamTileState extends State<_VolumeStreamTile> {
+  /// Wert während des Ziehens; gespeichert wird erst beim Loslassen.
+  double? _dragging;
+
+  @override
   Widget build(BuildContext context) {
-    final isEnabled = current >= 0;
-    final displayValue = isEnabled ? current : 0;
-    final percent = max > 0 ? ((displayValue / max) * 100).toStringAsFixed(0) : '0';
+    final max = widget.max < 1 ? 1 : widget.max;
+    final isEnabled = widget.current >= 0;
+    final value = (_dragging ?? widget.current.clamp(0, max).toDouble());
+    final percent = ((value / max) * 100).round();
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Expanded(
-                child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+                child: Text(
+                  widget.title,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
               ),
+              Text(isEnabled ? '$percent %' : 'nicht ändern'),
               Checkbox(
                 value: isEnabled,
-                onChanged: (v) {
-                  if (v ?? false) {
-                    onChangeEnd(0);
-                  } else {
-                    onChangeEnd(-1);
-                  }
-                },
+                // Einschalten startet bei der Hälfte (0 bräuchte „Nicht stören“-Zugriff).
+                onChanged: (v) =>
+                    widget.onChangeEnd((v ?? false) ? (max / 2).round() : -1),
               ),
             ],
           ),
-          if (isEnabled) ...[
+          if (isEnabled)
             Slider(
-              value: displayValue.toDouble(),
+              value: value,
               min: 0,
               max: max.toDouble(),
               divisions: max,
               label: '$percent %',
-              onChanged: (v) => onChanged(v.toInt()),
-              onChangeEnd: (v) => onChangeEnd(v.toInt()),
+              onChanged: (v) => setState(() => _dragging = v),
+              onChangeEnd: (v) {
+                setState(() => _dragging = null);
+                widget.onChangeEnd(v.round());
+              },
             ),
-            Text('$percent %', style: Theme.of(context).textTheme.bodySmall),
-          ],
         ],
       ),
     );

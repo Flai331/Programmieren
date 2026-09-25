@@ -92,7 +92,7 @@ class ForceStopService : AccessibilityService() {
 
     private fun tryRun() {
         if (step != 0) return
-        val pkg = pendingPkgs.peekFirst() ?: return
+        val pkg = pendingPkgs.firstOrNull() ?: return
         val now = System.currentTimeMillis()
         if (now - pendingSince > (30 * 60 * 1000L)) {
             pendingPkgs.clear()
@@ -230,9 +230,10 @@ class ForceStopService : AccessibilityService() {
     }
 
     private fun finish(reason: String) {
-        val pkg = pendingPkgs.peekFirst() ?: ""
+        val pkg = pendingPkgs.firstOrNull() ?: ""
         EventLog.info(this, "Beenden erzwingen ($pkg): $reason")
         pendingPkgs.removeFirstOrNull()
+        if (pendingPkgs.isEmpty()) pendingSince = 0L
         step = 0
         unlockRunnable?.let { handler.removeCallbacks(it) }
         handler.postDelayed({

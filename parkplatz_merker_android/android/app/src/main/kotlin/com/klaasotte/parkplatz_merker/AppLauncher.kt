@@ -25,7 +25,7 @@ object AppLauncher {
         Config.devicePresent = true
         Config.devicePresentAt = now
         if (!wasPresent) {
-            if (Config.deviceMode != "none") {
+            if (Config.hasDevice) {
                 CarSession.start(appCtx)
             }
         }
@@ -37,7 +37,7 @@ object AppLauncher {
         if ((strong) || (misses >= 2)) {
             Config.devicePresent = false
             misses = 0
-            if (Config.deviceMode != "none") {
+            if (Config.hasDevice) {
                 CarSession.end(ctx.applicationContext)
             }
         }
@@ -110,7 +110,7 @@ object AppLauncher {
         } catch (e: SecurityException) {
             // Benachrichtigungen nicht erlaubt
         }
-        EventLog.info(ctx, "App-Start: Hinweis gezeigt (Berechtigung „Über anderen Apps" fehlt)")
+        EventLog.info(ctx, "App-Start: Hinweis gezeigt (Berechtigung „Über anderen Apps“ fehlt)")
     }
 
     fun closeAll(ctx: Context, fromForeground: Boolean = false) {

@@ -91,8 +91,24 @@ object Config {
         set(value) = prefs().edit().putBoolean("forceStopFallback", value).apply()
 
     var launchApps: String
-        get() = prefs().getString("launchApps", "") ?: ""
+        get() {
+            val stored = prefs().getString("launchApps", "") ?: ""
+            if (stored.isNotEmpty() || launchPackage.isEmpty()) return stored
+            // Einmalige Übernahme der früheren Einzel-App-Einstellung.
+            val obj = org.json.JSONObject()
+            obj.put("package", launchPackage)
+            obj.put("label", launchLabel)
+            obj.put("closeActionIndex", closeActionIndex)
+            obj.put("closeActionTitle", closeActionTitle)
+            val migrated = org.json.JSONArray().put(obj).toString()
+            prefs().edit().putString("launchApps", migrated).apply()
+            return migrated
+        }
         set(value) = prefs().edit().putString("launchApps", value).apply()
+
+    /** Transmitter/Beacon eingerichtet (Modus UND Adresse). */
+    val hasDevice: Boolean
+        get() = deviceMode != "none" && !deviceAddress.isNullOrEmpty()
 
     var volumeEnabled: Boolean
         get() = prefs().getBoolean("volumeEnabled", false)

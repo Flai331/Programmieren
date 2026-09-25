@@ -146,7 +146,7 @@ class TripService : Service() {
         cancelPlannedStop()
         startLocationUpdates()
         if (Config.chargerEnabled) startPowerWatch()
-        if (Config.deviceMode == "none") {
+        if (scanMode == "none") {
             CarSession.start(this)
         }
         startScanning()
@@ -155,7 +155,7 @@ class TripService : Service() {
     private fun onExit() {
         if (!inVehicle && stopAt != 0L) return // doppeltes EXIT
         inVehicle = false
-        if (Config.deviceMode == "none") {
+        if (scanMode == "none") {
             CarSession.end(this)
         }
         // Letzte Suchrunde bzw. Fenster abschließen, dann Suche beenden.
@@ -259,7 +259,7 @@ class TripService : Service() {
         stopAt = 0L
 
         // sessionActive nur zurücksetzen, wenn kein Gerät konfiguriert oder Gerät ist weg
-        if (Config.deviceMode == "none" || !Config.devicePresent) {
+        if (scanMode == "none" || !Config.devicePresent) {
             Config.sessionActive = false
         }
 
