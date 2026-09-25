@@ -21,4 +21,12 @@ void main() {
     expect(find.textContaining('Lautstärke-Profil'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('Anleitung enthält Abschnitt Energiesparmodus (Samsung)', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: HelpPage(open: HelpTopic.powerSaving)));
+    await tester.pumpAndSettle();
+    expect(find.text('Energiesparmodus im Auto (Samsung)'), findsOneWidget);
+    expect(find.textContaining('Modi und Routinen'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
 }

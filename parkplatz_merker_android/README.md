@@ -191,3 +191,11 @@ Flutter (nur Android). Plan und Aufbau: [PLAN.md](PLAN.md).
 Die APK baut GitHub Actions (`.github/workflows/parkplatz-merker-apk.yml`);
 auf `main` wird das Release `parkplatz-merker-android` aktualisiert.
 Tests: `flutter test` (Erkennungslogik in `lib/logic/`).
+
+## Energiesparmodus im Auto (Samsung)
+
+Apps dürfen den Energiesparmodus nicht selbst umschalten. Bei Samsung geht es mit
+„Modi und Routinen“: Routine „Wenn App geöffnet: Blitzer.de → Energiesparmodus aus“.
+Weil der Parkplatz-Merker Blitzer.de beim Einsteigen öffnet und beim Aussteigen beendet,
+schaltet Samsung den Modus automatisch aus und danach wieder zurück. Schritt für Schritt:
+in der App unter **?** → „Energiesparmodus im Auto (Samsung)“.
