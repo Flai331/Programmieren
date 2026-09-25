@@ -15,7 +15,7 @@ Flutter-App, die Lesen in den Aufbau einer eigenen Stadt verwandelt: gelesene Se
 | Nahziel | Banner „Noch X Seiten bis zum …“, automatisch passend zum aktuellen Buch oder im Baumenü angeheftet. |
 | Jahresprojekt | Jahresziel = Bauabschnitte, Übererfüllung bringt Fahnen, Glocken, Beleuchtung. Bleibt als Denkmal mit Jahreszahl stehen. |
 | Stadtchronik | Monatlicher Schnappschuss (Gebäudeliste als JSON), Jahresrückblick, Zeitraffer ab 1. Januar, als Bild teilbar. |
-| Buchdaten | ISBN tippen oder scannen (`mobile_scanner`), Daten von Open Library, Lücken und Reiheninfos von Google Books. Titelsuche ohne ISBN über Open Library. |
+| Buchdaten | ISBN tippen oder scannen (`mobile_scanner`). Daten von Open Library, der Deutschen Nationalbibliothek (vor allem für deutsche Bücher) und Google Books. Das Genre ergibt sich aus den Schlagwörtern aller Quellen plus den Genre-Angaben von Wikidata. Titelsuche ohne ISBN über Open Library. |
 
 ## Technik
 
