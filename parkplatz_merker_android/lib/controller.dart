@@ -50,6 +50,9 @@ class AppController extends ChangeNotifier {
     String? launchPackage,
     String? launchLabel,
     bool? closeOnGone,
+    String? closeActionTitle,
+    int? closeActionIndex,
+    bool? forceStopFallback,
   }) async {
     await NativeBridge.setConfig(
       activityEnabled: activityEnabled,
@@ -60,6 +63,9 @@ class AppController extends ChangeNotifier {
       launchPackage: launchPackage,
       launchLabel: launchLabel,
       closeOnGone: closeOnGone,
+      closeActionTitle: closeActionTitle,
+      closeActionIndex: closeActionIndex,
+      forceStopFallback: forceStopFallback,
     );
     await reloadConfig();
   }

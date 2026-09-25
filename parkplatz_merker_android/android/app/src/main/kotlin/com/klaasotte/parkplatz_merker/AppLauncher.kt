@@ -89,7 +89,7 @@ object AppLauncher {
         EventLog.info(appCtx, "App-Start: Hinweis gezeigt (Berechtigung „Über anderen Apps“ fehlt)")
     }
 
-    fun close(ctx: Context) {
+    fun close(ctx: Context, fromForeground: Boolean = false) {
         val pkg = Config.launchPackage
         if (pkg.isEmpty()) return
         val label = Config.launchLabel
@@ -97,7 +97,10 @@ object AppLauncher {
         val nm = NotificationManagerCompat.from(appCtx)
         nm.cancel(4)
 
-        if (Settings.canDrawOverlays(appCtx)) {
+        val pressed = NotifListener.pressStop(pkg, Config.closeActionTitle, Config.closeActionIndex)
+        EventLog.info(appCtx, if (pressed) "Ausschaltknopf von $label gedrueckt" else "Kein Ausschaltknopf gefunden (Benachrichtigungszugriff an?)")
+
+        if (fromForeground || Settings.canDrawOverlays(appCtx)) {
             try {
                 val homeIntent = Intent(Intent.ACTION_MAIN)
                     .addCategory(Intent.CATEGORY_HOME)
@@ -117,6 +120,14 @@ object AppLauncher {
             }
             EventLog.info(appCtx, "App geschlossen (Startbildschirm + beenden versucht): $label")
         }, 1500L)
+
+        if (Config.forceStopFallback) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (!pressed || NotifListener.hasNotification(pkg)) {
+                    ForceStopService.request(appCtx, pkg)
+                }
+            }, 4000L)
+        }
     }
 
     fun listApps(ctx: Context): List<Map<String, String>> {

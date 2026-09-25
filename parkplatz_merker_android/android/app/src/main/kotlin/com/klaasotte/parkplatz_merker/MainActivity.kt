@@ -111,6 +111,9 @@ class MainActivity : FlutterActivity() {
                         "listApps" -> {
                             result.success(AppLauncher.listApps(this))
                         }
+                        "listCloseActions" -> {
+                            result.success(NotifListener.listCloseActions(Config.launchPackage))
+                        }
                         "openOverlaySettings" -> {
                             val uri = Uri.parse("package:$packageName")
                             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, uri)
@@ -125,8 +128,20 @@ class MainActivity : FlutterActivity() {
                             }
                             result.success(null)
                         }
+                        "openNotificationListenerSettings" -> {
+                            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                            result.success(null)
+                        }
+                        "openAccessibilitySettings" -> {
+                            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                            result.success(null)
+                        }
                         "testLaunch" -> {
                             AppLauncher.launch(this, fromForeground = true)
+                            result.success(null)
+                        }
+                        "testClose" -> {
+                            AppLauncher.close(this, fromForeground = true)
                             result.success(null)
                         }
                         "getNativeStatus" -> {
@@ -160,7 +175,9 @@ class MainActivity : FlutterActivity() {
                                 "serviceRunning" to TripService.running,
                                 "inVehicle" to TripService.inVehicle,
                                 "exactAlarms" to exactAlarms,
-                                "overlayAllowed" to Settings.canDrawOverlays(this)
+                                "overlayAllowed" to Settings.canDrawOverlays(this),
+                                "notificationListener" to NotifListener.isEnabled(this),
+                                "accessibility" to ForceStopService.isEnabled(this)
                             ))
                         }
                         "openAppDetails" -> {

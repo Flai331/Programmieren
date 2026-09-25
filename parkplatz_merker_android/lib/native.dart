@@ -38,6 +38,9 @@ class NativeBridge {
         'launchPackage': '',
         'launchLabel': '',
         'closeOnGone': true,
+        'closeActionTitle': '',
+        'closeActionIndex': -1,
+        'forceStopFallback': false,
       };
     } on PlatformException catch (e) {
       print('getConfig error: ${e.message}');
@@ -50,6 +53,9 @@ class NativeBridge {
         'launchPackage': '',
         'launchLabel': '',
         'closeOnGone': true,
+        'closeActionTitle': '',
+        'closeActionIndex': -1,
+        'forceStopFallback': false,
       };
     } on MissingPluginException {
       return {
@@ -61,6 +67,9 @@ class NativeBridge {
         'launchPackage': '',
         'launchLabel': '',
         'closeOnGone': true,
+        'closeActionTitle': '',
+        'closeActionIndex': -1,
+        'forceStopFallback': false,
       };
     }
   }
@@ -75,6 +84,9 @@ class NativeBridge {
     String? launchPackage,
     String? launchLabel,
     bool? closeOnGone,
+    String? closeActionTitle,
+    int? closeActionIndex,
+    bool? forceStopFallback,
   }) async {
     try {
       final params = <String, dynamic>{};
@@ -86,6 +98,9 @@ class NativeBridge {
       if (launchPackage != null) params['launchPackage'] = launchPackage;
       if (launchLabel != null) params['launchLabel'] = launchLabel;
       if (closeOnGone != null) params['closeOnGone'] = closeOnGone;
+      if (closeActionTitle != null) params['closeActionTitle'] = closeActionTitle;
+      if (closeActionIndex != null) params['closeActionIndex'] = closeActionIndex;
+      if (forceStopFallback != null) params['forceStopFallback'] = forceStopFallback;
       await _channel.invokeMethod('setConfig', params);
     } on PlatformException catch (e) {
       print('setConfig error: ${e.message}');
@@ -295,6 +310,55 @@ class NativeBridge {
       debugPrint('testLaunch error: ${e.message}');
     } on MissingPluginException {
       debugPrint('testLaunch: platform not available');
+    }
+  }
+
+  /// Listet Ausschaltknopf-Optionen auf.
+  static Future<Map<String, dynamic>> listCloseActions() async {
+    try {
+      final result = await _channel.invokeMethod('listCloseActions');
+      if (result is Map<Object?, Object?>) {
+        return Map<String, dynamic>.from(result);
+      }
+      return {'actions': [], 'actionless': false, 'hasNotification': false};
+    } on PlatformException catch (e) {
+      debugPrint('listCloseActions error: ${e.message}');
+      return {'actions': [], 'actionless': false, 'hasNotification': false};
+    } on MissingPluginException {
+      return {'actions': [], 'actionless': false, 'hasNotification': false};
+    }
+  }
+
+  /// Testet das App-Beenden.
+  static Future<void> testClose() async {
+    try {
+      await _channel.invokeMethod('testClose');
+    } on PlatformException catch (e) {
+      debugPrint('testClose error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('testClose: platform not available');
+    }
+  }
+
+  /// Oeffnet die Benachrichtigungszugriff-Einstellungen.
+  static Future<void> openNotificationListenerSettings() async {
+    try {
+      await _channel.invokeMethod('openNotificationListenerSettings');
+    } on PlatformException catch (e) {
+      debugPrint('openNotificationListenerSettings error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('openNotificationListenerSettings: platform not available');
+    }
+  }
+
+  /// Oeffnet die Bedienungshilfen-Einstellungen.
+  static Future<void> openAccessibilitySettings() async {
+    try {
+      await _channel.invokeMethod('openAccessibilitySettings');
+    } on PlatformException catch (e) {
+      debugPrint('openAccessibilitySettings error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('openAccessibilitySettings: platform not available');
     }
   }
 

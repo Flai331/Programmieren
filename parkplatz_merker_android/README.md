@@ -97,7 +97,29 @@ Blitzer- oder Navigation-App **automatisch öffnen**, sobald du dein Auto erkann
   Benachrichtigung läuft. Blitzer-Apps tun das meist – dann bleibt die Warnung aktiv
   und muss in der App selbst beendet werden.
 
-**Test:** Knopf **„Jetzt testen“** zum Probieren.
+**Test:** Knopf **„Jetzt testen”** zum Probieren.
+
+## Blitzer-App komplett beenden
+
+Manche Blitzer-Apps wie Blitzer.de laufen nach dem Beenden als Warnung im Hintergrund weiter. Um die App beim Aussteigen komplett zu beenden, nutzt Parkplatz-Merker zwei Wege:
+
+**Weg 1: Ausschaltknopf in der Benachrichtigung** (empfohlen)
+- Funktioniert auch bei **gesperrtem Bildschirm**.
+- Erfordert **Benachrichtigungszugriff**: Einstellungen → Benachrichtigungen → Parkplatz-Merker → Zugriff erlauben.
+- In der Einstellung **„Ausschaltknopf”** kannst du auswählen, welcher Knopf der Benachrichtigung gedrückt werden soll (z. B. „Ausschalten”, „Beenden” oder ein Symbol). Oder: automatisch suchen.
+
+**Weg 2: Beenden erzwingen per Bedienungshilfe** (Fallback)
+- Falls Weg 1 nicht klappt oder die App nicht reagiert.
+- Öffnet kurz die App-Info und drückt dort „Beenden erzwingen”.
+- Erfordert **Bedienungshilfe**: Einstellungen → Bedienungshilfen → Installierte Apps → „Parkplatz-Merker: App beenden” einschalten. Ausgegraut? Erst „Eingeschränkte Einstellungen zulassen”.
+- Nur bei **entsperrtem Bildschirm** möglich. Ist der Bildschirm gesperrt, erledigt es Parkplatz-Merker beim nächsten Entsperren (max. 30 Min. später).
+
+**Einrichtung:**
+1. Einstellungen → Abschnitt **„App im Auto”** → eine Blitzer-App auswählen.
+2. **„Beim Aussteigen schließen”** aktivieren.
+3. „Benachrichtigungszugriff”-Berechtigung freigeben.
+4. Optional: „Notfalls ‚Beenden erzwingen' (Bedienungshilfe)” aktivieren und die Bedienungshilfe-Berechtigung freigeben.
+5. Mit „Beenden jetzt testen” die Konfiguration prüfen.
 
 ## Widget und Schnelleinstellung
 
