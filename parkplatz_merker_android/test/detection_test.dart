@@ -449,4 +449,56 @@ void main() {
       expect(tripInProgress(events, 9 * 60 * 60 * 1000), isFalse);
     });
   });
+
+  group('Kurze Fahrten (Tankstelle → Parkplatz)', () {
+    // Nachgestellt aus der Diagnose vom 25.09.: 20:54–21:03 zur Tankstelle,
+    // 21:07–21:09 weiter zum Parkplatz (knapp 1 km, Transmitter gesehen).
+    List<RawEvent> base() => [
+          act(0, 'IN_VEHICLE', 'ENTER'),
+          scan(0, 'transmitter', 'AA', found: true),
+          act(9, 'IN_VEHICLE', 'EXIT'),
+          act(9, 'WALKING', 'ENTER'),
+          loc(9, 52.13545, 8.11635, 13),
+        ];
+
+    test('kurze Fahrt mit Transmitter zählt', () {
+      final events = [
+        ...base(),
+        act(13, 'IN_VEHICLE', 'ENTER'),
+        scan(13, 'transmitter', 'AA', found: true),
+        loc(13, 52.13690, 8.11222, 28),
+        act(15, 'IN_VEHICLE', 'EXIT'),
+        act(15, 'WALKING', 'ENTER'),
+        scan(15, 'transmitter', 'AA', found: false),
+        loc(15, 52.14167, 8.10511, 4),
+      ];
+      final spots = detectParkings(events, 30 * 60 * 1000);
+      spots.sort((a, b) => b.time.compareTo(a.time));
+      expect(spots.first.lat, 52.14167);
+      expect(spots.length, 2);
+    });
+
+    test('kurze Fahrt ohne Gerät, aber deutlich bewegt, zählt', () {
+      final events = [
+        act(0, 'IN_VEHICLE', 'ENTER'),
+        loc(0, 52.13690, 8.11222, 20),
+        act(2, 'IN_VEHICLE', 'EXIT'),
+        act(2, 'WALKING', 'ENTER'),
+        loc(2, 52.14167, 8.10511, 5),
+      ];
+      expect(detectParkings(events, 10 * 60 * 1000).length, 1);
+    });
+
+    test('kurze „Fahrt“ ohne Gerät und ohne Bewegung bleibt „zu kurz“', () {
+      final events = [
+        act(0, 'IN_VEHICLE', 'ENTER'),
+        loc(0, 52.09009, 8.06775, 80),
+        act(2, 'IN_VEHICLE', 'EXIT'),
+        act(2, 'WALKING', 'ENTER'),
+        loc(2, 52.09034, 8.06753, 9),
+      ];
+      final results = evaluateTrips(events, 10 * 60 * 1000);
+      expect(results.single.status, 'zu kurz');
+    });
+  });
 }

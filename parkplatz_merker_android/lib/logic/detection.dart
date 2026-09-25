@@ -1,7 +1,9 @@
+import 'format.dart' show haversineMeters;
 import 'models.dart';
 
 // Konstanten
-const minTripMs = 3 * 60 * 1000; // Fahrten < 3 min ignorieren
+const minTripMs = 3 * 60 * 1000; // Fahrten < 3 min ignorieren …
+const shortTripMinMoveM = 200.0; // … außer Gerät gesehen oder ≥ 200 m gefahren
 const shortHaltMs = 2 * 60 * 1000; // Halte < 2 min gehören zur Fahrt
 const noWalkFinalizeMs =
     15 * 60 * 1000; // ohne Gehen: nach 15 min trotzdem Parkplatz
@@ -164,8 +166,10 @@ List<TripResult> evaluateTrips(List<RawEvent> events, int now) {
       continue;
     }
 
-    // Kurz?
-    if (trip.exit! - trip.start < minTripMs) {
+    // Kurz? Nur verwerfen, wenn nichts für eine echte Fahrt spricht
+    // (z. B. Tankstelle → Parkplatz um die Ecke: Transmitter da oder deutlich bewegt).
+    if (trip.exit! - trip.start < minTripMs &&
+        !_shortTripConfirmed(sorted, allLocations, trip)) {
       results.add(TripResult(trip: trip, spot: null, status: 'zu kurz'));
       continue;
     }
@@ -376,6 +380,20 @@ _Evidence _evidence(
   }
   ev.chargerTime = candidate;
   return ev;
+}
+
+/// Kurze Fahrt trotzdem echt? Gerät während der Fahrt gesehen oder zwischen
+/// Start und Ausstieg mindestens [shortTripMinMoveM] (mehr als die Ungenauigkeit) bewegt.
+bool _shortTripConfirmed(
+    List<RawEvent> sorted, List<LocSample> locations, Trip trip) {
+  final exit = trip.exit!;
+  final ev = _evidence(sorted, trip.start - 2 * 60 * 1000, exit + 60 * 1000, exit);
+  if (ev.seen) return true;
+  final a = pickLocation(locations, trip.start);
+  final b = pickLocation(locations, exit);
+  if (a == null || b == null || identical(a, b)) return false;
+  final d = haversineMeters(a.lat, a.lng, b.lat, b.lng);
+  return d >= shortTripMinMoveM && d > a.acc + b.acc;
 }
 
 /// Erkennt Parkplätze aus Rohereignissen.

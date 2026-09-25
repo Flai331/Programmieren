@@ -46,7 +46,8 @@ const _sections = <_Section>[
     'Beim Aussteigen nimmt sie den genauesten Hinweis: Ladekabel abgezogen → Transmitter verschwunden '
         '(Motor aus) → Aussteigen erkannt. Der Parkplatz ist die Position zu diesem Zeitpunkt. '
         'Unter dem Parkplatz steht, woran er erkannt wurde.',
-    'Ignoriert werden Fahrten unter 3 Minuten und Halte unter 2 Minuten (Ampel, Stau). '
+    'Ignoriert werden Halte unter 2 Minuten (Ampel, Stau) und Fahrten unter 3 Minuten – außer dein '
+        'Transmitter war dabei oder du bist mindestens 200 m gefahren (z. B. Tankstelle → Parkplatz um die Ecke). '
         'Ein langer Stau ohne Aussteigen zählt auch nicht.',
     'Ist ein Transmitter eingerichtet und wurde er während der Fahrt nie gesehen, speichert die App '
         'keinen Parkplatz – du warst dann vermutlich im Bus, Taxi oder einem anderen Auto.',
