@@ -33,15 +33,18 @@ List<RawEvent> diagnosticEvents(List<RawEvent> all, {int limit = 100}) {
 /// Beschreibt ein einzelnes Ereignis als Text.
 String describeEvent(RawEvent e) {
   final dateTime = DateTime.fromMillisecondsSinceEpoch(e.t);
-  final dateStr = formatDateTime(dateTime);
-  final timeStr =
-      '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}:${dateTime.second.toString().padLeft(2, '0')}';
+  // „25.09. 17:42:08“ – mit Sekunden, damit die Reihenfolge nachvollziehbar ist.
+  final dateStr =
+      '${formatDateTime(dateTime)}:${dateTime.second.toString().padLeft(2, '0')}';
+  final timeStr = dateStr;
+  String coord(double? v) => v == null ? '?' : v.toStringAsFixed(5);
+  String meters(double? v) => v == null ? '?' : v.round().toString();
 
   return switch (e.type) {
     'activity' =>
-      '$dateStr ${timeStr.substring(dateStr.length - 5)} Aktivität ${e.str('activity')} ${e.str('transition')}',
+      '$dateStr Aktivität ${e.str('activity')} ${e.str('transition')}',
     'loc' =>
-      '$dateStr Standort ${e.dbl('lat')}, ${e.dbl('lng')} ± ${e.dbl('acc')} m (${e.str('reason')})',
+      '$dateStr Standort ${coord(e.dbl('lat'))}, ${coord(e.dbl('lng'))} ± ${meters(e.dbl('acc'))} m (${e.str('reason')})',
     'service' =>
       '$dateStr Service ${e.str('state')} (${e.str('mode')} ${e.str('target') ?? 'keins'})',
     'scan' => _describeScan(dateStr, timeStr, e),

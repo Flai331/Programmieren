@@ -217,4 +217,12 @@ void main() {
       expect(text.contains('Ereignisse'), true);
     });
   });
+
+  test('describeEvent: Uhrzeit mit Sekunden, gerundete Standortwerte', () {
+    final t = DateTime(2026, 9, 25, 17, 42, 8).millisecondsSinceEpoch;
+    final act = RawEvent.fromJson({'type': 'activity', 't': t, 'activity': 'STILL', 'transition': 'ENTER'});
+    expect(describeEvent(act), '25.09. 17:42:08 Aktivität STILL ENTER');
+    final loc = RawEvent.fromJson({'type': 'loc', 't': t, 'lat': 51.9609806, 'lng': 8.0143352, 'acc': 9.312000274658203, 'reason': 'exit'});
+    expect(describeEvent(loc), '25.09. 17:42:08 Standort 51.96098, 8.01434 ± 9 m (exit)');
+  });
 }
