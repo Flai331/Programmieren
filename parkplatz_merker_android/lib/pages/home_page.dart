@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../controller.dart';
+import 'help_page.dart';
 import 'history_page.dart';
 import 'settings_page.dart';
 import 'spot_view.dart';
@@ -74,6 +75,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         title: const Text('Parkplatz-Merker'),
         actions: [
           IconButton(
+            tooltip: 'Anleitung',
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => HelpPage.show(context),
+          ),
+          IconButton(
             tooltip: 'Verlauf',
             icon: const Icon(Icons.history),
             onPressed: () => Navigator.of(context).push(
@@ -137,6 +143,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     const Text(
                       'Fahr einfach los – oder tippe auf „Hier geparkt“.',
                       textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: () => HelpPage.show(context, HelpTopic.start),
+                      icon: const Icon(Icons.menu_book_outlined),
+                      label: const Text('Anleitung lesen'),
                     ),
                   ],
                 ),

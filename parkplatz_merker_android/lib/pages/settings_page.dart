@@ -6,6 +6,7 @@ import '../controller.dart';
 import '../native.dart';
 import 'app_picker_page.dart';
 import 'diagnostics_page.dart';
+import 'help_page.dart';
 import 'search_page.dart';
 
 /// Stand der Einrichtung (Berechtigungen + Akku).
@@ -239,10 +240,19 @@ class _SettingsPageState extends State<SettingsPage>
     final kind = deviceMode == 'beacon' ? 'Beacon' : 'Transmitter';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Einstellungen')),
+      appBar: AppBar(
+        title: const Text('Einstellungen'),
+        actions: [
+          IconButton(
+            tooltip: 'Anleitung',
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => HelpPage.show(context),
+          ),
+        ],
+      ),
       body: ListView(
         children: [
-          const _Header('Erkennung'),
+          const _Header('Erkennung', help: HelpTopic.transmitter),
           SwitchListTile(
             title: const Text('Aktivitätserkennung (Aussteigen)'),
             subtitle: const Text('Hauptweg: erkennt Fahrt und Aussteigen'),
@@ -300,7 +310,7 @@ class _SettingsPageState extends State<SettingsPage>
           ),
           if (deviceMode != 'none') ...[
             const Divider(),
-            const _Header('App im Auto'),
+            const _Header('App im Auto', help: HelpTopic.appInCar),
             ListTile(
               title: const Text('App öffnen, wenn das Gerät erkannt wird'),
               subtitle: Text(
@@ -370,6 +380,11 @@ class _SettingsPageState extends State<SettingsPage>
                 ((config['launchPackage'] as String?) ?? '').isNotEmpty)
               ListTile(
                 title: const Text('Beenden jetzt testen'),
+                trailing: IconButton(
+                  tooltip: 'Anleitung',
+                  icon: const Icon(Icons.help_outline),
+                  onPressed: () => HelpPage.show(context, HelpTopic.closeApp),
+                ),
                 onTap: () => NativeBridge.testClose(),
               ),
             if (setup != null)
@@ -385,7 +400,7 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ],
           const Divider(),
-          const _Header('Einrichtung'),
+          const _Header('Einrichtung', help: HelpTopic.start),
           if (setup == null)
             const Padding(
               padding: EdgeInsets.all(16),
@@ -479,12 +494,23 @@ class _SettingsPageState extends State<SettingsPage>
 
 class _Header extends StatelessWidget {
   final String text;
-  const _Header(this.text);
+  final HelpTopic? help;
+  const _Header(this.text, {this.help});
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-    child: Text(text, style: Theme.of(context).textTheme.titleMedium),
+    padding: EdgeInsets.fromLTRB(16, 16, help == null ? 16 : 4, 4),
+    child: Row(
+      children: [
+        Expanded(child: Text(text, style: Theme.of(context).textTheme.titleMedium)),
+        if (help != null)
+          IconButton(
+            tooltip: 'Anleitung',
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => HelpPage.show(context, help),
+          ),
+      ],
+    ),
   );
 }
 
