@@ -42,7 +42,27 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('ISBN scannen')),
+      appBar: AppBar(
+        title: const Text('ISBN scannen'),
+        actions: [
+          // Taschenlampe für Barcodes im Dunkeln; ohne Blitz ausgeblendet.
+          ValueListenableBuilder(
+            valueListenable: _controller,
+            builder: (context, state, _) {
+              final torch = state.torchState;
+              if (torch == TorchState.unavailable) {
+                return const SizedBox.shrink();
+              }
+              final an = torch == TorchState.on;
+              return IconButton(
+                tooltip: an ? 'Taschenlampe aus' : 'Taschenlampe an',
+                icon: Icon(an ? Icons.flashlight_on : Icons.flashlight_off),
+                onPressed: _controller.toggleTorch,
+              );
+            },
+          ),
+        ],
+      ),
       body: Stack(
         children: [
           MobileScanner(
