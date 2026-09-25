@@ -169,7 +169,8 @@ object Config {
                             "package" to obj.getString("package"),
                             "label" to obj.getString("label"),
                             "closeActionIndex" to obj.getInt("closeActionIndex"),
-                            "closeActionTitle" to obj.getString("closeActionTitle")
+                            "closeActionTitle" to obj.getString("closeActionTitle"),
+                            "closeWidget" to obj.optString("closeWidget", "")
                         )
                     }
                 }
@@ -224,6 +225,7 @@ object Config {
                             obj.put("label", (app["label"] as? String) ?: "")
                             obj.put("closeActionIndex", ((app["closeActionIndex"] as? Number)?.toInt()) ?: -1)
                             obj.put("closeActionTitle", (app["closeActionTitle"] as? String) ?: "")
+                            obj.put("closeWidget", (app["closeWidget"] as? String) ?: "")
                             ja.put(obj)
                         }
                     }
