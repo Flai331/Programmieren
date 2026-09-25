@@ -989,4 +989,75 @@ void main() {
       expect(lines.first, '25.09. 00:14:00 – Bewegung');
     });
   });
+
+  group('Einschlaf-Stellen im Verlauf', () {
+    Entry ch(String title, int start, int end) => Entry(
+      id: title,
+      key: '',
+      title: title,
+      artist: 'A',
+      album: 'Buch',
+      spotifyUri: null,
+      mediaId: 'spotify:track:$title',
+      artUri: '',
+      kind: 'spoken',
+      durationMs: 200000,
+      startPositionMs: 0,
+      positionMs: end - start,
+      startedAt: start,
+      lastSeenAt: end,
+      pinned: false,
+    );
+    const min = 60 * 1000;
+    final n1 = DateTime(2026, 9, 23, 23, 0).millisecondsSinceEpoch;
+    final n2 = DateTime(2026, 9, 24, 23, 0).millisecondsSinceEpoch;
+    // zwei Nächte, je 60 Min. am Stück in 3-Minuten-Kapiteln
+    final history = [
+      for (var i = 19; i >= 0; i--)
+        ch('N2 K${i + 1}', n2 + i * 3 * min, n2 + (i + 1) * 3 * min - 1000),
+      for (var i = 19; i >= 0; i--)
+        ch('N1 K${i + 1}', n1 + i * 3 * min, n1 + (i + 1) * 3 * min - 1000),
+    ];
+    final activity = [
+      ActivityEvent(ts: n1 + 5 * min, type: 'screen', action: 'off'),
+      ActivityEvent(ts: n2 + 20 * min, type: 'motion', level: 1.5),
+      ActivityEvent(ts: n2 + 9 * 60 * min, type: 'screen', action: 'unlock'),
+    ];
+
+    test('findet je Nacht eine Stelle, neueste zuerst', () {
+      final marks = findSleepMarks(history, activity);
+      expect(marks.length, 2);
+      expect(marks[0].at, n2 + 20 * min);
+      expect(marks[0].entry.title, 'N2 K7');
+      expect(marks[1].at, n1 + 5 * min);
+      expect(marks[1].entry.title, 'N1 K2');
+    });
+
+    test('mergeSleepMarks entfernt Doppelte, JSON hin und zurück', () {
+      final marks = findSleepMarks(history, activity);
+      final back = [for (final m in marks) SleepGuess.fromJson(m.toJson())];
+      final merged = mergeSleepMarks(back, marks, n2 + 10 * 60 * min);
+      expect(merged.length, 2);
+      expect(merged.first.entry.positionMs, marks.first.entry.positionMs);
+    });
+
+    test('filterSleepMarks: bei „Musik“ ausgeblendet, Suche greift', () {
+      final marks = findSleepMarks(history, activity);
+      final now = n2 + 10 * 60 * min;
+      expect(
+        filterSleepMarks(marks, FilterRange.all, FilterKind.music, '', now),
+        isEmpty,
+      );
+      expect(
+        filterSleepMarks(
+          marks,
+          FilterRange.all,
+          FilterKind.all,
+          'N1',
+          now,
+        ).length,
+        1,
+      );
+    });
+  });
 }

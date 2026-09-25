@@ -545,6 +545,20 @@ class SleepGuess {
     required this.source,
     required this.playedAfterMin,
   });
+
+  factory SleepGuess.fromJson(Map<String, dynamic> json) => SleepGuess(
+    entry: Entry.fromJson(Map<String, dynamic>.from(json['entry'] as Map)),
+    at: json['at'] as int? ?? 0,
+    source: json['source'] as String? ?? '',
+    playedAfterMin: json['playedAfterMin'] as int? ?? 0,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'entry': entry.toJson(),
+    'at': at,
+    'source': source,
+    'playedAfterMin': playedAfterMin,
+  };
 }
 
 /// Rät die Einschlafstelle aus Verlauf und Handy-Aktivität.
@@ -638,5 +652,98 @@ List<String> recentActivityLines(
   return [
     for (final a in sorted.take(count))
       '${formatClock(a.ts)} – ${describeActivity(a)}',
+  ];
+}
+
+/// Alle Einschlaf-Stellen im Verlauf – eine pro Hörbuch-Sitzung.
+///
+/// Sitzung = aufeinanderfolgende Hörbuch-Einträge mit höchstens 10 Min.
+/// Lücke. Je Sitzung gilt dieselbe Regel wie bei [guessSleep], betrachtet
+/// werden aber nur Wachzeichen ab 30 Min. vor Sitzungsbeginn.
+List<SleepGuess> findSleepMarks(
+  List<Entry> history,
+  List<ActivityEvent> activity,
+) {
+  const maxGap = 10 * 60 * 1000;
+  const lead = 30 * 60 * 1000;
+  final spoken = history.where((e) => e.kind == 'spoken').toList()
+    ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+
+  final sessions = <List<Entry>>[];
+  for (final e in spoken) {
+    if (sessions.isNotEmpty) {
+      final last = sessions.last;
+      final end = last.map((x) => x.lastSeenAt).reduce((a, b) => a > b ? a : b);
+      if (e.startedAt - end <= maxGap) {
+        last.add(e);
+        continue;
+      }
+    }
+    sessions.add([e]);
+  }
+
+  final marks = <SleepGuess>[];
+  for (final session in sessions) {
+    final start = session.first.startedAt;
+    final end = session
+        .map((x) => x.lastSeenAt)
+        .reduce((a, b) => a > b ? a : b);
+    final signs = activity
+        .where((a) => a.ts >= start - lead && a.ts <= end)
+        .toList();
+    final mark = guessSleep(session, signs, end + 1);
+    if (mark != null) marks.add(mark);
+  }
+  marks.sort((a, b) => b.at.compareTo(a.at));
+  return marks;
+}
+
+/// Gespeicherte und neu gefundene Einschlaf-Stellen zusammenführen
+/// (gleicher Zeitpunkt = gleiche Stelle), neueste zuerst, max. 90 Tage.
+List<SleepGuess> mergeSleepMarks(
+  List<SleepGuess> stored,
+  List<SleepGuess> fresh,
+  int now,
+) {
+  const keep = 90 * 24 * 60 * 60 * 1000;
+  final byAt = <int, SleepGuess>{
+    for (final m in stored) m.at: m,
+    for (final m in fresh) m.at: m,
+  };
+  final result = byAt.values.where((m) => now - m.at < keep).toList()
+    ..sort((a, b) => b.at.compareTo(a.at));
+  return result;
+}
+
+/// Einschlaf-Stellen nach denselben Filtern wie der Verlauf.
+List<SleepGuess> filterSleepMarks(
+  List<SleepGuess> marks,
+  FilterRange range,
+  FilterKind kind,
+  String query,
+  int now,
+) {
+  if (kind == FilterKind.music || kind == FilterKind.pinned) return [];
+  final asEntries = {
+    for (final m in marks)
+      Entry.fromJson({
+        ...m.entry.toJson(),
+        'id': 'sleep-${m.at}',
+        'kind': 'spoken',
+        'startedAt': m.at,
+        'lastSeenAt': m.at,
+      }): m,
+  };
+  final kept = filterHistory(
+    asEntries.keys.toList(),
+    range,
+    FilterKind.all,
+    query,
+    null,
+    now,
+  ).toSet();
+  return [
+    for (final e in asEntries.entries)
+      if (kept.contains(e.key)) e.value,
   ];
 }
