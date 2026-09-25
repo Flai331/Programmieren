@@ -171,4 +171,34 @@ class Storage {
       f.writeAsStringSync('$ts');
     } catch (_) {}
   }
+
+  static Future<File> get _sleepMarksFile async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File('${dir.path}/sleep_marks.json');
+  }
+
+  /// Gefundene Einschlaf-Stellen (bleiben erhalten, auch wenn die
+  /// Wachzeichen nach 14 Tagen gelöscht werden).
+  static Future<List<SleepGuess>> loadSleepMarks() async {
+    try {
+      final f = await _sleepMarksFile;
+      if (!f.existsSync()) return [];
+      final data = jsonDecode(f.readAsStringSync()) as List;
+      return [
+        for (final m in data)
+          SleepGuess.fromJson(Map<String, dynamic>.from(m as Map)),
+      ];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> saveSleepMarks(List<SleepGuess> marks) async {
+    try {
+      final f = await _sleepMarksFile;
+      final tmp = File('${f.path}.tmp');
+      tmp.writeAsStringSync(jsonEncode([for (final m in marks) m.toJson()]));
+      tmp.renameSync(f.path);
+    } catch (_) {}
+  }
 }

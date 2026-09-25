@@ -96,6 +96,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   int _selectedTab = 0;
   List<ActivityEvent> _activity = [];
   SleepGuess? _sleepGuess;
+  List<SleepGuess> _sleepMarks = [];
   int? _lastDismissedSleepAt;
 
   FilterRange _filterRange = FilterRange.all;
@@ -187,12 +188,23 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       // Sleep-Vorschlag berechnen
       final now = DateTime.now().millisecondsSinceEpoch;
       final guess = guessSleep(history, activity, now);
+      final stored = await Storage.loadSleepMarks();
+      final marks = mergeSleepMarks(
+        stored,
+        findSleepMarks(history, activity),
+        now,
+      );
+      if (marks.length != stored.length ||
+          (marks.isNotEmpty && marks.first.at != stored.first.at)) {
+        await Storage.saveSleepMarks(marks);
+      }
       _lastDismissedSleepAt ??= await Storage.loadDismissedSleepAt();
 
       if (!mounted) return;
       setState(() {
         _history = history;
         _activity = activity;
+        _sleepMarks = marks;
         _sleepGuess = (guess != null && guess.at != _lastDismissedSleepAt)
             ? guess
             : null;
@@ -248,6 +260,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
         ),
         HistoryScreen(
           history: _history,
+          sleepMarks: _sleepMarks,
           filterRange: _filterRange,
           filterKind: _filterKind,
           searchQuery: _searchQuery,
@@ -721,6 +734,7 @@ class _NowScreenState extends State<NowScreen> {
 
 class HistoryScreen extends StatefulWidget {
   final List<Entry> history;
+  final List<SleepGuess> sleepMarks;
   final FilterRange filterRange;
   final FilterKind filterKind;
   final String searchQuery;
@@ -733,6 +747,7 @@ class HistoryScreen extends StatefulWidget {
   const HistoryScreen({
     super.key,
     required this.history,
+    this.sleepMarks = const [],
     required this.filterRange,
     required this.filterKind,
     required this.searchQuery,
@@ -758,6 +773,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
       null,
       DateTime.now().millisecondsSinceEpoch,
     );
+    final marks = filterSleepMarks(
+      widget.sleepMarks,
+      widget.filterRange,
+      widget.filterKind,
+      widget.searchQuery,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+    // Einträge und Einschlaf-Stellen zeitlich gemischt, neueste zuerst.
+    int timeOf(Object o) => o is SleepGuess ? o.at : (o as Entry).startedAt;
+    final items = <Object>[...filtered, ...marks]
+      ..sort((a, b) => timeOf(b).compareTo(timeOf(a)));
 
     return Column(
       children: [
@@ -853,7 +879,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ),
         Expanded(
-          child: filtered.isEmpty
+          child: items.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -868,9 +894,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ),
                 )
               : ListView.builder(
-                  itemCount: filtered.length,
+                  itemCount: items.length,
                   itemBuilder: (context, index) {
-                    final entry = filtered[index];
+                    final item = items[index];
+                    if (item is SleepGuess) return SleepMarkCard(mark: item);
+                    final entry = item as Entry;
                     return HistoryEntryCard(
                       entry: entry,
                       onPin: (pinned) {
@@ -1216,6 +1244,42 @@ class _DiagnosticsCardState extends State<DiagnosticsCard> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Eintrag „😴 Eingeschlafen um …“ im Verlauf – antippen = dort weiterhören.
+class SleepMarkCard extends StatelessWidget {
+  final SleepGuess mark;
+
+  const SleepMarkCard({super.key, required this.mark});
+
+  @override
+  Widget build(BuildContext context) {
+    final d = DateTime.fromMillisecondsSinceEpoch(mark.at);
+    String two(int n) => n.toString().padLeft(2, '0');
+    const days = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    final when =
+        '${days[d.weekday - 1]} ${two(d.day)}.${two(d.month)}. um ${two(d.hour)}:${two(d.minute)}';
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      color: Colors.indigo.withValues(alpha: 0.12),
+      child: ListTile(
+        leading: const Text('😴', style: TextStyle(fontSize: 28)),
+        title: Text('Eingeschlafen $when'),
+        subtitle: Text(
+          '${mark.entry.groupTitle}\n'
+          '${mark.entry.title} · bei ${formatMs(mark.entry.positionMs)}\n'
+          'danach lief es noch ${mark.playedAfterMin} Min. · erkannt über ${mark.source}',
+        ),
+        isThreeLine: true,
+        trailing: IconButton(
+          icon: const Icon(Icons.play_arrow),
+          tooltip: 'Dort weiterhören',
+          onPressed: () => startResume(context, mark.entry),
+        ),
+        onTap: () => startResume(context, mark.entry),
       ),
     );
   }
