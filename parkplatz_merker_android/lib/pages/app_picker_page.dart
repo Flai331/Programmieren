@@ -5,7 +5,9 @@ import '../controller.dart';
 import '../native.dart';
 
 class AppPickerPage extends StatefulWidget {
-  const AppPickerPage({super.key});
+  final bool returnSelection;
+
+  const AppPickerPage({super.key, this.returnSelection = false});
 
   @override
   State<AppPickerPage> createState() => _AppPickerPageState();
@@ -51,12 +53,17 @@ class _AppPickerPageState extends State<AppPickerPage> {
   }
 
   void _selectApp(String? pkg, String? label) async {
-    final controller = context.read<AppController>();
-    await controller.updateConfig(
-      launchPackage: pkg ?? '',
-      launchLabel: label ?? '',
-    );
-    if (mounted) Navigator.pop(context);
+    if (widget.returnSelection) {
+      if (!mounted) return;
+      Navigator.pop(context, {'package': pkg, 'label': label});
+    } else {
+      final controller = context.read<AppController>();
+      await controller.updateConfig(
+        launchPackage: pkg ?? '',
+        launchLabel: label ?? '',
+      );
+      if (mounted) Navigator.pop(context);
+    }
   }
 
   @override

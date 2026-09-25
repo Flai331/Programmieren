@@ -21,7 +21,7 @@ class ForceStopService : AccessibilityService() {
 
     companion object {
         @Volatile var instance: ForceStopService? = null
-        private var pendingPkg: String? = null
+        private val pendingPkgs: ArrayDeque<String> = ArrayDeque()
         private var pendingSince = 0L
 
         fun isEnabled(ctx: Context): Boolean {
@@ -31,8 +31,12 @@ class ForceStopService : AccessibilityService() {
         }
 
         fun request(ctx: Context, pkg: String) {
-            pendingPkg = pkg
-            pendingSince = System.currentTimeMillis()
+            if (!pendingPkgs.contains(pkg)) {
+                pendingPkgs.addLast(pkg)
+            }
+            if (pendingSince == 0L) {
+                pendingSince = System.currentTimeMillis()
+            }
             instance?.tryRun()
             if (instance == null) {
                 EventLog.info(ctx, "Bedienungshilfe nicht aktiv")
@@ -87,14 +91,14 @@ class ForceStopService : AccessibilityService() {
     }
 
     private fun tryRun() {
-        val pkg = pendingPkg ?: return
+        if (step != 0) return
+        val pkg = pendingPkgs.peekFirst() ?: return
         val now = System.currentTimeMillis()
         if (now - pendingSince > (30 * 60 * 1000L)) {
-            pendingPkg = null
+            pendingPkgs.clear()
+            pendingSince = 0L
             return
         }
-
-        if (step != 0) return
 
         val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
         if (!pm.isInteractive) return
@@ -226,13 +230,16 @@ class ForceStopService : AccessibilityService() {
     }
 
     private fun finish(reason: String) {
-        val pkg = pendingPkg ?: ""
+        val pkg = pendingPkgs.peekFirst() ?: ""
         EventLog.info(this, "Beenden erzwingen ($pkg): $reason")
-        pendingPkg = null
+        pendingPkgs.removeFirstOrNull()
         step = 0
         unlockRunnable?.let { handler.removeCallbacks(it) }
         handler.postDelayed({
             performGlobalAction(GLOBAL_ACTION_HOME)
+            handler.postDelayed({
+                tryRun()
+            }, 1500L)
         }, 500L)
     }
 

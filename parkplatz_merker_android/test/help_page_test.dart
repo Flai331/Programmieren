@@ -8,9 +8,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Anleitung'), findsOneWidget);
     expect(find.text('Erste Schritte'), findsOneWidget);
-    expect(find.text('App beim Aussteigen komplett beenden'), findsOneWidget);
+    expect(find.text('Apps beim Aussteigen komplett beenden'), findsOneWidget);
     // Aufgeklappter Abschnitt zeigt seinen Text.
     expect(find.textContaining('Benachrichtigungszugriff'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Anleitung enthält neuen Abschnitt „Lautstärke"', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: HelpPage(open: HelpTopic.volume)));
+    await tester.pumpAndSettle();
+    expect(find.text('Lautstärke im Auto anpassen'), findsOneWidget);
+    expect(find.textContaining('Lautstärke-Profil'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 }

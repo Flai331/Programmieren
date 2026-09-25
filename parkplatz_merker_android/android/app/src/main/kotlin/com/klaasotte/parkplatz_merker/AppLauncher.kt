@@ -24,7 +24,11 @@ object AppLauncher {
         val wasPresent = (Config.devicePresent && (now - Config.devicePresentAt) < FRESH_MS)
         Config.devicePresent = true
         Config.devicePresentAt = now
-        if (!wasPresent) launch(appCtx)
+        if (!wasPresent) {
+            if (Config.deviceMode != "none") {
+                CarSession.start(appCtx)
+            }
+        }
     }
 
     fun miss(ctx: Context, strong: Boolean) {
@@ -33,13 +37,142 @@ object AppLauncher {
         if ((strong) || (misses >= 2)) {
             Config.devicePresent = false
             misses = 0
-            if (Config.closeOnGone) close(ctx.applicationContext)
+            if (Config.deviceMode != "none") {
+                CarSession.end(ctx.applicationContext)
+            }
         }
     }
 
     fun reset() {
         Config.devicePresent = false
         misses = 0
+    }
+
+    fun launchAll(ctx: Context, fromForeground: Boolean = false) {
+        val appCtx = ctx.applicationContext
+        val appsJson = Config.launchApps
+        if (appsJson.isEmpty()) return
+
+        try {
+            val ja = org.json.JSONArray(appsJson)
+            for (i in 0 until ja.length()) {
+                val obj = ja.getJSONObject(i)
+                val pkg = obj.getString("package")
+                val label = obj.getString("label")
+                val closeActionIdx = obj.getInt("closeActionIndex")
+                val closeActionTitle = obj.getString("closeActionTitle")
+
+                Handler(Looper.getMainLooper()).postDelayed({
+                    launchOne(appCtx, pkg, label, closeActionIdx, closeActionTitle, fromForeground, i)
+                }, i * 1500L)
+            }
+        } catch (e: Exception) {
+            EventLog.info(appCtx, "launchAll Fehler: ${e.message}")
+        }
+    }
+
+    private fun launchOne(ctx: Context, pkg: String, label: String, closeActionIdx: Int, closeActionTitle: String, fromForeground: Boolean, notifId: Int) {
+        if (pkg.isEmpty()) return
+        val pm = ctx.packageManager
+        val intent = pm.getLaunchIntentForPackage(pkg) ?: run {
+            EventLog.info(ctx, "App-Start: $pkg nicht gefunden")
+            return
+        }
+        intent.addFlags((Intent.FLAG_ACTIVITY_NEW_TASK) or (Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED))
+
+        if (fromForeground || Settings.canDrawOverlays(ctx)) {
+            try {
+                ctx.startActivity(intent)
+                EventLog.info(ctx, "App geöffnet: $label")
+                return
+            } catch (e: Exception) {
+                EventLog.info(ctx, "App-Start Fehler: ${e.message}")
+            }
+        }
+
+        val nm = NotificationManagerCompat.from(ctx)
+        if (!nm.areNotificationsEnabled()) return
+
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            ctx, (60 + notifId), intent,
+            (android.app.PendingIntent.FLAG_IMMUTABLE) or (android.app.PendingIntent.FLAG_UPDATE_CURRENT)
+        )
+        val notification = NotificationCompat.Builder(ctx, Notifications.CHANNEL_APP)
+            .setSmallIcon(R.drawable.ic_car)
+            .setContentTitle("$label öffnen")
+            .setContentText("Dein Auto ist erkannt – tippe zum Öffnen.")
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        try {
+            nm.notify((40 + notifId), notification)
+        } catch (e: SecurityException) {
+            // Benachrichtigungen nicht erlaubt
+        }
+        EventLog.info(ctx, "App-Start: Hinweis gezeigt (Berechtigung „Über anderen Apps" fehlt)")
+    }
+
+    fun closeAll(ctx: Context, fromForeground: Boolean = false) {
+        val appCtx = ctx.applicationContext
+        val appsJson = Config.launchApps
+        if (appsJson.isEmpty()) return
+
+        try {
+            val ja = org.json.JSONArray(appsJson)
+            val nm = NotificationManagerCompat.from(appCtx)
+            for (i in 0 until ja.length()) {
+                val obj = ja.getJSONObject(i)
+                val pkg = obj.getString("package")
+                val closeActionTitle = obj.getString("closeActionTitle")
+                val closeActionIdx = obj.getInt("closeActionIndex")
+                nm.cancel((40 + i))
+                NotifListener.pressStop(pkg, closeActionTitle, closeActionIdx)
+            }
+
+            if (fromForeground || Settings.canDrawOverlays(appCtx)) {
+                try {
+                    val homeIntent = Intent(Intent.ACTION_MAIN)
+                        .addCategory(Intent.CATEGORY_HOME)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    appCtx.startActivity(homeIntent)
+                } catch (e: Exception) {
+                    // ignore
+                }
+            }
+
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    val am = appCtx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+                    for (i in 0 until ja.length()) {
+                        val obj = ja.getJSONObject(i)
+                        val pkg = obj.getString("package")
+                        am?.killBackgroundProcesses(pkg)
+                    }
+                } catch (e: Exception) {
+                    // ignore
+                }
+                EventLog.info(appCtx, "Apps geschlossen (Startbildschirm + beenden versucht)")
+            }, 1500L)
+
+            if (Config.forceStopFallback) {
+                Handler(Looper.getMainLooper()).postDelayed({
+                    try {
+                        for (i in 0 until ja.length()) {
+                            val obj = ja.getJSONObject(i)
+                            val pkg = obj.getString("package")
+                            if (NotifListener.hasNotification(pkg)) {
+                                ForceStopService.request(appCtx, pkg)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // ignore
+                    }
+                }, 4000L)
+            }
+        } catch (e: Exception) {
+            EventLog.info(appCtx, "closeAll Fehler: ${e.message}")
+        }
     }
 
     /** [fromForeground]: Aufruf aus der sichtbaren App (Test) – dann ist Starten immer erlaubt. */

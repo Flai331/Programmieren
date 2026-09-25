@@ -27,51 +27,49 @@ class NativeBridge {
     try {
       final result = await _channel.invokeMethod('getConfig');
       if (result is Map<Object?, Object?>) {
-        return Map<String, dynamic>.from(result);
+        final map = Map<String, dynamic>.from(result);
+        if (map['launchApps'] is List) {
+          map['launchApps'] = List<Map<String, dynamic>>.from(
+            (map['launchApps'] as List).map((a) {
+              if (a is Map<Object?, Object?>) {
+                return Map<String, dynamic>.from(a);
+              }
+              return a as Map<String, dynamic>;
+            }),
+          );
+        }
+        return map;
       }
-      return {
-        'activityEnabled': true,
-        'chargerEnabled': true,
-        'deviceMode': 'none',
-        'deviceAddress': null,
-        'deviceName': null,
-        'launchPackage': '',
-        'launchLabel': '',
-        'closeOnGone': true,
-        'closeActionTitle': '',
-        'closeActionIndex': -1,
-        'forceStopFallback': false,
-      };
+      return _defaultConfig();
     } on PlatformException catch (e) {
-      print('getConfig error: ${e.message}');
-      return {
-        'activityEnabled': true,
-        'chargerEnabled': true,
-        'deviceMode': 'none',
-        'deviceAddress': null,
-        'deviceName': null,
-        'launchPackage': '',
-        'launchLabel': '',
-        'closeOnGone': true,
-        'closeActionTitle': '',
-        'closeActionIndex': -1,
-        'forceStopFallback': false,
-      };
+      debugPrint('getConfig error: ${e.message}');
+      return _defaultConfig();
     } on MissingPluginException {
-      return {
-        'activityEnabled': true,
-        'chargerEnabled': true,
-        'deviceMode': 'none',
-        'deviceAddress': null,
-        'deviceName': null,
-        'launchPackage': '',
-        'launchLabel': '',
-        'closeOnGone': true,
-        'closeActionTitle': '',
-        'closeActionIndex': -1,
-        'forceStopFallback': false,
-      };
+      return _defaultConfig();
     }
+  }
+
+  static Map<String, dynamic> _defaultConfig() {
+    return {
+      'activityEnabled': true,
+      'chargerEnabled': true,
+      'deviceMode': 'none',
+      'deviceAddress': null,
+      'deviceName': null,
+      'launchPackage': '',
+      'launchLabel': '',
+      'launchApps': <Map<String, dynamic>>[],
+      'closeOnGone': true,
+      'closeActionTitle': '',
+      'closeActionIndex': -1,
+      'forceStopFallback': false,
+      'volumeEnabled': false,
+      'volMusic': -1,
+      'volRing': -1,
+      'volNotification': -1,
+      'ringerMode': 'keep',
+      'volumeRestore': true,
+    };
   }
 
   /// Setzt die Konfiguration.
@@ -87,6 +85,13 @@ class NativeBridge {
     String? closeActionTitle,
     int? closeActionIndex,
     bool? forceStopFallback,
+    List<Map<String, dynamic>>? launchApps,
+    bool? volumeEnabled,
+    int? volMusic,
+    int? volRing,
+    int? volNotification,
+    String? ringerMode,
+    bool? volumeRestore,
   }) async {
     try {
       final params = <String, dynamic>{};
@@ -101,11 +106,18 @@ class NativeBridge {
       if (closeActionTitle != null) params['closeActionTitle'] = closeActionTitle;
       if (closeActionIndex != null) params['closeActionIndex'] = closeActionIndex;
       if (forceStopFallback != null) params['forceStopFallback'] = forceStopFallback;
+      if (launchApps != null) params['launchApps'] = launchApps;
+      if (volumeEnabled != null) params['volumeEnabled'] = volumeEnabled;
+      if (volMusic != null) params['volMusic'] = volMusic;
+      if (volRing != null) params['volRing'] = volRing;
+      if (volNotification != null) params['volNotification'] = volNotification;
+      if (ringerMode != null) params['ringerMode'] = ringerMode;
+      if (volumeRestore != null) params['volumeRestore'] = volumeRestore;
       await _channel.invokeMethod('setConfig', params);
     } on PlatformException catch (e) {
-      print('setConfig error: ${e.message}');
+      debugPrint('setConfig error: ${e.message}');
     } on MissingPluginException {
-      print('setConfig: platform not available');
+      debugPrint('setConfig: platform not available');
     }
   }
 
@@ -314,9 +326,9 @@ class NativeBridge {
   }
 
   /// Listet Ausschaltknopf-Optionen auf.
-  static Future<Map<String, dynamic>> listCloseActions() async {
+  static Future<Map<String, dynamic>> listCloseActions(String? package) async {
     try {
-      final result = await _channel.invokeMethod('listCloseActions');
+      final result = await _channel.invokeMethod('listCloseActions', {'package': package});
       if (result is Map<Object?, Object?>) {
         final map = Map<String, dynamic>.from(result);
         // Einträge von Android kommen als Map<Object?, Object?> an.
@@ -425,6 +437,55 @@ class NativeBridge {
       debugPrint('backgroundDone error: ${e.message}');
     } on MissingPluginException {
       debugPrint('backgroundDone: platform not available');
+    }
+  }
+
+  /// Holt Lautstärke-Info.
+  static Future<Map<String, dynamic>> getVolumeInfo() async {
+    try {
+      final result = await _channel.invokeMethod('getVolumeInfo');
+      if (result is Map<Object?, Object?>) {
+        return Map<String, dynamic>.from(result);
+      }
+      return {};
+    } on PlatformException catch (e) {
+      debugPrint('getVolumeInfo error: ${e.message}');
+      return {};
+    } on MissingPluginException {
+      return {};
+    }
+  }
+
+  /// Wendet Lautstärke-Profil an.
+  static Future<void> applyVolumeNow() async {
+    try {
+      await _channel.invokeMethod('applyVolumeNow');
+    } on PlatformException catch (e) {
+      debugPrint('applyVolumeNow error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('applyVolumeNow: platform not available');
+    }
+  }
+
+  /// Stellt Lautstärke zurück.
+  static Future<void> restoreVolumeNow() async {
+    try {
+      await _channel.invokeMethod('restoreVolumeNow');
+    } on PlatformException catch (e) {
+      debugPrint('restoreVolumeNow error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('restoreVolumeNow: platform not available');
+    }
+  }
+
+  /// Öffnet Nicht-stören-Zugriff-Einstellungen.
+  static Future<void> openDndSettings() async {
+    try {
+      await _channel.invokeMethod('openDndSettings');
+    } on PlatformException catch (e) {
+      debugPrint('openDndSettings error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('openDndSettings: platform not available');
     }
   }
 }

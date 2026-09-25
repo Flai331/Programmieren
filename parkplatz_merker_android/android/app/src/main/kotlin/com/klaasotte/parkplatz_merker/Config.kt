@@ -90,7 +90,78 @@ object Config {
         get() = prefs().getBoolean("forceStopFallback", false)
         set(value) = prefs().edit().putBoolean("forceStopFallback", value).apply()
 
+    var launchApps: String
+        get() = prefs().getString("launchApps", "") ?: ""
+        set(value) = prefs().edit().putString("launchApps", value).apply()
+
+    var volumeEnabled: Boolean
+        get() = prefs().getBoolean("volumeEnabled", false)
+        set(value) = prefs().edit().putBoolean("volumeEnabled", value).apply()
+
+    var volMusic: Int
+        get() = prefs().getInt("volMusic", -1)
+        set(value) = prefs().edit().putInt("volMusic", value).apply()
+
+    var volRing: Int
+        get() = prefs().getInt("volRing", -1)
+        set(value) = prefs().edit().putInt("volRing", value).apply()
+
+    var volNotification: Int
+        get() = prefs().getInt("volNotification", -1)
+        set(value) = prefs().edit().putInt("volNotification", value).apply()
+
+    var ringerMode: String
+        get() = prefs().getString("ringerMode", "keep") ?: "keep"
+        set(value) = prefs().edit().putString("ringerMode", value).apply()
+
+    var volumeRestore: Boolean
+        get() = prefs().getBoolean("volumeRestore", true)
+        set(value) = prefs().edit().putBoolean("volumeRestore", value).apply()
+
+    var savedVolumes: String
+        get() = prefs().getString("savedVolumes", "") ?: ""
+        set(value) = prefs().edit().putString("savedVolumes", value).apply()
+
+    var sessionActive: Boolean
+        get() = prefs().getBoolean("sessionActive", false)
+        set(value) = prefs().edit().putBoolean("sessionActive", value).apply()
+
+    var sessionSince: Long
+        get() = prefs().getLong("sessionSince", 0L)
+        set(value) = prefs().edit().putLong("sessionSince", value).apply()
+
     fun getConfig(): Map<String, Any?> {
+        val launchAppsList = try {
+            val json = launchApps
+            if (json.isEmpty()) {
+                // Migration: wenn launchPackage gesetzt ist
+                if (launchPackage.isNotEmpty()) {
+                    listOf(mapOf(
+                        "package" to launchPackage,
+                        "label" to launchLabel,
+                        "closeActionIndex" to closeActionIndex,
+                        "closeActionTitle" to closeActionTitle
+                    ))
+                } else {
+                    emptyList()
+                }
+            } else {
+                org.json.JSONArray(json).let { ja ->
+                    (0 until ja.length()).map { i ->
+                        val obj = ja.getJSONObject(i)
+                        mapOf(
+                            "package" to obj.getString("package"),
+                            "label" to obj.getString("label"),
+                            "closeActionIndex" to obj.getInt("closeActionIndex"),
+                            "closeActionTitle" to obj.getString("closeActionTitle")
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+
         return mapOf(
             "activityEnabled" to activityEnabled,
             "chargerEnabled" to chargerEnabled,
@@ -99,10 +170,17 @@ object Config {
             "deviceName" to deviceName,
             "launchPackage" to launchPackage,
             "launchLabel" to launchLabel,
+            "launchApps" to launchAppsList,
             "closeOnGone" to closeOnGone,
             "closeActionTitle" to closeActionTitle,
             "closeActionIndex" to closeActionIndex,
-            "forceStopFallback" to forceStopFallback
+            "forceStopFallback" to forceStopFallback,
+            "volumeEnabled" to volumeEnabled,
+            "volMusic" to volMusic,
+            "volRing" to volRing,
+            "volNotification" to volNotification,
+            "ringerMode" to ringerMode,
+            "volumeRestore" to volumeRestore
         )
     }
 
@@ -118,5 +196,33 @@ object Config {
         config["closeActionTitle"]?.let { (it as? String)?.let { v -> closeActionTitle = v } }
         config["closeActionIndex"]?.let { (it as? Number)?.toInt()?.let { v -> closeActionIndex = v } }
         config["forceStopFallback"]?.let { (it as? Boolean)?.let { v -> forceStopFallback = v } }
+
+        config["launchApps"]?.let { apps ->
+            if (apps is List<*>) {
+                try {
+                    val ja = org.json.JSONArray()
+                    for (app in apps) {
+                        if (app is Map<*, *>) {
+                            val obj = org.json.JSONObject()
+                            obj.put("package", (app["package"] as? String) ?: "")
+                            obj.put("label", (app["label"] as? String) ?: "")
+                            obj.put("closeActionIndex", ((app["closeActionIndex"] as? Number)?.toInt()) ?: -1)
+                            obj.put("closeActionTitle", (app["closeActionTitle"] as? String) ?: "")
+                            ja.put(obj)
+                        }
+                    }
+                    launchApps = ja.toString()
+                } catch (e: Exception) {
+                    // ignore
+                }
+            }
+        }
+
+        config["volumeEnabled"]?.let { (it as? Boolean)?.let { v -> volumeEnabled = v } }
+        config["volMusic"]?.let { (it as? Number)?.toInt()?.let { v -> volMusic = v } }
+        config["volRing"]?.let { (it as? Number)?.toInt()?.let { v -> volRing = v } }
+        config["volNotification"]?.let { (it as? Number)?.toInt()?.let { v -> volNotification = v } }
+        config["ringerMode"]?.let { (it as? String)?.let { v -> ringerMode = v } }
+        config["volumeRestore"]?.let { (it as? Boolean)?.let { v -> volumeRestore = v } }
     }
 }
