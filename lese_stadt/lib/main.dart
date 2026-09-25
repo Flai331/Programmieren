@@ -7,12 +7,18 @@ import 'state/city_store.dart';
 import 'ui/book_screens.dart';
 import 'ui/chronicle_screen.dart';
 import 'ui/city_screen.dart';
+import 'ui/sprites.dart';
 import 'ui/common.dart';
 import 'ui/year_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('de');
+  try {
+    Sprites.instance = await Sprites.load();
+  } catch (_) {
+    // Ohne Bilder wird die Stadt gezeichnet.
+  }
   final store = CityStore(AppDatabase());
   runApp(LeseStadtApp(store: store));
   await store.load();

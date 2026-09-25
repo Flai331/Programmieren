@@ -22,6 +22,7 @@ Flutter-App, die Lesen in den Aufbau einer eigenen Stadt verwandelt: gelesene Se
 - Flutter, Datenbank lokal mit Drift (`lib/data/db.dart`, generiert: `db.g.dart`)
 - Spiellogik als reine Funktionen in `lib/logic/`, getestet in `test/`
 - Stadtansicht mit `CustomPainter` (isometrisch) statt Flame: weniger Abhängigkeiten, Zoomen/Verschieben über `InteractiveViewer`
+- Gebäude und Boden sind mit Blender gerenderte 3D-Bilder (`assets/sprites/`, je Gebäude mit Fenstern auch eine Nachtversion mit erleuchteten Fenstern). Fehlen sie, wird die Stadt vereinfacht gezeichnet.
 - Materialbestand, Stadtstufe, Aktivität und Nahziel werden berechnet, nicht gespeichert
 
 Abweichungen vom Datenmodell im Konzept: `Book` hat zusätzlich `hinzugefuegtAm` und `beendetAm`, `Building` hat `jahr` und `gebautAm` (für Jahresprojekt und Zeitraffer). `Inventory` und `BuildingType` sind keine Tabellen: der Bestand wird berechnet, die Gebäudetypen stehen in `lib/model/catalog.dart`.
@@ -33,6 +34,14 @@ flutter pub get
 dart run build_runner build   # nach Änderungen an lib/data/db.dart
 flutter analyze
 flutter test
+```
+
+Gebäudebilder neu rendern (braucht Python 3.11 mit `bpy` und `pillow`):
+
+```bash
+pip install "bpy==4.2.*" pillow
+python tools/sprites/render_sprites.py /tmp/sprites          # alle, oder einzelne Namen anhängen
+python tools/sprites/to_webp.py /tmp/sprites assets/sprites
 ```
 
 Die APK baut der Workflow `.github/workflows/lese-stadt-apk.yml` und hängt sie als Artifact an den Lauf.

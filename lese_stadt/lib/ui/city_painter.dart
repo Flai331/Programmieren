@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -7,6 +8,7 @@ import '../logic/economy.dart';
 import '../logic/progress.dart';
 import '../logic/series.dart';
 import '../model/catalog.dart';
+import 'sprites.dart';
 
 const tileW = 64.0;
 const tileH = 32.0;
@@ -113,9 +115,14 @@ class CityPainter extends CustomPainter {
     this.animation,
     this.highlight,
     this.placing = false,
-  }) : super(repaint: animation);
+    Sprites? sprites,
+  }) : sprites = sprites ?? Sprites.instance,
+       super(repaint: animation);
 
   final CityScene scene;
+
+  /// Gerenderte Gebäudebilder; ohne sie wird die Stadt gezeichnet.
+  final Sprites? sprites;
 
   /// Animationsphase 0…1 für die Leute auf den Straßen.
   final Animation<double>? animation;
@@ -187,8 +194,172 @@ class CityPainter extends CustomPainter {
     );
   }
 
+  // ------------------------------------------------------------ Bilder
+
+  bool get _lichter =>
+      scene.nacht && scene.belebung.index >= Belebung.licht.index;
+
+  static const _nachtFilter = ColorFilter.mode(
+    Color(0xFF5A6690),
+    BlendMode.modulate,
+  );
+
+  // Blass und halb durchsichtig: Bauplan eines Buchs auf der Wunschliste.
+  static const _geistFilter = ColorFilter.matrix(<double>[
+    0.25, 0.25, 0.25, 0, 150, //
+    0.25, 0.25, 0.25, 0, 160,
+    0.25, 0.25, 0.25, 0, 185,
+    0, 0, 0, 0.45, 0,
+  ]);
+
+  static const _geistNachtFilter = ColorFilter.matrix(<double>[
+    0.2, 0.2, 0.2, 0, 60, //
+    0.2, 0.2, 0.2, 0, 70,
+    0.2, 0.2, 0.2, 0, 100,
+    0, 0, 0, 0.4, 0,
+  ]);
+
+  double get _bildSkala => tileW / Sprites.feldBreite;
+
+  /// Zeichnet das Bild [name] auf Feld (x, y). False, wenn es fehlt.
+  bool _sprite(Canvas canvas, String name, int x, int y, {bool geist = false}) {
+    final s = sprites;
+    if (s == null) return false;
+    ui.Image? bild = !geist && _lichter ? s['${name}_nacht'] : null;
+    ColorFilter? filter = geist
+        ? (scene.nacht ? _geistNachtFilter : _geistFilter)
+        : null;
+    if (bild == null) {
+      bild = s[name];
+      if (bild == null) return false;
+      if (scene.nacht && !geist) filter = _nachtFilter;
+    }
+    final k = _bildSkala;
+    final c = scene.toScreen(x + 0.5, y + 0.5);
+    canvas.drawImageRect(
+      bild,
+      Rect.fromLTWH(0, 0, bild.width.toDouble(), bild.height.toDouble()),
+      Rect.fromLTWH(
+        c.dx - Sprites.anker.dx * k,
+        c.dy - Sprites.anker.dy * k,
+        Sprites.groesse.width * k,
+        Sprites.groesse.height * k,
+      ),
+      Paint()
+        ..filterQuality = FilterQuality.medium
+        ..colorFilter = filter,
+    );
+    return true;
+  }
+
+  String _gras(int x, int y) =>
+      (x * 7 + y * 13) % 3 == 0 ? 'boden_gras2' : 'boden_gras1';
+
+  void _overlay(Canvas canvas, int x, int y, Color color) => canvas.drawPath(
+    _diamond(x.toDouble(), y.toDouble()),
+    Paint()..color = color,
+  );
+
+  bool _paintGroundSprites(Canvas canvas, Set<(int, int)> belegt) {
+    if (sprites?['boden_gras1'] == null) return false;
+    for (var x = 0; x < scene.size; x++) {
+      for (var y = 0; y < scene.size; y++) {
+        _sprite(canvas, _gras(x, y), x, y);
+        if (placing && !belegt.contains((x, y))) {
+          _overlay(canvas, x, y, Colors.yellow.withValues(alpha: 0.28));
+        }
+      }
+    }
+    for (final (x, y) in scene.roads) {
+      _sprite(canvas, 'boden_strasse', x, y);
+    }
+    for (final d in scene.districts) {
+      final tint = (d.genre?.material.color ?? Colors.grey).withValues(
+        alpha: 0.16,
+      );
+      for (var i = 0; i < d.breite * d.hoehe; i++) {
+        final x = d.x0 + i % d.breite, y = d.y0 + i ~/ d.breite;
+        _sprite(canvas, _gras(x, y), x, y);
+        _overlay(canvas, x, y, tint);
+      }
+    }
+    return true;
+  }
+
+  bool _paintBuildingSprite(Canvas canvas, Building b, BuildingType type) {
+    switch (type.id) {
+      case 'strasse':
+        return _sprite(canvas, 'boden_strasse', b.x, b.y);
+      case 'baum':
+        return _sprite(
+          canvas,
+          (b.x * 31 + b.y * 17).isEven ? 'baum' : 'baum2',
+          b.x,
+          b.y,
+        );
+      case typBuchDenkmal:
+        final book = scene.booksById[b.bookId];
+        if (book == null) return true;
+        switch (book.status) {
+          case BookStatus.wunsch:
+            return _sprite(canvas, 'haus', b.x, b.y, geist: true);
+          case BookStatus.lesend:
+            final gelesen = scene.pagesPerBook[book.id] ?? 0;
+            final p = book.seitenGesamt <= 0
+                ? 0.0
+                : gelesen / book.seitenGesamt;
+            final stufe = p < 1 / 3 ? 1 : (p < 2 / 3 ? 2 : 3);
+            return _sprite(canvas, 'baustelle$stufe', b.x, b.y);
+          case BookStatus.beendet:
+            final genre = book.genres.isEmpty
+                ? 'neutral'
+                : book.genres.first.name;
+            return _sprite(canvas, 'buch_$genre', b.x, b.y);
+        }
+      case typJahresprojekt:
+        final prog = b.jahr == null ? null : scene.years[b.jahr];
+        if (prog == null || prog.ziel <= 0) return true;
+        final teile = prog.fertig
+            ? 4
+            : (prog.abschnitte * 4 / prog.ziel).floor().clamp(0, 4);
+        final name = prog.fertig ? 'jahr_fertig' : 'jahr$teile';
+        if (!_sprite(canvas, name, b.x, b.y)) return false;
+        final hoehe = 0.06 + teile * 0.23 + (prog.fertig ? 0.46 : 0.12);
+        final top =
+            scene.toScreen(b.x + 0.5, b.y + 0.5) -
+            Offset(0, hoehe * Sprites.pxProHoehe * _bildSkala);
+        _yearDecor(canvas, prog, b, top);
+        return true;
+      default:
+        return _sprite(canvas, type.id, b.x, b.y);
+    }
+  }
+
+  bool _paintPlotSprite(Canvas canvas, SeriesPlot p, District d) {
+    final genre = d.genre?.name ?? 'neutral';
+    return switch (p.state) {
+      PlotState.geist => _sprite(
+        canvas,
+        'reihe_neutral',
+        p.x,
+        p.y,
+        geist: true,
+      ),
+      PlotState.geruest => _sprite(canvas, 'geruest', p.x, p.y),
+      PlotState.baustelle => _sprite(canvas, 'baustelle2', p.x, p.y),
+      PlotState.fertig => _sprite(canvas, 'reihe_$genre', p.x, p.y),
+      PlotState.wahrzeichen => _sprite(canvas, 'wahrzeichen', p.x, p.y),
+    };
+  }
+
+  // ------------------------------------------------------------ Zeichnung
+
   void _paintGround(Canvas canvas) {
     final belegt = {for (final b in scene.buildings) (b.x, b.y)};
+    if (_paintGroundSprites(canvas, belegt)) {
+      _paintHighlight(canvas);
+      return;
+    }
     for (var x = 0; x < scene.size; x++) {
       for (var y = 0; y < scene.size; y++) {
         var c = (x + y).isEven
@@ -213,6 +384,10 @@ class CityPainter extends CustomPainter {
         _tile(canvas, d.x0 + i % d.breite, d.y0 + i ~/ d.breite, base);
       }
     }
+    _paintHighlight(canvas);
+  }
+
+  void _paintHighlight(Canvas canvas) {
     if (highlight != null) {
       canvas.drawPath(
         _diamond(highlight!.$1.toDouble(), highlight!.$2.toDouble()),
@@ -398,6 +573,7 @@ class CityPainter extends CustomPainter {
   void _paintBuilding(Canvas canvas, Building b) {
     final type = typeById(b.typeId);
     if (type == null) return;
+    if (_paintBuildingSprite(canvas, b, type)) return;
     switch (type.id) {
       case 'strasse':
         _tile(canvas, b.x, b.y, const Color(0xFF9E9A92));
@@ -581,6 +757,11 @@ class CityPainter extends CustomPainter {
       _scaffold(canvas, b.x, b.y, base);
     }
     final top = scene.toScreen(b.x + 0.5, b.y + 0.5) - Offset(0, base + 14);
+    _yearDecor(canvas, prog, b, top);
+  }
+
+  /// Extras bei Übererfüllung und die Jahreszahl am Jahresbauwerk.
+  void _yearDecor(Canvas canvas, YearProgress prog, Building b, Offset top) {
     for (final e in prog.extras) {
       switch (e) {
         case Extra.fahnen:
@@ -620,6 +801,7 @@ class CityPainter extends CustomPainter {
   }
 
   void _paintPlot(Canvas canvas, SeriesPlot p, District d) {
+    if (_paintPlotSprite(canvas, p, d)) return;
     final color = d.genre?.material.color ?? const Color(0xFFC9A36B);
     switch (p.state) {
       case PlotState.geist:
@@ -778,5 +960,6 @@ class CityPainter extends CustomPainter {
       old.scene != scene ||
       old.animation != animation ||
       old.highlight != highlight ||
-      old.placing != placing;
+      old.placing != placing ||
+      old.sprites != sprites;
 }
