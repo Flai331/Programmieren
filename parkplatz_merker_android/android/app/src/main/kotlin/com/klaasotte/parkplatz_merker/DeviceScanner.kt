@@ -30,6 +30,10 @@ class DeviceScanner(context: Context) {
     private val ctx: Context = context.applicationContext
     private val handler = Handler(Looper.getMainLooper())
 
+    // Listener und Hit-Callback für App-Launcher
+    var listener: ((found: Boolean, ok: Boolean) -> Unit)? = null
+    var onHit: (() -> Unit)? = null
+
     private val adapter: BluetoothAdapter?
         get() = (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
 
@@ -139,6 +143,7 @@ class DeviceScanner(context: Context) {
         val a = adapter
         if (err != null || a == null) {
             logScan("transmitter", target, start, false, false, null, err ?: "Kein Bluetooth vorhanden")
+            listener?.invoke(false, false)
             onDone()
             return
         }
@@ -157,6 +162,7 @@ class DeviceScanner(context: Context) {
                 val device = deviceFrom(intent) ?: return
                 if (!device.address.equals(roundTarget, ignoreCase = true)) return
                 roundFound = true
+                onHit?.invoke()
                 val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE)
                 if (rssi != Short.MIN_VALUE) noteRssi(rssi.toInt())
             }
@@ -182,6 +188,7 @@ class DeviceScanner(context: Context) {
                     override fun onScanResult(callbackType: Int, result: ScanResult) {
                         if (result.device.address.equals(roundTarget, ignoreCase = true)) {
                             roundFound = true
+                            onHit?.invoke()
                             noteRssi(result.rssi)
                         }
                     }
@@ -218,6 +225,7 @@ class DeviceScanner(context: Context) {
         unregisterSafe(roundReceiver)
         roundReceiver = null
         logScan("transmitter", roundTarget, roundStart, true, roundFound, roundRssi, null)
+        listener?.invoke(roundFound, true)
         val done = roundOnDone
         roundOnDone = null
         done?.invoke()
@@ -253,6 +261,7 @@ class DeviceScanner(context: Context) {
                 override fun onScanResult(callbackType: Int, result: ScanResult) {
                     if (result.device.address.equals(beaconTarget, ignoreCase = true)) {
                         windowHit = true
+                        onHit?.invoke()
                         val best = windowRssi
                         windowRssi = if (best == null || result.rssi > best) result.rssi else best
                     }
@@ -275,6 +284,7 @@ class DeviceScanner(context: Context) {
         val target = beaconTarget ?: return
         val err = beaconError
         logScan("beacon", target, windowStart, err == null, windowHit, windowRssi, err)
+        listener?.invoke(windowHit, err == null)
         windowStart = System.currentTimeMillis()
         windowHit = false
         windowRssi = null

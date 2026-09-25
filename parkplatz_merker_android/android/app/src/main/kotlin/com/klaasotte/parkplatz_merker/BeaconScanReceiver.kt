@@ -32,6 +32,7 @@ class BeaconScanReceiver : BroadcastReceiver() {
                     obj.put("target", Config.deviceAddress)
                     obj.put("rssi", result.rssi)
                     EventLog.append(context, obj)
+                    AppLauncher.seen(context)
                 }
             }
         }

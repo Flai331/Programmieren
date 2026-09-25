@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../controller.dart';
 import '../native.dart';
+import 'app_picker_page.dart';
 import 'diagnostics_page.dart';
 import 'search_page.dart';
 
@@ -15,6 +16,7 @@ class SetupState {
   final bool bluetooth;
   final bool notifications;
   final bool battery;
+  final bool overlay;
 
   const SetupState({
     required this.location,
@@ -23,6 +25,7 @@ class SetupState {
     required this.bluetooth,
     required this.notifications,
     required this.battery,
+    required this.overlay,
   });
 
   /// Das Nötigste für die automatische Erkennung.
@@ -40,6 +43,7 @@ class SetupState {
           await Permission.bluetoothConnect.isGranted,
       notifications: await Permission.notification.isGranted,
       battery: status['ignoringBatteryOptimizations'] == true,
+      overlay: status['overlayAllowed'] == true,
     );
   }
 }
@@ -165,6 +169,46 @@ class _SettingsPageState extends State<SettingsPage>
               'Nur während einer Fahrt wird alle 2 Minuten kurz gesucht.',
             ),
           ),
+          if (deviceMode != 'none') ...[
+            const Divider(),
+            const _Header('App im Auto'),
+            ListTile(
+              title: const Text('App öffnen, wenn das Gerät erkannt wird'),
+              subtitle: Text(
+                ((config['launchPackage'] as String?) ?? '').isEmpty
+                    ? 'Keine'
+                    : config['launchLabel'] as String? ?? 'App',
+              ),
+              trailing: FilledButton.tonal(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AppPickerPage(),
+                  ),
+                ),
+                child: const Text('Wählen'),
+              ),
+            ),
+            SwitchListTile(
+              title: const Text('Beim Aussteigen schließen'),
+              subtitle: const Text(
+                'Wechselt zum Startbildschirm und beendet die App, wenn Android es erlaubt. '
+                'Läuft sie mit eigener Benachrichtigung weiter, beende sie dort.',
+              ),
+              value: config['closeOnGone'] != false,
+              onChanged: (v) => controller.updateConfig(closeOnGone: v),
+            ),
+            if (setup != null)
+              _PermTile(
+                title: 'Über anderen Apps einblenden',
+                hint: 'Nötig, damit die App von selbst aufgeht. Ohne kommt eine Benachrichtigung zum Antippen.',
+                ok: setup.overlay,
+                onFix: () => NativeBridge.openOverlaySettings(),
+              ),
+            ListTile(
+              title: const Text('Jetzt testen'),
+              onTap: () => NativeBridge.testLaunch(),
+            ),
+          ],
           const Divider(),
           const _Header('Einrichtung'),
           if (setup == null)

@@ -73,6 +73,32 @@ Bluetooth aus), gilt diese Regel nicht.
 Alternativ kannst du einen kleinen **USB-BLE-Beacon** nehmen (Gerät im Auto:
 Beacon) – funktioniert genauso, nur stromsparender.
 
+## Blitzer-App automatisch öffnen (optional)
+
+Wenn ein Transmitter/Beacon eingerichtet ist, kann die App eine beliebige
+Blitzer- oder Navigation-App **automatisch öffnen**, sobald du dein Auto erkannt hast.
+
+**Einrichtung:**
+1. Einstellungen → Abschnitt **„App im Auto“** → **„App öffnen, wenn …“** → **„Wählen“**.
+2. Die gewünschte App aus der Liste (z. B. Blitzer.de, Google Maps) auswählen.
+3. Optional: **„Beim Aussteigen schließen“** aktivieren (schaltet zum Startbildschirm und
+   versucht, die App zu beenden).
+4. Optional: **„Über anderen Apps einblenden“** Berechtigung freigeben (damit die App
+   direkt aufgeht; ohne die Berechtigung kommt statt dessen eine Benachrichtigung).
+
+**Wie es funktioniert:**
+- Sobald dein Transmitter/Beacon **während der Fahrt** erkannt wird, öffnet sich die App.
+  Die Suche startet, wenn Android „im Fahrzeug“ erkennt – meist 1–2 Minuten nach dem Losfahren
+  (mit Beacon oft schneller). Eine einzelne verpasste Suche schließt nichts.
+- Das funktioniert nur, wenn die App entweder die Berechtigung **„Über anderen Apps“**
+  hat, oder der Nutzer eine Benachrichtigung antippen kann.
+- Beim **Aussteigen** (wenn der Transmitter weg ist): Die App wechselt zum Startbildschirm.
+  Das Beenden funktioniert nur, wenn die App keinen eigenen Hintergrunddienst mit
+  Benachrichtigung läuft. Blitzer-Apps tun das meist – dann bleibt die Warnung aktiv
+  und muss in der App selbst beendet werden.
+
+**Test:** Knopf **„Jetzt testen“** zum Probieren.
+
 ## Widget und Schnelleinstellung
 
 - **Widget:** Startbildschirm lange drücken → Widgets → Parkplatz-Merker →
