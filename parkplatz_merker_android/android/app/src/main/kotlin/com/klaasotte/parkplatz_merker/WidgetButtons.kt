@@ -86,18 +86,34 @@ object WidgetButtons {
         return result
     }
 
-    /** Drückt den Knopf [key] ("big:3"). true = geklickt. */
+    /** Drückt den Knopf [key] ("big:3"). true = geklickt. Misserfolg mit Grund in der Diagnose. */
     fun press(ctx: Context, pkg: String, key: String): Boolean {
         if (!onMainThread()) return false
         val parts = key.split(":")
-        if (parts.size != 2) return false
-        val index = parts[1].toIntOrNull() ?: return false
-        val rv = layouts(pkg).firstOrNull { it.first == parts[0] }?.second ?: return false
+        val index = parts.getOrNull(1)?.toIntOrNull()
+        if (parts.size != 2 || index == null) {
+            EventLog.info(ctx, "Widget-Knopf $key: ungültige Auswahl")
+            return false
+        }
+        val all = layouts(pkg)
+        val rv = all.firstOrNull { it.first == parts[0] }?.second
+        if (rv == null) {
+            val available = all.joinToString(", ") { it.first }.ifEmpty { "keine" }
+            EventLog.info(ctx, "Widget-Knopf $key: Ansicht „${parts[0]}“ gerade nicht vorhanden (vorhanden: $available)")
+            return false
+        }
         return try {
             val views = clickables(ctx.applicationContext, rv)
-            if (index < 0 || index >= views.size) false else views[index].performClick()
+            if (index < 0 || index >= views.size) {
+                EventLog.info(ctx, "Widget-Knopf $key: nur ${views.size} Knöpfe in dieser Ansicht")
+                false
+            } else {
+                val clicked = views[index].performClick()
+                if (!clicked) EventLog.info(ctx, "Widget-Knopf $key: Klick ohne Wirkung")
+                clicked
+            }
         } catch (e: Exception) {
-            EventLog.info(ctx, "Widget-Knopf $key nicht drückbar: ${e.javaClass.simpleName}")
+            EventLog.info(ctx, "Widget-Knopf $key nicht drückbar: ${e.javaClass.simpleName} ${e.message}")
             false
         }
     }
