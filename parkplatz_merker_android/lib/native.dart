@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 class NativeBridge {
   static const _channel = MethodChannel('parkplatz_merker/native');
@@ -34,6 +35,9 @@ class NativeBridge {
         'deviceMode': 'none',
         'deviceAddress': null,
         'deviceName': null,
+        'launchPackage': '',
+        'launchLabel': '',
+        'closeOnGone': true,
       };
     } on PlatformException catch (e) {
       print('getConfig error: ${e.message}');
@@ -43,6 +47,9 @@ class NativeBridge {
         'deviceMode': 'none',
         'deviceAddress': null,
         'deviceName': null,
+        'launchPackage': '',
+        'launchLabel': '',
+        'closeOnGone': true,
       };
     } on MissingPluginException {
       return {
@@ -51,6 +58,9 @@ class NativeBridge {
         'deviceMode': 'none',
         'deviceAddress': null,
         'deviceName': null,
+        'launchPackage': '',
+        'launchLabel': '',
+        'closeOnGone': true,
       };
     }
   }
@@ -62,6 +72,9 @@ class NativeBridge {
     String? deviceMode,
     String? deviceAddress,
     String? deviceName,
+    String? launchPackage,
+    String? launchLabel,
+    bool? closeOnGone,
   }) async {
     try {
       final params = <String, dynamic>{};
@@ -70,6 +83,9 @@ class NativeBridge {
       if (deviceMode != null) params['deviceMode'] = deviceMode;
       if (deviceAddress != null) params['deviceAddress'] = deviceAddress;
       if (deviceName != null) params['deviceName'] = deviceName;
+      if (launchPackage != null) params['launchPackage'] = launchPackage;
+      if (launchLabel != null) params['launchLabel'] = launchLabel;
+      if (closeOnGone != null) params['closeOnGone'] = closeOnGone;
       await _channel.invokeMethod('setConfig', params);
     } on PlatformException catch (e) {
       print('setConfig error: ${e.message}');
@@ -234,6 +250,51 @@ class NativeBridge {
       print('cancelReminder error: ${e.message}');
     } on MissingPluginException {
       print('cancelReminder: platform not available');
+    }
+  }
+
+  /// Listet alle installierten Launcher-Apps auf.
+  static Future<List<Map<String, String>>> listApps() async {
+    try {
+      final result = await _channel.invokeMethod('listApps');
+      if (result is List) {
+        return List<Map<String, String>>.from(
+          result.cast<Object?>().map((e) {
+            if (e is Map<Object?, Object?>) {
+              return Map<String, String>.from(e.cast<String, String>());
+            }
+            return <String, String>{};
+          }),
+        );
+      }
+      return [];
+    } on PlatformException catch (e) {
+      debugPrint('listApps error: ${e.message}');
+      return [];
+    } on MissingPluginException {
+      return [];
+    }
+  }
+
+  /// Öffnet die Einstellungen für Overlay-Berechtigung.
+  static Future<void> openOverlaySettings() async {
+    try {
+      await _channel.invokeMethod('openOverlaySettings');
+    } on PlatformException catch (e) {
+      debugPrint('openOverlaySettings error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('openOverlaySettings: platform not available');
+    }
+  }
+
+  /// Testet den App-Start.
+  static Future<void> testLaunch() async {
+    try {
+      await _channel.invokeMethod('testLaunch');
+    } on PlatformException catch (e) {
+      debugPrint('testLaunch error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('testLaunch: platform not available');
     }
   }
 

@@ -242,6 +242,7 @@ class TripService : Service() {
         stopPowerWatch()
         scanner?.stopAll()
         scanner = null
+        AppLauncher.reset()
         if (started) logService("stop", reason)
         running = false
         inVehicle = false
@@ -353,6 +354,8 @@ class TripService : Service() {
         if (scanner != null) return
         val s = DeviceScanner(this)
         scanner = s
+        s.onHit = { AppLauncher.seen(this) }
+        s.listener = { found, ok -> if (found) AppLauncher.seen(this) else if (ok) AppLauncher.miss(this, strong = !inVehicle) }
         if (scanMode == "beacon") s.startBeacon(target)
         handler.removeCallbacks(scanTick)
         if (scanMode == "transmitter") {

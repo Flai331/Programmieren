@@ -47,6 +47,9 @@ class AppController extends ChangeNotifier {
     String? deviceMode,
     String? deviceAddress,
     String? deviceName,
+    String? launchPackage,
+    String? launchLabel,
+    bool? closeOnGone,
   }) async {
     await NativeBridge.setConfig(
       activityEnabled: activityEnabled,
@@ -54,6 +57,9 @@ class AppController extends ChangeNotifier {
       deviceMode: deviceMode,
       deviceAddress: deviceAddress,
       deviceName: deviceName,
+      launchPackage: launchPackage,
+      launchLabel: launchLabel,
+      closeOnGone: closeOnGone,
     );
     await reloadConfig();
   }

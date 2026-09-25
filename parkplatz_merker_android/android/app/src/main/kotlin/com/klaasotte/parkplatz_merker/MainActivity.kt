@@ -108,6 +108,27 @@ class MainActivity : FlutterActivity() {
                             Reminder.cancel(this)
                             result.success(null)
                         }
+                        "listApps" -> {
+                            result.success(AppLauncher.listApps(this))
+                        }
+                        "openOverlaySettings" -> {
+                            val uri = Uri.parse("package:$packageName")
+                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, uri)
+                            try {
+                                startActivity(intent)
+                            } catch (e: Exception) {
+                                try {
+                                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+                                } catch (e2: Exception) {
+                                    // ignore
+                                }
+                            }
+                            result.success(null)
+                        }
+                        "testLaunch" -> {
+                            AppLauncher.launch(this, fromForeground = true)
+                            result.success(null)
+                        }
                         "getNativeStatus" -> {
                             val playServices = GoogleApiAvailability.getInstance()
                                 .isGooglePlayServicesAvailable(this) == ConnectionResult.SUCCESS
@@ -138,7 +159,8 @@ class MainActivity : FlutterActivity() {
                                 "ignoringBatteryOptimizations" to batteryIgnored,
                                 "serviceRunning" to TripService.running,
                                 "inVehicle" to TripService.inVehicle,
-                                "exactAlarms" to exactAlarms
+                                "exactAlarms" to exactAlarms,
+                                "overlayAllowed" to Settings.canDrawOverlays(this)
                             ))
                         }
                         "openAppDetails" -> {

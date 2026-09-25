@@ -9,6 +9,7 @@ object Notifications {
     const val CHANNEL_TRIP = "trip"
     const val CHANNEL_PARKED = "parked"
     const val CHANNEL_REMINDER = "reminder"
+    const val CHANNEL_APP = "app"
 
     fun ensureChannels(ctx: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -28,5 +29,9 @@ object Notifications {
         val reminderChannel = NotificationChannel("reminder", "Parkschein", NotificationManager.IMPORTANCE_HIGH)
         reminderChannel.description = "Parkschein-Erinnerung"
         nm.createNotificationChannel(reminderChannel)
+
+        val appChannel = NotificationChannel("app", "App-Start", NotificationManager.IMPORTANCE_HIGH)
+        appChannel.description = "App-Start"
+        nm.createNotificationChannel(appChannel)
     }
 }

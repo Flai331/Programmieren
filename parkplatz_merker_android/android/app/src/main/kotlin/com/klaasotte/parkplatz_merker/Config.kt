@@ -58,13 +58,36 @@ object Config {
         get() = prefs().getLong("lastBeaconBgLog", 0L)
         set(value) = prefs().edit().putLong("lastBeaconBgLog", value).apply()
 
+    var launchPackage: String
+        get() = prefs().getString("launchPackage", "") ?: ""
+        set(value) = prefs().edit().putString("launchPackage", value).apply()
+
+    var launchLabel: String
+        get() = prefs().getString("launchLabel", "") ?: ""
+        set(value) = prefs().edit().putString("launchLabel", value).apply()
+
+    var closeOnGone: Boolean
+        get() = prefs().getBoolean("closeOnGone", true)
+        set(value) = prefs().edit().putBoolean("closeOnGone", value).apply()
+
+    var devicePresent: Boolean
+        get() = prefs().getBoolean("devicePresent", false)
+        set(value) = prefs().edit().putBoolean("devicePresent", value).apply()
+
+    var devicePresentAt: Long
+        get() = prefs().getLong("devicePresentAt", 0L)
+        set(value) = prefs().edit().putLong("devicePresentAt", value).apply()
+
     fun getConfig(): Map<String, Any?> {
         return mapOf(
             "activityEnabled" to activityEnabled,
             "chargerEnabled" to chargerEnabled,
             "deviceMode" to deviceMode,
             "deviceAddress" to deviceAddress,
-            "deviceName" to deviceName
+            "deviceName" to deviceName,
+            "launchPackage" to launchPackage,
+            "launchLabel" to launchLabel,
+            "closeOnGone" to closeOnGone
         )
     }
 
@@ -74,5 +97,8 @@ object Config {
         config["deviceMode"]?.let { (it as? String)?.let { v -> deviceMode = v } }
         config["deviceAddress"]?.let { (it as? String)?.let { v -> deviceAddress = v } }
         config["deviceName"]?.let { (it as? String)?.let { v -> deviceName = v } }
+        config["launchPackage"]?.let { (it as? String)?.let { v -> launchPackage = v } }
+        config["launchLabel"]?.let { (it as? String)?.let { v -> launchLabel = v } }
+        config["closeOnGone"]?.let { (it as? Boolean)?.let { v -> closeOnGone = v } }
     }
 }
