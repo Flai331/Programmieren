@@ -36,3 +36,21 @@ flutter test
 ```
 
 Die APK baut der Workflow `.github/workflows/lese-stadt-apk.yml` und hängt sie als Artifact an den Lauf.
+
+## Signaturschlüssel
+
+Damit sich jede neue APK als Update installieren lässt (ohne Deinstallieren, also ohne Datenverlust), braucht es einen festen Schlüssel. Einmalig anlegen, auf einem Rechner mit Java (`keytool` gehört zu jedem JDK und zu Android Studio):
+
+```bash
+keytool -genkeypair -storetype pkcs12 \
+  -keystore lese_stadt/android/app/lese-stadt-release.p12 \
+  -alias lesestadt -keyalg RSA -keysize 4096 -validity 36500 \
+  -dname "CN=Lese-Stadt"
+```
+
+`keytool` fragt nach einem Passwort. Dann:
+
+1. Die Datei `lese-stadt-release.p12` committen und pushen (sie ist passwortgeschützt).
+2. Auf GitHub unter Settings → Secrets and variables → Actions das Secret `LESE_STADT_KEYSTORE_PASSWORD` mit genau diesem Passwort anlegen.
+
+Ab dem nächsten Build ist die APK mit diesem Schlüssel signiert. Fehlt Datei oder Secret, signiert der Build mit einem Test-Schlüssel, der sich bei jedem Lauf ändert. Schlüssel und Passwort nicht verlieren: ohne sie lässt sich keine Update-APK mehr bauen.
