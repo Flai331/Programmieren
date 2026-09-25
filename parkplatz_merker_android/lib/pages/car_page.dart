@@ -158,6 +158,14 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
               onTap: () => NativeBridge.testClose(),
             ),
           const Divider(),
+          ListTile(
+            leading: const Icon(Icons.battery_saver_outlined),
+            title: const Text('Energiesparmodus im Auto (Samsung)'),
+            subtitle: const Text('Mit Samsung „Modi und Routinen“ – so richtest du es ein'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => HelpPage.show(context, HelpTopic.powerSaving),
+          ),
+          const Divider(),
           SectionHeader('Lautstärke im Auto', help: HelpTopic.volume),
           SwitchListTile(
             title: const Text('Lautstärke-Profil'),

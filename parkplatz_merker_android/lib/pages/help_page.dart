@@ -8,6 +8,7 @@ enum HelpTopic {
   appInCar,
   closeApp,
   volume,
+  powerSaving,
   widgets,
   extras,
   problems,
@@ -100,6 +101,22 @@ const _sections = <_Section>[
     'Um Lautstärke auf 0 (lautlos) zu stellen oder den Klingelmodus auf „Lautlos“ zu schalten, '
         'brauchst du „Nicht-stören-Zugriff“ (Einstellungen → Benachrichtigungen → „Nicht-stören-Zugriff“).',
     'Jede Änderung wird sofort gespeichert. Mit den Test-Knöpfen prüfst du, ob es so klingt, wie du es willst.',
+  ]),
+  _Section(HelpTopic.powerSaving, Icons.battery_saver_outlined, 'Energiesparmodus im Auto (Samsung)', [
+    'Android lässt Apps den Energiesparmodus nicht selbst umschalten. Bei Samsung geht es trotzdem '
+        'automatisch – mit den eingebauten „Modi und Routinen“. Weil der Parkplatz-Merker Blitzer.de '
+        'beim Einsteigen öffnet und beim Aussteigen beendet, dient Blitzer.de als Auslöser.',
+    '1. Samsung-Einstellungen → „Modi und Routinen“ → Reiter „Routinen“ → „+“.\n'
+        '2. „Wenn“ → „+“ → „App geöffnet“ → Blitzer.de PRO auswählen.\n'
+        '3. „Dann“ → „+“ → „Akku“ → „Energiesparmodus“ → „Aus“.\n'
+        '4. „Speichern“, Namen vergeben (z. B. „Auto“).',
+    'Wird Blitzer.de beendet, endet die Routine und Samsung stellt den Energiesparmodus automatisch '
+        'wieder her (so, wie er vorher war).',
+    'Wichtig: Samsung prüft bei „App geöffnet“ meist die App im Vordergrund. Wechselst du während der '
+        'Fahrt in eine andere App, kann der Energiesparmodus zwischendurch wieder angehen. Liegt '
+        'Blitzer.de vorn (in „Im Auto“ als letzte App in der Liste), klappt es am besten.',
+    'Probier es einmal im Stand aus: „Im Auto“ → „Apps jetzt öffnen“ → der Energiesparmodus muss '
+        'ausgehen; „Beenden jetzt testen“ → er muss wieder angehen.',
   ]),
   _Section(HelpTopic.widgets, Icons.widgets_outlined, 'Widgets und Schnelleinstellung', [
     'Widget „Mein Auto“: Startbildschirm lange drücken → Widgets → Parkplatz-Merker → „Mein Auto“ '
