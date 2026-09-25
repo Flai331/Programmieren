@@ -98,7 +98,7 @@ object AppLauncher {
         nm.cancel(4)
 
         val pressed = NotifListener.pressStop(pkg, Config.closeActionTitle, Config.closeActionIndex)
-        EventLog.info(appCtx, if (pressed) "Ausschaltknopf von $label gedrueckt" else "Kein Ausschaltknopf gefunden (Benachrichtigungszugriff an?)")
+        EventLog.info(appCtx, if (pressed) "Ausschaltknopf von $label gedrückt" else "Kein Ausschaltknopf gefunden (Benachrichtigungszugriff an?)")
 
         if (fromForeground || Settings.canDrawOverlays(appCtx)) {
             try {

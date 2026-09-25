@@ -318,7 +318,13 @@ class NativeBridge {
     try {
       final result = await _channel.invokeMethod('listCloseActions');
       if (result is Map<Object?, Object?>) {
-        return Map<String, dynamic>.from(result);
+        final map = Map<String, dynamic>.from(result);
+        // Einträge von Android kommen als Map<Object?, Object?> an.
+        map['actions'] = ((map['actions'] as List?) ?? const [])
+            .whereType<Map<Object?, Object?>>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        return map;
       }
       return {'actions': [], 'actionless': false, 'hasNotification': false};
     } on PlatformException catch (e) {

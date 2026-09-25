@@ -84,20 +84,40 @@ class _SettingsPageState extends State<SettingsPage>
     if (state == AppLifecycleState.resumed) _reload();
   }
 
-  Future<void> _showCloseActionDialog(BuildContext ctx, AppController controller) async {
+  String _closeActionLabel(Map<String, dynamic> config) {
+    final index = (config['closeActionIndex'] as num?)?.toInt() ?? -1;
+    final title = (config['closeActionTitle'] as String?) ?? '';
+    if (index >= 0)
+      return title.isEmpty
+          ? 'Knopf ${index + 1} (nur Symbol)'
+          : 'Knopf ${index + 1}: $title';
+    if (title.isNotEmpty) return title;
+    return 'automatisch (Ausschalten, Beenden, Stopp …)';
+  }
+
+  Future<void> _showCloseActionDialog(
+    BuildContext ctx,
+    AppController controller,
+  ) async {
     final config = controller.config;
     final launchPackage = (config['launchPackage'] as String?) ?? '';
 
     final actionList = await NativeBridge.listCloseActions();
     if (!mounted) return;
 
-    final actions = (actionList['actions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final actions = ((actionList['actions'] as List?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
     final actionless = actionList['actionless'] == true;
     final hasNotification = actionList['hasNotification'] == true;
 
     if (!hasNotification) {
       ScaffoldMessenger.of(ctx).showSnackBar(
-        SnackBar(content: Text('Öffne zuerst ${config['launchLabel'] as String? ?? launchPackage}, damit ihre Benachrichtigung da ist.')),
+        SnackBar(
+          content: Text(
+            'Öffne zuerst ${config['launchLabel'] as String? ?? launchPackage}, damit ihre Benachrichtigung da ist.',
+          ),
+        ),
       );
       return;
     }
@@ -109,7 +129,7 @@ class _SettingsPageState extends State<SettingsPage>
           title: const Text('Hinweis'),
           content: const Text(
             'Diese Benachrichtigung hat keine normalen Knöpfe, die Android anderen Apps zeigt. '
-            'Schalte dann "Notfalls Beenden erzwingen (Bedienungshilfe)" ein.',
+            'Schalte dann „Notfalls Beenden erzwingen (Bedienungshilfe)“ ein.',
           ),
           actions: [
             TextButton(
@@ -131,12 +151,14 @@ class _SettingsPageState extends State<SettingsPage>
 
     final choices = [
       {'index': -1, 'title': 'Automatisch'},
-      ...actions.map((a) => {
-        'index': a['index'] as int,
-        'title': ((a['title'] as String?) ?? '').isEmpty
-            ? 'Knopf ${((a['index'] as int?) ?? 0) + 1} (nur Symbol)'
-            : 'Knopf ${((a['index'] as int?) ?? 0) + 1}: ${a['title']}',
-      }),
+      ...actions.map(
+        (a) => {
+          'index': a['index'] as int,
+          'title': ((a['title'] as String?) ?? '').isEmpty
+              ? 'Knopf ${((a['index'] as int?) ?? 0) + 1} (nur Symbol)'
+              : 'Knopf ${((a['index'] as int?) ?? 0) + 1}: ${a['title']}',
+        },
+      ),
     ];
 
     if (!mounted) return;
@@ -144,30 +166,36 @@ class _SettingsPageState extends State<SettingsPage>
       context: ctx,
       builder: (bctx) => AlertDialog(
         title: const Text('Ausschaltknopf wählen'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Bei mehreren Knöpfen: Probier einen aus mit "Beenden jetzt testen".'),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: choices.length,
-                itemBuilder: (_, idx) {
-                  final choice = choices[idx];
-                  return ListTile(
-                    title: Text(choice['title'] as String),
-                    onTap: () {
-                      controller.updateConfig(
-                        closeActionIndex: choice['index'] as int,
-                        closeActionTitle: (choice['index'] as int) == -1 ? '' : (actions.firstWhere((a) => a['index'] == choice['index'])['title'] as String? ?? ''),
-                      );
-                      Navigator.pop(bctx);
-                    },
-                  );
-                },
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const Text(
+                'Bei mehreren Knöpfen: Probier einen aus mit „Beenden jetzt testen“.',
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              ...List.generate(choices.length, (idx) {
+                final choice = choices[idx];
+                return ListTile(
+                  title: Text(choice['title'] as String),
+                  onTap: () {
+                    controller.updateConfig(
+                      closeActionIndex: choice['index'] as int,
+                      closeActionTitle: (choice['index'] as int) == -1
+                          ? ''
+                          : (actions.firstWhere(
+                                      (a) => a['index'] == choice['index'],
+                                    )['title']
+                                    as String? ??
+                                ''),
+                    );
+                    Navigator.pop(bctx);
+                  },
+                );
+              }),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -298,43 +326,48 @@ class _SettingsPageState extends State<SettingsPage>
               value: config['closeOnGone'] != false,
               onChanged: (v) => controller.updateConfig(closeOnGone: v),
             ),
-            if ((config['closeOnGone'] != false) && ((config['launchPackage'] as String?) ?? '').isNotEmpty)
+            if ((config['closeOnGone'] != false) &&
+                ((config['launchPackage'] as String?) ?? '').isNotEmpty)
               _PermTile(
                 title: 'Benachrichtigungszugriff',
                 hint: 'Damit der Ausschaltknopf in der Benachrichtigung der App gedrückt werden kann – klappt auch bei gesperrtem Handy.',
                 ok: setup?.notificationListener ?? false,
                 onFix: () => NativeBridge.openNotificationListenerSettings(),
               ),
-            if ((config['closeOnGone'] != false) && ((config['launchPackage'] as String?) ?? '').isNotEmpty)
+            if ((config['closeOnGone'] != false) &&
+                ((config['launchPackage'] as String?) ?? '').isNotEmpty)
               ListTile(
                 title: const Text('Ausschaltknopf'),
-                subtitle: Text(
-                  (config['closeActionIndex'] as int?) == -1 || ((config['closeActionTitle'] as String?) ?? '').isEmpty
-                      ? 'automatisch (Ausschalten, Beenden, Stopp ...)'
-                      : 'Knopf ${((config['closeActionIndex'] as int?) ?? 0) + 1}: ${config['closeActionTitle'] as String? ?? ''}',
-                ),
+                subtitle: Text(_closeActionLabel(config)),
                 trailing: FilledButton.tonal(
                   onPressed: () => _showCloseActionDialog(context, controller),
                   child: const Text('Wählen'),
                 ),
               ),
-            if ((config['closeOnGone'] != false) && ((config['launchPackage'] as String?) ?? '').isNotEmpty)
+            if ((config['closeOnGone'] != false) &&
+                ((config['launchPackage'] as String?) ?? '').isNotEmpty)
               SwitchListTile(
-                title: const Text('Notfalls "Beenden erzwingen" (Bedienungshilfe)'),
-                subtitle: const Text(
-                  'Öffnet kurz die App-Info und drückt "Beenden erzwingen". Nur bei entsperrtem Handy – sonst beim nächsten Entsperren.',
+                title: const Text(
+                  'Notfalls „Beenden erzwingen“ (Bedienungshilfe)',
                 ),
-                value: config['forceStopFallback'] != false,
+                subtitle: const Text(
+                  'Öffnet kurz die App-Info und drückt „Beenden erzwingen“. Nur bei entsperrtem Handy – sonst beim nächsten Entsperren.',
+                ),
+                value: config['forceStopFallback'] == true,
                 onChanged: (v) => controller.updateConfig(forceStopFallback: v),
               ),
-            if ((config['closeOnGone'] != false) && ((config['launchPackage'] as String?) ?? '').isNotEmpty && (config['forceStopFallback'] != false) && (setup != null))
+            if ((config['closeOnGone'] != false) &&
+                ((config['launchPackage'] as String?) ?? '').isNotEmpty &&
+                (config['forceStopFallback'] == true) &&
+                (setup != null))
               _PermTile(
                 title: 'Bedienungshilfe',
-                hint: 'Einstellungen → Bedienungshilfen → Installierte Apps → "Parkplatz-Merker: App beenden" einschalten. Ausgegraut? Erst "Eingeschränkte Einstellungen zulassen".',
+                hint: 'Einstellungen → Bedienungshilfen → Installierte Apps → „Parkplatz-Merker: App beenden“ einschalten. Ausgegraut? Erst „Eingeschränkte Einstellungen zulassen“.',
                 ok: setup.accessibility,
                 onFix: () => NativeBridge.openAccessibilitySettings(),
               ),
-            if ((config['closeOnGone'] != false) && ((config['launchPackage'] as String?) ?? '').isNotEmpty)
+            if ((config['closeOnGone'] != false) &&
+                ((config['launchPackage'] as String?) ?? '').isNotEmpty)
               ListTile(
                 title: const Text('Beenden jetzt testen'),
                 onTap: () => NativeBridge.testClose(),

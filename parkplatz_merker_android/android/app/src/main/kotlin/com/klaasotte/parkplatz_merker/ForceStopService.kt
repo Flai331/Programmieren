@@ -113,7 +113,7 @@ class ForceStopService : AccessibilityService() {
 
         step = 1
         stepSince = now
-        handler.removeCallbacks(unlockRunnable ?: {})
+        unlockRunnable?.let { handler.removeCallbacks(it) }
         unlockRunnable = Runnable { finish("Zeitlimit") }
         handler.postDelayed(unlockRunnable!!, 8000L)
     }
@@ -132,6 +132,9 @@ class ForceStopService : AccessibilityService() {
         for (id in FORCE_IDS) {
             val nodes = root.findAccessibilityNodeInfosByViewId(id)
             for (node in nodes) {
+                // Nur klicken, wenn der Knopf wirklich „Beenden erzwingen“ heißt –
+                // gleiche IDs können auf manchen Handys z. B. „Deinstallieren“ sein.
+                if (!isForceNode(node)) continue
                 if (!node.isEnabled) {
                     finish("lief nicht mehr")
                     return
@@ -139,7 +142,7 @@ class ForceStopService : AccessibilityService() {
                 if (click(node)) {
                     step = 2
                     stepSince = System.currentTimeMillis()
-                    handler.removeCallbacks(unlockRunnable ?: {})
+                    unlockRunnable?.let { handler.removeCallbacks(it) }
                     unlockRunnable = Runnable { finish("Zeitlimit") }
                     handler.postDelayed(unlockRunnable!!, 8000L)
                     return
@@ -158,7 +161,7 @@ class ForceStopService : AccessibilityService() {
                     if (click(node)) {
                         step = 2
                         stepSince = System.currentTimeMillis()
-                        handler.removeCallbacks(unlockRunnable ?: {})
+                        unlockRunnable?.let { handler.removeCallbacks(it) }
                         unlockRunnable = Runnable { finish("Zeitlimit") }
                         handler.postDelayed(unlockRunnable!!, 8000L)
                         return
@@ -168,7 +171,23 @@ class ForceStopService : AccessibilityService() {
         }
     }
 
+    private fun isForceNode(node: AccessibilityNodeInfo): Boolean {
+        val texts = mutableListOf<String>()
+        node.text?.let { texts.add(it.toString().lowercase()) }
+        node.contentDescription?.let { texts.add(it.toString().lowercase()) }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            child.text?.let { texts.add(it.toString().lowercase()) }
+        }
+        return texts.any { t -> FORCE_TEXTS.any { f -> t.contains(f) } }
+    }
+
     private fun handleClickOK(root: AccessibilityNodeInfo) {
+        // Nur bestätigen, wenn der Dialog wirklich zum Beenden erzwingen gehört.
+        val isForceDialog = listOf("erzwingen", "force stop").any { w ->
+            root.findAccessibilityNodeInfosByText(w).isNotEmpty()
+        }
+        if (!isForceDialog) return
         for (id in OK_IDS) {
             val nodes = root.findAccessibilityNodeInfosByViewId(id)
             for (node in nodes) {
@@ -211,7 +230,7 @@ class ForceStopService : AccessibilityService() {
         EventLog.info(this, "Beenden erzwingen ($pkg): $reason")
         pendingPkg = null
         step = 0
-        handler.removeCallbacks(unlockRunnable ?: {})
+        unlockRunnable?.let { handler.removeCallbacks(it) }
         handler.postDelayed({
             performGlobalAction(GLOBAL_ACTION_HOME)
         }, 500L)
