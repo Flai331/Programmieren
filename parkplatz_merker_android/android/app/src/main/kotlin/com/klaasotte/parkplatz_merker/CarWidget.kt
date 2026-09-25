@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.RemoteViews
@@ -30,9 +31,9 @@ object CarWidget {
                 when (v) {
                     is Number -> {
                         if (key == "time" || key == "t") {
-                            json.put(key, (v as Number).toLong())
+                            json.put(key, v.toLong())
                         } else {
-                            json.put(key, (v as Number).toDouble())
+                            json.put(key, v.toDouble())
                         }
                     }
                     is String -> json.put(key, v)
@@ -81,7 +82,7 @@ object CarWidget {
                 val bitmap = MapSnapshot.render(lat, lng)
                 if (bitmap != null) {
                     try {
-                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, mapFile.outputStream())
+                        mapFile.outputStream().use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
                         prefs.edit().putString(KEY_MAP, mapKey).apply()
                         // Aktualisiere UI mit neuer Map
                         val am2 = AppWidgetManager.getInstance(ctx)
@@ -130,8 +131,8 @@ object CarWidget {
                 val time = (obj.opt("time") as? Number)?.toLong() ?: 0L
                 val lat = (obj.opt("lat") as? Number)?.toDouble()
                 val lng = (obj.opt("lng") as? Number)?.toDouble()
-                val address = obj.optString("address", null)?.takeIf { it.isNotEmpty() }
-                val note = obj.optString("note", null)?.takeIf { it.isNotEmpty() }
+                val address = text(obj, "address")
+                val note = text(obj, "note")
 
                 views.setTextViewText(R.id.widget_title, "Dein Auto steht")
                 views.setTextViewText(R.id.widget_since, sinceText(time))
@@ -152,9 +153,11 @@ object CarWidget {
                     views.setViewVisibility(R.id.widget_note, android.view.View.GONE)
                 }
 
-                // Map laden
+                // Karte nur zeigen, wenn sie zu DIESER Position gehört – sonst Platzhalter.
+                views.setImageViewResource(R.id.widget_map, R.drawable.ic_car)
                 val mapFile = File(ctx.filesDir, "widget_map.png")
-                if (mapFile.exists()) {
+                val currentKey = if (lat != null && lng != null) String.format(Locale.US, "%.5f,%.5f", lat, lng) else null
+                if (currentKey != null && prefs.getString(KEY_MAP, null) == currentKey && mapFile.exists()) {
                     try {
                         val bitmap = BitmapFactory.decodeFile(mapFile.path)
                         if (bitmap != null) {
@@ -204,59 +207,47 @@ object CarWidget {
                     views.setViewVisibility(R.id.btn_nav, android.view.View.GONE)
                 }
 
-                // "Hier geparkt"
-                val parkIntent = Intent(ctx, ParkHereActivity::class.java)
-                    .putExtra("source", "widget")
-                val parkPending = PendingIntent.getActivity(
-                    ctx, 12, parkIntent,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
-                views.setOnClickPendingIntent(R.id.btn_park, parkPending)
-
             } catch (e: Exception) {
                 EventLog.info(ctx, "CarWidget build Fehler: ${e.message}")
                 views.setTextViewText(R.id.widget_title, "Fehler")
             }
         }
 
+        // „Hier geparkt“ – auch ohne gespeicherten Parkplatz
+        val parkIntent = Intent(ctx, ParkHereActivity::class.java)
+            .putExtra("source", "widget")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val parkPending = PendingIntent.getActivity(
+            ctx, 12, parkIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        views.setOnClickPendingIntent(R.id.btn_park, parkPending)
         return views
+    }
+
+    /** Text aus JSON; fehlend, JSON-null oder leer → null. */
+    private fun text(obj: JSONObject, key: String): String? {
+        if (!obj.has(key) || obj.isNull(key)) return null
+        return obj.optString(key).takeIf { it.isNotBlank() }
     }
 
     /** Formatiert die Zeit wie Dart: "seit 14:32", "seit gestern, 14:32", etc. */
     fun sinceText(time: Long): String {
-        val now = System.currentTimeMillis()
-        val cal = Calendar.getInstance()
-
-        // Zielzeit
-        cal.timeInMillis = time
-        val targetYear = cal.get(Calendar.YEAR)
-        val targetMonth = cal.get(Calendar.MONTH)
-        val targetDay = cal.get(Calendar.DAY_OF_MONTH)
-        val targetHour = cal.get(Calendar.HOUR_OF_DAY)
-        val targetMin = cal.get(Calendar.MINUTE)
-
-        // Heute
-        cal.timeInMillis = now
-        val nowYear = cal.get(Calendar.YEAR)
-        val nowMonth = cal.get(Calendar.MONTH)
-        val nowDay = cal.get(Calendar.DAY_OF_MONTH)
-
-        val timeStr = String.format(Locale.GERMANY, "%02d:%02d", targetHour, targetMin)
-
+        val parked = Calendar.getInstance().apply { timeInMillis = time }
+        val today = Calendar.getInstance()
+        val yesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+        fun sameDay(a: Calendar, b: Calendar) =
+            a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
+        val clock = String.format(Locale.GERMANY, "%02d:%02d", parked.get(Calendar.HOUR_OF_DAY), parked.get(Calendar.MINUTE))
         return when {
-            targetYear == nowYear && targetMonth == nowMonth && targetDay == nowDay -> {
-                "seit $timeStr"
-            }
-            targetYear == nowYear && targetMonth == nowMonth && targetDay == nowDay - 1 -> {
-                "seit gestern, $timeStr"
-            }
+            sameDay(parked, today) -> "seit $clock"
+            sameDay(parked, yesterday) -> "seit gestern, $clock"
             else -> {
-                val dayNames = listOf("So", "Mo", "Di", "Mi", "Do", "Fr", "Sa")
-                cal.timeInMillis = time
-                val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK) - 1
-                val dayName = dayNames[dayOfWeek]
-                val date = String.format(Locale.GERMANY, "%02d.%02d.", targetMonth + 1, targetDay)
-                "seit $dayName., $date $timeStr"
+                // Calendar.DAY_OF_WEEK: Sonntag = 1 … Samstag = 7
+                val days = listOf("So.", "Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa.")
+                val day = days[parked.get(Calendar.DAY_OF_WEEK) - 1]
+                val date = String.format(Locale.GERMANY, "%02d.%02d.", parked.get(Calendar.DAY_OF_MONTH), parked.get(Calendar.MONTH) + 1)
+                "seit $day, $date, $clock"
             }
         }
     }

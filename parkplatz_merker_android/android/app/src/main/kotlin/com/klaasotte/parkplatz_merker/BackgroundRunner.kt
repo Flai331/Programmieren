@@ -68,7 +68,8 @@ object BackgroundRunner {
                     if (timeout != null) handler.removeCallbacks(timeout!!)
                     try {
                         e.destroy()
-                    } catch (_: Exception) {
+                    } catch (ex: Exception) {
+                        // ignorieren
                     }
                     engine = null
                     done()

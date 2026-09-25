@@ -3,6 +3,7 @@ package com.klaasotte.parkplatz_merker
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 class BackgroundHandler(
@@ -10,7 +11,7 @@ class BackgroundHandler(
     private val onDone: () -> Unit
 ) : MethodChannel.MethodCallHandler {
 
-    override fun onMethodCall(call: MethodChannel.MethodCall, result: MethodChannel.Result) {
+    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         try {
             when (call.method) {
                 "drainEvents" -> {
@@ -48,7 +49,8 @@ class BackgroundHandler(
                 }
                 "backgroundDone" -> {
                     result.success(null)
-                    onDone()
+                    // Engine erst nach dieser Nachricht beenden, nicht mittendrin.
+                    Handler(Looper.getMainLooper()).post { onDone() }
                 }
                 else -> result.notImplemented()
             }
