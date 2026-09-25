@@ -54,6 +54,13 @@ class AppController extends ChangeNotifier {
     String? closeActionTitle,
     int? closeActionIndex,
     bool? forceStopFallback,
+    List<Map<String, dynamic>>? launchApps,
+    bool? volumeEnabled,
+    int? volMusic,
+    int? volRing,
+    int? volNotification,
+    String? ringerMode,
+    bool? volumeRestore,
   }) async {
     await NativeBridge.setConfig(
       activityEnabled: activityEnabled,
@@ -67,6 +74,13 @@ class AppController extends ChangeNotifier {
       closeActionTitle: closeActionTitle,
       closeActionIndex: closeActionIndex,
       forceStopFallback: forceStopFallback,
+      launchApps: launchApps,
+      volumeEnabled: volumeEnabled,
+      volMusic: volMusic,
+      volRing: volRing,
+      volNotification: volNotification,
+      ringerMode: ringerMode,
+      volumeRestore: volumeRestore,
     );
     await reloadConfig();
   }

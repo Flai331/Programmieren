@@ -4,7 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../controller.dart';
 import '../native.dart';
-import 'app_picker_page.dart';
+import 'car_page.dart';
+import 'common_widgets.dart';
 import 'diagnostics_page.dart';
 import 'help_page.dart';
 import 'search_page.dart';
@@ -85,127 +86,19 @@ class _SettingsPageState extends State<SettingsPage>
     if (state == AppLifecycleState.resumed) _reload();
   }
 
-  String _closeActionLabel(Map<String, dynamic> config) {
-    final index = (config['closeActionIndex'] as num?)?.toInt() ?? -1;
-    final title = (config['closeActionTitle'] as String?) ?? '';
-    if (index >= 0)
-      return title.isEmpty
-          ? 'Knopf ${index + 1} (nur Symbol)'
-          : 'Knopf ${index + 1}: $title';
-    if (title.isNotEmpty) return title;
-    return 'automatisch (Ausschalten, Beenden, Stopp …)';
-  }
-
-  Future<void> _showCloseActionDialog(
-    BuildContext ctx,
-    AppController controller,
-  ) async {
-    final config = controller.config;
-    final launchPackage = (config['launchPackage'] as String?) ?? '';
-
-    final actionList = await NativeBridge.listCloseActions();
-    if (!mounted) return;
-
-    final actions = ((actionList['actions'] as List?) ?? const [])
+  String _buildCarSubtitle(Map<String, dynamic> config) {
+    final launchApps = ((config['launchApps'] as List?) ?? const [])
         .whereType<Map<String, dynamic>>()
-        .toList();
-    final actionless = actionList['actionless'] == true;
-    final hasNotification = actionList['hasNotification'] == true;
-
-    if (!hasNotification) {
-      ScaffoldMessenger.of(ctx).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Öffne zuerst ${config['launchLabel'] as String? ?? launchPackage}, damit ihre Benachrichtigung da ist.',
-          ),
-        ),
-      );
-      return;
+        .length;
+    final volumeEnabled = (config['volumeEnabled'] as bool?) ?? false;
+    final parts = <String>[];
+    if (launchApps > 0) {
+      parts.add('$launchApps ${launchApps == 1 ? 'App' : 'Apps'}');
     }
-
-    if (actionless) {
-      showDialog<void>(
-        context: ctx,
-        builder: (bctx) => AlertDialog(
-          title: const Text('Hinweis'),
-          content: const Text(
-            'Diese Benachrichtigung hat keine normalen Knöpfe, die Android anderen Apps zeigt. '
-            'Schalte dann „Notfalls Beenden erzwingen (Bedienungshilfe)“ ein.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(bctx),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
+    if (volumeEnabled) {
+      parts.add('Lautstärke-Profil an');
     }
-
-    if (actions.isEmpty) {
-      ScaffoldMessenger.of(ctx).showSnackBar(
-        const SnackBar(content: Text('Keine Knöpfe in der Benachrichtigung.')),
-      );
-      return;
-    }
-
-    final choices = [
-      {'index': -1, 'title': 'Automatisch'},
-      ...actions.map(
-        (a) => {
-          'index': a['index'] as int,
-          'title': ((a['title'] as String?) ?? '').isEmpty
-              ? 'Knopf ${((a['index'] as int?) ?? 0) + 1} (nur Symbol)'
-              : 'Knopf ${((a['index'] as int?) ?? 0) + 1}: ${a['title']}',
-        },
-      ),
-    ];
-
-    if (!mounted) return;
-    showDialog<void>(
-      context: ctx,
-      builder: (bctx) => AlertDialog(
-        title: const Text('Ausschaltknopf wählen'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              const Text(
-                'Bei mehreren Knöpfen: Probier einen aus mit „Beenden jetzt testen“.',
-              ),
-              const SizedBox(height: 8),
-              ...List.generate(choices.length, (idx) {
-                final choice = choices[idx];
-                return ListTile(
-                  title: Text(choice['title'] as String),
-                  onTap: () {
-                    controller.updateConfig(
-                      closeActionIndex: choice['index'] as int,
-                      closeActionTitle: (choice['index'] as int) == -1
-                          ? ''
-                          : (actions.firstWhere(
-                                      (a) => a['index'] == choice['index'],
-                                    )['title']
-                                    as String? ??
-                                ''),
-                    );
-                    Navigator.pop(bctx);
-                  },
-                );
-              }),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(bctx),
-            child: const Text('Abbrechen'),
-          ),
-        ],
-      ),
-    );
+    return parts.isEmpty ? 'Nicht konfiguriert' : parts.join(' · ');
   }
 
   Future<void> _reload() async {
@@ -252,7 +145,7 @@ class _SettingsPageState extends State<SettingsPage>
       ),
       body: ListView(
         children: [
-          const _Header('Erkennung', help: HelpTopic.transmitter),
+          SectionHeader('Erkennung', help: HelpTopic.transmitter),
           SwitchListTile(
             title: const Text('Aktivitätserkennung (Aussteigen)'),
             subtitle: const Text('Hauptweg: erkennt Fahrt und Aussteigen'),
@@ -308,143 +201,62 @@ class _SettingsPageState extends State<SettingsPage>
               'Nur während einer Fahrt wird alle 2 Minuten kurz gesucht.',
             ),
           ),
-          if (deviceMode != 'none') ...[
-            const Divider(),
-            const _Header('App im Auto', help: HelpTopic.appInCar),
-            ListTile(
-              title: const Text('App öffnen, wenn das Gerät erkannt wird'),
-              subtitle: Text(
-                ((config['launchPackage'] as String?) ?? '').isEmpty
-                    ? 'Keine'
-                    : config['launchLabel'] as String? ?? 'App',
-              ),
-              trailing: FilledButton.tonal(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const AppPickerPage(),
-                  ),
-                ),
-                child: const Text('Wählen'),
-              ),
-            ),
-            SwitchListTile(
-              title: const Text('Beim Aussteigen schließen'),
-              subtitle: const Text(
-                'Wechselt zum Startbildschirm und beendet die App, wenn Android es erlaubt. '
-                'Läuft sie mit eigener Benachrichtigung weiter, beende sie dort.',
-              ),
-              value: config['closeOnGone'] != false,
-              onChanged: (v) => controller.updateConfig(closeOnGone: v),
-            ),
-            if ((config['closeOnGone'] != false) &&
-                ((config['launchPackage'] as String?) ?? '').isNotEmpty)
-              _PermTile(
-                title: 'Benachrichtigungszugriff',
-                hint: 'Damit der Ausschaltknopf in der Benachrichtigung der App gedrückt werden kann – klappt auch bei gesperrtem Handy.',
-                ok: setup?.notificationListener ?? false,
-                onFix: () => NativeBridge.openNotificationListenerSettings(),
-              ),
-            if ((config['closeOnGone'] != false) &&
-                ((config['launchPackage'] as String?) ?? '').isNotEmpty)
-              ListTile(
-                title: const Text('Ausschaltknopf'),
-                subtitle: Text(_closeActionLabel(config)),
-                trailing: FilledButton.tonal(
-                  onPressed: () => _showCloseActionDialog(context, controller),
-                  child: const Text('Wählen'),
-                ),
-              ),
-            if ((config['closeOnGone'] != false) &&
-                ((config['launchPackage'] as String?) ?? '').isNotEmpty)
-              SwitchListTile(
-                title: const Text(
-                  'Notfalls „Beenden erzwingen“ (Bedienungshilfe)',
-                ),
-                subtitle: const Text(
-                  'Öffnet kurz die App-Info und drückt „Beenden erzwingen“. Nur bei entsperrtem Handy – sonst beim nächsten Entsperren.',
-                ),
-                value: config['forceStopFallback'] == true,
-                onChanged: (v) => controller.updateConfig(forceStopFallback: v),
-              ),
-            if ((config['closeOnGone'] != false) &&
-                ((config['launchPackage'] as String?) ?? '').isNotEmpty &&
-                (config['forceStopFallback'] == true) &&
-                (setup != null))
-              _PermTile(
-                title: 'Bedienungshilfe',
-                hint: 'Einstellungen → Bedienungshilfen → Installierte Apps → „Parkplatz-Merker: App beenden“ einschalten. Ausgegraut? Erst „Eingeschränkte Einstellungen zulassen“.',
-                ok: setup.accessibility,
-                onFix: () => NativeBridge.openAccessibilitySettings(),
-              ),
-            if ((config['closeOnGone'] != false) &&
-                ((config['launchPackage'] as String?) ?? '').isNotEmpty)
-              ListTile(
-                title: const Text('Beenden jetzt testen'),
-                trailing: IconButton(
-                  tooltip: 'Anleitung',
-                  icon: const Icon(Icons.help_outline),
-                  onPressed: () => HelpPage.show(context, HelpTopic.closeApp),
-                ),
-                onTap: () => NativeBridge.testClose(),
-              ),
-            if (setup != null)
-              _PermTile(
-                title: 'Über anderen Apps einblenden',
-                hint: 'Nötig, damit die App von selbst aufgeht. Ohne kommt eine Benachrichtigung zum Antippen.',
-                ok: setup.overlay,
-                onFix: () => NativeBridge.openOverlaySettings(),
-              ),
-            ListTile(
-              title: const Text('Jetzt testen'),
-              onTap: () => NativeBridge.testLaunch(),
-            ),
-          ],
           const Divider(),
-          const _Header('Einrichtung', help: HelpTopic.start),
+          ListTile(
+            leading: const Icon(Icons.directions_car),
+            title: const Text('Im Auto: Apps & Lautstärke'),
+            subtitle: Text(_buildCarSubtitle(config)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const CarPage()),
+            ),
+          ),
+          const Divider(),
+          SectionHeader('Einrichtung', help: HelpTopic.start),
           if (setup == null)
             const Padding(
               padding: EdgeInsets.all(16),
               child: LinearProgressIndicator(),
             )
           else ...[
-            _PermTile(
+            PermTile(
               title: '1. Standort',
               ok: setup.location,
               onFix: () => _request([Permission.locationWhenInUse]),
             ),
-            _PermTile(
-              title: '2. Standort „Immer zulassen“',
-              hint: 'Im nächsten Fenster „Immer zulassen“ wählen – sonst klappt es nicht bei geschlossener App.',
+            PermTile(
+              title: '2. Standort „Immer zulassen”',
+              hint: 'Im nächsten Fenster „Immer zulassen” wählen – sonst klappt es nicht bei geschlossener App.',
               ok: setup.locationAlways,
               onFix: setup.location
                   ? () => _request([Permission.locationAlways])
                   : null,
             ),
-            _PermTile(
+            PermTile(
               title: '3. Aktivitätserkennung',
               hint: 'Erkennt, ob du fährst oder gehst.',
               ok: setup.activity,
               onFix: () => _request([Permission.activityRecognition]),
             ),
-            _PermTile(
+            PermTile(
               title: '4. Bluetooth-Suche',
               hint: deviceMode == 'none'
                   ? 'Nur nötig mit Transmitter oder Beacon.'
-                  : 'Zum „Sehen“ des Geräts.',
+                  : 'Zum „Sehen” des Geräts.',
               ok: setup.bluetooth,
               onFix: () => _request([
                 Permission.bluetoothScan,
                 Permission.bluetoothConnect,
               ]),
             ),
-            _PermTile(
+            PermTile(
               title: '5. Benachrichtigungen',
-              hint: 'Für „Fahrt erkannt“ und die Parkschein-Erinnerung.',
+              hint: 'Für „Fahrt erkannt” und die Parkschein-Erinnerung.',
               ok: setup.notifications,
               onFix: () => _request([Permission.notification]),
             ),
-            _PermTile(
-              title: '6. Akku „Nicht eingeschränkt“',
+            PermTile(
+              title: '6. Akku „Nicht eingeschränkt”',
               hint: 'Sonst beendet Android die Erkennung im Hintergrund.',
               ok: setup.battery,
               onFix: () => NativeBridge.openBatterySettings(),
@@ -488,58 +300,6 @@ class _SettingsPageState extends State<SettingsPage>
           const SizedBox(height: 24),
         ],
       ),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  final String text;
-  final HelpTopic? help;
-  const _Header(this.text, {this.help});
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(16, 16, help == null ? 16 : 4, 4),
-    child: Row(
-      children: [
-        Expanded(child: Text(text, style: Theme.of(context).textTheme.titleMedium)),
-        if (help != null)
-          IconButton(
-            tooltip: 'Anleitung',
-            icon: const Icon(Icons.help_outline),
-            onPressed: () => HelpPage.show(context, help),
-          ),
-      ],
-    ),
-  );
-}
-
-class _PermTile extends StatelessWidget {
-  final String title;
-  final String? hint;
-  final bool ok;
-  final VoidCallback? onFix;
-
-  const _PermTile({
-    required this.title,
-    required this.ok,
-    this.hint,
-    this.onFix,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListTile(
-      leading: Icon(
-        ok ? Icons.check_circle : Icons.error_outline,
-        color: ok ? Colors.green : scheme.error,
-      ),
-      title: Text(title),
-      subtitle: hint == null ? null : Text(hint!),
-      trailing: ok
-          ? null
-          : FilledButton(onPressed: onFix, child: const Text('Erlauben')),
     );
   }
 }

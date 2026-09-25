@@ -125,7 +125,8 @@ class MainActivity : FlutterActivity() {
                             result.success(AppLauncher.listApps(this))
                         }
                         "listCloseActions" -> {
-                            result.success(NotifListener.listCloseActions(Config.launchPackage))
+                            val pkg = call.argument<String>("package") ?: Config.launchPackage
+                            result.success(NotifListener.listCloseActions(pkg))
                         }
                         "openOverlaySettings" -> {
                             val uri = Uri.parse("package:$packageName")
@@ -150,11 +151,26 @@ class MainActivity : FlutterActivity() {
                             result.success(null)
                         }
                         "testLaunch" -> {
-                            AppLauncher.launch(this, fromForeground = true)
+                            AppLauncher.launchAll(this, fromForeground = true)
                             result.success(null)
                         }
                         "testClose" -> {
-                            AppLauncher.close(this, fromForeground = true)
+                            AppLauncher.closeAll(this, fromForeground = true)
+                            result.success(null)
+                        }
+                        "getVolumeInfo" -> {
+                            result.success(VolumeProfile.info(this))
+                        }
+                        "applyVolumeNow" -> {
+                            VolumeProfile.apply(this)
+                            result.success(null)
+                        }
+                        "restoreVolumeNow" -> {
+                            VolumeProfile.restore(this)
+                            result.success(null)
+                        }
+                        "openDndSettings" -> {
+                            startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
                             result.success(null)
                         }
                         "getNativeStatus" -> {
@@ -176,6 +192,8 @@ class MainActivity : FlutterActivity() {
                                 true
                             }
 
+                            val nm = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+                            val dndAccess = nm?.isNotificationPolicyAccessGranted ?: false
                             result.success(mapOf(
                                 "sdkInt" to Build.VERSION.SDK_INT,
                                 "playServices" to playServices,
@@ -190,7 +208,8 @@ class MainActivity : FlutterActivity() {
                                 "exactAlarms" to exactAlarms,
                                 "overlayAllowed" to Settings.canDrawOverlays(this),
                                 "notificationListener" to NotifListener.isEnabled(this),
-                                "accessibility" to ForceStopService.isEnabled(this)
+                                "accessibility" to ForceStopService.isEnabled(this),
+                                "dndAccess" to dndAccess
                             ))
                         }
                         "openAppDetails" -> {

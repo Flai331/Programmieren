@@ -146,12 +146,18 @@ class TripService : Service() {
         cancelPlannedStop()
         startLocationUpdates()
         if (Config.chargerEnabled) startPowerWatch()
+        if (scanMode == "none") {
+            CarSession.start(this)
+        }
         startScanning()
     }
 
     private fun onExit() {
         if (!inVehicle && stopAt != 0L) return // doppeltes EXIT
         inVehicle = false
+        if (scanMode == "none") {
+            CarSession.end(this)
+        }
         // Letzte Suchrunde bzw. Fenster abschließen, dann Suche beenden.
         val s = scanner
         val target = scanTarget
@@ -251,6 +257,11 @@ class TripService : Service() {
         running = false
         inVehicle = false
         stopAt = 0L
+
+        // sessionActive nur zurücksetzen, wenn kein Gerät konfiguriert oder Gerät ist weg
+        if (scanMode == "none" || !Config.devicePresent) {
+            Config.sessionActive = false
+        }
 
         // Hintergrund-Lauf starten, um Widget zu aktualisieren
         BackgroundRunner.schedule(this, 60_000L, 7)

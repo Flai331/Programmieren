@@ -78,31 +78,32 @@ Bluetooth aus), gilt diese Regel nicht.
 Alternativ kannst du einen kleinen **USB-BLE-Beacon** nehmen (Gerät im Auto:
 Beacon) – funktioniert genauso, nur stromsparender.
 
-## Blitzer-App automatisch öffnen (optional)
+## Apps im Auto automatisch öffnen (optional)
 
-Wenn ein Transmitter/Beacon eingerichtet ist, kann die App eine beliebige
-Blitzer- oder Navigation-App **automatisch öffnen**, sobald du dein Auto erkannt hast.
+Wenn ein Transmitter/Beacon eingerichtet ist, kann die App **mehrere beliebige Apps** 
+automatisch öffnen, sobald du dein Auto erkannt hast – z. B. Blitzer.de + Spotify + Google Maps.
 
 **Einrichtung:**
-1. Einstellungen → Abschnitt **„App im Auto“** → **„App öffnen, wenn …“** → **„Wählen“**.
-2. Die gewünschte App aus der Liste (z. B. Blitzer.de, Google Maps) auswählen.
-3. Optional: **„Beim Aussteigen schließen“** aktivieren (schaltet zum Startbildschirm und
-   versucht, die App zu beenden).
-4. Optional: **„Über anderen Apps einblenden“** Berechtigung freigeben (damit die App
-   direkt aufgeht; ohne die Berechtigung kommt statt dessen eine Benachrichtigung).
+1. Einstellungen → **„Im Auto: Apps & Lautstärke“** → **Apps hinzufügen**.
+2. Jede gewünschte App aus der Liste auswählen. Die letzte der Liste liegt danach vorn.
+3. Optional: **„Beim Aussteigen beenden“** aktivieren (schaltet zum Startbildschirm und
+   versucht, die Apps zu beenden).
+4. Optional: **„Über anderen Apps einblenden“** Berechtigung freigeben (damit die Apps
+   direkt aufgehen; ohne die Berechtigung kommt statt dessen eine Benachrichtigung).
 
 **Wie es funktioniert:**
-- Sobald dein Transmitter/Beacon **während der Fahrt** erkannt wird, öffnet sich die App.
+- Sobald dein Transmitter/Beacon **während der Fahrt** erkannt wird, öffnen sich alle gewählten Apps
+  nacheinander mit je 1,5 Sekunden Abstand. Die letzte liegt danach vorn.
   Die Suche startet, wenn Android „im Fahrzeug“ erkennt – meist 1–2 Minuten nach dem Losfahren
   (mit Beacon oft schneller). Eine einzelne verpasste Suche schließt nichts.
+- Ohne Transmitter/Beacon: Jede erkannte Fahrt öffnet die Apps – auch Bus oder Taxi.
 - Das funktioniert nur, wenn die App entweder die Berechtigung **„Über anderen Apps“**
   hat, oder der Nutzer eine Benachrichtigung antippen kann.
-- Beim **Aussteigen** (wenn der Transmitter weg ist): Die App wechselt zum Startbildschirm.
-  Das Beenden funktioniert nur, wenn die App keinen eigenen Hintergrunddienst mit
-  Benachrichtigung läuft. Blitzer-Apps tun das meist – dann bleibt die Warnung aktiv
-  und muss in der App selbst beendet werden.
+- Beim **Aussteigen** (wenn der Transmitter weg ist): Die App wechselt zum Startbildschirm und versucht,
+  alle Apps zu beenden. Manche Blitzer-Apps laufen als Warnung im Hintergrund weiter –
+  dann muss die Warnung in der App selbst beendet werden.
 
-**Test:** Knopf **„Jetzt testen”** zum Probieren.
+**Test:** Knopf **„Apps jetzt öffnen (Test)“** zum Probieren.
 
 ## Blitzer-App komplett beenden
 
@@ -111,34 +112,49 @@ Manche Blitzer-Apps wie Blitzer.de laufen nach dem Beenden als Warnung im Hinter
 **Weg 1: Ausschaltknopf in der Benachrichtigung** (empfohlen)
 - Funktioniert auch bei **gesperrtem Bildschirm**.
 - Erfordert **Benachrichtigungszugriff**: Einstellungen → Benachrichtigungen → Parkplatz-Merker → Zugriff erlauben.
-- In der Einstellung **„Ausschaltknopf”** kannst du auswählen, welcher Knopf der Benachrichtigung gedrückt werden soll (z. B. „Ausschalten”, „Beenden” oder ein Symbol). Oder: automatisch suchen.
+- In der Einstellung **„Ausschaltknopf“** kannst du auswählen, welcher Knopf der Benachrichtigung gedrückt werden soll (z. B. „Ausschalten“, „Beenden“ oder ein Symbol). Oder: automatisch suchen.
 
 **Weg 2: Beenden erzwingen per Bedienungshilfe** (Fallback)
 - Falls Weg 1 nicht klappt oder die App nicht reagiert.
-- Öffnet kurz die App-Info und drückt dort „Beenden erzwingen”.
-- Erfordert **Bedienungshilfe**: Einstellungen → Bedienungshilfen → Installierte Apps → „Parkplatz-Merker: App beenden” einschalten. Ausgegraut? Erst „Eingeschränkte Einstellungen zulassen”.
+- Öffnet kurz die App-Info und drückt dort „Beenden erzwingen“.
+- Erfordert **Bedienungshilfe**: Einstellungen → Bedienungshilfen → Installierte Apps → „Parkplatz-Merker: App beenden“ einschalten. Ausgegraut? Erst „Eingeschränkte Einstellungen zulassen“.
 - Nur bei **entsperrtem Bildschirm** möglich. Ist der Bildschirm gesperrt, erledigt es Parkplatz-Merker beim nächsten Entsperren (max. 30 Min. später).
 
 **Einrichtung:**
-1. Einstellungen → Abschnitt **„App im Auto”** → eine Blitzer-App auswählen.
-2. **„Beim Aussteigen schließen”** aktivieren.
-3. „Benachrichtigungszugriff”-Berechtigung freigeben.
-4. Optional: „Notfalls ‚Beenden erzwingen' (Bedienungshilfe)” aktivieren und die Bedienungshilfe-Berechtigung freigeben.
-5. Mit „Beenden jetzt testen” die Konfiguration prüfen.
+1. Einstellungen → **„Im Auto: Apps & Lautstärke“** → Apps hinzufügen.
+2. **„Beim Aussteigen beenden“** aktivieren.
+3. „Benachrichtigungszugriff“-Berechtigung freigeben.
+4. Optional: „Notfalls ‚Beenden erzwingen' (Bedienungshilfe)“ aktivieren und die Bedienungshilfe-Berechtigung freigeben.
+5. Mit „Beenden jetzt testen“ die Konfiguration prüfen.
+
+## Lautstärke im Auto automatisch anpassen (optional)
+
+Mit dem Lautstärke-Profil stellst du dich automatisch auf feste Lautstärken um, wenn du einsteigst 
+– z. B. Medien auf 70 %, Klingelton normal, Benachrichtigungen aus. Beim Aussteigen wird alles zurückgesetzt.
+
+**Einrichtung:**
+1. Einstellungen → **„Im Auto: Apps & Lautstärke“** → Abschnitt **„Lautstärke im Auto“**.
+2. **„Lautstärke-Profil“** aktivieren.
+3. Für jeden Stream (Medien, Klingelton, Benachrichtigungen) festlegen, ob und auf welche Stufe er umgestellt werden soll.
+4. Optional: Klingelmodus auf „Lautlos“, „Vibration“ oder „Normal“ setzen.
+5. **„Nicht-stören-Zugriff“-Berechtigung** freigeben, falls du Lautstärke auf 0 (lautlos) stellen möchtest.
+6. Mit den Test-Knöpfen prüfen.
+
+**Ohne Transmitter/Beacon:** Das Profil gilt für jede erkannte Fahrt – auch Bus oder Taxi.
 
 ## Widget und Schnelleinstellung
 
-- **Widget „Hier geparkt”:** Startbildschirm lange drücken → Widgets → Parkplatz-Merker →
-  „Hier geparkt” auf den Startbildschirm ziehen. Tippen merkt die aktuelle Position.
-- **Widget „Mein Auto”:** Startbildschirm lange drücken → Widgets → Parkplatz-Merker →
-  „Mein Auto” auf den Startbildschirm ziehen. Zeigt, wo dein Auto steht (Karte, Adresse,
+- **Widget „Hier geparkt“:** Startbildschirm lange drücken → Widgets → Parkplatz-Merker →
+  „Hier geparkt“ auf den Startbildschirm ziehen. Tippen merkt die aktuelle Position.
+- **Widget „Mein Auto“:** Startbildschirm lange drücken → Widgets → Parkplatz-Merker →
+  „Mein Auto“ auf den Startbildschirm ziehen. Zeigt, wo dein Auto steht (Karte, Adresse,
   Zeit seit dem Parken). Tippt du auf die Karte oder den Text, öffnet sich die App.
-  Der Knopf „Navigation” startet den Fußweg in Google Maps. Der Knopf „Hier geparkt”
+  Der Knopf „Navigation“ startet den Fußweg in Google Maps. Der Knopf „Hier geparkt“
   merkt einen neuen Standort. Das Widget aktualisiert sich von selbst etwa 1 Minute nach
   dem Aussteigen.
 - **Kachel:** Benachrichtigungsleiste ganz herunterziehen → Stift/Bearbeiten →
-  „Hier geparkt” in die aktiven Kacheln ziehen.
-- In der App: großer Knopf **„Hier geparkt”** unten.
+  „Hier geparkt“ in die aktiven Kacheln ziehen.
+- In der App: großer Knopf **„Hier geparkt“** unten.
 
 ## So funktioniert die Erkennung
 

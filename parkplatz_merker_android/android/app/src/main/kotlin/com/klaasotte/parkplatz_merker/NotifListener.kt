@@ -35,7 +35,7 @@ class NotifListener : NotificationListenerService() {
             return emptyList()
         }
 
-        /** Liefert Knopftexte und ob Benachrichtigung vorhanden ist. */
+        /** Liefert Knopftexte und ob Benachrichtigung vorhanden ist – wird in Dart auch direkt mit Package aufgerufen. */
         fun listCloseActions(pkg: String): Map<String, Any> {
             val acts = actions(pkg)
             val hasNotif = acts.isNotEmpty() || hasActionlessNotification(pkg)

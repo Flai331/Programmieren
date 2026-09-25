@@ -7,6 +7,7 @@ enum HelpTopic {
   transmitter,
   appInCar,
   closeApp,
+  volume,
   widgets,
   extras,
   problems,
@@ -66,28 +67,39 @@ const _sections = <_Section>[
     'Beacon statt Transmitter: Gerät im Auto „Beacon“ wählen – funktioniert genauso, nur stromsparender '
         'und oft schneller erkannt.',
   ]),
-  _Section(HelpTopic.appInCar, Icons.open_in_new, 'App im Auto öffnen (z. B. Blitzer.de)', [
-    'Sobald dein Transmitter/Beacon während der Fahrt erkannt wird, öffnet sich die gewählte App. '
-        'Das geht mit jeder App, die ein Symbol in deiner App-Übersicht hat.',
-    '1. Einstellungen → „App im Auto“ → „Wählen“ → App aus der Liste tippen.\n'
-        '2. „Über anderen Apps einblenden“ erlauben – nur dann geht die App von selbst auf. '
+  _Section(HelpTopic.appInCar, Icons.open_in_new, 'Apps im Auto öffnen (z. B. Blitzer.de + Spotify)', [
+    'Sobald dein Transmitter/Beacon während der Fahrt erkannt wird, öffnen sich alle gewählten Apps '
+        'nacheinander mit je 1,5 Sekunden Abstand. Die letzte liegt danach vorn. Das geht mit jeder App, '
+        'die ein Symbol in deiner App-Übersicht hat.',
+    'Ohne Transmitter/Beacon: Jede erkannte Fahrt startet die Apps – auch Bus oder Taxi.',
+    '1. Einstellungen → „Im Auto: Apps & Lautstärke“ → Apps hinzufügen.\n'
+        '2. „Über anderen Apps einblenden“ erlauben – nur dann gehen die Apps von selbst auf. '
         'Ohne kommt eine Benachrichtigung zum Antippen.\n'
-        '3. Mit „Jetzt testen“ ausprobieren.',
+        '3. Mit „Apps jetzt öffnen (Test)“ ausprobieren.',
     'Die Suche beginnt, wenn Android „im Fahrzeug“ erkennt – meist 1–2 Minuten nach dem Losfahren '
         '(mit Beacon oft schneller).',
   ]),
-  _Section(HelpTopic.closeApp, Icons.power_settings_new, 'App beim Aussteigen komplett beenden', [
-    'Ist der Transmitter weg (Motor aus), wird die App geschlossen. Eine einzelne verpasste Suche '
+  _Section(HelpTopic.closeApp, Icons.power_settings_new, 'Apps beim Aussteigen komplett beenden', [
+    'Ist der Transmitter weg (Motor aus), werden alle Apps geschlossen. Eine einzelne verpasste Suche '
         'während der Fahrt schließt nichts.',
-    'Weg 1 – Ausschaltknopf (empfohlen): „Benachrichtigungszugriff“ erlauben. Dann drückt die App '
-        'den Knopf in der Benachrichtigung der Blitzer-App – unsichtbar, auch bei gesperrtem Handy. '
-        'Hat der Knopf nur ein Symbol: „Ausschaltknopf“ → „Wählen“ (dazu muss die Blitzer-App gerade laufen) '
-        '→ z. B. „Knopf 1 (nur Symbol)“ und mit „Beenden jetzt testen“ prüfen.',
-    'Weg 2 – „Beenden erzwingen“ (Ersatz): Schalter „Notfalls Beenden erzwingen“ an und die '
+    'Weg 1 – Ausschaltknöpfe (empfohlen): „Benachrichtigungszugriff“ erlauben. Dann drückt die App '
+        'den Ausschaltknopf in jeder Benachrichtigung – unsichtbar, auch bei gesperrtem Handy. '
+        'Hat ein Knopf nur ein Symbol: Tippe auf die App in der Liste → „Ausschaltknopf“ → „Wählen“ '
+        '(die App muss gerade laufen) und teste mit „Beenden jetzt testen“.',
+    'Weg 2 – „Beenden erzwingen“ (Fallback): Schalter „Notfalls Beenden erzwingen“ an und die '
         'Bedienungshilfe „Parkplatz-Merker: App beenden“ einschalten (Einstellungen → Bedienungshilfen → '
         'Installierte Apps). Die App öffnet dann kurz die App-Info und drückt „Beenden erzwingen“. '
         'Klappt nur bei entsperrtem Handy – sonst beim nächsten Entsperren.',
     'Die Bedienungshilfe drückt ausschließlich Knöpfe, auf denen wirklich „Beenden erzwingen“ steht.',
+  ]),
+  _Section(HelpTopic.volume, Icons.volume_up_outlined, 'Lautstärke im Auto anpassen', [
+    'Mit dem Lautstärke-Profil stellst du Medien, Klingelton und Benachrichtigungen auf feste Werte um, '
+        'wenn du einsteigst – z. B. Medien auf 70 %, Klingelton normal, Benachrichtigungen lautlos. '
+        'Beim Aussteigen wird alles zurückgesetzt.',
+    'Ohne Transmitter/Beacon: Das Profil gilt für jede erkannte Fahrt.',
+    'Um Lautstärke auf 0 (lautlos) zu stellen oder den Klingelmodus auf „Lautlos“ zu schalten, '
+        'brauchst du „Nicht-stören-Zugriff“ (Einstellungen → Benachrichtigungen → „Nicht-stören-Zugriff“).',
+    'Jede Änderung wird sofort gespeichert. Mit den Test-Knöpfen prüfst du, ob es so klingt, wie du es willst.',
   ]),
   _Section(HelpTopic.widgets, Icons.widgets_outlined, 'Widgets und Schnelleinstellung', [
     'Widget „Mein Auto“: Startbildschirm lange drücken → Widgets → Parkplatz-Merker → „Mein Auto“ '
