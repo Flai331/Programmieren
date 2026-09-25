@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -325,24 +326,123 @@ List<BookInfo> parseOpenLibrarySearch(Map<String, dynamic> json) => [
     ),
 ];
 
+/// Google Books `volumes?q=` (Titelsuche).
+List<BookInfo> parseGoogleBooksSearch(Map<String, dynamic> json) => [
+  for (final item in (json['items'] as List? ?? const []).cast<Map>())
+    ?_googleVolume(item['volumeInfo'] as Map? ?? const {}),
+];
+
+BookInfo? _googleVolume(Map info) {
+  final titel = info['title'] as String? ?? '';
+  if (titel.isEmpty) return null;
+  final ids = (info['industryIdentifiers'] as List? ?? const []).cast<Map>();
+  String? isbn;
+  for (final typ in ['ISBN_13', 'ISBN_10']) {
+    isbn ??= ids
+        .where((i) => i['type'] == typ)
+        .map((i) => i['identifier'] as String)
+        .firstOrNull;
+  }
+  final categories = (info['categories'] as List? ?? const [])
+      .map((c) => c.toString())
+      .toList();
+  final sub = info['subtitle'] as String?;
+  final fromTitle = seriesFromTitle(titel);
+  return BookInfo(
+    isbn: isbn,
+    titel: sub == null || sub.isEmpty ? titel : '$titel: $sub',
+    autor: (info['authors'] as List? ?? const []).join(', '),
+    seiten: (info['pageCount'] as num?)?.toInt(),
+    genres: genresFromSubjects(categories),
+    reihe: fromTitle == null || fromTitle.$1.isEmpty ? null : fromTitle.$1,
+    band: fromTitle?.$2,
+    schlagwoerter: categories,
+  );
+}
+
+String _vereinfacht(String s) => s
+    .toLowerCase()
+    .replaceAll('ä', 'ae')
+    .replaceAll('ö', 'oe')
+    .replaceAll('ü', 'ue')
+    .replaceAll('ß', 'ss')
+    .replaceAll(RegExp(r'[^a-z0-9 ]'), ' ')
+    .replaceAll(RegExp(r'\s+'), ' ')
+    .trim();
+
+/// Schlüssel für "dasselbe Buch": Haupttitel ohne Untertitel plus Nachname
+/// des ersten Autors. Verschiedene Ausgaben fallen so zusammen.
+String werkSchluessel(BookInfo b) {
+  final haupttitel = b.titel.split(RegExp(r'\s*[:(]|\s[-–]\s')).first;
+  final erster = b.autor.split(RegExp(r'[,;&]| und ')).first.trim();
+  final nachname = erster.split(' ').last;
+  return '${_vereinfacht(haupttitel)}|${_vereinfacht(nachname)}';
+}
+
+/// Führt Treffer aus mehreren Quellen zusammen: Ausgaben desselben Werks
+/// werden zu einem Eintrag, Lücken (Seiten, ISBN, Genre) füllen sich aus den
+/// anderen Ausgaben. Die Reihenfolge folgt dem ersten Auftreten; Treffer, in
+/// denen alle Suchwörter vorkommen, stehen vorn.
+List<BookInfo> mergeSearchResults(String query, List<List<BookInfo>> quellen) {
+  final gruppen = <String, BookInfo>{};
+  final reihenfolge = <String>[];
+  // Reihum aus den Quellen nehmen, damit keine Quelle die Liste dominiert.
+  final laenge = quellen.fold(0, (m, q) => max(m, q.length));
+  for (var i = 0; i < laenge; i++) {
+    for (final quelle in quellen) {
+      if (i >= quelle.length) continue;
+      final b = quelle[i];
+      if (b.titel.isEmpty) continue;
+      final key = werkSchluessel(b);
+      final vorhanden = gruppen[key];
+      if (vorhanden == null) {
+        gruppen[key] = b;
+        reihenfolge.add(key);
+      } else {
+        // Eine Ausgabe mit Seitenzahl ist die bessere Vorlage.
+        gruppen[key] = vorhanden.seiten == null && b.seiten != null
+            ? b.merge(vorhanden)
+            : vorhanden.merge(b);
+      }
+    }
+  }
+  final woerter = _vereinfacht(query).split(' ').where((w) => w.length > 1);
+  bool passt(BookInfo b) {
+    final text = _vereinfacht('${b.titel} ${b.autor}');
+    return woerter.every(text.contains);
+  }
+
+  final alle = [for (final k in reihenfolge) gruppen[k]!.withPooledGenres()];
+  return [...alle.where(passt), ...alle.where((b) => !passt(b))];
+}
+
 /// Deutsche Nationalbibliothek, SRU-Antwort im Format MARC21-xml.
 ///
 /// Genutzt werden Titel (245), Person (100), Umfang (300), Reihe (490),
 /// Schlagwörter und Gattungsbegriffe (650, 655, 689) sowie die
 /// DNB-Sachgruppe (082/083), an der Sachbuch und Geschichte erkennbar sind.
 BookInfo? parseDnb(String isbn, String xmlText) {
-  final XmlDocument doc;
-  try {
-    doc = XmlDocument.parse(xmlText);
-  } on XmlException {
-    return null;
-  }
-  final record = doc.descendants
-      .whereType<XmlElement>()
-      .where((e) => e.localName == 'record' && e.getAttribute('type') != null)
-      .firstOrNull;
-  if (record == null) return null;
+  final records = _dnbRecords(xmlText);
+  return records.isEmpty ? null : _parseDnbRecord(records.first, isbn);
+}
 
+/// Alle Treffer einer DNB-Suche.
+List<BookInfo> parseDnbAll(String xmlText) => [
+  for (final r in _dnbRecords(xmlText)) ?_parseDnbRecord(r, null),
+];
+
+List<XmlElement> _dnbRecords(String xmlText) {
+  try {
+    return XmlDocument.parse(xmlText).descendants
+        .whereType<XmlElement>()
+        .where((e) => e.localName == 'record' && e.getAttribute('type') != null)
+        .toList();
+  } on XmlException {
+    return const [];
+  }
+}
+
+BookInfo? _parseDnbRecord(XmlElement record, String? isbnVorgabe) {
   List<Map<String, String>> fields(String tag) => [
     for (final f in record.descendants.whereType<XmlElement>())
       if (f.localName == 'datafield' && f.getAttribute('tag') == tag)
@@ -398,6 +498,15 @@ BookInfo? parseDnb(String isbn, String xmlText) {
       if (hint != null) schlagwoerter.add(hint);
     }
   }
+
+  // Hörbücher und E-Books haben keine Seitenzahl im Umfang; ohne Vorgabe
+  // wird die erste gültige ISBN des Datensatzes genommen.
+  final isbn =
+      isbnVorgabe ??
+      fields('020')
+          .map((f) => normalizeIsbn(f['a'] ?? ''))
+          .where(isValidIsbn)
+          .firstOrNull;
 
   if (titel.isEmpty) return null;
   return BookInfo(
@@ -564,11 +673,36 @@ class BookLookup {
     return info.merge(BookInfo(schlagwoerter: wikidata)).withPooledGenres();
   }
 
+  /// Titel- oder Autorsuche in Open Library, Google Books und der Deutschen
+  /// Nationalbibliothek zugleich; Ausgaben desselben Buchs werden
+  /// zusammengefasst.
   Future<List<BookInfo>> search(String query) async {
-    final q = Uri.encodeQueryComponent(query.trim());
-    final json = await _get(
-      'https://openlibrary.org/search.json?q=$q&limit=15&fields=title,author_name,number_of_pages_median,isbn,subject',
-    );
-    return json == null ? const [] : parseOpenLibrarySearch(json);
+    final text = query.trim();
+    if (text.isEmpty) return const [];
+    final q = Uri.encodeQueryComponent(text);
+    final woerter = text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    final ergebnisse = await Future.wait([
+      _get(
+        'https://openlibrary.org/search.json?q=$q&limit=20&fields=title,author_name,number_of_pages_median,isbn,subject',
+      ).then((j) => j == null ? const <BookInfo>[] : parseOpenLibrarySearch(j)),
+      _get(
+        'https://www.googleapis.com/books/v1/volumes?q=$q&maxResults=20&printType=books',
+      ).then((j) => j == null ? const <BookInfo>[] : parseGoogleBooksSearch(j)),
+      _getText(
+        Uri.https('services.dnb.de', '/sru/dnb', {
+          'version': '1.1',
+          'operation': 'searchRetrieve',
+          'query': woerter.map((w) => 'woe=$w').join(' and '),
+          'recordSchema': 'MARC21-xml',
+          'maximumRecords': '30',
+        }),
+      ).then((x) => x == null ? const <BookInfo>[] : parseDnbAll(x)),
+    ]);
+    // DNB zuerst: deutsche Ausgaben mit verlässlichen Seitenzahlen.
+    return mergeSearchResults(text, [
+      ergebnisse[2],
+      ergebnisse[1],
+      ergebnisse[0],
+    ]);
   }
 }
