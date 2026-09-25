@@ -405,4 +405,26 @@ class NativeBridge {
       print('openBatterySettings: platform not available');
     }
   }
+
+  /// Aktualisiert das Car-Widget mit den neuesten Parkplatz-Daten.
+  static Future<void> updateWidget(Map<String, dynamic>? spot) async {
+    try {
+      await _channel.invokeMethod('updateWidget', spot);
+    } on PlatformException catch (e) {
+      debugPrint('updateWidget error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('updateWidget: platform not available');
+    }
+  }
+
+  /// Signalisiert dem Hintergrund-Lauf, dass er beendet ist.
+  static Future<void> backgroundDone() async {
+    try {
+      await _channel.invokeMethod('backgroundDone');
+    } on PlatformException catch (e) {
+      debugPrint('backgroundDone error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('backgroundDone: platform not available');
+    }
+  }
 }

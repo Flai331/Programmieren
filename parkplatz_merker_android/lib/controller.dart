@@ -21,6 +21,7 @@ class AppController extends ChangeNotifier {
   ParkingSpot? _myLocation;
   Timer? _refreshTimer;
   Timer? _statusTimer;
+  String? _lastWidgetJson;
 
   AppController({Storage? storage}) : _storage = storage ?? Storage();
 
@@ -90,7 +91,7 @@ class AppController extends ChangeNotifier {
 
   Map<String, dynamic> get config => _config;
 
-  Future<void> initialize() async {
+  Future<void> initialize({bool background = false}) async {
     await _storage.initialize();
     _events = await _storage.loadEvents();
     _spots = await _storage.loadSpots();
@@ -99,16 +100,18 @@ class AppController extends ChangeNotifier {
     _ready = true;
     notifyListeners();
 
-    // Bei jedem Start (neu) registrieren – die Registrierung kann nach
-    // Updates von Play-Diensten oder „Beenden erzwingen“ verloren gehen.
-    await NativeBridge.registerTransitions();
+    if (!background) {
+      // Bei jedem Start (neu) registrieren – die Registrierung kann nach
+      // Updates von Play-Diensten oder „Beenden erzwingen” verloren gehen.
+      await NativeBridge.registerTransitions();
+
+      // Regelmäßig auffrischen: alle 15 s
+      _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+        await refresh();
+      });
+    }
 
     await refresh();
-
-    // Regelmäßig auffrischen: alle 15 s
-    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
-      await refresh();
-    });
 
     // Status wird in der UI aktualisiert
   }
@@ -188,9 +191,32 @@ class AppController extends ChangeNotifier {
         }
       }
 
+      // Widget aktualisieren
+      await _syncWidget();
+
       notifyListeners();
     } catch (e) {
       debugPrint('refresh error: $e');
+    }
+  }
+
+  Future<void> _syncWidget() async {
+    final latest = _spots.isNotEmpty ? _spots.first : null;
+    final widgetData = latest != null
+        ? {
+            'time': latest.time,
+            'lat': latest.lat,
+            'lng': latest.lng,
+            'acc': latest.acc,
+            'address': latest.address,
+            'note': latest.note,
+            'source': latest.sourceLabel,
+          }
+        : null;
+    final json = jsonEncode(widgetData);
+    if (json != _lastWidgetJson) {
+      _lastWidgetJson = json;
+      await NativeBridge.updateWidget(widgetData);
     }
   }
 
@@ -202,6 +228,11 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> resumedRefresh() async {
+    // Neu von der Platte laden (der Hintergrund-Lauf kann sie inzwischen geändert haben)
+    _events = await _storage.loadEvents();
+    _spots = await _storage.loadSpots();
+    _deletedIds = await _storage.loadDeletedIds();
+
     await refresh();
     // Timer neu starten
     _refreshTimer?.cancel();
@@ -284,6 +315,7 @@ class AppController extends ChangeNotifier {
 
     _spots.removeWhere((s) => s.id == id);
     await _storage.saveSpots(_spots);
+    await _syncWidget();
     notifyListeners();
   }
 
@@ -292,6 +324,7 @@ class AppController extends ChangeNotifier {
     if (idx != -1) {
       _spots[idx] = _spots[idx].copyWith(note: note);
       await _storage.saveSpots(_spots);
+      await _syncWidget();
       notifyListeners();
     }
   }
