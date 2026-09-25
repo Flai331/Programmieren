@@ -441,6 +441,89 @@ class NativeBridge {
     }
   }
 
+  /// Macht eine einzelne Suchrunde (~12 s).
+  static Future<Map<String, dynamic>> scanOnce() async {
+    try {
+      final result = await _channel.invokeMethod('scanOnce');
+      if (result is Map<Object?, Object?>) {
+        return Map<String, dynamic>.from(result);
+      }
+      return {'ok': false, 'found': false, 'error': 'Unerwartetes Format'};
+    } on PlatformException catch (e) {
+      return {'ok': false, 'found': false, 'error': e.message};
+    } on MissingPluginException {
+      return {'ok': false, 'found': false, 'error': 'Platform nicht verfügbar'};
+    }
+  }
+
+  /// Startet die Routine wie Einsteigen.
+  static Future<void> routineStart() async {
+    try {
+      await _channel.invokeMethod('routineStart');
+    } on PlatformException catch (e) {
+      debugPrint('routineStart error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('routineStart: platform not available');
+    }
+  }
+
+  /// Beendet die Routine wie Aussteigen.
+  static Future<void> routineEnd() async {
+    try {
+      await _channel.invokeMethod('routineEnd');
+    } on PlatformException catch (e) {
+      debugPrint('routineEnd error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('routineEnd: platform not available');
+    }
+  }
+
+  /// Prüft, ob eine App noch läuft (Benachrichtigung vorhanden).
+  static Future<bool> appRunning(String package) async {
+    try {
+      final result = await _channel.invokeMethod('appRunning', {'package': package});
+      return result is bool ? result : false;
+    } on PlatformException catch (e) {
+      debugPrint('appRunning error: ${e.message}');
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// Simuliert: Transmitter gefunden (simulierter Fahrtstart).
+  static Future<void> fakeDeviceSeen() async {
+    try {
+      await _channel.invokeMethod('fakeDeviceSeen');
+    } on PlatformException catch (e) {
+      debugPrint('fakeDeviceSeen error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('fakeDeviceSeen: platform not available');
+    }
+  }
+
+  /// Simuliert: Transmitter weg (simuliertes Aussteigen).
+  static Future<void> fakeDeviceGone() async {
+    try {
+      await _channel.invokeMethod('fakeDeviceGone');
+    } on PlatformException catch (e) {
+      debugPrint('fakeDeviceGone error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('fakeDeviceGone: platform not available');
+    }
+  }
+
+  /// Simuliert eine einzelne Suche.
+  static Future<void> fakeScan(bool found, int rssi) async {
+    try {
+      await _channel.invokeMethod('fakeScan', {'found': found, 'rssi': rssi});
+    } on PlatformException catch (e) {
+      debugPrint('fakeScan error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('fakeScan: platform not available');
+    }
+  }
+
   /// Aktualisiert das Car-Widget mit den neuesten Parkplatz-Daten.
   static Future<void> updateWidget(Map<String, dynamic>? spot) async {
     try {

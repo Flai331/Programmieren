@@ -6,6 +6,7 @@ import '../native.dart';
 import 'app_picker_page.dart';
 import 'common_widgets.dart';
 import 'help_page.dart';
+import 'routine_test_page.dart';
 
 class CarPage extends StatefulWidget {
   const CarPage({super.key});
@@ -130,6 +131,14 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
               title: const Text('Apps jetzt öffnen (Test)'),
               onTap: () => NativeBridge.testLaunch(),
             ),
+          ListTile(
+            leading: const Icon(Icons.science),
+            title: const Text('Ganze Routine testen'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => const RoutineTestPage(),
+            )),
+          ),
           const Divider(),
           SectionHeader('Beim Aussteigen', help: HelpTopic.closeApp),
           SwitchListTile(

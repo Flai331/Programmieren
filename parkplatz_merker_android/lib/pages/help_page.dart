@@ -6,6 +6,7 @@ enum HelpTopic {
   detection,
   transmitter,
   appInCar,
+  routineTest,
   closeApp,
   volume,
   powerSaving,
@@ -74,12 +75,26 @@ const _sections = <_Section>[
         'nacheinander mit je 1,5 Sekunden Abstand. Die letzte liegt danach vorn. Das geht mit jeder App, '
         'die ein Symbol in deiner App-Übersicht hat.',
     'Ohne Transmitter/Beacon: Jede erkannte Fahrt startet die Apps – auch Bus oder Taxi.',
-    '1. Einstellungen → „Im Auto: Apps & Lautstärke“ → Apps hinzufügen.\n'
-        '2. „Über anderen Apps einblenden“ erlauben – nur dann gehen die Apps von selbst auf. '
+    '1. Einstellungen → „Im Auto: Apps & Lautstärke” → Apps hinzufügen.\n'
+        '2. „Über anderen Apps einblenden” erlauben – nur dann gehen die Apps von selbst auf. '
         'Ohne kommt eine Benachrichtigung zum Antippen.\n'
-        '3. Mit „Apps jetzt öffnen (Test)“ ausprobieren.',
-    'Die Suche beginnt, wenn Android „im Fahrzeug“ erkennt – meist 1–2 Minuten nach dem Losfahren '
+        '3. Mit „Apps jetzt öffnen (Test)” ausprobieren.',
+    'Die Suche beginnt, wenn Android „im Fahrzeug” erkennt – meist 1–2 Minuten nach dem Losfahren '
         '(mit Beacon oft schneller).',
+  ]),
+  _Section(HelpTopic.routineTest, Icons.science, 'Ganze Routine testen', [
+    'Der Test spielt eine echte Fahrt nach (wie in deinen Protokollen): Transmitter gefunden, ein kurzer Aussetzer, '
+        'wieder gefunden, beim Aussteigen weg. Du kannst ihn daheim durchführen – Apps gehen wirklich auf und wieder zu, '
+        'die Lautstärke ändert sich wirklich.',
+    'Im Auto → „Ganze Routine testen” → „Abstand zwischen den Suchen” wählen (5/10/20 Sekunden, Standard 10) → „Test starten”.',
+    'Der Test zeigt 5 Schritte mit ✓ (ok), ✗ (fehler) oder „–“ (übersprungen):\n'
+        '1. Transmitter gefunden (RSSI −51) – Apps öffnen.\n'
+        '2. Suche: nicht gefunden (einzelner Aussetzer) – Apps sollen offen bleiben.\n'
+        '3. Suche: gefunden (RSSI −47) – Transmitter wieder da, Apps nicht erneut öffnen.\n'
+        '4. Suche: gefunden (RSSI −49) – ok.\n'
+        '5. Aussteigen: Transmitter weg – Apps beenden, Lautstärke zurücksetzen.',
+    'Nach dem Test: „Ergebnis kopieren” zeigt den vollständigen Text mit allen Ereignissen – '
+        'hilfreich zum Weiterschicken, wenn es nicht klappt.',
   ]),
   _Section(HelpTopic.closeApp, Icons.power_settings_new, 'Apps beim Aussteigen komplett beenden', [
     'Ist der Transmitter weg (Motor aus), werden alle Apps geschlossen. Eine einzelne verpasste Suche '
