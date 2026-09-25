@@ -167,6 +167,12 @@ class MainActivity : FlutterActivity() {
                             AppLauncher.fakeSeen(this)
                             result.success(null)
                         }
+                        "fakeScan" -> {
+                            val found = call.argument<Boolean>("found") ?: false
+                            val rssi = (call.argument<Any>("rssi") as? Number)?.toInt() ?: -50
+                            AppLauncher.fakeScan(this, found, rssi)
+                            result.success(null)
+                        }
                         "fakeDeviceGone" -> {
                             AppLauncher.fakeGone(this)
                             result.success(null)

@@ -59,6 +59,17 @@ object AppLauncher {
         }
     }
 
+    /**
+     * Eine simulierte Suchrunde mitten in der Fahrt – wie eine echte Runde:
+     * gefunden → „gesehen“, nicht gefunden → einzelner Aussetzer (schließt erst beim zweiten).
+     */
+    fun fakeScan(ctx: Context, found: Boolean, rssi: Int) {
+        EventLog.info(ctx, if (found) "Routine-Test: Suche simuliert – gefunden (RSSI $rssi)" else "Routine-Test: Suche simuliert – nicht gefunden")
+        if (Config.hasDevice) {
+            if (found) seen(ctx) else miss(ctx, strong = false)
+        }
+    }
+
     fun fakeGone(ctx: Context) {
         EventLog.info(ctx, "Routine-Test: Transmitter simuliert – weg (Aussteigen)")
         if (Config.hasDevice) {
