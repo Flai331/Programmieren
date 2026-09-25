@@ -80,10 +80,25 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
               final app = launchApps[i];
               final pkg = app['package'] as String?;
               final label = app['label'] as String?;
+              final closeWidget = app['closeWidget'] as String? ?? '';
+              final closeActionTitle = app['closeActionTitle'] as String? ?? '';
+              // Subtitle anzeigen: Widget-Knopf, Aktion oder Package
+              String subtitle = pkg ?? '';
+              if (closeWidget.isNotEmpty) {
+                // Extract index from key like "big:3"
+                final parts = closeWidget.split(':');
+                if (parts.length == 2) {
+                  final idx = int.tryParse(parts[1]) ?? 0;
+                  subtitle = 'Aus-Knopf: Widget-Knopf ${idx + 1}${_widgetWhere(closeWidget)}';
+                }
+              } else if (closeActionTitle.isNotEmpty) {
+                subtitle = closeActionTitle;
+              }
               return _AppListTile(
                 index: i,
                 package: pkg ?? '',
                 label: label ?? '',
+                subtitleText: subtitle,
                 onMoveUp: i > 0
                     ? () => _moveApp(launchApps, i, i - 1, controller)
                     : null,
@@ -282,6 +297,7 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
           'label': label,
           'closeActionIndex': -1,
           'closeActionTitle': '',
+          'closeWidget': '',
         });
         await controller.updateConfig(launchApps: newList);
       }
@@ -321,6 +337,9 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
     final actions = ((actionList['actions'] as List?) ?? const [])
         .whereType<Map<String, dynamic>>()
         .toList();
+    final widgetButtons = ((actionList['widgetButtons'] as List?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
     final hasNotification = actionList['hasNotification'] == true;
 
     if (!hasNotification) {
@@ -336,10 +355,12 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
     }
 
     final choices = [
-      {'index': -1, 'title': 'Automatisch'},
+      {'index': -1, 'type': 'auto', 'title': 'Automatisch', 'raw': ''},
       ...actions.map(
         (a) => {
           'index': a['index'] as int,
+          'type': 'action',
+          'raw': (a['title'] as String?) ?? '',
           'title': ((a['title'] as String?) ?? '').isEmpty
               ? 'Knopf ${((a['index'] as int?) ?? 0) + 1} (nur Symbol)'
               : 'Knopf ${((a['index'] as int?) ?? 0) + 1}: ${a['title']}',
@@ -357,41 +378,92 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
           child: ListView(
             shrinkWrap: true,
             children: [
-              const Text(
-                'Bei mehreren Knöpfen: Probier einen aus mit „Beenden jetzt testen".',
+              Text(
+                '$label muss gerade laufen (Benachrichtigung sichtbar). Teste die Knöpfe nacheinander – beim richtigen geht $label aus. Starte es danach wieder.',
               ),
-              const SizedBox(height: 8),
-              ...List.generate(choices.length, (idx) {
-                final choice = choices[idx];
-                return ListTile(
-                  title: Text(choice['title'] as String),
-                  onTap: () {
-                    // Update the specific app in the list
-                    final config = controller.config;
-                    final launchApps =
-                        ((config['launchApps'] as List?) ?? const [])
-                            .whereType<Map<String, dynamic>>()
-                            .toList();
-                    final appIndex = launchApps.indexWhere(
-                      (a) => a['package'] == pkg,
-                    );
-                    if (appIndex != -1) {
-                      launchApps[appIndex]['closeActionIndex'] =
-                          choice['index'] as int;
-                      launchApps[appIndex]['closeActionTitle'] =
-                          ((choice['index'] as int) == -1)
-                          ? ''
-                          : (actions.firstWhere(
-                                      (a) => a['index'] == choice['index'],
-                                    )['title']
-                                    as String? ??
-                                '');
-                      controller.updateConfig(launchApps: launchApps);
-                    }
-                    Navigator.pop(bctx);
-                  },
-                );
-              }),
+              const SizedBox(height: 12),
+              // Automatisch + Benachrichtigungs-Aktionen
+              if (actions.isNotEmpty) ...[
+                Text(
+                  'Benachrichtigungs-Knöpfe',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                ...List.generate(choices.length, (idx) {
+                  final choice = choices[idx];
+                  return ListTile(
+                    title: Text(choice['title'] as String),
+                    onTap: () => _selectCloseAction(
+                      controller,
+                      pkg,
+                      actions,
+                      choice['index'] as int,
+                      choice['raw'] as String,
+                      '',
+                      bctx,
+                    ),
+                  );
+                }),
+              ] else
+                ...List.generate(choices.length, (idx) {
+                  final choice = choices[idx];
+                  return ListTile(
+                    title: Text(choice['title'] as String),
+                    onTap: () => _selectCloseAction(
+                      controller,
+                      pkg,
+                      actions,
+                      choice['index'] as int,
+                      choice['raw'] as String,
+                      '',
+                      bctx,
+                    ),
+                  );
+                }),
+              // Widget-Knöpfe
+              if (widgetButtons.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Knöpfe im Benachrichtigungs-Widget',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                ...List.generate(widgetButtons.length, (idx) {
+                  final btn = widgetButtons[idx];
+                  final key = btn['key'] as String? ?? '';
+                  final name = btn['name'] as String? ?? '';
+                  final desc = btn['desc'] as String? ?? '';
+                  final btnIdx = (int.tryParse(key.split(':').last) ?? idx) + 1;
+                  final where = _widgetWhere(key);
+                  return ListTile(
+                    title: Text('Widget-Knopf $btnIdx$where'),
+                    subtitle: (name.isNotEmpty || desc.isNotEmpty)
+                        ? Text('$name $desc'.trim())
+                        : null,
+                    trailing: IconButton(
+                      icon: const Icon(Icons.play_arrow),
+                      onPressed: () => _testWidgetButton(pkg, key, label),
+                      tooltip: 'Testen',
+                    ),
+                    onTap: () => _selectCloseAction(
+                      controller,
+                      pkg,
+                      actions,
+                      -1,
+                      '',
+                      key,
+                      bctx,
+                    ),
+                  );
+                }),
+              ],
+              // Warnung wenn weder Aktionen noch Widget-Knöpfe
+              if (actions.isEmpty && widgetButtons.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Keine Knöpfe gefunden. Die App muss gerade laufen und eine Benachrichtigung haben.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
             ],
           ),
         ),
@@ -404,12 +476,69 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
       ),
     );
   }
+
+  Future<void> _testWidgetButton(String pkg, String key, String label) async {
+    if (!mounted) return;
+
+    final result = await NativeBridge.testWidgetButton(pkg, key);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result
+              ? 'Gedrückt – ist $label jetzt aus?'
+              : 'Konnte nicht gedrückt werden',
+        ),
+      ),
+    );
+  }
+
+  void _selectCloseAction(
+    AppController controller,
+    String pkg,
+    List<Map<String, dynamic>> actions,
+    int actionIndex,
+    String actionTitle,
+    String widgetKey,
+    BuildContext bctx,
+  ) {
+    final config = controller.config;
+    final launchApps = ((config['launchApps'] as List?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+    final appIndex = launchApps.indexWhere((a) => a['package'] == pkg);
+
+    if (appIndex != -1) {
+      if (widgetKey.isNotEmpty) {
+        // Widget-Knopf ausgewählt
+        launchApps[appIndex]['closeWidget'] = widgetKey;
+        launchApps[appIndex]['closeActionIndex'] = -1;
+        launchApps[appIndex]['closeActionTitle'] = '';
+      } else {
+        // Benachrichtigungs-Aktion ausgewählt
+        launchApps[appIndex]['closeActionIndex'] = actionIndex;
+        launchApps[appIndex]['closeActionTitle'] = actionTitle.isEmpty ? '' : actionTitle;
+        launchApps[appIndex]['closeWidget'] = '';
+      }
+      controller.updateConfig(launchApps: launchApps);
+    }
+    Navigator.pop(bctx);
+  }
+}
+
+/// Wo der Widget-Knopf liegt – passend zum Schlüssel "big:3" / "normal:1" / "headsup:0".
+String _widgetWhere(String key) {
+  if (key.startsWith('big:')) return ' (große Ansicht)';
+  if (key.startsWith('headsup:')) return ' (Einblendung)';
+  return ' (kleine Ansicht)';
 }
 
 class _AppListTile extends StatelessWidget {
   final int index;
   final String package;
   final String label;
+  final String subtitleText;
   final VoidCallback? onMoveUp;
   final VoidCallback? onMoveDown;
   final VoidCallback onDelete;
@@ -419,6 +548,7 @@ class _AppListTile extends StatelessWidget {
     required this.index,
     required this.package,
     required this.label,
+    required this.subtitleText,
     required this.onDelete,
     required this.onSelectCloseAction,
     this.onMoveUp,
@@ -429,7 +559,7 @@ class _AppListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       title: Text(label),
-      subtitle: Text(package),
+      subtitle: Text(subtitleText),
       trailing: SizedBox(
         width: 120,
         child: Row(

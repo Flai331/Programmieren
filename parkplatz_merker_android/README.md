@@ -112,12 +112,14 @@ Manche Blitzer-Apps wie Blitzer.de laufen nach dem Beenden als Warnung im Hinter
 **Weg 1: Ausschaltknopf in der Benachrichtigung** (empfohlen)
 - Funktioniert auch bei **gesperrtem Bildschirm**.
 - Erfordert **Benachrichtigungszugriff**: Einstellungen → Benachrichtigungen → Parkplatz-Merker → Zugriff erlauben.
-- In der Einstellung **„Ausschaltknopf“** kannst du auswählen, welcher Knopf der Benachrichtigung gedrückt werden soll (z. B. „Ausschalten“, „Beenden“ oder ein Symbol). Oder: automatisch suchen.
+- In der Einstellung **„Ausschaltknopf”** kannst du auswählen, welcher Knopf der Benachrichtigung gedrückt werden soll (z. B. „Ausschalten”, „Beenden” oder ein Symbol). Oder: automatisch suchen.
+
+**Widget-Knöpfe:** Manche Apps wie Blitzer.de zeigen ein eigenes Layout mit zusätzlichen Knöpfen in der Benachrichtigung. Du siehst diese Widget-Knöpfe in der Einstellung **„Ausschaltknopf”** separat aufgelistet. Wähle einen → teste ihn mit dem Play-Symbol rechts. Beim richtigen geht die App aus.
 
 **Weg 2: Beenden erzwingen per Bedienungshilfe** (Fallback)
 - Falls Weg 1 nicht klappt oder die App nicht reagiert.
-- Öffnet kurz die App-Info und drückt dort „Beenden erzwingen“.
-- Erfordert **Bedienungshilfe**: Einstellungen → Bedienungshilfen → Installierte Apps → „Parkplatz-Merker: App beenden“ einschalten. Ausgegraut? Erst „Eingeschränkte Einstellungen zulassen“.
+- Öffnet kurz die App-Info und drückt dort „Beenden erzwingen”.
+- Erfordert **Bedienungshilfe**: Einstellungen → Bedienungshilfen → Installierte Apps → „Parkplatz-Merker: App beenden” einschalten. Ausgegraut? Erst „Eingeschränkte Einstellungen zulassen”.
 - Nur bei **entsperrtem Bildschirm** möglich. Ist der Bildschirm gesperrt, erledigt es Parkplatz-Merker beim nächsten Entsperren (max. 30 Min. später).
 
 **Einrichtung:**

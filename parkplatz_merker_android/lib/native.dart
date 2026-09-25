@@ -62,6 +62,7 @@ class NativeBridge {
       'closeOnGone': true,
       'closeActionTitle': '',
       'closeActionIndex': -1,
+      'closeWidget': '',
       'forceStopFallback': false,
       'volumeEnabled': false,
       'volMusic': -1,
@@ -84,6 +85,7 @@ class NativeBridge {
     bool? closeOnGone,
     String? closeActionTitle,
     int? closeActionIndex,
+    String? closeWidget,
     bool? forceStopFallback,
     List<Map<String, dynamic>>? launchApps,
     bool? volumeEnabled,
@@ -105,6 +107,7 @@ class NativeBridge {
       if (closeOnGone != null) params['closeOnGone'] = closeOnGone;
       if (closeActionTitle != null) params['closeActionTitle'] = closeActionTitle;
       if (closeActionIndex != null) params['closeActionIndex'] = closeActionIndex;
+      if (closeWidget != null) params['closeWidget'] = closeWidget;
       if (forceStopFallback != null) params['forceStopFallback'] = forceStopFallback;
       if (launchApps != null) params['launchApps'] = launchApps;
       if (volumeEnabled != null) params['volumeEnabled'] = volumeEnabled;
@@ -336,14 +339,34 @@ class NativeBridge {
             .whereType<Map<Object?, Object?>>()
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
+        map['widgetButtons'] = ((map['widgetButtons'] as List?) ?? const [])
+            .whereType<Map<Object?, Object?>>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
         return map;
       }
-      return {'actions': [], 'actionless': false, 'hasNotification': false};
+      return {'actions': [], 'actionless': false, 'hasNotification': false, 'widgetButtons': []};
     } on PlatformException catch (e) {
       debugPrint('listCloseActions error: ${e.message}');
-      return {'actions': [], 'actionless': false, 'hasNotification': false};
+      return {'actions': [], 'actionless': false, 'hasNotification': false, 'widgetButtons': []};
     } on MissingPluginException {
-      return {'actions': [], 'actionless': false, 'hasNotification': false};
+      return {'actions': [], 'actionless': false, 'hasNotification': false, 'widgetButtons': []};
+    }
+  }
+
+  /// Testet einen Widget-Knopf.
+  static Future<bool> testWidgetButton(String package, String key) async {
+    try {
+      final result = await _channel.invokeMethod('testWidgetButton', {
+        'package': package,
+        'key': key,
+      });
+      return result is bool ? result : false;
+    } on PlatformException catch (e) {
+      debugPrint('testWidgetButton error: ${e.message}');
+      return false;
+    } on MissingPluginException {
+      return false;
     }
   }
 

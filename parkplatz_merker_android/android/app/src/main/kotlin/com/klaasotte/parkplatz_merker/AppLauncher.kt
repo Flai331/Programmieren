@@ -127,8 +127,19 @@ object AppLauncher {
                 val closeActionTitle = obj.getString("closeActionTitle")
                 val closeActionIdx = obj.getInt("closeActionIndex")
                 nm.cancel((40 + i))
-                val pressed = NotifListener.pressStop(pkg, closeActionTitle, closeActionIdx)
                 val label = obj.optString("label", pkg)
+                val closeWidget = obj.optString("closeWidget", "")
+                // 1. Knopf der Benachrichtigung (Notification.Action)
+                var pressed = closeWidget.isEmpty() && NotifListener.pressStop(pkg, closeActionTitle, closeActionIdx)
+                // 2. Knopf im eigenen Benachrichtigungs-Layout („Widget“, z. B. Blitzer.de)
+                if (!pressed) {
+                    pressed = if (closeWidget.isNotEmpty()) {
+                        WidgetButtons.press(appCtx, pkg, closeWidget)
+                    } else {
+                        WidgetButtons.pressAuto(appCtx, pkg)
+                    }
+                    if (pressed) EventLog.info(appCtx, "Widget-Knopf von $label gedrückt (${closeWidget.ifEmpty { "automatisch" }})")
+                }
                 if (pressed) {
                     EventLog.info(appCtx, "Ausschaltknopf von $label gedrückt")
                 } else {
@@ -140,7 +151,7 @@ object AppLauncher {
                     val why = when {
                         NotifListener.instance == null -> "Benachrichtigungszugriff nicht verbunden"
                         !NotifListener.hasNotification(pkg) -> "keine Benachrichtigung von $label"
-                        titles.isEmpty() -> "Benachrichtigung ohne Knöpfe"
+                        titles.isEmpty() -> "Benachrichtigung ohne Knöpfe, Widget-Knopf nicht gewählt/gefunden"
                         else -> "kein passender Knopf unter: " + titles.joinToString(", ")
                     }
                     EventLog.info(appCtx, "Ausschaltknopf von $label nicht gedrückt – $why")

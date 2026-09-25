@@ -126,7 +126,16 @@ class MainActivity : FlutterActivity() {
                         }
                         "listCloseActions" -> {
                             val pkg = call.argument<String>("package") ?: Config.launchPackage
-                            result.success(NotifListener.listCloseActions(pkg))
+                            val map = HashMap<String, Any>(NotifListener.listCloseActions(pkg))
+                            map["widgetButtons"] = WidgetButtons.list(this, pkg)
+                            // Auch mit Widget-Knöpfen gilt die Benachrichtigung als vorhanden.
+                            if ((map["widgetButtons"] as List<*>).isNotEmpty()) map["hasNotification"] = true
+                            result.success(map)
+                        }
+                        "testWidgetButton" -> {
+                            val pkg = call.argument<String>("package") ?: ""
+                            val key = call.argument<String>("key") ?: ""
+                            result.success(WidgetButtons.press(this, pkg, key))
                         }
                         "openOverlaySettings" -> {
                             val uri = Uri.parse("package:$packageName")
