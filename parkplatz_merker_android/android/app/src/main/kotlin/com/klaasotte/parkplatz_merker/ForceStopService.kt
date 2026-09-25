@@ -49,8 +49,7 @@ class ForceStopService : AccessibilityService() {
     private val FORCE_IDS = listOf("com.android.settings:id/force_stop_button",
         "com.android.settings:id/button3", "com.miui.securitycenter:id/am_force_stop")
     private val OK_IDS = listOf("android:id/button1")
-    private val OK_TEXTS = listOf("ok", "beenden erzwingen", "stopp erzwingen", "force stop")
-    private var step = 0
+        private var step = 0
     private var stepSince = 0L
     private val handler = Handler(Looper.getMainLooper())
     private var unlockReceiver: BroadcastReceiver? = null
@@ -187,32 +186,32 @@ class ForceStopService : AccessibilityService() {
     }
 
     private fun handleClickOK(root: AccessibilityNodeInfo) {
-        // Nur bestätigen, wenn der Dialog wirklich zum Beenden erzwingen gehört.
-        val isForceDialog = listOf("erzwingen", "force stop").any { w ->
-            root.findAccessibilityNodeInfosByText(w).isNotEmpty()
-        }
-        if (!isForceDialog) return
+        // Dem Bestätigungsdialog kurz Zeit geben – vorher ist noch die App-Info zu sehen,
+        // deren eigener Knopf „Stopp erzwingen“ heißt (daran ist der alte Ablauf gescheitert).
+        if (System.currentTimeMillis() - stepSince < 400L) return
+        // Nur den positiven Knopf eines echten Dialogs drücken (AlertDialog: android:id/button1).
+        // Der heißt je nach Handy „OK“ oder „Stopp erzwingen“ – der Knopf der App-Info hat eine andere ID.
         for (id in OK_IDS) {
             val nodes = root.findAccessibilityNodeInfosByViewId(id)
             for (node in nodes) {
+                if (!node.isEnabled) continue
                 if (click(node)) {
-                    finish("beendet")
+                    confirmed()
                     return
                 }
             }
         }
+    }
 
-        for (text in OK_TEXTS) {
-            val nodes = root.findAccessibilityNodeInfosByText(text)
-            for (node in nodes) {
-                if ((node.text?.toString()?.lowercase()?.equals(text)) == true) {
-                    if (click(node)) {
-                        finish("beendet")
-                        return
-                    }
-                }
-            }
-        }
+    /** Nach dem Bestätigen prüfen, ob die App wirklich aus ist, und das ehrlich protokollieren. */
+    private fun confirmed() {
+        val pkg = pendingPkgs.firstOrNull() ?: ""
+        step = 3 // wartet auf Prüfung, nichts mehr klicken
+        unlockRunnable?.let { handler.removeCallbacks(it) }
+        handler.postDelayed({
+            val stillRunning = pkg.isNotEmpty() && NotifListener.hasNotification(pkg)
+            finish(if (stillRunning) "Dialog bestätigt, App läuft aber noch" else "beendet")
+        }, 2000L)
     }
 
     private fun click(node: AccessibilityNodeInfo): Boolean {
