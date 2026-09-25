@@ -132,6 +132,8 @@ String buildDiagnosticText({
   // Kopf
   buffer.writeln('Parkplatz-Merker Diagnose');
   buffer.writeln(formatDateTime(DateTime.now()));
+  final version = nativeStatus['appVersion'];
+  if (version != null) buffer.writeln('Version: $version');
   buffer.writeln();
 
   // Berechtigungen

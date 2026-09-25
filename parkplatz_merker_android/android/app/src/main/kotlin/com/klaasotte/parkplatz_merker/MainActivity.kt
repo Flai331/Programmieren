@@ -251,6 +251,7 @@ class MainActivity : FlutterActivity() {
                             val nm = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
                             val dndAccess = nm?.isNotificationPolicyAccessGranted ?: false
                             result.success(mapOf(
+                                "appVersion" to appVersion(),
                                 "sdkInt" to Build.VERSION.SDK_INT,
                                 "playServices" to playServices,
                                 "transitionsRegistered" to Config.transitionsRegistered,
@@ -327,6 +328,20 @@ class MainActivity : FlutterActivity() {
     override fun onPause() {
         visible = false
         super.onPause()
+    }
+
+    /** z. B. "1.0.0 (Build 38)" – steht oben in der Diagnose. */
+    private fun appVersion(): String = try {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        val code = if (Build.VERSION.SDK_INT >= 28) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode.toLong()
+        }
+        "${info.versionName} (Build $code)"
+    } catch (e: Exception) {
+        "?"
     }
 
     override fun onDestroy() {
