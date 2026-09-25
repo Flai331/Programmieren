@@ -84,15 +84,18 @@ const _sections = <_Section>[
   _Section(HelpTopic.closeApp, Icons.power_settings_new, 'Apps beim Aussteigen komplett beenden', [
     'Ist der Transmitter weg (Motor aus), werden alle Apps geschlossen. Eine einzelne verpasste Suche '
         'während der Fahrt schließt nichts.',
-    'Weg 1 – Ausschaltknöpfe (empfohlen): „Benachrichtigungszugriff“ erlauben. Dann drückt die App '
+    'Weg 1 – Ausschaltknöpfe (empfohlen): „Benachrichtigungszugriff” erlauben. Dann drückt die App '
         'den Ausschaltknopf in jeder Benachrichtigung – unsichtbar, auch bei gesperrtem Handy. '
-        'Hat ein Knopf nur ein Symbol: Tippe auf die App in der Liste → „Ausschaltknopf“ → „Wählen“ '
-        '(die App muss gerade laufen) und teste mit „Beenden jetzt testen“.',
-    'Weg 2 – „Beenden erzwingen“ (Fallback): Schalter „Notfalls Beenden erzwingen“ an und die '
-        'Bedienungshilfe „Parkplatz-Merker: App beenden“ einschalten (Einstellungen → Bedienungshilfen → '
-        'Installierte Apps). Die App öffnet dann kurz die App-Info und drückt „Beenden erzwingen“. '
+        'Hat ein Knopf nur ein Symbol: Tippe auf die App in der Liste → „Ausschaltknopf” → „Wählen” '
+        '(die App muss gerade laufen) und teste mit „Beenden jetzt testen”.',
+    'Blitzer.de & Co. zeigen oft ein eigenes Widget in der Benachrichtigung mit weiteren Knöpfen. '
+        'Die App sieht diese Widget-Knöpfe auch: Wähle einen → teste ihn mit dem Play-Symbol rechts. '
+        'Beim richtigen geht die App aus.',
+    'Weg 2 – „Beenden erzwingen” (Fallback): Schalter „Notfalls Beenden erzwingen” an und die '
+        'Bedienungshilfe „Parkplatz-Merker: App beenden” einschalten (Einstellungen → Bedienungshilfen → '
+        'Installierte Apps). Die App öffnet dann kurz die App-Info und drückt „Beenden erzwingen”. '
         'Klappt nur bei entsperrtem Handy – sonst beim nächsten Entsperren.',
-    'Die Bedienungshilfe drückt ausschließlich Knöpfe, auf denen wirklich „Beenden erzwingen“ steht.',
+    'Die Bedienungshilfe drückt ausschließlich Knöpfe, auf denen wirklich „Beenden erzwingen” steht.',
   ]),
   _Section(HelpTopic.volume, Icons.volume_up_outlined, 'Lautstärke im Auto anpassen', [
     'Mit dem Lautstärke-Profil stellst du Medien, Klingelton und Benachrichtigungen auf feste Werte um, '

@@ -29,4 +29,13 @@ void main() {
     expect(find.textContaining('Modi und Routinen'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('Anleitung closeApp enthält Text über Widget-Knöpfe', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: HelpPage(open: HelpTopic.closeApp)));
+    await tester.pumpAndSettle();
+    expect(find.text('Apps beim Aussteigen komplett beenden'), findsOneWidget);
+    expect(find.textContaining('Widget-Knöpfe'), findsWidgets);
+    expect(find.textContaining('Blitzer.de & Co.'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
 }
