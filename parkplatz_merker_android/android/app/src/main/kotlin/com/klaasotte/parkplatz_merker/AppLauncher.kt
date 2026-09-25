@@ -43,6 +43,36 @@ object AppLauncher {
         }
     }
 
+    /**
+     * Routine-Test mit simuliertem Transmitter: geht durch dieselbe Logik wie eine echte
+     * Suche („gesehen“ bzw. „weg“ beim Aussteigen). Ohne eingerichtetes Gerät wird die
+     * Sitzung direkt gestartet/beendet (wie „ohne Gerät“ bei jeder Fahrt).
+     */
+    fun fakeSeen(ctx: Context) {
+        EventLog.info(ctx, "Routine-Test: Transmitter simuliert – gesehen")
+        if (Config.hasDevice) {
+            Config.devicePresent = false // sonst gälte er noch als „schon da“
+            Config.sessionActive = false
+            seen(ctx)
+        } else {
+            CarSession.testStart(ctx)
+        }
+    }
+
+    fun fakeGone(ctx: Context) {
+        EventLog.info(ctx, "Routine-Test: Transmitter simuliert – weg (Aussteigen)")
+        if (Config.hasDevice) {
+            if (!Config.devicePresent) {
+                Config.devicePresent = true
+                Config.sessionActive = true
+                Config.sessionSince = System.currentTimeMillis()
+            }
+            miss(ctx, strong = true)
+        } else {
+            CarSession.testEnd(ctx)
+        }
+    }
+
     fun reset() {
         Config.devicePresent = false
         misses = 0

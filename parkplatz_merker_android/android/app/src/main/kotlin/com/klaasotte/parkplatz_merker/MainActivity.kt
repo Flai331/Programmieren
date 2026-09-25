@@ -163,6 +163,14 @@ class MainActivity : FlutterActivity() {
                             AppLauncher.launchAll(this, fromForeground = true)
                             result.success(null)
                         }
+                        "fakeDeviceSeen" -> {
+                            AppLauncher.fakeSeen(this)
+                            result.success(null)
+                        }
+                        "fakeDeviceGone" -> {
+                            AppLauncher.fakeGone(this)
+                            result.success(null)
+                        }
                         "routineStart" -> {
                             CarSession.testStart(this)
                             result.success(null)
