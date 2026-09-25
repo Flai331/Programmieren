@@ -7,7 +7,7 @@ Flutter-App, die Lesen in den Aufbau einer eigenen Stadt verwandelt: gelesene Se
 | Bereich | Umsetzung |
 | --- | --- |
 | Material | Jede Seite: 1 Holz + 1 Genre-Material. Mehrere Genres teilen das Genre-Material auf. |
-| Bauen | Grund-, Genre- und Kombi-Gebäude im Baumenü, Platz in der Stadt antippen. Abreißen gibt das Material zurück, Verschieben geht auch. |
+| Bauen | Grund- (Haus, Straße, Baum, Bäckerei, Wassermühle), Genre- und Kombi-Gebäude im Baumenü, Platz in der Stadt antippen. Abreißen gibt das Material zurück, Verschieben geht auch. |
 | Buch-Denkmal | Jedes Buch steht als Geister-Gebäude (Wunschliste), Baustelle (am Lesen) oder Denkmal (beendet) in der Stadt. Antippen zeigt Buch, Datum, Notiz. |
 | Buchreihen | Eigenes Viertel östlich der Stadt, ein Bauplatz pro Band, Gerüst für laufende Reihen, Wahrzeichen + Materialbonus (50 Holz und 50 Genre-Material je Band) bei kompletter Reihe. Ab 10 Bänden quadratisch. |
 | Stadtstufen | Dorf 10×10 → Kleinstadt 16×16 (2.000 S.) → Stadt 24×24 (10.000 S.) → Metropole 32×32 (30.000 S.). |
@@ -22,7 +22,7 @@ Flutter-App, die Lesen in den Aufbau einer eigenen Stadt verwandelt: gelesene Se
 - Flutter, Datenbank lokal mit Drift (`lib/data/db.dart`, generiert: `db.g.dart`)
 - Spiellogik als reine Funktionen in `lib/logic/`, getestet in `test/`
 - Stadtansicht mit `CustomPainter` (isometrisch) statt Flame: weniger Abhängigkeiten, Zoomen/Verschieben über `InteractiveViewer`
-- Gebäude und Boden sind mit Blender gerenderte 3D-Bilder (`assets/sprites/`, je Gebäude mit Fenstern auch eine Nachtversion mit erleuchteten Fenstern). Fehlen sie, wird die Stadt vereinfacht gezeichnet.
+- Gebäude und Boden sind mit Blender gerenderte 3D-Bilder (`assets/sprites/`, je Gebäude mit Fenstern auch eine Nachtversion mit erleuchteten Fenstern). Bäckerei, Wassermühle, die Baustellen gelesener Bücher und die Dorfbewohner sind gemalte Bilder aus `tools/sprites/vorlage_gemalt.jpg`, freigestellt mit `tools/sprites/cutout.py`. Fehlen die Bilder, wird die Stadt vereinfacht gezeichnet.
 - Materialbestand, Stadtstufe, Aktivität und Nahziel werden berechnet, nicht gespeichert
 
 Abweichungen vom Datenmodell im Konzept: `Book` hat zusätzlich `hinzugefuegtAm` und `beendetAm`, `Building` hat `jahr` und `gebautAm` (für Jahresprojekt und Zeitraffer). `Inventory` und `BuildingType` sind keine Tabellen: der Bestand wird berechnet, die Gebäudetypen stehen in `lib/model/catalog.dart`.
@@ -42,6 +42,8 @@ Gebäudebilder neu rendern (braucht Python 3.11 mit `bpy` und `pillow`):
 pip install "bpy==4.2.*" pillow
 python tools/sprites/render_sprites.py /tmp/sprites          # alle, oder einzelne Namen anhängen
 python tools/sprites/to_webp.py /tmp/sprites assets/sprites
+python tools/sprites/cutout.py tools/sprites/vorlage_gemalt.jpg /tmp/gemalt
+python tools/sprites/to_webp.py /tmp/gemalt assets/sprites
 ```
 
 Die APK baut der Workflow `.github/workflows/lese-stadt-apk.yml` und hängt sie als Artifact an den Lauf.

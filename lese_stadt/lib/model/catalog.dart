@@ -78,6 +78,21 @@ const _grund = [
     kosten: {Mat.holz: 8},
     hoehe: 0.9,
   ),
+  BuildingType(
+    id: 'baeckerei',
+    name: 'Bäckerei',
+    kategorie: Kategorie.grund,
+    kosten: {Mat.holz: 60},
+    hoehe: 1.1,
+  ),
+  BuildingType(
+    id: 'wassermuehle',
+    name: 'Wassermühle',
+    kategorie: Kategorie.grund,
+    kosten: {Mat.holz: 120},
+    abStufe: Stufe.kleinstadt,
+    hoehe: 1.2,
+  ),
 ];
 
 /// Pro Genre die Gebäude aus dem Konzept, in aufsteigender Stufe.

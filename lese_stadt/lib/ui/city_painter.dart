@@ -308,6 +308,16 @@ class CityPainter extends CustomPainter {
             final p = book.seitenGesamt <= 0
                 ? 0.0
                 : gelesen / book.seitenGesamt;
+            // Gemalte Baustellen: erst Rohbau mit offenem Dach, ab der
+            // Hälfte mit Dachstuhl. Sonst die gerenderten in drei Stufen.
+            if (_sprite(
+              canvas,
+              p < 0.5 ? 'baustelle_baeckerei' : 'baustelle_muehle',
+              b.x,
+              b.y,
+            )) {
+              return true;
+            }
             final stufe = p < 1 / 3 ? 1 : (p < 2 / 3 ? 2 : 3);
             return _sprite(canvas, 'baustelle$stufe', b.x, b.y);
           case BookStatus.beendet:
@@ -346,7 +356,9 @@ class CityPainter extends CustomPainter {
         geist: true,
       ),
       PlotState.geruest => _sprite(canvas, 'geruest', p.x, p.y),
-      PlotState.baustelle => _sprite(canvas, 'baustelle2', p.x, p.y),
+      PlotState.baustelle =>
+        _sprite(canvas, 'baustelle_muehle', p.x, p.y) ||
+            _sprite(canvas, 'baustelle2', p.x, p.y),
       PlotState.fertig => _sprite(canvas, 'reihe_$genre', p.x, p.y),
       PlotState.wahrzeichen => _sprite(canvas, 'wahrzeichen', p.x, p.y),
     };
@@ -407,6 +419,11 @@ class CityPainter extends CustomPainter {
     for (final d in scene.districts) {
       for (final p in d.plots) {
         items.add((p.x, p.y, () => _paintPlot(canvas, p, d)));
+      }
+    }
+    if (sprites?['person_a_vorn'] != null) {
+      for (final m in _menschen()) {
+        items.add((m.x, m.y, () => _paintMensch(canvas, m)));
       }
     }
     items.sort((a, b) {
@@ -838,9 +855,75 @@ class CityPainter extends CustomPainter {
     }
   }
 
+  /// Leute auf den Wegen der Stadt, je nach Aktivität mehr oder weniger.
+  List<_Mensch> _menschen() {
+    final bel = scene.belebung;
+    if (bel == Belebung.still || scene.size == 0) return const [];
+    final anzahl = switch (bel) {
+      Belebung.wenige => 4,
+      Belebung.licht => 10,
+      _ => 18,
+    };
+    // In Gebäuden (nicht auf Straßen oder im Park) sind sie unsichtbar.
+    final drin = {
+      for (final b in scene.buildings)
+        if (b.typeId != 'strasse' && b.typeId != 'park') (b.x, b.y),
+    };
+    final rnd = Random(42);
+    final s = scene.size.toDouble();
+    final result = <_Mensch>[];
+    for (var i = 0; i < anzahl; i++) {
+      final entlangX = rnd.nextBool();
+      final vor = rnd.nextBool();
+      final spur = rnd.nextInt(scene.size) + 0.5;
+      final tempo = 0.5 + rnd.nextDouble();
+      final phase = rnd.nextDouble();
+      var pos = ((t * tempo + phase) % 1.0) * s;
+      if (!vor) pos = s - pos;
+      final (fx, fy) = entlangX ? (pos, spur) : (spur, pos);
+      final tile = (fx.floor(), fy.floor());
+      if (drin.contains(tile)) continue;
+      final frau = i.isOdd;
+      // Nach vorn (zum Betrachter) laufen sie mit Gesicht, sonst von hinten.
+      final bild = vor
+          ? (frau ? 'person_b_vorn' : 'person_a_vorn')
+          : (frau
+                ? 'person_b_hinten'
+                : (i % 4 == 0 ? 'person_a_seite' : 'person_a_hinten'));
+      // Entlang y geht es im Bild nach links: gespiegelt.
+      result.add(
+        _Mensch(tile.$1, tile.$2, scene.toScreen(fx, fy), bild, !entlangX),
+      );
+    }
+    return result;
+  }
+
+  void _paintMensch(Canvas canvas, _Mensch m) {
+    final bild = sprites?[m.bild];
+    if (bild == null) return;
+    final h = 0.32 * Sprites.pxProHoehe * _bildSkala;
+    final w = h * bild.width / bild.height;
+    canvas.save();
+    canvas.translate(m.fuss.dx, m.fuss.dy);
+    if (m.gespiegelt) canvas.scale(-1, 1);
+    canvas.drawImageRect(
+      bild,
+      Rect.fromLTWH(0, 0, bild.width.toDouble(), bild.height.toDouble()),
+      Rect.fromLTWH(-w / 2, -h, w, h),
+      Paint()
+        ..filterQuality = FilterQuality.medium
+        ..colorFilter = scene.nacht ? _nachtFilter : null,
+    );
+    canvas.restore();
+  }
+
   void _paintLife(Canvas canvas) {
     final bel = scene.belebung;
     if (bel == Belebung.still || scene.size == 0) return;
+    if (sprites?['person_a_vorn'] != null) {
+      _paintFest(canvas);
+      return;
+    }
     final anzahl = switch (bel) {
       Belebung.wenige => 4,
       Belebung.licht => 10,
@@ -869,7 +952,12 @@ class CityPainter extends CustomPainter {
         Paint()..color = _shade(const Color(0xFFF1C9A5), _light),
       );
     }
-    if (bel == Belebung.fest) {
+    _paintFest(canvas);
+  }
+
+  void _paintFest(Canvas canvas) {
+    final s = scene.size.toDouble();
+    if (scene.belebung == Belebung.fest) {
       // Lichterkette zwischen zwei Masten quer über die Stadt.
       final a = scene.toScreen(0, s / 2);
       final b = scene.toScreen(s, s / 2);
@@ -962,4 +1050,12 @@ class CityPainter extends CustomPainter {
       old.highlight != highlight ||
       old.placing != placing ||
       old.sprites != sprites;
+}
+
+class _Mensch {
+  _Mensch(this.x, this.y, this.fuss, this.bild, this.gespiegelt);
+  final int x, y;
+  final Offset fuss;
+  final String bild;
+  final bool gespiegelt;
 }
