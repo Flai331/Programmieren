@@ -1,0 +1,13 @@
+{
+  "name": "lese-stadt-3d",
+  "private": true,
+  "description": "3D-Stadtansicht der Lese-Stadt (three.js), gebündelt nach ../assets/city3d",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --minify --format=iife --target=es2020 --outfile=../assets/city3d/app.js"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "^4.5.0",
+    "esbuild": "^0.24.0",
+    "three": "^0.170.0"
+  }
+}

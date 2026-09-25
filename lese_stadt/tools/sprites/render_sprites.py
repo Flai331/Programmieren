@@ -871,6 +871,99 @@ def g_hafen():
     return True
 
 
+def fachwerk(x0, y0, z0, sx, sy, h, etagen=2, holzfarbe=(0.3, 0.18, 0.1)):
+    """Dunkle Balken auf allen vier Fassaden eines Quaders."""
+    holz = mat('holz', holzfarbe, 0.75)
+    d = 0.018
+    for seite in ('+x', '-x', '+y', '-y'):
+        laenge = sy if seite in ('+x', '-x') else sx
+        vz = 1 if seite[0] == '+' else -1
+        def balken(t, z, bl, bh, rot=0.0):
+            if seite in ('+x', '-x'):
+                box(x0 + vz * (sx / 2 + d / 2), y0 + t, z, d, bl, bh, holz, 0.002,
+                    rot=0) if rot == 0 else _schraeg(x0 + vz * (sx / 2 + d / 2), y0 + t, z, bl, bh, rot, 'x', holz)
+            else:
+                box(x0 + t, y0 + vz * (sy / 2 + d / 2), z, bl, d, bh, holz, 0.002) if rot == 0 else \
+                    _schraeg(x0 + t, y0 + vz * (sy / 2 + d / 2), z, bl, bh, rot, 'y', holz)
+        felder = max(2, round(laenge / 0.16))
+        for e in range(etagen + 1):
+            balken(0, z0 + h * e / etagen - (0.02 if e == etagen else 0), laenge + d, 0.025)
+        for i in range(felder + 1):
+            t = -laenge / 2 + laenge * i / felder
+            balken(t, z0, 0.025, h)
+        for e in range(etagen):
+            t = -laenge / 2 + laenge * 0.5 / felder
+            balken(t, z0 + h * e / etagen, 0.02, h / etagen * 1.1, rot=0.7)
+
+
+def _schraeg(x, y, z, bl, bh, winkel, achse, material):
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(x, y, z + bh / 2))
+    o = bpy.context.active_object
+    o.scale = (0.018, bl, bh) if achse == 'x' else (bl, 0.018, bh)
+    o.rotation_euler = (winkel, 0, 0) if achse == 'x' else (0, winkel, 0)
+    return _fertig(o, material, 0.002)
+
+
+def g_baeckerei():
+    platz(0.94, 0.94, (0.6, 0.57, 0.52))
+    putz = mat('putz', (0.93, 0.88, 0.76))
+    sx, sy = 0.58, 0.5
+    box(0, 0, 0, sx, sy, 0.14, mat('stein', (0.55, 0.53, 0.5)))
+    box(0, 0, 0.14, sx, sy, 0.38, putz)
+    fachwerk(0, 0, 0.14, sx, sy, 0.38)
+    giebel(0, 0, 0.52, sx, sy, 0.3, putz, 'y')
+    satteldach(0, 0, 0.52, sx, sy, 0.3, mat('dach', (0.72, 0.24, 0.14)), 'y', 0.05)
+    box(0.14, -0.1, 0.52, 0.07, 0.07, 0.34, mat('ziegel', (0.5, 0.28, 0.2)))
+    fenster(0, 0, 0.14, sx, sy, 2, 2, 0.38, fb=0.07, fh=0.09, start=0.04)
+    fenster(0, 0, 0, sx, sy, 1, 2, 0.14, seiten=('+x',), fb=0.1, fh=0.08, start=0.03)
+    # Markise und Auslage vor dem Laden
+    for i in range(4):
+        farbe = (0.85, 0.15, 0.12) if i % 2 == 0 else (0.96, 0.95, 0.92)
+        _schraeg(0.05 + i * 0.055 - 0.08, sy / 2 + 0.07, 0.2, 0.055, 0.12, -0.9, 'x', mat('putz', farbe, 0.6)).rotation_euler = (math.radians(-55), 0, 0)
+    box(0.02, sy / 2 + 0.09, 0, 0.22, 0.08, 0.07, mat('holz', (0.45, 0.3, 0.18)))
+    for k in range(5):
+        kugel(-0.07 + k * 0.045, sy / 2 + 0.09, 0.085, 0.018, mat('putz', (0.78, 0.55, 0.28), 0.8), sz=0.7)
+    tuer(-0.15, 0, sx, sy, '+y', (0.35, 0.2, 0.1))
+    box(-0.26, sy / 2 + 0.06, 0.32, 0.1, 0.012, 0.07, mat('holz', (0.35, 0.22, 0.12)))
+    return True
+
+
+def g_wassermuehle():
+    # Gras, Bachbett und Wasser quer über das Feld
+    box(-0.26, 0, 0, 0.44, 0.96, 0.05, mat('gras', (0.3, 0.5, 0.18)))
+    box(0.34, 0, 0, 0.28, 0.96, 0.05, mat('gras', (0.3, 0.5, 0.18)))
+    box(0.06, 0, 0, 0.16, 0.96, 0.015, mat('erde', (0.4, 0.33, 0.25)))
+    box(0.06, 0, 0.015, 0.16, 0.96, 0.02, mat('wasser', (0.2, 0.42, 0.55)), 0)
+    putz = mat('putz', (0.9, 0.85, 0.72))
+    sx, sy = 0.4, 0.46
+    box(-0.2, 0, 0.05, sx, sy, 0.2, mat('stein', (0.55, 0.54, 0.52)))
+    box(-0.2, 0, 0.25, sx, sy, 0.26, putz)
+    fachwerk(-0.2, 0, 0.25, sx, sy, 0.26, etagen=1)
+    giebel(-0.2, 0, 0.51, sx, sy, 0.26, putz, 'x')
+    satteldach(-0.2, 0, 0.51, sx, sy, 0.26, mat('holz', (0.45, 0.3, 0.18), 0.8), 'x', 0.05)
+    box(-0.3, -0.12, 0.5, 0.06, 0.06, 0.3, mat('stein', (0.5, 0.5, 0.5)))
+    fenster(-0.2, 0, 0.25, sx, sy, 1, 2, 0.26, fb=0.07, fh=0.09, start=0.05)
+    tuer(-0.28, 0, sx, sy, '+y', (0.35, 0.2, 0.1))
+    # Wasserrad mit Speichen an der Bachseite
+    holz = mat('holz', (0.38, 0.24, 0.13), 0.8)
+    rad = []
+    bpy.ops.mesh.primitive_torus_add(major_radius=0.17, minor_radius=0.018,
+                                     location=(0.06, 0.0, 0.2), rotation=(0, math.radians(90), 0))
+    rad.append(_fertig(bpy.context.active_object, holz))
+    for i in range(8):
+        a = i * math.pi / 8
+        o = box(0.06, 0.0, 0.2 - 0.17, 0.02, 0.012, 0.34, holz, 0.001)
+        o.location = (0.06, 0, 0.2)
+        o.rotation_euler = (a, 0, 0)
+    for i in range(12):
+        a = i * math.tau / 12
+        o = box(0.06, math.cos(a) * 0.17, 0.2 + math.sin(a) * 0.17 - 0.025, 0.07, 0.012, 0.05, holz, 0.001)
+    zylinder(0.06, 0, 0.19, 0.02, 0.03, mat('metall', (0.2, 0.2, 0.2)), n=12).rotation_euler = (0, math.radians(90), 0)
+    # Holzsteg über den Bach
+    box(0.06, 0.34, 0.05, 0.22, 0.12, 0.02, holz)
+    return True
+
+
 def buchdenkmal(farbe):
     rasen(0.7, 0.7)
     stein = mat('stein', (0.8, 0.78, 0.74))
@@ -993,6 +1086,8 @@ BILDER = {
     'bahnhof': g_bahnhof,
     'hafen': g_hafen,
     'geruest': g_geruest,
+    'baeckerei3d': g_baeckerei,
+    'wassermuehle3d': g_wassermuehle,
     'wahrzeichen': g_wahrzeichen,
     'boden_gras1': lambda: boden_gras(1),
     'boden_gras2': lambda: boden_gras(2),

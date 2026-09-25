@@ -5,6 +5,7 @@ import '../logic/series.dart';
 import '../model/catalog.dart';
 import 'book_screens.dart';
 import 'build_menu.dart';
+import 'city3d.dart';
 import 'city_painter.dart';
 import 'common.dart';
 import 'entry_screen.dart';
@@ -62,9 +63,13 @@ class _CityScreenState extends State<CityScreen>
       ..scaleByDouble(scale, scale, 1, 1);
   }
 
-  Future<void> _tap(CityScene scene, Offset pos) async {
-    final store = StoreScope.read(context);
+  Future<void> _tap(CityScene scene, Offset pos) {
     final (x, y) = scene.fromScreen(pos);
+    return _tapFeld(scene, x, y);
+  }
+
+  Future<void> _tapFeld(CityScene scene, int x, int y) async {
+    final store = StoreScope.read(context);
     switch (_modus) {
       case _Bauen(:final typ):
         if (!store.isFreeTile(x, y)) {
@@ -305,6 +310,23 @@ class _CityScreenState extends State<CityScreen>
         ),
         actions: [
           IconButton(
+            tooltip: 'Über die 3D-Stadt',
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => showAboutDialog(
+              context: context,
+              applicationName: 'Lese-Stadt',
+              children: const [
+                Text(
+                  'Die 3D-Stadt nutzt three.js (MIT-Lizenz). Gebäude selbst in Blender gebaut.\n\n'
+                  'Figuren: „Cesium Man“ aus den glTF-Beispielmodellen der Khronos Group, '
+                  'Lizenz CC BY 4.0 (creativecommons.org/licenses/by/4.0), '
+                  'neu eingefärbt und um Animationen ergänzt.\n\n'
+                  'Laterne: „Lantern“ aus den glTF-Beispielmodellen der Khronos Group, CC0.',
+                ),
+              ],
+            ),
+          ),
+          IconButton(
             tooltip: 'Baumenü',
             icon: const Icon(Icons.construction),
             onPressed: _openBuildMenu,
@@ -395,37 +417,50 @@ class _CityScreenState extends State<CityScreen>
                 style: TextStyle(color: theme.colorScheme.error),
               ),
             ),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                if (!_zentriert) {
-                  _zentriert = true;
-                  _zentrieren(scene, constraints.biggest);
-                }
-                return ClipRect(
-                  child: InteractiveViewer(
-                    transformationController: _viewer,
-                    constrained: false,
-                    minScale: 0.3,
-                    maxScale: 3,
-                    boundaryMargin: const EdgeInsets.all(400),
-                    child: GestureDetector(
-                      onTapUp: (d) => _tap(scene, d.localPosition),
-                      child: CustomPaint(
-                        size: scene.canvasSize,
-                        painter: CityPainter(
-                          scene,
-                          animation: _anim,
-                          highlight: _highlight,
-                          placing: placing,
+          if (City3D.enabled)
+            Expanded(
+              child: City3DView(
+                daten: city3dJson(
+                  scene,
+                  now: store.now,
+                  placing: placing,
+                  highlight: _highlight,
+                ),
+                onTap: (x, y) => _tapFeld(scene, x, y),
+              ),
+            )
+          else
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  if (!_zentriert) {
+                    _zentriert = true;
+                    _zentrieren(scene, constraints.biggest);
+                  }
+                  return ClipRect(
+                    child: InteractiveViewer(
+                      transformationController: _viewer,
+                      constrained: false,
+                      minScale: 0.3,
+                      maxScale: 3,
+                      boundaryMargin: const EdgeInsets.all(400),
+                      child: GestureDetector(
+                        onTapUp: (d) => _tap(scene, d.localPosition),
+                        child: CustomPaint(
+                          size: scene.canvasSize,
+                          painter: CityPainter(
+                            scene,
+                            animation: _anim,
+                            highlight: _highlight,
+                            placing: placing,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Text(

@@ -44,6 +44,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   xml: ^7.0.1
+  webview_flutter: ^4.14.1
 
 dev_dependencies:
   flutter_test:
@@ -72,6 +73,8 @@ flutter:
   # Mit Blender gerenderte Gebäudebilder (tools/sprites/render_sprites.py).
   assets:
     - assets/sprites/
+    - assets/city3d/
+    - assets/city3d/models/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

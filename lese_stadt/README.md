@@ -17,6 +17,29 @@ Flutter-App, die Lesen in den Aufbau einer eigenen Stadt verwandelt: gelesene Se
 | Stadtchronik | Monatlicher Schnappschuss (Gebäudeliste als JSON), Jahresrückblick, Zeitraffer ab 1. Januar, als Bild teilbar. |
 | Buchdaten | ISBN tippen oder scannen (`mobile_scanner`). Daten von Open Library, der Deutschen Nationalbibliothek (vor allem für deutsche Bücher) und Google Books. Das Genre ergibt sich aus den Schlagwörtern aller Quellen plus den Genre-Angaben von Wikidata. Titelsuche ohne ISBN über Open Library. |
 
+## 3D-Stadt
+
+Die Stadtansicht ist eine echte 3D-Szene (three.js in einer WebView, Quelltext in `web3d/src/main.js`, gebündelt nach `assets/city3d/app.js`). Die App liefert die Dateien über einen kleinen Server auf 127.0.0.1 aus und schickt den Stadtzustand als JSON (`lib/ui/city3d.dart`).
+
+- Kamera drehen, neigen und zoomen mit den Fingern
+- Sonne und Himmel folgen der Uhrzeit, Schatten wandern mit; nachts Mond, Laternenlicht und – bei viel Leseaktivität – hell erleuchtete Fenster
+- Spaziergänger laufen animiert auf Wegen über freie Felder (Wegsuche auf dem Raster), nachts kaum jemand
+- Werktags von 7 bis 18 Uhr hämmern Arbeiter an den Baustellen der Bücher, die gerade gelesen werden; vor Bäckerei, Mühle, Rathaus usw. steht jemand bei der Arbeit
+- Gebäude sind in Blender gebaute Modelle mit eingebrannten Texturen (`assets/city3d/models/`, 61 Modelle, 13 MB)
+
+Modelle neu erzeugen:
+
+```bash
+python tools/city3d/export_models.py /tmp/glb                # Gebäude (bpy)
+python tools/city3d/export_mensch.py CesiumMan.glb /tmp/glb  # Figur mit Animationen
+python tools/city3d/export_laterne.py Lantern.glb /tmp/glb
+cd web3d && npm install && cd ..
+sh tools/city3d/optimize.sh /tmp/glb assets/city3d/models   # Texturen verkleinern, Meshopt
+cd web3d && npm run build                                   # main.js -> assets/city3d/app.js
+```
+
+Fremde Modelle: „Cesium Man“ (Khronos glTF-Sample-Assets, CC BY 4.0, neu eingefärbt, eigene Animationen „stehen“ und „haemmern“) und „Lantern“ (CC0). Die Namensnennung steht in der App unter dem Info-Symbol der Stadt.
+
 ## Technik
 
 - Flutter, Datenbank lokal mit Drift (`lib/data/db.dart`, generiert: `db.g.dart`)
