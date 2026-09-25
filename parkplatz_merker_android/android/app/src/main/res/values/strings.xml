@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="widget_description">Merkt den aktuellen Standort als Parkplatz</string>
+    <string name="car_widget_description">Zeigt, wo dein Auto steht</string>
+    <string name="force_stop_description">Beendet beim Aussteigen die gewählte App (z. B. Blitzer.de), indem in der App-Info „Beenden erzwingen“ gedrückt wird. Sonst liest oder ändert der Dienst nichts.</string>
 </resources>

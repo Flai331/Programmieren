@@ -78,6 +78,18 @@ object Config {
         get() = prefs().getLong("devicePresentAt", 0L)
         set(value) = prefs().edit().putLong("devicePresentAt", value).apply()
 
+    var closeActionTitle: String
+        get() = prefs().getString("closeActionTitle", "") ?: ""
+        set(value) = prefs().edit().putString("closeActionTitle", value).apply()
+
+    var closeActionIndex: Int
+        get() = prefs().getInt("closeActionIndex", -1)
+        set(value) = prefs().edit().putInt("closeActionIndex", value).apply()
+
+    var forceStopFallback: Boolean
+        get() = prefs().getBoolean("forceStopFallback", false)
+        set(value) = prefs().edit().putBoolean("forceStopFallback", value).apply()
+
     fun getConfig(): Map<String, Any?> {
         return mapOf(
             "activityEnabled" to activityEnabled,
@@ -87,7 +99,10 @@ object Config {
             "deviceName" to deviceName,
             "launchPackage" to launchPackage,
             "launchLabel" to launchLabel,
-            "closeOnGone" to closeOnGone
+            "closeOnGone" to closeOnGone,
+            "closeActionTitle" to closeActionTitle,
+            "closeActionIndex" to closeActionIndex,
+            "forceStopFallback" to forceStopFallback
         )
     }
 
@@ -100,5 +115,8 @@ object Config {
         config["launchPackage"]?.let { (it as? String)?.let { v -> launchPackage = v } }
         config["launchLabel"]?.let { (it as? String)?.let { v -> launchLabel = v } }
         config["closeOnGone"]?.let { (it as? Boolean)?.let { v -> closeOnGone = v } }
+        config["closeActionTitle"]?.let { (it as? String)?.let { v -> closeActionTitle = v } }
+        config["closeActionIndex"]?.let { (it as? Number)?.toInt()?.let { v -> closeActionIndex = v } }
+        config["forceStopFallback"]?.let { (it as? Boolean)?.let { v -> forceStopFallback = v } }
     }
 }

@@ -195,7 +195,11 @@ class TripService : Service() {
             }
             EventLog.append(this, obj)
             notifyParked(loc != null)
-            if (!inVehicle && stopAt == 0L && pendingManual == 0) stopEverything("Hier geparkt erledigt")
+            if (!inVehicle && stopAt == 0L && pendingManual == 0) {
+                // Widget nach "Hier geparkt" schnell aktualisieren
+                BackgroundRunner.schedule(this, 3_000L, 9)
+                stopEverything("Hier geparkt erledigt")
+            }
         }
     }
 
@@ -247,6 +251,11 @@ class TripService : Service() {
         running = false
         inVehicle = false
         stopAt = 0L
+
+        // Hintergrund-Lauf starten, um Widget zu aktualisieren
+        BackgroundRunner.schedule(this, 60_000L, 7)
+        BackgroundRunner.schedule(this, (16 * 60_000L), 8)
+
         try {
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         } catch (e: Exception) {

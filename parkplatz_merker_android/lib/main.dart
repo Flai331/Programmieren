@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'controller.dart';
+import 'native.dart';
 import 'pages/home_page.dart';
 
 void main() async {
@@ -12,6 +13,19 @@ void main() async {
   runApp(MyApp(controller: controller));
   // Laden läuft im Hintergrund; die Startseite zeigt solange einen Kreis.
   controller.initialize();
+}
+
+@pragma('vm:entry-point')
+Future<void> backgroundMain() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    final c = AppController();
+    await c.initialize(background: true);
+  } catch (e) {
+    debugPrint('backgroundMain: $e');
+  } finally {
+    await NativeBridge.backgroundDone();
+  }
 }
 
 class MyApp extends StatelessWidget {

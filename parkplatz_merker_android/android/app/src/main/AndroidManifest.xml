@@ -82,6 +82,44 @@
                 android:resource="@xml/park_widget_info" />
         </receiver>
 
+        <receiver
+            android:name=".BackgroundRunReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".CarWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/car_widget_info" />
+        </receiver>
+
+        <service
+            android:name=".NotifListener"
+            android:exported="true"
+            android:label="Parkplatz-Merker"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".ForceStopService"
+            android:exported="true"
+            android:label="Parkplatz-Merker: App beenden"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/force_stop_service" />
+        </service>
+
         <service
             android:name=".ParkTileService"
             android:exported="true"

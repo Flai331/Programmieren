@@ -19,6 +19,10 @@ private const val CHANNEL = "parkplatz_merker/native"
 
 class MainActivity : FlutterActivity() {
 
+    companion object {
+        @Volatile var visible = false
+    }
+
     private var deviceSearcher: DeviceScanner? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -69,11 +73,20 @@ class MainActivity : FlutterActivity() {
                         "reverseGeocode" -> {
                             val lat = (call.argument<Any>("lat") as? Number)?.toDouble()
                             val lng = (call.argument<Any>("lng") as? Number)?.toDouble()
-                            if (lat == null || lng == null || !Geocoder.isPresent()) {
+                            if (lat == null || lng == null) {
                                 result.success(null)
                             } else {
-                                reverseGeocode(lat, lng) { text -> runOnUiThread { result.success(text) } }
+                                Geo.reverse(this@MainActivity, lat, lng) { text -> runOnUiThread { result.success(text) } }
                             }
+                        }
+                        "updateWidget" -> {
+                            @Suppress("UNCHECKED_CAST")
+                            val args = call.arguments as? Map<String, Any?>
+                            CarWidget.save(this@MainActivity, args)
+                            result.success(null)
+                        }
+                        "backgroundDone" -> {
+                            result.success(null)
                         }
                         "openNavigation" -> {
                             val lat = (call.argument<Any>("lat") as? Number)?.toDouble()
@@ -111,6 +124,9 @@ class MainActivity : FlutterActivity() {
                         "listApps" -> {
                             result.success(AppLauncher.listApps(this))
                         }
+                        "listCloseActions" -> {
+                            result.success(NotifListener.listCloseActions(Config.launchPackage))
+                        }
                         "openOverlaySettings" -> {
                             val uri = Uri.parse("package:$packageName")
                             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, uri)
@@ -125,8 +141,20 @@ class MainActivity : FlutterActivity() {
                             }
                             result.success(null)
                         }
+                        "openNotificationListenerSettings" -> {
+                            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                            result.success(null)
+                        }
+                        "openAccessibilitySettings" -> {
+                            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                            result.success(null)
+                        }
                         "testLaunch" -> {
                             AppLauncher.launch(this, fromForeground = true)
+                            result.success(null)
+                        }
+                        "testClose" -> {
+                            AppLauncher.close(this, fromForeground = true)
                             result.success(null)
                         }
                         "getNativeStatus" -> {
@@ -160,7 +188,9 @@ class MainActivity : FlutterActivity() {
                                 "serviceRunning" to TripService.running,
                                 "inVehicle" to TripService.inVehicle,
                                 "exactAlarms" to exactAlarms,
-                                "overlayAllowed" to Settings.canDrawOverlays(this)
+                                "overlayAllowed" to Settings.canDrawOverlays(this),
+                                "notificationListener" to NotifListener.isEnabled(this),
+                                "accessibility" to ForceStopService.isEnabled(this)
                             ))
                         }
                         "openAppDetails" -> {
@@ -192,38 +222,6 @@ class MainActivity : FlutterActivity() {
             }
     }
 
-    private fun reverseGeocode(lat: Double, lng: Double, done: (String?) -> Unit) {
-        val geocoder = Geocoder(this, Locale.GERMANY)
-        if (Build.VERSION.SDK_INT >= 33) {
-            geocoder.getFromLocation(lat, lng, 1, object : Geocoder.GeocodeListener {
-                override fun onGeocode(addresses: MutableList<Address>) {
-                    done(addresses.firstOrNull()?.let { addressText(it) })
-                }
-
-                override fun onError(errorMessage: String?) {
-                    done(null)
-                }
-            })
-        } else {
-            Thread {
-                val text = try {
-                    @Suppress("DEPRECATION")
-                    geocoder.getFromLocation(lat, lng, 1)?.firstOrNull()?.let { addressText(it) }
-                } catch (e: Exception) {
-                    null
-                }
-                done(text)
-            }.start()
-        }
-    }
-
-    private fun addressText(address: Address): String? {
-        val line = address.getAddressLine(0)
-        if (!line.isNullOrBlank()) return line
-        val street = listOfNotNull(address.thoroughfare, address.subThoroughfare).joinToString(" ")
-        val town = listOfNotNull(address.postalCode, address.locality).joinToString(" ")
-        return listOf(street, town).filter { it.isNotBlank() }.joinToString(", ").ifBlank { null }
-    }
 
     /** Fußweg-Navigation in Google Maps, sonst beliebige Karten-App über geo:. */
     private fun openNavigation(lat: Double, lng: Double): Boolean {
@@ -244,6 +242,16 @@ class MainActivity : FlutterActivity() {
         } catch (e: ActivityNotFoundException) {
             false
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        visible = true
+    }
+
+    override fun onPause() {
+        visible = false
+        super.onPause()
     }
 
     override fun onDestroy() {
