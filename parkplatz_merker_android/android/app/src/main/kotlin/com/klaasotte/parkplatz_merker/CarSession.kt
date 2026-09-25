@@ -14,6 +14,23 @@ object CarSession {
         AppLauncher.launchAll(ctx)
     }
 
+    /** Routine-Test aus der App: Sitzung neu beginnen, auch wenn schon eine läuft. */
+    fun testStart(ctx: Context) {
+        EventLog.info(ctx, "Routine-Test: Einsteigen")
+        Config.sessionActive = false
+        start(ctx)
+    }
+
+    /** Routine-Test aus der App: Aussteigen wie im Auto. */
+    fun testEnd(ctx: Context) {
+        EventLog.info(ctx, "Routine-Test: Aussteigen")
+        if (!Config.sessionActive) {
+            Config.sessionActive = true
+            Config.sessionSince = System.currentTimeMillis()
+        }
+        end(ctx)
+    }
+
     fun end(ctx: Context) {
         if (!Config.sessionActive) return
         Config.sessionActive = false

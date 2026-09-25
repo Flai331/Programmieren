@@ -103,7 +103,23 @@ automatisch öffnen, sobald du dein Auto erkannt hast – z. B. Blitzer.de + Spo
   alle Apps zu beenden. Manche Blitzer-Apps laufen als Warnung im Hintergrund weiter –
   dann muss die Warnung in der App selbst beendet werden.
 
-**Test:** Knopf **„Apps jetzt öffnen (Test)“** zum Probieren.
+**Test:** Knopf **„Apps jetzt öffnen (Test)”** zum Probieren.
+
+## Ganze Routine testen
+
+Der Test spielt daheim eine echte Fahrt nach: Transmitter gefunden, ein kurzer Aussetzer (z. B. Tunnel), wieder gefunden, beim Aussteigen weg.
+
+**Im Auto → „Ganze Routine testen”:**
+1. Abstand zwischen den Suchen wählen (5 / 10 / 20 Sekunden, Standard 10 s).
+2. „Test starten” – der Test zeigt 5 Schritte:
+   - **Transmitter gefunden (RSSI −51):** Apps öffnen.
+   - **Suche: nicht gefunden (einzelner Aussetzer):** Apps sollen offenbleiben.
+   - **Suche: gefunden (RSSI −47):** Transmitter wieder da, Apps nicht erneut öffnen.
+   - **Suche: gefunden (RSSI −49):** ok.
+   - **Aussteigen: Transmitter weg:** Apps beenden, Lautstärke zurücksetzen.
+3. Während der Abstand-Countdown läuft, kannst du prüfen: Apps oben? Lautstärke richtig? Energiesparmodus aus?
+
+Jeder Schritt zeigt **✓** (ok), **✗** (fehler) oder **–** (übersprungen). Nach dem Test: **„Ergebnis kopieren”** → Text mit Schritten + Ereignissen in die Zwischenablage (zum Weiterschicken).
 
 ## Blitzer-App komplett beenden
 

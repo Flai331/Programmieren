@@ -163,6 +163,53 @@ class MainActivity : FlutterActivity() {
                             AppLauncher.launchAll(this, fromForeground = true)
                             result.success(null)
                         }
+                        "fakeDeviceSeen" -> {
+                            AppLauncher.fakeSeen(this)
+                            result.success(null)
+                        }
+                        "fakeScan" -> {
+                            val found = call.argument<Boolean>("found") ?: false
+                            val rssi = (call.argument<Any>("rssi") as? Number)?.toInt() ?: -50
+                            AppLauncher.fakeScan(this, found, rssi)
+                            result.success(null)
+                        }
+                        "fakeDeviceGone" -> {
+                            AppLauncher.fakeGone(this)
+                            result.success(null)
+                        }
+                        "routineStart" -> {
+                            CarSession.testStart(this)
+                            result.success(null)
+                        }
+                        "routineEnd" -> {
+                            CarSession.testEnd(this)
+                            result.success(null)
+                        }
+                        "appRunning" -> {
+                            // Läuft die App noch? (hat sie noch eine Benachrichtigung)
+                            val pkg = call.argument<String>("package") ?: ""
+                            result.success(NotifListener.hasNotification(pkg))
+                        }
+                        "scanOnce" -> {
+                            // Eine Suchrunde nach dem eingerichteten Gerät (ca. 12 s).
+                            val target = Config.deviceAddress
+                            if (!Config.hasDevice || target == null) {
+                                result.success(mapOf("ok" to false, "found" to false, "error" to "Kein Transmitter/Beacon eingerichtet"))
+                            } else {
+                                val answered = java.util.concurrent.atomic.AtomicBoolean(false)
+                                val scanner = DeviceScanner(this)
+                                scanner.listener = { found, ok ->
+                                    if (!answered.getAndSet(true)) {
+                                        result.success(mapOf("ok" to ok, "found" to found, "error" to (if (ok) null else "Suche nicht möglich (Bluetooth an? Berechtigung?)")))
+                                    }
+                                }
+                                scanner.runTransmitterRound(target) {
+                                    if (!answered.getAndSet(true)) {
+                                        result.success(mapOf("ok" to false, "found" to false, "error" to "Keine Antwort"))
+                                    }
+                                }
+                            }
+                        }
                         "testClose" -> {
                             AppLauncher.closeAll(this, fromForeground = true)
                             result.success(null)

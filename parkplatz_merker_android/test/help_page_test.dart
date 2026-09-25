@@ -38,4 +38,13 @@ void main() {
     expect(find.textContaining('Blitzer.de & Co.'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('Anleitung enthält Abschnitt „Ganze Routine testen"', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: HelpPage(open: HelpTopic.routineTest)));
+    await tester.pumpAndSettle();
+    expect(find.text('Ganze Routine testen'), findsOneWidget);
+    expect(find.textContaining('echte Fahrt'), findsWidgets);
+    expect(find.textContaining('Ergebnis kopieren'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
 }
