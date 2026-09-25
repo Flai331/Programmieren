@@ -32,11 +32,13 @@ android {
     // alte installieren lässt (sonst gehen beim Neuinstallieren die Lesedaten
     // verloren). Die Datei ist passwortgeschützt; das Passwort liegt nur als
     // GitHub-Secret LESE_STADT_KEYSTORE_PASSWORD vor. Fehlt es (z. B. lokal),
-    // wird mit dem Debug-Schlüssel signiert.
+    // wird mit dem Debug-Schlüssel signiert, ebenso solange die Datei fehlt.
     val keystorePassword = System.getenv("LESE_STADT_KEYSTORE_PASSWORD")
+    val keystoreFile = file("lese-stadt-release.p12")
+    val useReleaseKey = !keystorePassword.isNullOrEmpty() && keystoreFile.exists()
     signingConfigs {
         create("release") {
-            storeFile = file("lese-stadt-release.p12")
+            storeFile = keystoreFile
             storeType = "pkcs12"
             storePassword = keystorePassword
             keyAlias = "lesestadt"
@@ -46,10 +48,10 @@ android {
 
     buildTypes {
         release {
-            signingConfig = if (keystorePassword.isNullOrEmpty()) {
-                signingConfigs.getByName("debug")
-            } else {
+            signingConfig = if (useReleaseKey) {
                 signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
             }
         }
     }
