@@ -89,7 +89,7 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
                 final parts = closeWidget.split(':');
                 if (parts.length == 2) {
                   final idx = int.tryParse(parts[1]) ?? 0;
-                  subtitle = 'Widget-Knopf ${idx + 1}';
+                  subtitle = 'Aus-Knopf: Widget-Knopf ${idx + 1}${_widgetWhere(closeWidget)}';
                 }
               } else if (closeActionTitle.isNotEmpty) {
                 subtitle = closeActionTitle;
@@ -355,11 +355,12 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
     }
 
     final choices = [
-      {'index': -1, 'type': 'auto', 'title': 'Automatisch'},
+      {'index': -1, 'type': 'auto', 'title': 'Automatisch', 'raw': ''},
       ...actions.map(
         (a) => {
           'index': a['index'] as int,
           'type': 'action',
+          'raw': (a['title'] as String?) ?? '',
           'title': ((a['title'] as String?) ?? '').isEmpty
               ? 'Knopf ${((a['index'] as int?) ?? 0) + 1} (nur Symbol)'
               : 'Knopf ${((a['index'] as int?) ?? 0) + 1}: ${a['title']}',
@@ -377,8 +378,8 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
           child: ListView(
             shrinkWrap: true,
             children: [
-              const Text(
-                'Blitzer.de muss gerade laufen (Benachrichtigung sichtbar). Teste die Knöpfe nacheinander – beim richtigen geht Blitzer.de aus. Starte es danach wieder.',
+              Text(
+                '$label muss gerade laufen (Benachrichtigung sichtbar). Teste die Knöpfe nacheinander – beim richtigen geht $label aus. Starte es danach wieder.',
               ),
               const SizedBox(height: 12),
               // Automatisch + Benachrichtigungs-Aktionen
@@ -396,7 +397,7 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
                       pkg,
                       actions,
                       choice['index'] as int,
-                      choice['title'] as String,
+                      choice['raw'] as String,
                       '',
                       bctx,
                     ),
@@ -412,7 +413,7 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
                       pkg,
                       actions,
                       choice['index'] as int,
-                      choice['title'] as String,
+                      choice['raw'] as String,
                       '',
                       bctx,
                     ),
@@ -430,9 +431,10 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
                   final key = btn['key'] as String? ?? '';
                   final name = btn['name'] as String? ?? '';
                   final desc = btn['desc'] as String? ?? '';
-                  final btnIdx = idx + 1;
+                  final btnIdx = (int.tryParse(key.split(':').last) ?? idx) + 1;
+                  final where = _widgetWhere(key);
                   return ListTile(
-                    title: Text('Widget-Knopf $btnIdx'),
+                    title: Text('Widget-Knopf $btnIdx$where'),
                     subtitle: (name.isNotEmpty || desc.isNotEmpty)
                         ? Text('$name $desc'.trim())
                         : null,
@@ -523,6 +525,13 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
     }
     Navigator.pop(bctx);
   }
+}
+
+/// Wo der Widget-Knopf liegt – passend zum Schlüssel "big:3" / "normal:1" / "headsup:0".
+String _widgetWhere(String key) {
+  if (key.startsWith('big:')) return ' (große Ansicht)';
+  if (key.startsWith('headsup:')) return ' (Einblendung)';
+  return ' (kleine Ansicht)';
 }
 
 class _AppListTile extends StatelessWidget {
