@@ -160,10 +160,10 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
           if ((config['closeOnGone'] as bool?) ?? true)
             SwitchListTile(
               title: const Text(
-                'Notfalls „Beenden erzwingen" (Bedienungshilfe)',
+                'Notfalls „Beenden erzwingen“ (Bedienungshilfe)',
               ),
               subtitle: const Text(
-                'Öffnet kurz die App-Info und drückt „Beenden erzwingen". Nur bei entsperrtem Handy.',
+                'Öffnet kurz die App-Info und drückt „Beenden erzwingen“. Nur bei entsperrtem Handy.',
               ),
               value: (config['forceStopFallback'] as bool?) ?? false,
               onChanged: (v) => controller.updateConfig(forceStopFallback: v),
@@ -172,7 +172,7 @@ class _CarPageState extends State<CarPage> with WidgetsBindingObserver {
             if ((config['forceStopFallback'] as bool?) ?? false)
               PermTile(
                 title: 'Bedienungshilfe',
-                hint: 'Einstellungen → Bedienungshilfen → Installierte Apps → „Parkplatz-Merker: App beenden" einschalten.',
+                hint: 'Einstellungen → Bedienungshilfen → Installierte Apps → „Parkplatz-Merker: App beenden“ einschalten.',
                 ok: (config['accessibility'] as bool?) ?? false,
                 onFix: () => NativeBridge.openAccessibilitySettings(),
               ),

@@ -214,7 +214,10 @@ class _RoutineTestPageState extends State<RoutineTestPage> {
 
           if (!found) {
             allAppsOpened = false;
-            appDetail = 'nur Benachrichtigung – „Über anderen Apps einblenden" erlauben';
+            final hint = infoEvents.any((e) => (e.str('msg') ?? '').contains('Hinweis gezeigt'));
+            appDetail = hint
+                ? '$label: nur Benachrichtigung – „Über anderen Apps einblenden“ erlauben'
+                : '$label wurde nicht geöffnet (siehe Ergebnis-Protokoll)';
             break;
           }
         }
@@ -265,7 +268,8 @@ class _RoutineTestPageState extends State<RoutineTestPage> {
       }
 
       bool allAppsStillRunning = true;
-      if (launchApps.isNotEmpty) {
+      // Nur prüfbar, wenn die Apps in Schritt 1 wirklich aufgegangen sind.
+      if (launchApps.isNotEmpty && allAppsOpened) {
         for (final app in launchApps) {
           final pkg = app['package'] as String?;
           final isRunning = await NativeBridge.appRunning(pkg ?? '');
@@ -280,7 +284,8 @@ class _RoutineTestPageState extends State<RoutineTestPage> {
       if (aussetzerIgnored && allAppsStillRunning) {
         _updateLastStep('Suche: nicht gefunden (einzelner Aussetzer)', 'ok', 'Aussetzer ignoriert, Apps bleiben offen');
       } else {
-        _updateLastStep('Suche: nicht gefunden (einzelner Aussetzer)', 'error', 'Apps wurden beim ersten Aussetzer geschlossen');
+        _updateLastStep('Suche: nicht gefunden (einzelner Aussetzer)', 'error',
+            sessionEndEvent != null ? 'Sitzung wurde beim ersten Aussetzer beendet' : 'Eine App lief nach dem Aussetzer nicht mehr');
         allOk = false;
       }
 
