@@ -22,13 +22,18 @@ Future<void> startResume(BuildContext context, Entry e) async {
       duration: const Duration(seconds: 3),
     ),
   );
+  // Nicht ans Kapitelende spulen – sonst springt Spotify ins nächste Kapitel.
+  var position = e.positionMs;
+  if (e.durationMs > 0 && position > e.durationMs - 5000) {
+    position = e.durationMs - 5000 < 0 ? 0 : e.durationMs - 5000;
+  }
   final r = await Native.resume(
     title: e.title,
     artist: e.artist,
     album: e.album,
     spotifyUri: e.spotifyUri,
     mediaId: e.mediaId,
-    positionMs: e.positionMs,
+    positionMs: position,
   );
   if (r['started'] != true) {
     messenger.showSnackBar(
@@ -859,6 +864,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       widget.onFilterKindChanged(FilterKind.pinned);
                     },
                   ),
+                  FilterChip(
+                    label: const Text('😴 Eingeschlafen'),
+                    selected: widget.filterKind == FilterKind.sleep,
+                    onSelected: (_) {
+                      widget.onFilterKindChanged(FilterKind.sleep);
+                    },
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -887,7 +899,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       Icon(Icons.history, size: 64, color: Colors.grey[400]),
                       const SizedBox(height: 16),
                       Text(
-                        'Kein Verlauf',
+                        widget.filterKind == FilterKind.sleep
+                            ? 'Noch keine Einschlaf-Stelle erkannt'
+                            : 'Kein Verlauf',
                         style: TextStyle(color: Colors.grey[600]),
                       ),
                     ],

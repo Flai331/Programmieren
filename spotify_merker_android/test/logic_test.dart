@@ -662,7 +662,6 @@ void main() {
     test('guessSleep: < 15 min → kein Vorschlag', () {
       final now = DateTime.now().millisecondsSinceEpoch;
       final minutesAgo = now - 5 * 60 * 1000; // 5 min ago
-      final twoHoursAgo = now - 2 * 60 * 60 * 1000;
 
       final history = [
         Entry(
@@ -678,7 +677,8 @@ void main() {
           durationMs: 3600000,
           startPositionMs: 0,
           positionMs: 2400000,
-          startedAt: twoHoursAgo,
+          // nur 20 Min. Sitzung: 10 Min. bis zum Wachzeichen, 10 Min. danach
+          startedAt: minutesAgo - 20 * 60 * 1000,
           lastSeenAt: minutesAgo,
           pinned: false,
         ),
@@ -1024,20 +1024,24 @@ void main() {
       ActivityEvent(ts: n2 + 9 * 60 * min, type: 'screen', action: 'unlock'),
     ];
 
-    test('findet je Nacht eine Stelle, neueste zuerst', () {
+    test('findet alle Stellen, neueste zuerst', () {
       final marks = findSleepMarks(history, activity);
-      expect(marks.length, 2);
+      // Nacht 2: 20 Min. ohne Wachzeichen ab Wiedergabe-Start, dann ab der
+      // Bewegung um +20 Min.; Nacht 1: ab Bildschirm aus um +5 Min.
+      expect(marks.length, 3);
       expect(marks[0].at, n2 + 20 * min);
       expect(marks[0].entry.title, 'N2 K7');
-      expect(marks[1].at, n1 + 5 * min);
-      expect(marks[1].entry.title, 'N1 K2');
+      expect(marks[1].at, n2);
+      expect(marks[1].source, 'Wiedergabe-Start');
+      expect(marks[2].at, n1 + 5 * min);
+      expect(marks[2].entry.title, 'N1 K2');
     });
 
     test('mergeSleepMarks entfernt Doppelte, JSON hin und zurück', () {
       final marks = findSleepMarks(history, activity);
       final back = [for (final m in marks) SleepGuess.fromJson(m.toJson())];
       final merged = mergeSleepMarks(back, marks, n2 + 10 * 60 * min);
-      expect(merged.length, 2);
+      expect(merged.length, 3);
       expect(merged.first.entry.positionMs, marks.first.entry.positionMs);
     });
 
@@ -1057,6 +1061,84 @@ void main() {
           now,
         ).length,
         1,
+      );
+    });
+  });
+
+  group('Aufwachen und Weiterhören überschreibt nichts', () {
+    Entry ch(String title, int start, int end) => Entry(
+      id: title,
+      key: '',
+      title: title,
+      artist: 'A',
+      album: 'Buch',
+      spotifyUri: null,
+      mediaId: 'spotify:track:$title',
+      artUri: '',
+      kind: 'spoken',
+      durationMs: 180000,
+      startPositionMs: 0,
+      positionMs: end - start,
+      startedAt: start,
+      lastSeenAt: end,
+      pinned: false,
+    );
+    const min = 60 * 1000;
+    final t0 = DateTime(2026, 9, 26, 0, 0).millisecondsSinceEpoch;
+    // 00:00–02:10 durchgehend, 3-Minuten-Kapitel
+    final history = [
+      for (var i = 42; i >= 0; i--)
+        ch('K${i + 1}', t0 + i * 3 * min, t0 + (i + 1) * 3 * min - 1000),
+    ];
+    final activity = [
+      ActivityEvent(
+        ts: t0 + 10 * min,
+        type: 'screen',
+        action: 'off',
+      ), // 00:10 weggelegt
+      // 02:04 aufgewacht, Handy benutzt, weitergehört
+      ActivityEvent(ts: t0 + 124 * min, type: 'screen', action: 'on'),
+      ActivityEvent(ts: t0 + 125 * min, type: 'motion', level: 11.6),
+    ];
+
+    test('Stelle beim Weglegen bleibt, obwohl danach weitergehört wurde', () {
+      final g = guessSleep(history, activity, t0 + 129 * min);
+      expect(g, isNotNull);
+      expect(g!.at, t0 + 10 * min);
+      expect(g.entry.title, 'K4'); // 00:09–00:12
+      expect(g.playedAfterMin, 114); // bis zum Aufwachen um 02:04
+    });
+
+    test('Start der Wiedergabe zählt als Wachzeichen', () {
+      final g = findSleepMarks(history, const []);
+      expect(g.length, 1);
+      expect(g.first.at, t0);
+      expect(g.first.source, 'Wiedergabe-Start');
+    });
+
+    test('Filter „Eingeschlafen“ zeigt nur Einschlaf-Stellen', () {
+      final now = t0 + 129 * min;
+      expect(
+        filterHistory(
+          history,
+          FilterRange.all,
+          FilterKind.sleep,
+          '',
+          null,
+          now,
+        ),
+        isEmpty,
+      );
+      final marks = findSleepMarks(history, activity);
+      expect(
+        filterSleepMarks(
+          marks,
+          FilterRange.all,
+          FilterKind.sleep,
+          '',
+          now,
+        ).length,
+        marks.length,
       );
     });
   });
