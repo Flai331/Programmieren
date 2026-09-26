@@ -21,14 +21,18 @@ object WidgetButtons {
         "exit", "close", "quit", "stop", "power", "shutdown", "beenden", "schließen", "schliessen", "ausschalten",
     )
 
-    /** Eigene Layouts der ersten Benachrichtigung von [pkg], mit Schlüssel ("big", "normal", "headsup"). */
-    private fun layouts(pkg: String): List<Pair<String, RemoteViews>> {
-        val sbn = try {
-            NotifListener.instance?.activeNotifications?.firstOrNull { it.packageName == pkg }
-        } catch (e: Exception) {
-            null
-        } ?: return emptyList()
-        val n: Notification = sbn.notification ?: return emptyList()
+    /** Alle aktiven Benachrichtigungen von [pkg]. */
+    private fun notifications(pkg: String): List<Notification> = try {
+        NotifListener.instance?.activeNotifications
+            ?.filter { it.packageName == pkg }
+            ?.mapNotNull { it.notification }
+            ?: emptyList()
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    /** Eigene Layouts einer Benachrichtigung, mit Schlüssel ("big", "normal", "headsup"). */
+    private fun layoutsOf(n: Notification): List<Pair<String, RemoteViews>> {
         val out = mutableListOf<Pair<String, RemoteViews>>()
         @Suppress("DEPRECATION")
         n.bigContentView?.let { out.add("big" to it) }
@@ -37,6 +41,23 @@ object WidgetButtons {
         @Suppress("DEPRECATION")
         n.headsUpContentView?.let { out.add("headsup" to it) }
         return out
+    }
+
+    /**
+     * Layouts der ersten Benachrichtigung von [pkg], die überhaupt ein eigenes Layout hat.
+     * Apps wie Blitzer.de haben oft mehrere Benachrichtigungen (z. B. Gruppe + Widget).
+     */
+    private fun layouts(pkg: String): List<Pair<String, RemoteViews>> =
+        notifications(pkg).map { layoutsOf(it) }.firstOrNull { it.isNotEmpty() } ?: emptyList()
+
+    /** Kurzbeschreibung für die Diagnose, wenn kein Layout gefunden wird. */
+    private fun describe(pkg: String): String {
+        val list = notifications(pkg)
+        return when {
+            NotifListener.instance == null -> "Benachrichtigungszugriff nicht verbunden"
+            list.isEmpty() -> "keine Benachrichtigung der App sichtbar"
+            else -> "${list.size} Benachrichtigung(en), keine mit eigenem Widget-Layout"
+        }
     }
 
     /** Layout aufbauen und alle klickbaren Views in fester Reihenfolge liefern. */
@@ -98,7 +119,7 @@ object WidgetButtons {
         val all = layouts(pkg)
         val rv = all.firstOrNull { it.first == parts[0] }?.second
         if (rv == null) {
-            val available = all.joinToString(", ") { it.first }.ifEmpty { "keine" }
+            val available = all.joinToString(", ") { it.first }.ifEmpty { "keine – " + describe(pkg) }
             EventLog.info(ctx, "Widget-Knopf $key: Ansicht „${parts[0]}“ gerade nicht vorhanden (vorhanden: $available)")
             return false
         }
@@ -133,7 +154,7 @@ object WidgetButtons {
                 val label = listOf(b["name"] as? String, b["desc"] as? String)
                     .filter { !it.isNullOrEmpty() }.joinToString("/")
                 if (label.isEmpty()) "${b["key"]}" else "${b["key"]} ($label)"
-            }.ifEmpty { "keine" }
+            }.ifEmpty { "keine – " + describe(pkg) }
             val why = if (distinct.isEmpty()) "keiner klingt nach Beenden" else "${distinct.size} möglich, nicht eindeutig"
             EventLog.info(ctx, "Widget-Knöpfe automatisch: $why – gefunden: $seen")
             return false
