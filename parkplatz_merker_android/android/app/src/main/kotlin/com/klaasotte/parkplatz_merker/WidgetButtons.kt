@@ -120,13 +120,24 @@ object WidgetButtons {
 
     /** Genau ein Knopf, dessen Name/Beschreibung nach Beenden klingt → drücken. */
     fun pressAuto(ctx: Context, pkg: String): Boolean {
-        val candidates = list(ctx, pkg).filter { b ->
+        val all = list(ctx, pkg)
+        val candidates = all.filter { b ->
             val text = ((b["name"] as? String).orEmpty() + " " + (b["desc"] as? String).orEmpty()).lowercase()
             STOP_WORDS.any { w -> text.contains(w) }
         }
         // Gleicher Knopf kann in mehreren Layouts (groß/klein) vorkommen – nach Name zusammenfassen.
         val distinct = candidates.distinctBy { b -> (b["name"] as? String).orEmpty() + "|" + (b["desc"] as? String).orEmpty() }
-        if (distinct.size != 1) return false
+        if (distinct.size != 1) {
+            // Was gibt es überhaupt? Damit man im Protokoll sieht, welchen Knopf man wählen muss.
+            val seen = all.joinToString(", ") { b ->
+                val label = listOf(b["name"] as? String, b["desc"] as? String)
+                    .filter { !it.isNullOrEmpty() }.joinToString("/")
+                if (label.isEmpty()) "${b["key"]}" else "${b["key"]} ($label)"
+            }.ifEmpty { "keine" }
+            val why = if (distinct.isEmpty()) "keiner klingt nach Beenden" else "${distinct.size} möglich, nicht eindeutig"
+            EventLog.info(ctx, "Widget-Knöpfe automatisch: $why – gefunden: $seen")
+            return false
+        }
         val key = distinct[0]["key"] as? String ?: return false
         return press(ctx, pkg, key)
     }
