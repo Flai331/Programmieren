@@ -68,35 +68,22 @@ class _CityScreenState extends State<CityScreen>
     return _tapFeld(scene, x, y);
   }
 
+  /// Beim Bauen in 3D erst eine Vorschau zeigen, gebaut wird mit "Hier bauen".
+  (int, int)? _vorschau;
+
   Future<void> _tapFeld(CityScene scene, int x, int y) async {
     final store = StoreScope.read(context);
     switch (_modus) {
-      case _Bauen(:final typ):
+      case _Bauen() || _Verschieben():
         if (!store.isFreeTile(x, y)) {
           showSnack(context, 'Tippe auf ein freies Feld der Stadt.');
           return;
         }
-        final ok = await store.build(typ, x, y);
-        if (!mounted) return;
-        showSnack(
-          context,
-          ok ? '${typ.name} gebaut!' : 'Nicht genug Material.',
-        );
-        setState(() {
-          _modus = _Ansehen();
-          _highlight = null;
-        });
-      case _Verschieben(:final building):
-        final ok = await store.move(building, x, y);
-        if (!mounted) return;
-        if (!ok) {
-          showSnack(context, 'Tippe auf ein freies Feld der Stadt.');
-          return;
+        if (City3D.enabled) {
+          setState(() => _vorschau = (x, y));
+        } else {
+          await _ausfuehren(x, y);
         }
-        setState(() {
-          _modus = _Ansehen();
-          _highlight = null;
-        });
       case _Ansehen():
         final b = store.buildingAt(x, y);
         if (b != null) {
@@ -117,6 +104,41 @@ class _CityScreenState extends State<CityScreen>
         }
     }
   }
+
+  /// Baut oder verschiebt auf Feld (x, y).
+  Future<void> _ausfuehren(int x, int y) async {
+    final store = StoreScope.read(context);
+    final bool ok;
+    switch (_modus) {
+      case _Bauen(:final typ):
+        ok = await store.build(typ, x, y);
+        if (mounted) {
+          showSnack(
+            context,
+            ok ? '${typ.name} gebaut!' : 'Nicht genug Material.',
+          );
+        }
+      case _Verschieben(:final building):
+        ok = await store.move(building, x, y);
+        if (!ok && mounted) {
+          showSnack(context, 'Tippe auf ein freies Feld der Stadt.');
+        }
+      case _Ansehen():
+        return;
+    }
+    if (ok && mounted) _abbrechen();
+  }
+
+  Future<void> _bestaetigen() async {
+    final v = _vorschau;
+    if (v != null) await _ausfuehren(v.$1, v.$2);
+  }
+
+  void _abbrechen() => setState(() {
+    _modus = _Ansehen();
+    _vorschau = null;
+    _highlight = null;
+  });
 
   Future<void> _buildingSheet(Building b) async {
     final store = StoreScope.read(context);
@@ -349,17 +371,28 @@ class _CityScreenState extends State<CityScreen>
           if (placing)
             MaterialBanner(
               content: Text(switch (_modus) {
+                _Bauen(:final typ) when _vorschau != null =>
+                  '${typ.name} hier bauen? Du kannst auch ein anderes Feld antippen.',
                 _Bauen(:final typ) =>
                   'Tippe auf ein freies Feld für: ${typ.name}',
+                _Verschieben() when _vorschau != null =>
+                  'Hierhin verschieben? Oder ein anderes Feld antippen.',
                 _Verschieben() => 'Tippe auf das neue Feld.',
                 _Ansehen() => '',
               }),
               leading: const Icon(Icons.touch_app),
               actions: [
                 TextButton(
-                  onPressed: () => setState(() => _modus = _Ansehen()),
+                  onPressed: _abbrechen,
                   child: const Text('Abbrechen'),
                 ),
+                if (City3D.enabled)
+                  FilledButton(
+                    onPressed: _vorschau == null ? null : _bestaetigen,
+                    child: Text(
+                      _modus is _Verschieben ? 'Hierhin' : 'Hier bauen',
+                    ),
+                  ),
               ],
             )
           else if (ziel != null)
@@ -424,7 +457,21 @@ class _CityScreenState extends State<CityScreen>
                   scene,
                   now: store.now,
                   placing: placing,
-                  highlight: _highlight,
+                  highlight: _vorschau ?? _highlight,
+                  vorschau: _vorschau == null
+                      ? null
+                      : (
+                          x: _vorschau!.$1,
+                          y: _vorschau!.$2,
+                          typeId: switch (_modus) {
+                            _Bauen(:final typ) => typ.id,
+                            _ => null,
+                          },
+                          von: switch (_modus) {
+                            _Verschieben(:final building) => building,
+                            _ => null,
+                          },
+                        ),
                 ),
                 onTap: (x, y) => _tapFeld(scene, x, y),
               ),

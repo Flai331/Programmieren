@@ -12,13 +12,15 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const MODELLE = 'models/';
 
 // ------------------------------------------------------------------ Grundgerüst
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Volle Handy-Auflösung (3x) kostet viel Leistung und bringt wenig.
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -43,7 +45,7 @@ const himmel = new THREE.HemisphereLight(0xcfe6ff, 0x5b6b3a, 0.9);
 scene.add(himmel);
 const sonne = new THREE.DirectionalLight(0xfff2dd, 2.6);
 sonne.castShadow = true;
-sonne.shadow.mapSize.set(2048, 2048);
+sonne.shadow.mapSize.set(1536, 1536);
 sonne.shadow.bias = -0.0004;
 sonne.shadow.normalBias = 0.02;
 scene.add(sonne);
@@ -124,6 +126,8 @@ function mulberry(a) {
 const grasTex = rauschTextur('#5c7a3e', ['#526f36', '#667f45', '#6f8a4b', '#4b6532', '#7a8a4e'], 160, 2500);
 const wieseTex = rauschTextur('#617a42', ['#56703a', '#6b8249', '#74874f'], 120, 1200);
 const pflasterTex = pflasterTextur();
+const kiesTex = rauschTextur('#8a7556', ['#7a6548', '#9a8664', '#6e5a40', '#a8946f'], 140, 3000);
+const gehwegTex = rauschTextur('#8f887c', ['#857e72', '#9a9387', '#7c756a'], 80, 800);
 
 // ------------------------------------------------------------------ Modelle
 
@@ -172,6 +176,16 @@ function feld(x, y) {
   return new THREE.Vector3(x + 0.5, 0, y + 0.5);
 }
 
+const RICHTUNGEN = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+let pfadFelder = new Set(); // "x,y" der Trampelpfade (begehbar, bebaubar)
+let strassenFelder = new Set();
+
+function kachel(geos, x, y, bx, bz, lx, lz, hoehe, oben = 0) {
+  const g = new THREE.BoxGeometry(lx, hoehe, lz);
+  g.translate(x + bx, oben + hoehe / 2, y + bz);
+  geos.push(g);
+}
+
 function baueBoden(z) {
   if (bodenGruppe) stadt.remove(bodenGruppe);
   bodenGruppe = new THREE.Group();
@@ -189,22 +203,15 @@ function baueBoden(z) {
   const tex = grasTex.clone();
   tex.needsUpdate = true;
   tex.repeat.set(z.size / 2, z.size / 2);
+  // Flach statt als Platte, sonst zeichnet sich die Kante als Linie ab.
   const flaeche = new THREE.Mesh(
-    new THREE.BoxGeometry(z.size, 0.06, z.size),
+    new THREE.PlaneGeometry(z.size, z.size),
     new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }),
   );
-  flaeche.position.set(z.size / 2, -0.03, z.size / 2);
+  flaeche.rotation.x = -Math.PI / 2;
+  flaeche.position.set(z.size / 2, -0.002, z.size / 2);
   flaeche.receiveShadow = true;
   bodenGruppe.add(flaeche);
-
-  const strasseMat = new THREE.MeshStandardMaterial({ map: pflasterTex, roughness: 0.95 });
-  const strasseGeo = new THREE.BoxGeometry(1, 0.02, 1);
-  for (const [x, y] of z.strassen) {
-    const m = new THREE.Mesh(strasseGeo, strasseMat);
-    m.position.copy(feld(x, y)).setY(0.005);
-    m.receiveShadow = true;
-    bodenGruppe.add(m);
-  }
 
   for (const v of z.viertel) {
     const tex2 = grasTex.clone();
@@ -218,7 +225,267 @@ function baueBoden(z) {
     m.receiveShadow = true;
     bodenGruppe.add(m);
   }
+
+  // Straßen: Kopfsteinpflaster, an Seiten ohne Anschluss ein erhöhter
+  // Gehweg mit Bordstein – so entsteht ein durchgehendes Straßennetz.
+  strassenFelder = new Set(z.strassen.map(([x, y]) => `${x},${y}`));
+  const pflaster = [];
+  const gehweg = [];
+  for (const [x, y] of z.strassen) {
+    kachel(pflaster, x, y, 0.5, 0.5, 1, 1, 0.02);
+    RICHTUNGEN.forEach(([dx, dy]) => {
+      if (strassenFelder.has(`${x + dx},${y + dy}`)) return;
+      const b = 0.16;
+      if (dx) kachel(gehweg, x, y, dx > 0 ? 1 - b / 2 : b / 2, 0.5, b, 1, 0.03);
+      else kachel(gehweg, x, y, 0.5, dy > 0 ? 1 - b / 2 : b / 2, 1, b, 0.03);
+    });
+  }
+  const ptex = pflasterTex.clone();
+  ptex.needsUpdate = true;
+  ptex.repeat.set(2, 2);
+  for (const [geos, mat] of [
+    [pflaster, new THREE.MeshStandardMaterial({ map: ptex, roughness: 0.95 })],
+    [gehweg, new THREE.MeshStandardMaterial({ map: gehwegTex, roughness: 0.9 })],
+  ]) {
+    if (!geos.length) continue;
+    const m = new THREE.Mesh(mergeGeometries(geos), mat);
+    m.receiveShadow = true;
+    bodenGruppe.add(m);
+  }
+
+  bauePfade(z);
   stadt.add(bodenGruppe);
+}
+
+// Trampelpfade: von der Tür jedes Gebäudes zur nächsten Straße (oder, solange
+// es keine gibt, zur Stadtmitte). Sie belegen kein Feld, man kann darauf bauen.
+function bauePfade(z) {
+  pfadFelder = new Set();
+  const gebaut = new Set(z.gebaeude.map((g) => `${g.x},${g.y}`));
+  const frei = (x, y) => x >= 0 && y >= 0 && x < z.size && y < z.size && !gebaut.has(`${x},${y}`);
+  const mitte = [Math.floor(z.size / 2), Math.floor(z.size / 2)];
+  const ziele = strassenFelder.size ? strassenFelder : new Set([`${mitte[0]},${mitte[1]}`]);
+  const stuecke = [];
+  const verbinde = (a, b) => {
+    const ax = a[0] + 0.5, ay = a[1] + 0.5, bx = b[0] + 0.5, by = b[1] + 0.5;
+    const lx = Math.abs(ax - bx) + 0.22, ly = Math.abs(ay - by) + 0.22;
+    kachel(stuecke, (ax + bx) / 2, (ay + by) / 2, 0, 0, lx, ly, 0.012);
+  };
+  for (const g of z.gebaeude) {
+    if (g.geist || g.x >= z.size || g.y >= z.size) continue;
+    // Tür zeigt nach +y (Süden); von dort aus suchen, sonst von einer Seite.
+    const starts = [[g.x, g.y + 1], [g.x + 1, g.y], [g.x - 1, g.y], [g.x, g.y - 1]].filter(([x, y]) => frei(x, y) || ziele.has(`${x},${y}`));
+    if (!starts.length) continue;
+    const start = starts[0];
+    const key = (p) => `${p[0]},${p[1]}`;
+    const vorher = new Map([[key(start), null]]);
+    const q = [start];
+    let ende = null;
+    while (q.length && !ende) {
+      const p = q.shift();
+      if (ziele.has(key(p)) || pfadFelder.has(key(p))) { ende = p; break; }
+      if (vorher.size > 200) break;
+      for (const [dx, dy] of RICHTUNGEN) {
+        const n = [p[0] + dx, p[1] + dy];
+        if (vorher.has(key(n))) continue;
+        if (!frei(n[0], n[1]) && !ziele.has(key(n))) continue;
+        vorher.set(key(n), p);
+        q.push(n);
+      }
+    }
+    if (!ende) continue;
+    const pfad = [];
+    for (let p = ende; p; p = vorher.get(key(p))) pfad.unshift(p);
+    verbinde([g.x, g.y], pfad[0]);
+    for (let i = 0; i < pfad.length; i++) {
+      if (!strassenFelder.has(key(pfad[i]))) pfadFelder.add(key(pfad[i]));
+      if (i > 0) verbinde(pfad[i - 1], pfad[i]);
+    }
+  }
+  if (!stuecke.length) return;
+  const ktex = kiesTex.clone();
+  ktex.needsUpdate = true;
+  ktex.repeat.set(0.5, 0.5);
+  const m = new THREE.Mesh(mergeGeometries(stuecke), new THREE.MeshStandardMaterial({ map: ktex, roughness: 1 }));
+  m.position.y = 0.001;
+  m.receiveShadow = true;
+  bodenGruppe.add(m);
+}
+
+// Wald rund um die Stadt, damit sie nicht auf einer endlosen Wiese steht.
+let waldGruppe = null;
+async function baueWald(z) {
+  if (waldGruppe) stadt.remove(waldGruppe);
+  waldGruppe = new THREE.Group();
+  stadt.add(waldGruppe);
+  const vorlagen = (await Promise.all(['baum', 'baum2'].map(lade))).filter(Boolean);
+  if (!vorlagen.length) return;
+  const sperre = (x, y) => {
+    if (x > -1.5 && y > -1.5 && x < z.size + 0.5 && y < z.size + 0.5) return true;
+    for (const v of z.viertel) {
+      if (x > v.x0 - 1.5 && y > v.y0 - 1.5 && x < v.x0 + v.breite + 0.5 && y < v.y0 + v.hoehe + 0.5) return true;
+    }
+    return z.strassen.some(([sx, sy]) => Math.abs(sx - x) < 1.5 && Math.abs(sy - y) < 1.5);
+  };
+  const rnd = mulberry(99);
+  const breite = 7;
+  const plaetze = vorlagen.map(() => []);
+  let maxX = z.size, maxY = z.size;
+  for (const v of z.viertel) { maxX = Math.max(maxX, v.x0 + v.breite); maxY = Math.max(maxY, v.y0 + v.hoehe); }
+  for (let x = -breite; x < maxX + breite; x += 0.8) {
+    for (let y = -breite; y < maxY + breite; y += 0.8) {
+      const px = x + (rnd() - 0.5) * 0.7, py = y + (rnd() - 0.5) * 0.7;
+      if (sperre(px, py)) continue;
+      // Am Waldrand lichter, weiter draußen dichter.
+      const rand = Math.max(-px, -py, px - maxX, py - maxY);
+      if (rnd() > 0.35 + Math.min(0.5, rand * 0.12)) continue;
+      plaetze[Math.floor(rnd() * vorlagen.length)].push([px, py, 0.8 + rnd() * 0.7, rnd() * Math.PI * 2]);
+    }
+  }
+  vorlagen.forEach((gltf, i) => {
+    gltf.scene.updateMatrixWorld(true);
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const n = plaetze[i].length;
+      const inst = new THREE.InstancedMesh(o.geometry, o.material, n);
+      const m = new THREE.Matrix4();
+      plaetze[i].forEach(([x, y, s, r], k) => {
+        m.compose(new THREE.Vector3(x, 0, y), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), r), new THREE.Vector3(s, s, s));
+        inst.setMatrixAt(k, m.multiply(o.matrixWorld));
+      });
+      inst.instanceMatrix.needsUpdate = true;
+      inst.computeBoundingSphere();
+      inst.computeBoundingBox();
+      inst.castShadow = false;
+      inst.receiveShadow = true;
+      waldGruppe.add(inst);
+    });
+  });
+}
+
+// ------------------------------------------------------------------ Deko
+
+const DEKO_HAUS = ['p_beet', 'p_busch', 'p_blumen', 'p_zaun'];
+const DEKO_ARBEIT = ['p_fass', 'p_kisten', 'p_karren', 'p_heu'];
+const DEKO_NATUR = ['p_busch', 'p_felsen', 'p_blumen', 'p_busch', 'baum'];
+let dekoGruppe = null;
+
+function hash(x, y, salz = 0) {
+  let h = (x * 374761393 + y * 668265263 + salz * 982451653) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+async function setzeDeko(z) {
+  if (dekoGruppe) stadt.remove(dekoGruppe);
+  dekoGruppe = new THREE.Group();
+  stadt.add(dekoGruppe);
+  const belegt = new Map(z.gebaeude.map((g) => [`${g.x},${g.y}`, g]));
+  // Pro Sorte eine Liste von Plätzen; gezeichnet wird gebündelt (Instancing),
+  // das spart auf dem Handy viele einzelne Zeichenaufrufe.
+  const plaetze = new Map();
+  const setze = (name, x, y, dx, dz, dreh, skala = 1) => {
+    if (!plaetze.has(name)) plaetze.set(name, []);
+    plaetze.get(name).push(new THREE.Matrix4().compose(
+      new THREE.Vector3(x + 0.5 + dx, 0, y + 0.5 + dz),
+      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), dreh),
+      new THREE.Vector3(skala, skala, skala),
+    ));
+  };
+  for (let x = 0; x < z.size; x++) {
+    for (let y = 0; y < z.size; y++) {
+      const k = `${x},${y}`;
+      if (belegt.has(k) || strassenFelder.has(k)) continue;
+      const nachbarn = RICHTUNGEN.map(([dx, dy]) => belegt.get(`${x + dx},${y + dy}`)).filter(Boolean);
+      const r = hash(x, y);
+      const dreh = Math.floor(hash(x, y, 1) * 4) * Math.PI / 2;
+      const jx = (hash(x, y, 2) - 0.5) * 0.4, jz = (hash(x, y, 3) - 0.5) * 0.4;
+      const auf = pfadFelder.has(k);
+      const wohnen = nachbarn.some((g) => /^(haus|reihe_)/.test(g.modell) && !g.geist);
+      const arbeit = nachbarn.some((g) => z.arbeitsplaetze.some(([ax, ay]) => ax === g.x && ay === g.y));
+      const anStrasse = RICHTUNGEN.some(([dx, dy]) => strassenFelder.has(`${x + dx},${y + dy}`));
+      if (auf) {
+        // Auf Pfaden nur am Rand etwas Kleines.
+        if (r < 0.2) setze(r < 0.1 ? 'p_blumen' : 'p_busch', x, y, 0.36, 0.36, dreh, 0.8);
+      } else if (wohnen && r < 0.55) {
+        setze(DEKO_HAUS[Math.floor(hash(x, y, 4) * DEKO_HAUS.length)], x, y, jx * 0.3, jz * 0.3, dreh);
+        if (hash(x, y, 5) < 0.5) setze('p_zaun', x, y, 0, 0, dreh);
+      } else if (arbeit && r < 0.6) {
+        setze(DEKO_ARBEIT[Math.floor(hash(x, y, 4) * DEKO_ARBEIT.length)], x, y, jx, jz, dreh);
+      } else if (anStrasse && r < 0.14) {
+        setze('p_bank', x, y, 0, 0, dreh);
+      } else if (r < 0.22) {
+        const n = DEKO_NATUR[Math.floor(hash(x, y, 4) * DEKO_NATUR.length)];
+        setze(n, x, y, jx, jz, dreh, n === 'baum' ? 0.6 + hash(x, y, 6) * 0.4 : 1);
+      }
+    }
+  }
+  const gruppe = dekoGruppe;
+  await Promise.all([...plaetze].map(async ([name, liste]) => {
+    const gltf = await lade(name);
+    if (!gltf || gruppe !== dekoGruppe) return;
+    gltf.scene.updateMatrixWorld(true);
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const inst = new THREE.InstancedMesh(o.geometry, o.material, liste.length);
+      liste.forEach((m, k) => inst.setMatrixAt(k, m.clone().multiply(o.matrixWorld)));
+      inst.instanceMatrix.needsUpdate = true;
+      inst.computeBoundingSphere();
+      inst.castShadow = true;
+      inst.receiveShadow = true;
+      gruppe.add(inst);
+    });
+  }));
+}
+
+// ------------------------------------------------------------------ Rauch
+
+// Schornsteine in Modellkoordinaten (x, Höhe, z).
+const SCHORNSTEINE = {
+  haus: [-0.12, 0.64, 0.1],
+  haus_b: [0.1, 0.79, -0.08],
+  haus_c: [0.12, 0.76, -0.05],
+  baeckerei3d: [0.14, 0.88, 0.1],
+  wassermuehle3d: [-0.3, 0.82, 0.12],
+};
+const rauchQuellen = [];
+const rauchTex = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const r = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  r.addColorStop(0, 'rgba(235,235,235,0.9)');
+  r.addColorStop(1, 'rgba(235,235,235,0)');
+  g.fillStyle = r;
+  g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+
+function neueRauchQuelle(pos) {
+  const wolken = [];
+  for (let i = 0; i < 7; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: rauchTex, transparent: true, depthWrite: false, opacity: 0 }));
+    sp.userData.alter = i / 7;
+    wolken.push(sp);
+    stadt.add(sp);
+  }
+  return { pos, wolken };
+}
+
+function bewegeRauch(dt, nacht) {
+  for (const q of rauchQuellen) {
+    for (const sp of q.wolken) {
+      let a = sp.userData.alter + dt / 5;
+      if (a > 1) a -= 1;
+      sp.userData.alter = a;
+      sp.position.set(q.pos.x + a * 0.25, q.pos.y + a * 0.6, q.pos.z - a * 0.1);
+      const s = 0.06 + a * 0.22;
+      sp.scale.set(s, s, s);
+      sp.material.opacity = (1 - a) * (nacht ? 0.25 : 0.5);
+    }
+  }
 }
 
 async function setzeGebaeude(z) {
@@ -229,6 +496,10 @@ async function setzeGebaeude(z) {
     const neu = soll.get(key);
     if (!neu || neu.modell !== alt.name || !!neu.geist !== alt.geist) {
       stadt.remove(alt.objekt);
+      if (alt.rauch) {
+        for (const sp of alt.rauch.wolken) stadt.remove(sp);
+        rauchQuellen.splice(rauchQuellen.indexOf(alt.rauch), 1);
+      }
       gebaeudeObjekte.delete(key);
     }
   }
@@ -250,8 +521,14 @@ async function setzeGebaeude(z) {
       }
       obj.position.copy(feld(g.x, g.y));
       obj.rotation.y = (g.drehung || 0) * Math.PI / 2;
+      obj.userData.feld = [g.x, g.y];
       eintrag.objekt = obj;
       stadt.add(obj);
+      const sch = !g.geist && SCHORNSTEINE[g.modell];
+      if (sch) {
+        eintrag.rauch = neueRauchQuelle(new THREE.Vector3(g.x + 0.5 + sch[0], sch[1], g.y + 0.5 + sch[2]));
+        rauchQuellen.push(eintrag.rauch);
+      }
     }));
   }
   await Promise.all(auftraege);
@@ -266,12 +543,9 @@ function setzeLaternen(z) {
     const strassen = z.strassen.filter((_, i) => i % 3 === 0);
     for (const [x, y] of strassen) {
       const l = gltf.scene.clone(true);
-      l.position.copy(feld(x, y)).add(new THREE.Vector3(0.42, 0, 0.42));
+      l.position.copy(feld(x, y)).add(new THREE.Vector3(0.42, 0.045, 0.42));
       // Leuchtende Glühbirne; echtes Licht nur für die ersten Laternen,
       // viele Punktlichter wären auf dem Handy zu langsam.
-      const birne = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), lampenMaterial);
-      birne.position.set(0, 0.36, 0);
-      l.add(birne);
       if (laternenLichter.length < 6) {
         const licht = new THREE.PointLight(0xffc56b, 0, 2.2, 1.6);
         licht.position.set(0, 0.36, 0);
@@ -282,6 +556,28 @@ function setzeLaternen(z) {
       laternen.push(l);
     }
   });
+}
+
+let vorschau = null;
+const vorschauMaterial = new THREE.MeshStandardMaterial({
+  color: 0x9cff8a, transparent: true, opacity: 0.6, roughness: 0.6, depthWrite: false,
+});
+
+async function setzeVorschau(z) {
+  const v = z.vorschau;
+  const schluessel = v ? `${v.modell}@${v.x},${v.y}` : null;
+  if (vorschau?.schluessel === schluessel) return;
+  if (vorschau) scene.remove(vorschau.obj);
+  vorschau = null;
+  if (!v) return;
+  vorschau = { schluessel, obj: new THREE.Group() };
+  const gltf = await lade(v.modell);
+  if (!gltf || vorschau?.schluessel !== schluessel) return;
+  const obj = gltf.scene.clone(true);
+  obj.traverse((o) => { if (o.isMesh) { o.material = vorschauMaterial; o.castShadow = false; } });
+  obj.position.copy(feld(v.x, v.y));
+  vorschau.obj = obj;
+  scene.add(obj);
 }
 
 function setzeMarkierung(z) {
@@ -410,28 +706,55 @@ let menschSkala = 1;
 
 const KLEIDUNG = [0x3f6e3a, 0x8c2f2a, 0x2f4f7a, 0x7a5a2f, 0x5a3f6e, 0xb88a3a, 0x3a6e6a];
 
+const HAARE = [0x2b1a10, 0x4a2e18, 0x6b4a2a, 0x1a1410, 0x8a6a3a, 0x9a9a92];
+let menschZaehler = 0;
+
 function neuerMensch(farbe) {
   const obj = SkeletonUtils.clone(menschVorlage.scene);
+  const nr = menschZaehler++;
   obj.traverse((o) => {
     if (o.isMesh) {
-      o.castShadow = true;
+      // Schatten der kleinen Figuren kosten viel und sieht man kaum.
+      o.castShadow = false;
       if (o.material?.name === 'hemd') {
         o.material = o.material.clone();
         o.material.color.set(farbe);
+      } else if (o.material?.name === 'haare') {
+        o.material = o.material.clone();
+        o.material.color.set(HAARE[nr % HAARE.length]);
       }
     }
   });
-  obj.scale.setScalar(menschSkala);
+  obj.scale.setScalar(menschSkala * (0.9 + mulberry(nr + 7)() * 0.2));
   // Das Modell blickt nach +Z, so wie lookAt und die Laufrichtung es
   // erwarten (die Schuhspitzen zeigen dorthin).
   obj.traverse((o) => { if (o.name === 'hammer') o.visible = false; });
   const huelle = new THREE.Group();
   huelle.add(obj);
+  if (mulberry(nr + 31)() < 0.55) setzeHut(huelle, obj, nr);
   const mixer = new THREE.AnimationMixer(obj);
   const clips = {};
   for (const c of menschVorlage.animations) clips[c.name] = mixer.clipAction(c);
   stadt.add(huelle);
   return { obj: huelle, mixer, clips, aktiv: null };
+}
+
+const HUTFARBEN = [0x5a3f2a, 0x3a3a3a, 0xc9a86a, 0x6b2f2a, 0x2f3f5a];
+
+// Hut auf den Kopf. Er sitzt an der Hülle (nicht am Knochen), das Wippen
+// des Kopfes beim Gehen ist so klein, dass man es nicht vermisst.
+function setzeHut(huelle, obj, nr) {
+  huelle.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(obj);
+  const mat = new THREE.MeshStandardMaterial({ color: HUTFARBEN[nr % HUTFARBEN.length], roughness: 0.9 });
+  const hut = new THREE.Group();
+  const h = MENSCH_HOEHE;
+  const krempe = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.1, h * 0.1, h * 0.01, 14), mat);
+  const krone = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.055, h * 0.065, h * 0.07, 12), mat);
+  krone.position.y = h * 0.035;
+  hut.add(krempe, krone);
+  hut.position.set(0, box.max.y - huelle.position.y - h * 0.025, h * 0.01);
+  huelle.add(hut);
 }
 
 function spiele(m, name) {
@@ -445,7 +768,8 @@ function spiele(m, name) {
 
 function begehbar(z) {
   const belegt = new Set(z.gebaeude.filter((g) => !g.begehbar).map((g) => `${g.x},${g.y}`));
-  return (x, y) => x >= 0 && y >= 0 && x < z.size && y < z.size && !belegt.has(`${x},${y}`);
+  return (x, y) => (strassenFelder.has(`${x},${y}`) ||
+    (x >= 0 && y >= 0 && x < z.size && y < z.size)) && !belegt.has(`${x},${y}`);
 }
 
 function weg(z, von, nach) {
@@ -472,7 +796,8 @@ function weg(z, von, nach) {
 
 function zufallsFeld(z, rnd) {
   const frei = begehbar(z);
-  const strassen = z.strassen.filter(([x, y]) => frei(x, y));
+  const wege = [...pfadFelder].map((k) => k.split(',').map(Number));
+  const strassen = [...z.strassen, ...wege].filter(([x, y]) => frei(x, y));
   for (let i = 0; i < 40; i++) {
     const p = strassen.length && rnd() < 0.6
       ? strassen[Math.floor(rnd() * strassen.length)]
@@ -590,11 +915,20 @@ renderer.domElement.addEventListener('pointerup', (e) => {
     -(e.clientY / window.innerHeight) * 2 + 1,
   );
   raycaster.setFromCamera(ndc, camera);
-  // Erst Gebäude treffen (auch hohe Türme), sonst den Boden.
-  const treffer = raycaster.intersectObjects([...gebaeudeObjekte.values()].map((g) => g.objekt), true)[0];
-  const p = treffer ? treffer.object.getWorldPosition(new THREE.Vector3()) : raycaster.ray.intersectPlane(bodenEbene, new THREE.Vector3());
-  if (!p) return;
-  melde({ typ: 'tap', x: Math.floor(p.x), y: Math.floor(p.z) });
+  // Beim Bauen zählt der Boden; sonst zuerst Gebäude (auch hohe Türme).
+  let ziel = null;
+  if (!zustand?.placing) {
+    const treffer = raycaster.intersectObjects([...gebaeudeObjekte.values()].map((g) => g.objekt), true)[0];
+    for (let o = treffer?.object; o && !ziel; o = o.parent) ziel = o.userData?.feld;
+  }
+  if (!ziel) {
+    const p = raycaster.ray.intersectPlane(bodenEbene, new THREE.Vector3());
+    if (!p) return;
+    ziel = [Math.floor(p.x), Math.floor(p.z)];
+  }
+  // Sofort sichtbar machen, welches Feld getroffen wurde.
+  setzeMarkierung({ ...zustand, highlight: ziel });
+  melde({ typ: 'tap', x: ziel[0], y: ziel[1] });
 });
 
 function melde(nachricht) {
@@ -630,11 +964,19 @@ window.LeseStadt = {
     const bodenNeu = !alt || alt.size !== z.size ||
       JSON.stringify(alt.strassen) !== JSON.stringify(z.strassen) ||
       JSON.stringify(alt.viertel) !== JSON.stringify(z.viertel);
-    if (bodenNeu) {
+    const lageNeu = bodenNeu || !alt ||
+      JSON.stringify(alt.gebaeude.map((g) => [g.x, g.y, g.modell, g.geist])) !==
+      JSON.stringify(z.gebaeude.map((g) => [g.x, g.y, g.modell, g.geist]));
+    if (lageNeu) {
       baueBoden(z);
+      setzeDeko(z);
+    }
+    if (bodenNeu) {
       setzeLaternen(z);
+      baueWald(z);
     }
     setzeMarkierung(z);
+    setzeVorschau(z);
     await setzeGebaeude(z);
     const menschenNeu = !alt || alt.belebung !== z.belebung ||
       JSON.stringify(alt.baustellen) !== JSON.stringify(z.baustellen) ||
@@ -659,7 +1001,8 @@ function schleife(t) {
   letztesBild = t;
   const dt = Math.min(uhr.getDelta(), 0.1);
   controls.update();
-  const { h } = aktualisiereLicht();
+  const { h, nacht } = aktualisiereLicht();
+  bewegeRauch(dt, nacht);
   // Zu jeder vollen Stunde Arbeiter und Spaziergänger neu verteilen.
   const volle = Math.floor(h);
   if (zustand && letzteStunde !== -1 && volle !== letzteStunde) setzeMenschen(zustand);

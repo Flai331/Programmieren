@@ -349,27 +349,45 @@ def walmdach(x, y, z, sx, sy, h, material, ueberstand=0.04, spitze=0.0):
     return o
 
 
-def fenster(x0, y0, z0, sx, sy, etagen, spalten, hoehe, seiten=('+x', '+y'),
-            fb=0.07, fh=0.1, rahmen=(0.93, 0.92, 0.88), start=0.08):
-    """Fenster auf den sichtbaren Fassaden (+x und +y) eines Quaders mit
-    Grundflächen-Mitte (x0, y0) und Unterkante z0."""
+# Die 3D-Stadt lässt sich drehen, daher bekommen alle vier Fassaden Fenster.
+ALLE_SEITEN = ('+x', '+y', '-x', '-y')
+
+
+def fenster(x0, y0, z0, sx, sy, etagen, spalten, hoehe, seiten=ALLE_SEITEN,
+            fb=0.07, fh=0.1, rahmen=(0.93, 0.92, 0.88), start=0.08,
+            laeden=None, blumen=False):
+    """Fenster auf den Fassaden eines Quaders mit Grundflächen-Mitte (x0, y0)
+    und Unterkante z0. `laeden` = Farbe der Fensterläden, `blumen` =
+    Blumenkästen unter den Fenstern im Erdgeschoss."""
     glas = mat('glas')
     rahm = mat('putz', rahmen, 0.6)
+    laden = mat('holz', laeden, 0.7) if laeden else None
+    kasten = mat('holz', (0.4, 0.25, 0.14), 0.8)
+    bluete = [mat('putz', f, 0.8) for f in ((0.85, 0.15, 0.2), (0.95, 0.75, 0.2), (0.8, 0.4, 0.8))]
     etage_h = (hoehe - start) / etagen
     for seite in seiten:
-        laenge = sy if seite == '+x' else sx
+        achse_x = seite in ('+x', '-x')
+        vz = 1 if seite[0] == '+' else -1
+        laenge = sy if achse_x else sx
         for e in range(etagen):
             z = z0 + start + e * etage_h + (etage_h - fh) / 2
             for s in range(spalten):
                 t = -laenge / 2 + laenge * (s + 0.5) / spalten
-                if seite == '+x':
-                    px, py = x0 + sx / 2 + 0.004, y0 + t
-                    box(px, py, z - 0.008, 0.012, fb + 0.02, fh + 0.016, rahm, 0.002)
-                    box(px + 0.005, py, z, 0.01, fb, fh, glas, 0.0)
-                else:
-                    px, py = x0 + t, y0 + sy / 2 + 0.004
-                    box(px, py, z - 0.008, fb + 0.02, 0.012, fh + 0.016, rahm, 0.002)
-                    box(px, py + 0.005, z, fb, 0.01, fh, glas, 0.0)
+
+                def teil(dn, dt, dz, dicke, breite, hoehe_, material, bevel=0.002):
+                    if achse_x:
+                        return box(x0 + vz * (sx / 2 + dn), y0 + t + dt, z + dz, dicke, breite, hoehe_, material, bevel)
+                    return box(x0 + t + dt, y0 + vz * (sy / 2 + dn), z + dz, breite, dicke, hoehe_, material, bevel)
+
+                teil(0.004, 0, -0.008, 0.012, fb + 0.02, fh + 0.016, rahm)
+                teil(0.009, 0, 0, 0.01, fb, fh, glas, 0.0)
+                if laden:
+                    for seitlich in (-1, 1):
+                        teil(0.006, seitlich * (fb / 2 + 0.028), -0.004, 0.008, 0.032, fh + 0.008, laden)
+                if blumen and e == 0:
+                    teil(0.018, 0, -0.03, 0.028, fb + 0.02, 0.022, kasten)
+                    for k in range(4):
+                        o = teil(0.02, -fb / 2 + (k + 0.5) * fb / 4, -0.008, 0.018, 0.018, 0.016, bluete[k % 3], 0.006)
 
 
 def tuer(x0, y0, sx, sy, seite='+y', farbe=(0.36, 0.22, 0.13), b=0.09, h=0.16):
@@ -472,14 +490,45 @@ GENREFARBEN = {
 }
 
 
-def haus(wand=CREME, dach=TERRAKOTTA, s=1.0):
+def haus(wand=CREME, dach=TERRAKOTTA, s=1.0, laeden=(0.18, 0.32, 0.22), blumen=True):
     sx, sy, h = 0.56 * s, 0.5 * s, 0.34 * s
-    box(0, 0, 0, sx, sy, h, mat('putz', wand))
+    box(0, 0, 0, sx + 0.02, sy + 0.02, 0.04, mat('stein', (0.5, 0.49, 0.47)))
+    box(0, 0, 0.04, sx, sy, h - 0.04, mat('putz', wand))
     giebel(0, 0, h, sx, sy, 0.24 * s, mat('putz', wand), 'x')
     satteldach(0, 0, h, sx, sy, 0.24 * s, mat('dach', dach), 'x')
     box(-0.12 * s, -0.1 * s, h, 0.06, 0.06, 0.26 * s, mat('ziegel', (0.55, 0.3, 0.22)))
-    fenster(0, 0, 0, sx, sy, 2, 2, h)
+    box(-0.12 * s, -0.1 * s, h + 0.26 * s, 0.075, 0.075, 0.015, mat('stein', (0.4, 0.4, 0.4)))
+    fenster(0, 0, 0, sx, sy, 2, 2, h, laeden=laeden, blumen=blumen)
     tuer(0.1 * s, 0, sx, sy, '+y')
+    box(0.1 * s, sy / 2 + 0.03, 0, 0.13, 0.05, 0.02, mat('stein', (0.6, 0.58, 0.55)))
+    return True
+
+
+def haus_b():
+    """Schmales Stadthaus, zwei Stockwerke, Walmdach, Ziegelsockel."""
+    sx, sy, h = 0.46, 0.46, 0.52
+    box(0, 0, 0, sx + 0.02, sy + 0.02, 0.1, mat('ziegel', (0.5, 0.26, 0.2)))
+    box(0, 0, 0.1, sx, sy, h - 0.1, mat('putz', (0.82, 0.74, 0.62)))
+    box(0, 0, h - 0.02, sx + 0.03, sy + 0.03, 0.025, mat('stein', (0.9, 0.88, 0.84)))
+    walmdach(0, 0, h, sx, sy, 0.2, mat('dach', (0.28, 0.3, 0.34)), spitze=0.12)
+    box(0.1, 0.08, h + 0.05, 0.06, 0.06, 0.2, mat('ziegel', (0.5, 0.28, 0.2)))
+    fenster(0, 0, 0, sx, sy, 3, 2, h, laeden=(0.55, 0.12, 0.1), blumen=True, start=0.06)
+    tuer(-0.1, 0, sx, sy, '+y', (0.2, 0.25, 0.35))
+    return True
+
+
+def haus_c():
+    """Fachwerk-Häuschen mit tiefem Dach."""
+    sx, sy = 0.52, 0.44
+    putz = mat('putz', (0.95, 0.9, 0.8))
+    box(0, 0, 0, sx, sy, 0.08, mat('stein', (0.55, 0.53, 0.5)))
+    box(0, 0, 0.08, sx, sy, 0.3, putz)
+    fachwerk(0, 0, 0.08, sx, sy, 0.3, etagen=1)
+    giebel(0, 0, 0.38, sx, sy, 0.3, putz, 'y')
+    satteldach(0, 0, 0.38, sx, sy, 0.3, mat('dach', (0.45, 0.22, 0.12)), 'y', 0.06)
+    box(0.12, 0.05, 0.4, 0.06, 0.06, 0.34, mat('stein', (0.5, 0.5, 0.5)))
+    fenster(0, 0, 0.08, sx, sy, 1, 2, 0.3, laeden=(0.35, 0.2, 0.1), blumen=True, start=0.04)
+    tuer(-0.14, 0, sx, sy, '+y', (0.3, 0.18, 0.1))
     return True
 
 
@@ -487,6 +536,131 @@ def g_haus():
     haus()
     baum(-0.34, 0.3, 0.8, seed=3)
     return True
+
+
+def g_haus_b():
+    haus_b()
+    busch(0.3, 0.32, 0.8, seed=4)
+    return True
+
+
+def g_haus_c():
+    haus_c()
+    baum(0.34, -0.3, 0.75, seed=6)
+    return True
+
+
+# ------------------------------------------------------------------ Kleinteile
+# Einzelne Dinge, die die 3D-Stadt auf freie Felder und an Wege verteilt.
+
+def busch(x, y, s=1.0, seed=0, farbe=(0.2, 0.38, 0.16)):
+    baumkrone(x, y, 0.05 * s, 0.07 * s, farbe, n=4, seed=seed)
+
+
+def p_zaun():
+    """Holzzaun über die ganze Feldbreite (entlang x, am Rand y = +0.45)."""
+    holz = mat('holz', (0.5, 0.36, 0.22), 0.8)
+    for i in range(7):
+        box(-0.45 + i * 0.15, 0.45, 0, 0.022, 0.022, 0.13, holz, 0.004)
+    for z in (0.04, 0.095):
+        box(0, 0.45, z, 0.92, 0.012, 0.022, holz, 0.003)
+    return False
+
+
+def p_busch():
+    busch(0, 0, 1.4, seed=21)
+    return False
+
+
+def p_blumen():
+    erde = mat('erde', (0.3, 0.22, 0.15))
+    box(0, 0, 0, 0.3, 0.16, 0.025, erde, 0.01)
+    import random
+    rnd = random.Random(5)
+    farben = [(0.85, 0.15, 0.2), (0.95, 0.75, 0.2), (0.75, 0.35, 0.85), (0.95, 0.95, 0.9)]
+    for i in range(18):
+        x, y = rnd.uniform(-0.13, 0.13), rnd.uniform(-0.06, 0.06)
+        zylinder(x, y, 0.02, 0.003, 0.04, mat('laub', (0.2, 0.4, 0.15)), n=4)
+        kugel(x, y, 0.065, 0.014, mat('putz', farben[i % 4], 0.8), n=8)
+    return False
+
+
+def p_fass():
+    holz = mat('holz', (0.45, 0.3, 0.17), 0.8)
+    for (x, y) in ((0, 0), (0.1, 0.03)):
+        zylinder(x, y, 0, 0.045, 0.11, holz, n=16)
+        for z in (0.015, 0.09):
+            zylinder(x, y, z, 0.047, 0.008, mat('metall', (0.25, 0.25, 0.25), 0.6), n=16)
+    return False
+
+
+def p_kisten():
+    holz = mat('holz', (0.62, 0.46, 0.28), 0.8)
+    box(0, 0, 0, 0.1, 0.1, 0.08, holz, 0.004)
+    box(0.11, 0.02, 0, 0.09, 0.09, 0.07, holz, 0.004, rot=0.3)
+    box(0.04, 0.01, 0.08, 0.08, 0.08, 0.065, holz, 0.004, rot=0.15)
+    return False
+
+
+def p_karren():
+    holz = mat('holz', (0.5, 0.33, 0.2), 0.8)
+    box(0, 0, 0.07, 0.26, 0.16, 0.012, holz, 0.003)
+    for sy in (-1, 1):
+        box(0, sy * 0.08, 0.07, 0.26, 0.012, 0.06, holz, 0.003)
+    for sx in (-1, 1):
+        box(sx * 0.13, 0, 0.07, 0.012, 0.16, 0.06, holz, 0.003)
+    box(0.2, 0, 0.075, 0.16, 0.012, 0.012, holz, 0.002)
+    for sy in (-1, 1):
+        bpy.ops.mesh.primitive_torus_add(major_radius=0.06, minor_radius=0.01,
+                                         location=(-0.02, sy * 0.1, 0.06),
+                                         rotation=(math.radians(90), 0, 0))
+        _fertig(bpy.context.active_object, holz)
+    kugel(0.02, 0, 0.1, 0.05, mat('laub', (0.8, 0.65, 0.3)), sz=0.5, n=10)
+    return False
+
+
+def p_bank():
+    holz = mat('holz', (0.48, 0.32, 0.2), 0.8)
+    box(0, 0, 0.055, 0.28, 0.07, 0.012, holz, 0.003)
+    box(0, -0.03, 0.07, 0.28, 0.012, 0.06, holz, 0.003)
+    for sx in (-1, 1):
+        box(sx * 0.12, 0, 0, 0.016, 0.06, 0.055, mat('metall', (0.15, 0.15, 0.15), 0.5), 0.002)
+    return False
+
+
+def p_heu():
+    heu = mat('laub', (0.78, 0.66, 0.35))
+    kugel(0, 0, 0.02, 0.1, heu, sz=0.75, n=14)
+    kugel(0.14, 0.05, 0.0, 0.07, heu, sz=0.7, n=12)
+    return False
+
+
+def p_beet():
+    erde = mat('erde', (0.28, 0.2, 0.13))
+    box(0, 0, 0, 0.7, 0.5, 0.02, erde, 0.01)
+    import random
+    rnd = random.Random(9)
+    for r in range(4):
+        for c in range(7):
+            x, y = -0.3 + c * 0.1, -0.18 + r * 0.12
+            kugel(x, y, 0.035, 0.025 + rnd.random() * 0.01,
+                  mat('laub', (0.22, 0.45, 0.15) if r % 2 else (0.3, 0.5, 0.12)), sz=0.7, n=8)
+    holz = mat('holz', (0.5, 0.36, 0.22), 0.8)
+    for (x, y, lx, ly) in ((0, 0.27, 0.74, 0.012), (0, -0.27, 0.74, 0.012), (0.37, 0, 0.012, 0.54), (-0.37, 0, 0.012, 0.54)):
+        box(x, y, 0, lx, ly, 0.05, holz, 0.002)
+    return False
+
+
+def p_felsen():
+    fels = mat('stein', (0.5, 0.49, 0.46), 0.9)
+    for (x, y, r) in ((0, 0, 0.07), (0.08, 0.04, 0.045), (-0.05, 0.06, 0.035)):
+        o = kugel(x, y, 0.0, r, fels, sz=0.7, n=10, glatt=False)
+        mod = o.modifiers.new('disp', 'DISPLACE')
+        tex = bpy.data.textures.new(f'fels{x}', 'VORONOI')
+        tex.noise_scale = 0.05
+        mod.texture = tex
+        mod.strength = r * 0.4
+    return False
 
 
 def g_baum():
@@ -1058,6 +1232,18 @@ def boden_strasse():
 
 BILDER = {
     'haus': g_haus,
+    'haus_b': g_haus_b,
+    'haus_c': g_haus_c,
+    'p_zaun': p_zaun,
+    'p_busch': p_busch,
+    'p_blumen': p_blumen,
+    'p_fass': p_fass,
+    'p_kisten': p_kisten,
+    'p_karren': p_karren,
+    'p_bank': p_bank,
+    'p_heu': p_heu,
+    'p_beet': p_beet,
+    'p_felsen': p_felsen,
     'baum': g_baum,
     'baum2': g_baum2,
     'polizeiwache': g_polizeiwache,

@@ -19,6 +19,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'sprites'))
 
 import bpy  # noqa: E402
+import numpy as np  # noqa: E402
 
 import render_sprites as rs  # noqa: E402
 
@@ -74,6 +75,22 @@ def _backen(obj, name):
     ziel(normal)
     bpy.ops.object.bake(type='NORMAL', normal_space='TANGENT')
 
+    # Umgebungsverschattung (Ecken, Dachüberstände, Fuß am Boden) in die
+    # Farbtextur einrechnen; dafür kurz einen Boden dazulegen.
+    ao = bpy.data.images.new(f'{name}_ao', TEXTUR, TEXTUR)
+    ziel(ao)
+    bpy.ops.mesh.primitive_plane_add(size=4, location=(0, 0, -0.001))
+    boden = bpy.context.active_object
+    _auswahl([obj])
+    sc.cycles.samples = 24
+    bpy.ops.object.bake(type='AO')
+    bpy.data.objects.remove(boden)
+    f = np.array(farbe.pixels[:]).reshape(-1, 4)
+    a = np.array(ao.pixels[:]).reshape(-1, 4)[:, :1]
+    f[:, :3] *= 0.35 + 0.65 * a
+    farbe.pixels = f.ravel().tolist()
+    farbe.update()
+
     m = bpy.data.materials.new(f'{name}_gebacken')
     m.use_nodes = True
     nt = m.node_tree
@@ -111,6 +128,12 @@ def export(name, out):
     rs.reset()
     rs.BILDER[name]()
     objs = _alle_meshes()
+    # Laub hat durch Verformung sehr viele Flächen; für das Handy reduzieren.
+    for o in objs:
+        m = o.material_slots[0].material if o.material_slots else None
+        if _art(m) == 'laub' and len(o.modifiers):
+            dec = o.modifiers.new('weniger', 'DECIMATE')
+            dec.ratio = 0.3
     _auswahl(objs)
     bpy.ops.object.convert(target='MESH')
     objs = _alle_meshes()

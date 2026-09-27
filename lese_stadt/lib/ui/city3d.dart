@@ -84,12 +84,23 @@ const _begehbar = {'park', 'marktplatz', 'brunnen', 'denkmal'};
 String _hex(Color c) =>
     '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
 
-/// Der Stadtzustand für die 3D-Szene.
+/// 3D-Modell eines Gebäudetyps auf Feld (x, y). Häuser und Bäume gibt es in
+/// Varianten, damit die Stadt nicht wie kopiert aussieht.
+String modellFuerTyp(String typeId, int x, int y) => switch (typeId) {
+  'baum' => (x * 31 + y * 17).isEven ? 'baum' : 'baum2',
+  'haus' => const ['haus', 'haus_b', 'haus_c'][(x * 7 + y * 13) % 3],
+  'baeckerei' || 'wassermuehle' => '${typeId}3d',
+  _ => typeId,
+};
+
+/// Der Stadtzustand für die 3D-Szene. [vorschau] zeigt beim Bauen oder
+/// Verschieben ein Gebäude halb durchsichtig an der gewählten Stelle.
 Map<String, Object?> city3dJson(
   CityScene scene, {
   required DateTime now,
   bool placing = false,
   (int, int)? highlight,
+  ({int x, int y, String? typeId, Building? von})? vorschau,
 }) {
   final gebaeude = <Map<String, Object?>>[];
   final strassen = <List<int>>[
@@ -108,10 +119,6 @@ Map<String, Object?> city3dJson(
     String? modell;
     var geist = false;
     switch (typ.id) {
-      case 'baum':
-        modell = (b.x * 31 + b.y * 17).isEven ? 'baum' : 'baum2';
-      case 'baeckerei' || 'wassermuehle':
-        modell = '${typ.id}3d';
       case typBuchDenkmal:
         final book = scene.booksById[b.bookId];
         if (book == null) continue;
@@ -137,7 +144,7 @@ Map<String, Object?> city3dJson(
             : 'jahr${(prog.abschnitte * 4 / prog.ziel).floor().clamp(0, 4)}';
         if (!prog.fertig) baustellen.add([b.x, b.y]);
       default:
-        modell = typ.id;
+        modell = modellFuerTyp(typ.id, b.x, b.y);
     }
     if (_arbeitsplaetze.contains(typ.id)) arbeit.add([b.x, b.y]);
     gebaeude.add({
@@ -173,8 +180,21 @@ Map<String, Object?> city3dJson(
     }
   }
 
+  Map<String, Object?>? vorschauJson;
+  if (vorschau != null) {
+    final von = vorschau.von;
+    final modell = von != null
+        ? gebaeude.firstWhere(
+            (g) => g['x'] == von.x && g['y'] == von.y,
+            orElse: () => const {'modell': 'haus'},
+          )['modell']
+        : modellFuerTyp(vorschau.typeId ?? 'haus', vorschau.x, vorschau.y);
+    vorschauJson = {'x': vorschau.x, 'y': vorschau.y, 'modell': modell};
+  }
+
   return {
     'size': scene.size,
+    'vorschau': vorschauJson,
     'stunde': now.hour + now.minute / 60,
     'belebung': scene.belebung.index,
     'lichter': scene.belebung.index >= Belebung.licht.index,
