@@ -173,7 +173,8 @@ Mit dem Lautstärke-Profil stellst du dich automatisch auf feste Lautstärken um
   „Hier geparkt“ auf den Startbildschirm ziehen. Tippen merkt die aktuelle Position.
 - **Widget „Mein Auto“:** Startbildschirm lange drücken → Widgets → Parkplatz-Merker →
   „Mein Auto“ auf den Startbildschirm ziehen. Zeigt, wo dein Auto steht (Karte, Adresse,
-  Zeit seit dem Parken). Tippt du auf die Karte oder den Text, öffnet sich die App.
+  Zeit seit dem Parken); in der Größe veränderbar – ab etwa 3 Zeilen Höhe mit großer Karte.
+  Tippst du auf die Karte oder den Text, öffnet sich die App.
   Der Knopf „Navigation“ startet den Fußweg in Google Maps. Der Knopf „Hier geparkt“
   merkt einen neuen Standort. Das Widget aktualisiert sich von selbst etwa 1 Minute nach
   dem Aussteigen.

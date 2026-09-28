@@ -9,6 +9,8 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
+import android.util.SizeF
 import android.widget.RemoteViews
 import org.json.JSONObject
 import java.io.File
@@ -68,7 +70,7 @@ object CarWidget {
             val lng = (obj.opt("lng") as? Number)?.toDouble()
             if (lat == null || lng == null) return
 
-            val mapKey = String.format(Locale.US, "%.5f,%.5f", lat, lng)
+            val mapKey = String.format(Locale.US, "v2:%.5f,%.5f", lat, lng)
             val savedKey = prefs.getString(KEY_MAP, null)
             val mapFile = File(ctx.filesDir, "widget_map.png")
 
@@ -103,9 +105,24 @@ object CarWidget {
         }
     }
 
-    /** Baut RemoteViews für das Widget. */
+    /**
+     * Baut RemoteViews für das Widget. Ab Android 12 zwei Layouts: flach (Karte links)
+     * und hoch (große Karte oben) – der Launcher nimmt das, was zur Widget-Größe passt.
+     */
     fun build(ctx: Context): RemoteViews {
-        val views = RemoteViews(ctx.packageName, R.layout.car_widget)
+        val small = buildLayout(ctx, R.layout.car_widget)
+        if (Build.VERSION.SDK_INT < 31) return small
+        val tall = buildLayout(ctx, R.layout.car_widget_tall)
+        return RemoteViews(
+            mapOf(
+                SizeF(180f, 80f) to small,
+                SizeF(180f, 200f) to tall,
+            )
+        )
+    }
+
+    private fun buildLayout(ctx: Context, layout: Int): RemoteViews {
+        val views = RemoteViews(ctx.packageName, layout)
         val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val spotJson = prefs.getString(KEY_SPOT, null)
 
@@ -156,7 +173,7 @@ object CarWidget {
                 // Karte nur zeigen, wenn sie zu DIESER Position gehört – sonst Platzhalter.
                 views.setImageViewResource(R.id.widget_map, R.drawable.ic_car)
                 val mapFile = File(ctx.filesDir, "widget_map.png")
-                val currentKey = if (lat != null && lng != null) String.format(Locale.US, "%.5f,%.5f", lat, lng) else null
+                val currentKey = if (lat != null && lng != null) String.format(Locale.US, "v2:%.5f,%.5f", lat, lng) else null
                 if (currentKey != null && prefs.getString(KEY_MAP, null) == currentKey && mapFile.exists()) {
                     try {
                         val bitmap = BitmapFactory.decodeFile(mapFile.path)

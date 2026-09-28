@@ -84,6 +84,11 @@
                 android:layout_marginEnd="4dp"
                 android:text="Navigation"
                 android:textSize="12sp"
+                android:textAllCaps="false"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
                 android:textColor="@android:color/white"
                 android:background="@drawable/widget_button_bg" />
 
@@ -94,6 +99,11 @@
                 android:layout_weight="1"
                 android:text="Hier geparkt"
                 android:textSize="12sp"
+                android:textAllCaps="false"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
                 android:textColor="@android:color/white"
                 android:background="@drawable/widget_button_bg" />
         </LinearLayout>
