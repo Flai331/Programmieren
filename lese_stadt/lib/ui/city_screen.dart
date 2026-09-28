@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../data/db.dart';
+import '../logic/production.dart';
 import '../logic/series.dart';
 import '../model/catalog.dart';
+import '../state/city_store.dart';
 import 'book_screens.dart';
 import 'build_menu.dart';
 import 'city3d.dart';
@@ -140,6 +142,41 @@ class _CityScreenState extends State<CityScreen>
     _highlight = null;
   });
 
+  /// Was ein Betrieb hergestellt hat bzw. was der Markt verkauft.
+  List<Widget> _produktionsInfo(CityStore store, Building b) {
+    final alle = store.betriebsProduktion;
+    final eigene = alle.where((p) => p.gebaeude.id == b.id).firstOrNull;
+    if (eigene != null) {
+      final bt = eigene.betrieb;
+      final hilfe = bt.hilfe == null
+          ? ''
+          : eigene.mitHilfe
+          ? ' Mit ${typeById(bt.hilfe!)?.name} geht es schneller.'
+          : ' Mit einer ${typeById(bt.hilfe!)?.name} ginge es schneller.';
+      return [
+        const SizedBox(height: 8),
+        Text(
+          '${eigene.menge} ${bt.einheit} hergestellt, '
+          'je ${eigene.mitHilfe ? bt.seitenJeMitHilfe : bt.seitenJe} gelesene Seiten.$hilfe',
+        ),
+        Text('Am Markt verkauft für ${eigene.erloes} Holz.'),
+      ];
+    }
+    if (markttypen.contains(b.typeId)) {
+      final summe = alle.fold(0, (s, p) => s + p.erloes);
+      return [
+        const SizedBox(height: 8),
+        Text(
+          alle.isEmpty
+              ? 'Hier verkaufen Bäckerei und Mühle ihre Waren, sobald es sie gibt.'
+              : 'Verkauft: ${alle.map((p) => '${p.menge} ${p.betrieb.einheit}').join(', ')}. '
+                    'Erlös: $summe Holz.',
+        ),
+      ];
+    }
+    return const [];
+  }
+
   Future<void> _buildingSheet(Building b) async {
     final store = StoreScope.read(context);
     final type = typeById(b.typeId);
@@ -190,6 +227,7 @@ class _CityScreenState extends State<CityScreen>
                     style: theme.textTheme.titleLarge,
                   ),
                   Text('Gebaut am ${datumFormat.format(b.gebautAm)}'),
+                  ..._produktionsInfo(store, b),
                 ],
                 const SizedBox(height: 16),
                 Wrap(

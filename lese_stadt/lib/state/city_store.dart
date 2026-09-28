@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../data/db.dart';
 import '../logic/chronicle.dart';
 import '../logic/economy.dart';
+import '../logic/production.dart';
 import '../logic/progress.dart';
 import '../logic/series.dart';
 import '../model/catalog.dart';
@@ -52,8 +53,11 @@ class CityStore extends ChangeNotifier {
     boni: [
       for (final d in districts)
         if (d.komplett) seriesBonus(d.baende, d.genre),
+      marktErloes(buildings, entries),
     ],
   );
+
+  List<Produktion> get betriebsProduktion => produktion(buildings, entries);
 
   int get aktivitaet => activityValue(entries, now);
   Belebung get belebung => belebungFuer(aktivitaet);
@@ -145,6 +149,8 @@ class CityStore extends ChangeNotifier {
         if (b.typeId == typJahresprojekt) b.jahr,
     };
     final fehlend = [
+      if (!buildings.any((b) => b.typeId == typDorfmarkt))
+        (typDorfmarkt, null, null),
       for (final g in yearGoals)
         if (!mitJahr.contains(g.jahr)) (typJahresprojekt, null, g.jahr),
       for (final b in books)

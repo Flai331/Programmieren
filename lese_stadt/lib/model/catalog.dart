@@ -55,6 +55,7 @@ class BuildingType {
 /// Typ-Ids der Gebäude, die nicht im Baumenü stehen.
 const typBuchDenkmal = 'buch';
 const typJahresprojekt = 'jahr';
+const typDorfmarkt = 'dorfmarkt';
 
 const _grund = [
   BuildingType(
@@ -171,6 +172,15 @@ const _kombi = [
 ];
 
 const _denkmaeler = [
+  // Jede Stadt beginnt mit einem Dorfmarkt; er kostet nichts und lässt sich
+  // nur verschieben, nicht abreißen.
+  BuildingType(
+    id: typDorfmarkt,
+    name: 'Dorfmarkt',
+    kategorie: Kategorie.denkmal,
+    kosten: {},
+    hoehe: 0.6,
+  ),
   BuildingType(
     id: typBuchDenkmal,
     name: 'Buch-Denkmal',

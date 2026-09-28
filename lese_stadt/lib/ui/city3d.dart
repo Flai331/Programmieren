@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../data/db.dart';
+import '../logic/production.dart';
 import '../logic/progress.dart';
 import '../logic/series.dart';
 import '../model/catalog.dart';
@@ -58,6 +59,7 @@ class City3D {
 
 /// Gebäude, vor denen tagsüber jemand arbeitet.
 const _arbeitsplaetze = {
+  typDorfmarkt,
   'baeckerei',
   'wassermuehle',
   'marktplatz',
@@ -79,7 +81,7 @@ const _arbeitsplaetze = {
 };
 
 /// Plätze, über die man laufen kann.
-const _begehbar = {'park', 'marktplatz', 'brunnen', 'denkmal'};
+const _begehbar = {'park', 'marktplatz', 'brunnen', 'denkmal', typDorfmarkt};
 
 String _hex(Color c) =>
     '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
@@ -90,8 +92,34 @@ String modellFuerTyp(String typeId, int x, int y) => switch (typeId) {
   'baum' => (x * 31 + y * 17).isEven ? 'baum' : 'baum2',
   'haus' => const ['haus', 'haus_b', 'haus_c'][(x * 7 + y * 13) % 3],
   'baeckerei' || 'wassermuehle' => '${typeId}3d',
+  typDorfmarkt => 'marktplatz',
   _ => typeId,
 };
+
+/// Wege, auf denen tagsüber Waren getragen werden: Mehl von der Mühle zur
+/// Bäckerei und zum Markt, Brot von der Bäckerei zum Markt.
+List<List<Object>> _lieferungen(List<Building> buildings) {
+  List<Building> vom(String typ) =>
+      buildings.where((b) => b.typeId == typ).toList();
+  final maerkte = buildings
+      .where((b) => markttypen.contains(b.typeId))
+      .toList();
+  final result = <List<Object>>[];
+  for (final m in vom('wassermuehle')) {
+    for (final b in vom('baeckerei').take(2)) {
+      result.add([m.x, m.y, b.x, b.y, 'sack']);
+    }
+    if (maerkte.isNotEmpty) {
+      result.add([m.x, m.y, maerkte.first.x, maerkte.first.y, 'sack']);
+    }
+  }
+  for (final b in vom('baeckerei')) {
+    if (maerkte.isNotEmpty) {
+      result.add([b.x, b.y, maerkte.first.x, maerkte.first.y, 'korb']);
+    }
+  }
+  return result;
+}
 
 /// Der Stadtzustand für die 3D-Szene. [vorschau] zeigt beim Bauen oder
 /// Verschieben ein Gebäude halb durchsichtig an der gewählten Stelle.
@@ -203,6 +231,7 @@ Map<String, Object?> city3dJson(
     'viertel': viertel,
     'baustellen': baustellen,
     'arbeitsplaetze': arbeit,
+    'lieferungen': _lieferungen(scene.buildings),
     'placing': placing,
     'highlight': highlight == null ? null : [highlight.$1, highlight.$2],
   };

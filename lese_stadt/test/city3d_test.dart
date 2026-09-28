@@ -57,8 +57,16 @@ void main() {
     expect(j['strassen'], [
       [1, 0],
     ]);
-    expect(j['arbeitsplaetze'], [
-      [0, 0],
+    expect(
+      j['arbeitsplaetze'],
+      containsAll([
+        [0, 0],
+        [4, 4],
+      ]),
+    );
+    expect(modelle, contains('marktplatz'));
+    expect(j['lieferungen'], [
+      [0, 0, 4, 4, 'korb'],
     ]);
     expect((j['baustellen'] as List).length, 1);
     expect(j['highlight'], [1, 0]);

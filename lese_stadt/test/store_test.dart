@@ -6,7 +6,23 @@ import 'package:lese_stadt/model/catalog.dart';
 import 'package:lese_stadt/model/genre.dart';
 import 'package:lese_stadt/state/city_store.dart';
 
+/// Gebäude ohne den Dorfmarkt, der von Anfang an steht.
+List<Building> eigene(CityStore store) =>
+    store.buildings.where((b) => b.typeId != typDorfmarkt).toList();
+
 void main() {
+  test('der Dorfmarkt steht von Anfang an in der Mitte', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final store = CityStore(db, clock: () => DateTime(2026, 9, 24));
+    await store.load();
+    final markt = store.buildings.single;
+    expect(markt.typeId, typDorfmarkt);
+    final mitte = store.citySize / 2;
+    expect((markt.x - mitte).abs(), lessThanOrEqualTo(1));
+    expect((markt.y - mitte).abs(), lessThanOrEqualTo(1));
+    await db.close();
+  });
+
   late AppDatabase db;
   late CityStore store;
   var now = DateTime(2026, 9, 24, 12);
@@ -27,8 +43,8 @@ void main() {
       genres: [Genre.scifi],
       status: BookStatus.wunsch,
     );
-    expect(store.buildings.single.typeId, typBuchDenkmal);
-    expect(store.buildings.single.bookId, store.books.single.id);
+    expect(eigene(store).single.typeId, typBuchDenkmal);
+    expect(eigene(store).single.bookId, store.books.single.id);
   });
 
   test('Eintragen bringt Material, beendet und startet Bücher', () async {
@@ -85,7 +101,7 @@ void main() {
       band: 1,
     );
     expect(store.series.single.name, 'Harry Potter');
-    expect(store.buildings, isEmpty);
+    expect(eigene(store), isEmpty);
     expect(store.districts.single.plots.length, 2); // Band 1 + Gerüst
 
     await store.addBook(
@@ -130,7 +146,7 @@ void main() {
     await store.deleteBook(store.booksById[id]!);
     expect(store.books, isEmpty);
     expect(store.entries, isEmpty);
-    expect(store.buildings, isEmpty);
+    expect(eigene(store), isEmpty);
 
     final id2 = await store.addBook(
       titel: 'R',
@@ -144,10 +160,10 @@ void main() {
 
   test('Jahresziel stellt ein Jahresbauwerk auf', () async {
     await store.setYearGoal(2026, 12);
-    expect(store.buildings.single.typeId, typJahresprojekt);
-    expect(store.buildings.single.jahr, 2026);
+    expect(eigene(store).single.typeId, typJahresprojekt);
+    expect(eigene(store).single.jahr, 2026);
     await store.setYearGoal(2026, 20);
-    expect(store.buildings, hasLength(1));
+    expect(eigene(store), hasLength(1));
     expect(store.goalFor(2026)!.zielBuecher, 20);
   });
 

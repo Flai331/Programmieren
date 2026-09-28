@@ -11,6 +11,7 @@ Flutter-App, die Lesen in den Aufbau einer eigenen Stadt verwandelt: gelesene Se
 | Buch-Denkmal | Jedes Buch steht als Geister-Gebäude (Wunschliste), Baustelle (am Lesen) oder Denkmal (beendet) in der Stadt. Antippen zeigt Buch, Datum, Notiz. |
 | Buchreihen | Eigenes Viertel östlich der Stadt, ein Bauplatz pro Band, Gerüst für laufende Reihen, Wahrzeichen + Materialbonus (50 Holz und 50 Genre-Material je Band) bei kompletter Reihe. Ab 10 Bänden quadratisch. |
 | Stadtstufen | Dorf 10×10 → Kleinstadt 16×16 (2.000 S.) → Stadt 24×24 (10.000 S.) → Metropole 32×32 (30.000 S.). |
+| Markt und Betriebe | Der Dorfmarkt steht von Anfang an in der Stadtmitte (kostenlos, verschiebbar). Die Wassermühle mahlt 1 Sack Mehl je 15 gelesene Seiten, die Bäckerei backt 1 Brot je 25 Seiten, mit Mühle schon je 10 Seiten; gezählt wird ab dem Bau. Der Markt verkauft alles: Mehl bringt 1 Holz, Brot 2 Holz. Antippen zeigt, was ein Betrieb hergestellt hat. |
 | Lebendige Stadt | Seiten der letzten 7 Tage: 1+ ein paar Leute, 80+ Licht in den Fenstern, 250+ Markt und Lichterkette. Tag/Nacht nach Handyzeit. |
 | Nahziel | Banner „Noch X Seiten bis zum …“, automatisch passend zum aktuellen Buch oder im Baumenü angeheftet. |
 | Jahresprojekt | Jahresziel = Bauabschnitte, Übererfüllung bringt Fahnen, Glocken, Beleuchtung. Bleibt als Denkmal mit Jahreszahl stehen. |
@@ -24,7 +25,7 @@ Die Stadtansicht ist eine echte 3D-Szene (three.js in einer WebView, Quelltext i
 - Kamera drehen, neigen und zoomen mit den Fingern
 - Sonne und Himmel folgen der Uhrzeit, Schatten wandern mit; nachts Mond, Laternenlicht und – bei viel Leseaktivität – hell erleuchtete Fenster
 - Spaziergänger laufen animiert auf Wegen über freie Felder (Wegsuche auf dem Raster), nachts kaum jemand
-- Werktags von 7 bis 18 Uhr hämmern Arbeiter an den Baustellen der Bücher, die gerade gelesen werden; vor Bäckerei, Mühle, Rathaus usw. steht jemand bei der Arbeit
+- Werktags von 7 bis 18 Uhr hämmern Arbeiter an den Baustellen der Bücher, die gerade gelesen werden; vor Bäckerei, Mühle, Rathaus usw. steht jemand bei der Arbeit, Träger bringen Mehlsäcke und Brotkörbe von der Mühle zur Bäckerei und zum Markt, am Markt stehen Händler und Kundschaft
 - Gebäude sind in Blender gebaute Modelle mit eingebrannten Texturen (`assets/city3d/models/`, 61 Modelle, 13 MB)
 
 Modelle neu erzeugen:

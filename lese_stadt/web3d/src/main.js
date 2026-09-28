@@ -850,6 +850,34 @@ function setzeMenschen(z) {
     }
   }
 
+  // Träger bringen Mehl und Brot zwischen Mühle, Bäckerei und Markt hin
+  // und her, am Markt stehen Händler und Kundschaft.
+  if (arbeit) {
+    (z.lieferungen || []).forEach(([ax, ay, bx, by, ware], i) => {
+      const von = nachbarFeld(z, [ax, ay]);
+      const nach = nachbarFeld(z, [bx, by]);
+      if (!von || !nach) return;
+      const m = neuerMensch(ware === 'korb' ? 0xe8e2d4 : 0x7a6a4a);
+      m.last = setzeLast(m.obj, ware);
+      const rnd2 = mulberry(300 + i);
+      m.obj.position.copy(feld(von[0], von[1]));
+      m.laeufer = { feld: [von[0], von[1]], pfad: [], pause: rnd2() * 4, rnd: rnd2,
+        route: [[nach[0], nach[1]], [von[0], von[1]]], hin: true };
+      menschen.push(m);
+    });
+    for (const g of z.gebaeude.filter((g) => g.modell === 'marktplatz')) {
+      for (let i = 0; i < 3; i++) {
+        const w = (i / 3) * Math.PI * 2 + 0.4;
+        const m = neuerMensch(KLEIDUNG[(i + 3) % KLEIDUNG.length]);
+        m.obj.position.set(g.x + 0.5 + Math.cos(w) * 0.3, 0, g.y + 0.5 + Math.sin(w) * 0.3);
+        m.obj.lookAt(g.x + 0.5, 0, g.y + 0.5);
+        spiele(m, 'stehen');
+        m.mixer.update(rnd() * 2);
+        menschen.push(m);
+      }
+    }
+  }
+
   // Spaziergänger: je nach Leseaktivität, nachts kaum jemand.
   let anzahl = [2, 5, 10, 16][z.belebung] ?? 4;
   if (nachts) anzahl = Math.min(anzahl, z.lichter ? 3 : 1);
@@ -863,6 +891,33 @@ function setzeMenschen(z) {
   }
 }
 
+const LAST_FARBEN = { sack: 0xd8c8a0, korb: 0x8a5a2a, brot: 0xc0843a };
+
+// Mehlsack auf der Schulter oder Brotkorb vor dem Bauch.
+function setzeLast(huelle, ware) {
+  const h = MENSCH_HOEHE;
+  const last = new THREE.Group();
+  const mat = (f) => new THREE.MeshStandardMaterial({ color: f, roughness: 0.95 });
+  if (ware === 'korb') {
+    const korb = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.1, h * 0.075, h * 0.07, 10), mat(LAST_FARBEN.korb));
+    last.add(korb);
+    for (let i = 0; i < 3; i++) {
+      const brot = new THREE.Mesh(new THREE.SphereGeometry(h * 0.04, 8, 6), mat(LAST_FARBEN.brot));
+      brot.scale.set(1.5, 0.8, 1);
+      brot.position.set((i - 1) * h * 0.05, h * 0.045, (i % 2) * h * 0.02);
+      last.add(brot);
+    }
+    last.position.set(0, h * 0.5, h * 0.11);
+  } else {
+    const sack = new THREE.Mesh(new THREE.SphereGeometry(h * 0.09, 10, 8), mat(LAST_FARBEN.sack));
+    sack.scale.set(1.4, 0.8, 0.9);
+    last.add(sack);
+    last.position.set(h * 0.05, h * 0.86, -h * 0.02);
+  }
+  huelle.add(last);
+  return last;
+}
+
 function bewegeLaeufer(m, dt) {
   const l = m.laeufer;
   if (!l || !zustand) return;
@@ -871,8 +926,22 @@ function bewegeLaeufer(m, dt) {
     spiele(m, 'stehen');
     return;
   }
+  if (!l.pfad.length && l.route) {
+    // Träger: abwechselnd zum Ziel (mit Ware) und zurück (ohne).
+    const ziel = l.route[l.hin ? 0 : 1];
+    const pfad = weg(zustand, l.feld, ziel);
+    if (!pfad || pfad.length < 2) {
+      l.hin = !l.hin;
+      l.pause = 2;
+      return;
+    }
+    l.pfad = pfad.slice(1);
+    if (m.last) m.last.visible = l.hin;
+    l.hin = !l.hin;
+  }
   if (!l.pfad.length) {
-    const ziel = zufallsFeld(zustand, l.rnd);
+    const markt = zustand.gebaeude.find((g) => g.modell === 'marktplatz');
+    const ziel = markt && l.rnd() < 0.3 ? [markt.x, markt.y] : zufallsFeld(zustand, l.rnd);
     const pfad = ziel && weg(zustand, l.feld, ziel);
     if (!pfad || pfad.length < 2) {
       l.pause = 1 + l.rnd() * 2;
@@ -981,6 +1050,7 @@ window.LeseStadt = {
     const menschenNeu = !alt || alt.belebung !== z.belebung ||
       JSON.stringify(alt.baustellen) !== JSON.stringify(z.baustellen) ||
       JSON.stringify(alt.arbeitsplaetze) !== JSON.stringify(z.arbeitsplaetze) ||
+      JSON.stringify(alt.lieferungen) !== JSON.stringify(z.lieferungen) ||
       JSON.stringify(alt.gebaeude.map((g) => [g.x, g.y])) !== JSON.stringify(z.gebaeude.map((g) => [g.x, g.y]));
     if (menschenNeu) setzeMenschen(z);
     melde({ typ: 'bereit' });

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lese_stadt/data/db.dart';
 import 'package:lese_stadt/logic/chronicle.dart';
 import 'package:lese_stadt/logic/economy.dart';
+import 'package:lese_stadt/logic/production.dart';
 import 'package:lese_stadt/logic/progress.dart';
 import 'package:lese_stadt/logic/series.dart';
 import 'package:lese_stadt/model/catalog.dart';
@@ -54,6 +55,40 @@ Series series(int id, {int? baende, bool fertig = false, int pos = 0}) =>
     );
 
 void main() {
+  group('Produktion', () {
+    final spaeter = DateTime(2026, 2, 1);
+    final eintraege = [
+      entry(1, 1, 0, 100), // vor dem Bau der Bäckerei
+      entry(2, 1, 100, 150, spaeter),
+    ];
+
+    test('Bäckerei backt aus den Seiten seit ihrem Bau', () {
+      final p = produktion([
+        building(1, 'baeckerei', 0, 0, spaeter),
+      ], eintraege).single;
+      expect(p.menge, 2); // 50 Seiten / 25
+      expect(p.mitHilfe, isFalse);
+      expect(p.erloes, 4);
+    });
+
+    test('mit Wassermühle geht es schneller', () {
+      final p = produktion([
+        building(1, 'baeckerei', 0, 0, spaeter),
+        building(2, 'wassermuehle', 1, 0, spaeter),
+      ], eintraege);
+      expect(p.first.menge, 5); // 50 / 10
+      expect(p.first.mitHilfe, isTrue);
+      expect(p.last.menge, 3); // Mehl: 50 / 15
+    });
+
+    test('verkauft wird nur mit Markt', () {
+      final ohne = [building(1, 'baeckerei', 0, 0, spaeter)];
+      expect(marktErloes(ohne, eintraege), isEmpty);
+      final mit = [...ohne, building(2, typDorfmarkt, 4, 4)];
+      expect(marktErloes(mit, eintraege), {Mat.holz: 4});
+    });
+  });
+
   group('Material', () {
     test('jede Seite bringt Holz und Genre-Material', () {
       expect(materialsForPages(10, [Genre.fantasy]), {

@@ -341,7 +341,12 @@ class CityPainter extends CustomPainter {
         _yearDecor(canvas, prog, b, top);
         return true;
       default:
-        return _sprite(canvas, type.id, b.x, b.y);
+        return _sprite(
+          canvas,
+          type.id == typDorfmarkt ? 'marktplatz' : type.id,
+          b.x,
+          b.y,
+        );
     }
   }
 
@@ -618,6 +623,8 @@ class CityPainter extends CustomPainter {
           6,
           Paint()..color = _shade(const Color(0xFF58A95C), _light),
         );
+      case typDorfmarkt:
+        _paintGenreBuilding(canvas, b, typeById('marktplatz')!);
       case 'haus':
         _box(canvas, b.x, b.y, 18, const Color(0xFFEAD9C0), inset: 0.2);
         _pyramid(
