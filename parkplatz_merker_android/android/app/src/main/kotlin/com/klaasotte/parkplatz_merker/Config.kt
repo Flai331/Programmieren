@@ -50,6 +50,19 @@ object Config {
         get() = prefs().getLong("reminderAt", 0L)
         set(value) = prefs().edit().putLong("reminderAt", value).apply()
 
+    /** Parkschein gültig bis (0 = keiner) und Ort des Autos dazu. */
+    var ticketUntil: Long
+        get() = prefs().getLong("ticketUntil", 0L)
+        set(value) = prefs().edit().putLong("ticketUntil", value).apply()
+
+    var ticketLat: Double
+        get() = java.lang.Double.longBitsToDouble(prefs().getLong("ticketLat", 0L))
+        set(value) = prefs().edit().putLong("ticketLat", java.lang.Double.doubleToRawLongBits(value)).apply()
+
+    var ticketLng: Double
+        get() = java.lang.Double.longBitsToDouble(prefs().getLong("ticketLng", 0L))
+        set(value) = prefs().edit().putLong("ticketLng", java.lang.Double.doubleToRawLongBits(value)).apply()
+
     var reminderText: String
         get() = prefs().getString("reminderText", "") ?: ""
         set(value) = prefs().edit().putString("reminderText", value).apply()

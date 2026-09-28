@@ -270,15 +270,17 @@ class NativeBridge {
   }
 
   /// Plant einen Reminder.
-  static Future<bool> scheduleReminder(int atMs, String text) async {
+  static Future<bool> scheduleTicket(int untilMs, double lat, double lng, String text) async {
     try {
-      final result = await _channel.invokeMethod('scheduleReminder', {
-        'atMs': atMs,
+      final result = await _channel.invokeMethod('scheduleTicket', {
+        'untilMs': untilMs,
+        'lat': lat,
+        'lng': lng,
         'text': text,
       });
       return result is bool ? result : false;
     } on PlatformException catch (e) {
-      print('scheduleReminder error: ${e.message}');
+      debugPrint('scheduleTicket error: ${e.message}');
       return false;
     } on MissingPluginException {
       return false;

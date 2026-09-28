@@ -111,11 +111,12 @@ class MainActivity : FlutterActivity() {
                             deviceSearcher?.stopSearch()
                             result.success(null)
                         }
-                        "scheduleReminder" -> {
-                            val atMs = (call.argument<Any>("atMs") as? Number)?.toLong() ?: 0L
+                        "scheduleTicket" -> {
+                            val untilMs = (call.argument<Any>("untilMs") as? Number)?.toLong() ?: 0L
+                            val lat = (call.argument<Any>("lat") as? Number)?.toDouble() ?: 0.0
+                            val lng = (call.argument<Any>("lng") as? Number)?.toDouble() ?: 0.0
                             val text = call.argument<String>("text") ?: ""
-                            val ok = Reminder.schedule(this, atMs, text)
-                            result.success(ok)
+                            result.success(Reminder.scheduleTicket(this, untilMs, lat, lng, text))
                         }
                         "cancelReminder" -> {
                             Reminder.cancel(this)
