@@ -62,6 +62,7 @@ class AppController extends ChangeNotifier {
     int? volNotification,
     String? ringerMode,
     bool? volumeRestore,
+    List<Map<String, dynamic>>? headphones,
   }) async {
     await NativeBridge.setConfig(
       activityEnabled: activityEnabled,
@@ -83,6 +84,7 @@ class AppController extends ChangeNotifier {
       volNotification: volNotification,
       ringerMode: ringerMode,
       volumeRestore: volumeRestore,
+      headphones: headphones,
     );
     await reloadConfig();
   }
