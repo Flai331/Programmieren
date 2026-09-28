@@ -38,6 +38,16 @@ class NativeBridge {
             }),
           );
         }
+        if (map['headphones'] is List) {
+          map['headphones'] = List<Map<String, dynamic>>.from(
+            (map['headphones'] as List).map((h) {
+              if (h is Map<Object?, Object?>) {
+                return Map<String, dynamic>.from(h);
+              }
+              return h as Map<String, dynamic>;
+            }),
+          );
+        }
         return map;
       }
       return _defaultConfig();
@@ -70,6 +80,7 @@ class NativeBridge {
       'volNotification': -1,
       'ringerMode': 'keep',
       'volumeRestore': true,
+      'headphones': <Map<String, dynamic>>[],
     };
   }
 
@@ -94,6 +105,7 @@ class NativeBridge {
     int? volNotification,
     String? ringerMode,
     bool? volumeRestore,
+    List<Map<String, dynamic>>? headphones,
   }) async {
     try {
       final params = <String, dynamic>{};
@@ -116,6 +128,7 @@ class NativeBridge {
       if (volNotification != null) params['volNotification'] = volNotification;
       if (ringerMode != null) params['ringerMode'] = ringerMode;
       if (volumeRestore != null) params['volumeRestore'] = volumeRestore;
+      if (headphones != null) params['headphones'] = headphones;
       await _channel.invokeMethod('setConfig', params);
     } on PlatformException catch (e) {
       debugPrint('setConfig error: ${e.message}');
@@ -592,6 +605,63 @@ class NativeBridge {
       debugPrint('openDndSettings error: ${e.message}');
     } on MissingPluginException {
       debugPrint('openDndSettings: platform not available');
+    }
+  }
+
+  /// Listet alle gekoppelten Geräte auf.
+  static Future<List<Map<String, dynamic>>> listBondedDevices() async {
+    try {
+      final result = await _channel.invokeMethod('listBondedDevices');
+      if (result is List) {
+        return List<Map<String, dynamic>>.from(
+          result.cast<Object?>().map((e) {
+            if (e is Map<Object?, Object?>) {
+              return Map<String, dynamic>.from(e);
+            }
+            return <String, dynamic>{};
+          }),
+        );
+      }
+      return [];
+    } on PlatformException catch (e) {
+      debugPrint('listBondedDevices error: ${e.message}');
+      return [];
+    } on MissingPluginException {
+      return [];
+    }
+  }
+
+  /// Holt Kopfhörer-Status (ausgewählte Geräte mit Verbindungszustand).
+  static Future<List<Map<String, dynamic>>> getHeadphones() async {
+    try {
+      final result = await _channel.invokeMethod('getHeadphones');
+      if (result is List) {
+        return List<Map<String, dynamic>>.from(
+          result.cast<Object?>().map((e) {
+            if (e is Map<Object?, Object?>) {
+              return Map<String, dynamic>.from(e);
+            }
+            return <String, dynamic>{};
+          }),
+        );
+      }
+      return [];
+    } on PlatformException catch (e) {
+      debugPrint('getHeadphones error: ${e.message}');
+      return [];
+    } on MissingPluginException {
+      return [];
+    }
+  }
+
+  /// Löscht einen gespeicherten Kopfhörer-Ort.
+  static Future<void> forgetHeadphone(String address) async {
+    try {
+      await _channel.invokeMethod('forgetHeadphone', {'address': address});
+    } on PlatformException catch (e) {
+      debugPrint('forgetHeadphone error: ${e.message}');
+    } on MissingPluginException {
+      debugPrint('forgetHeadphone: platform not available');
     }
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../controller.dart';
+import 'headphones_page.dart';
 import 'help_page.dart';
 import 'history_page.dart';
 import 'settings_page.dart';
@@ -74,6 +75,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       appBar: AppBar(
         title: const Text('Parkplatz-Merker'),
         actions: [
+          IconButton(
+            tooltip: 'Kopfhörer',
+            icon: const Icon(Icons.headphones),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const HeadphonesPage()),
+            ),
+          ),
           IconButton(
             tooltip: 'Anleitung',
             icon: const Icon(Icons.help_outline),

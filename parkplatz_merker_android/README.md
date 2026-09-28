@@ -78,6 +78,13 @@ Bluetooth aus), gilt diese Regel nicht.
 Alternativ kannst du einen kleinen **USB-BLE-Beacon** nehmen (Gerät im Auto:
 Beacon) – funktioniert genauso, nur stromsparender.
 
+## Kopfhörer wiederfinden (optional)
+
+Falls du deine Kopfhörer verlierst, speichert die App automatisch den Ort, wo sich dein
+Handy befand, als die Kopfhörer sich trennten. **Einrichtung:** Kopfhörer normal in
+Bluetooth-Einstellungen koppeln → App → Kopfhörer-Symbol oben → „Kopfhörer hinzufügen“.
+Die App zeigt dann auf einer Karte, wo die Kopfhörer zu suchen sind.
+
 ## Apps im Auto automatisch öffnen (optional)
 
 Wenn ein Transmitter/Beacon eingerichtet ist, kann die App **mehrere beliebige Apps** 

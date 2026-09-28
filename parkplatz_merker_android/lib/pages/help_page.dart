@@ -11,6 +11,7 @@ enum HelpTopic {
   volume,
   powerSaving,
   widgets,
+  headphones,
   extras,
   problems,
 }
@@ -75,42 +76,42 @@ const _sections = <_Section>[
         'nacheinander mit je 1,5 Sekunden Abstand. Die letzte liegt danach vorn. Das geht mit jeder App, '
         'die ein Symbol in deiner App-Übersicht hat.',
     'Ohne Transmitter/Beacon: Jede erkannte Fahrt startet die Apps – auch Bus oder Taxi.',
-    '1. Einstellungen → „Im Auto: Apps & Lautstärke” → Apps hinzufügen.\n'
-        '2. „Über anderen Apps einblenden” erlauben – nur dann gehen die Apps von selbst auf. '
+    '1. Einstellungen → „Im Auto: Apps & Lautstärke“ → Apps hinzufügen.\n'
+        '2. „Über anderen Apps einblenden“ erlauben – nur dann gehen die Apps von selbst auf. '
         'Ohne kommt eine Benachrichtigung zum Antippen.\n'
-        '3. Mit „Apps jetzt öffnen (Test)” ausprobieren.',
-    'Die Suche beginnt, wenn Android „im Fahrzeug” erkennt – meist 1–2 Minuten nach dem Losfahren '
+        '3. Mit „Apps jetzt öffnen (Test)“ ausprobieren.',
+    'Die Suche beginnt, wenn Android „im Fahrzeug“ erkennt – meist 1–2 Minuten nach dem Losfahren '
         '(mit Beacon oft schneller).',
   ]),
   _Section(HelpTopic.routineTest, Icons.science, 'Ganze Routine testen', [
     'Der Test spielt eine echte Fahrt nach (wie in deinen Protokollen): Transmitter gefunden, ein kurzer Aussetzer, '
         'wieder gefunden, beim Aussteigen weg. Du kannst ihn daheim durchführen – Apps gehen wirklich auf und wieder zu, '
         'die Lautstärke ändert sich wirklich.',
-    'Im Auto → „Ganze Routine testen” → „Abstand zwischen den Suchen” wählen (5/10/20 Sekunden, Standard 10) → „Test starten”.',
+    'Im Auto → „Ganze Routine testen“ → „Abstand zwischen den Suchen“ wählen (5/10/20 Sekunden, Standard 10) → „Test starten“.',
     'Der Test zeigt 5 Schritte mit ✓ (ok), ✗ (fehler) oder „–“ (übersprungen):\n'
         '1. Transmitter gefunden (RSSI −51) – Apps öffnen.\n'
         '2. Suche: nicht gefunden (einzelner Aussetzer) – Apps sollen offen bleiben.\n'
         '3. Suche: gefunden (RSSI −47) – Transmitter wieder da, Apps nicht erneut öffnen.\n'
         '4. Suche: gefunden (RSSI −49) – ok.\n'
         '5. Aussteigen: Transmitter weg – Apps beenden, Lautstärke zurücksetzen.',
-    'Nach dem Test: „Ergebnis kopieren” zeigt den vollständigen Text mit allen Ereignissen – '
+    'Nach dem Test: „Ergebnis kopieren“ zeigt den vollständigen Text mit allen Ereignissen – '
         'hilfreich zum Weiterschicken, wenn es nicht klappt.',
   ]),
   _Section(HelpTopic.closeApp, Icons.power_settings_new, 'Apps beim Aussteigen komplett beenden', [
     'Ist der Transmitter weg (Motor aus), werden alle Apps geschlossen. Eine einzelne verpasste Suche '
         'während der Fahrt schließt nichts.',
-    'Weg 1 – Ausschaltknöpfe (empfohlen): „Benachrichtigungszugriff” erlauben. Dann drückt die App '
+    'Weg 1 – Ausschaltknöpfe (empfohlen): „Benachrichtigungszugriff“ erlauben. Dann drückt die App '
         'den Ausschaltknopf in jeder Benachrichtigung – unsichtbar, auch bei gesperrtem Handy. '
-        'Hat ein Knopf nur ein Symbol: Tippe auf die App in der Liste → „Ausschaltknopf” → „Wählen” '
-        '(die App muss gerade laufen) und teste mit „Beenden jetzt testen”.',
+        'Hat ein Knopf nur ein Symbol: Tippe auf die App in der Liste → „Ausschaltknopf“ → „Wählen“ '
+        '(die App muss gerade laufen) und teste mit „Beenden jetzt testen“.',
     'Blitzer.de & Co. zeigen oft ein eigenes Widget in der Benachrichtigung mit weiteren Knöpfen. '
         'Die App sieht diese Widget-Knöpfe auch: Wähle einen → teste ihn mit dem Play-Symbol rechts. '
         'Beim richtigen geht die App aus.',
-    'Weg 2 – „Beenden erzwingen” (Fallback): Schalter „Notfalls Beenden erzwingen” an und die '
-        'Bedienungshilfe „Parkplatz-Merker: App beenden” einschalten (Einstellungen → Bedienungshilfen → '
-        'Installierte Apps). Die App öffnet dann kurz die App-Info und drückt „Beenden erzwingen”. '
+    'Weg 2 – „Beenden erzwingen“ (Fallback): Schalter „Notfalls Beenden erzwingen“ an und die '
+        'Bedienungshilfe „Parkplatz-Merker: App beenden“ einschalten (Einstellungen → Bedienungshilfen → '
+        'Installierte Apps). Die App öffnet dann kurz die App-Info und drückt „Beenden erzwingen“. '
         'Klappt nur bei entsperrtem Handy – sonst beim nächsten Entsperren.',
-    'Die Bedienungshilfe drückt ausschließlich Knöpfe, auf denen wirklich „Beenden erzwingen” steht.',
+    'Die Bedienungshilfe drückt ausschließlich Knöpfe, auf denen wirklich „Beenden erzwingen“ steht.',
   ]),
   _Section(HelpTopic.volume, Icons.volume_up_outlined, 'Lautstärke im Auto anpassen', [
     'Mit dem Lautstärke-Profil stellst du Medien, Klingelton und Benachrichtigungen auf feste Werte um, '
@@ -145,6 +146,20 @@ const _sections = <_Section>[
     'Kleines Widget „Hier geparkt“: merkt mit einem Tipp die aktuelle Position.',
     'Schnelleinstellung: Benachrichtigungsleiste ganz herunterziehen → Stift/Bearbeiten → '
         '„Hier geparkt“ in die aktiven Kacheln ziehen.',
+  ]),
+  _Section(HelpTopic.headphones, Icons.headphones, 'Kopfhörer wiederfinden', [
+    'Verbindest du deine Kopfhörer mit dem Handy, merkt sich die App den Ort, wenn sie sich '
+        'trennen – auch wenn die App geschlossen ist. So findest du verlorene Kopfhörer wieder.',
+    'Einrichten: Kopple deinen Kopfhörer normal in den Bluetooth-Einstellungen. Dann öffne in '
+        'der App das Kopfhörer-Symbol oben auf der Startseite (oder Einstellungen → Kopfhörer) → '
+        '„Kopfhörer hinzufügen“ → Gerät wählen. Voraussetzungen: Standort „Immer zulassen“ und '
+        '„Geräte in der Nähe“.',
+    'Wiederfinden: Kopfhörer-Seite zeigt eine kleine Karte mit dem Ort, wo das Handy war, als '
+        'sich deine Kopfhörer trennten. Der Ort ist dort, wo dein Handy war – die Kopfhörer '
+        'liegen meist in der Nähe (Bluetooth reicht ca. 10 m). Tippe „Navigation“, um in Google '
+        'Maps hin zu gehen.',
+    'Testen: Kopfhörer verbinden → dann ausschalten oder ins Case legen. Nach ein paar Sekunden '
+        'steht auf der Kopfhörer-Seite „Getrennt am …“ mit der Karte und dem Ort.',
   ]),
   _Section(HelpTopic.extras, Icons.sticky_note_2_outlined, 'Notiz, Foto, Parkschein, Verlauf', [
     'Notiz und Foto: beim Parkplatz auf „Notiz“ bzw. „Foto“ tippen (z. B. „Parkhaus Ebene 3, Platz 112“).',

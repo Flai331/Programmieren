@@ -69,6 +69,7 @@ class FakeAppController extends ChangeNotifier implements AppController {
     int? volNotification,
     String? ringerMode,
     bool? volumeRestore,
+    List<Map<String, dynamic>>? headphones,
   }) async {}
 
   @override

@@ -214,6 +214,16 @@ class MainActivity : FlutterActivity() {
                             AppLauncher.closeAll(this, fromForeground = true)
                             result.success(null)
                         }
+                        "listBondedDevices" -> {
+                            result.success(Headphones.bonded(this))
+                        }
+                        "getHeadphones" -> {
+                            result.success(Headphones.all(this))
+                        }
+                        "forgetHeadphone" -> {
+                            Headphones.forget(this, call.argument<String>("address") ?: "")
+                            result.success(null)
+                        }
                         "getVolumeInfo" -> {
                             result.success(VolumeProfile.info(this))
                         }

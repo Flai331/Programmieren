@@ -106,6 +106,11 @@ object Config {
         }
         set(value) = prefs().edit().putString("launchApps", value).apply()
 
+    /** Gewählte Kopfhörer als JSON-Liste [{address, name}]. */
+    var headphones: String
+        get() = prefs().getString("headphones", "") ?: ""
+        set(value) = prefs().edit().putString("headphones", value).apply()
+
     /** Transmitter/Beacon eingerichtet (Modus UND Adresse). */
     val hasDevice: Boolean
         get() = deviceMode != "none" && !deviceAddress.isNullOrEmpty()
@@ -197,8 +202,19 @@ object Config {
             "volRing" to volRing,
             "volNotification" to volNotification,
             "ringerMode" to ringerMode,
-            "volumeRestore" to volumeRestore
+            "volumeRestore" to volumeRestore,
+            "headphones" to headphonesList()
         )
+    }
+
+    private fun headphonesList(): List<Map<String, String>> = try {
+        val ja = org.json.JSONArray(headphones.ifEmpty { "[]" })
+        (0 until ja.length()).map { i ->
+            val obj = ja.getJSONObject(i)
+            mapOf("address" to obj.optString("address"), "name" to obj.optString("name"))
+        }
+    } catch (e: Exception) {
+        emptyList()
     }
 
     fun setConfig(config: Map<String, Any?>) {
@@ -242,5 +258,20 @@ object Config {
         config["volNotification"]?.let { (it as? Number)?.toInt()?.let { v -> volNotification = v } }
         config["ringerMode"]?.let { (it as? String)?.let { v -> ringerMode = v } }
         config["volumeRestore"]?.let { (it as? Boolean)?.let { v -> volumeRestore = v } }
+        config["headphones"]?.let { list ->
+            if (list is List<*>) {
+                val ja = org.json.JSONArray()
+                for (item in list) {
+                    if (item is Map<*, *>) {
+                        val address = (item["address"] as? String) ?: continue
+                        val obj = org.json.JSONObject()
+                        obj.put("address", address.uppercase())
+                        obj.put("name", (item["name"] as? String) ?: address)
+                        ja.put(obj)
+                    }
+                }
+                headphones = ja.toString()
+            }
+        }
     }
 }

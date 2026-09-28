@@ -7,6 +7,7 @@ import '../native.dart';
 import 'car_page.dart';
 import 'common_widgets.dart';
 import 'diagnostics_page.dart';
+import 'headphones_page.dart';
 import 'help_page.dart';
 import 'search_page.dart';
 
@@ -209,6 +210,17 @@ class _SettingsPageState extends State<SettingsPage>
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const CarPage()),
+            ),
+          ),
+          const Divider(),
+          SectionHeader('Kopfhörer', help: HelpTopic.headphones),
+          ListTile(
+            leading: const Icon(Icons.headphones),
+            title: const Text('Kopfhörer wiederfinden'),
+            subtitle: const Text('Ort beim Trennen speichern'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const HeadphonesPage()),
             ),
           ),
           const Divider(),
