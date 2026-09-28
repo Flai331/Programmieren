@@ -201,7 +201,7 @@ Mit dem Lautstärke-Profil stellst du dich automatisch auf feste Lautstärken um
 ## Weitere Funktionen
 
 - **Notiz und Foto** zum Parkplatz (z. B. „Parkhaus Ebene 3, Platz 112“).
-- **Parkschein:** Dauer wählen (30 Min bis 4 Std) oder Uhrzeit → die Restzeit steht beim Parkplatz, 15 Minuten vor Ablauf kommt eine Erinnerung.
+- **Parkschein:** Dauer wählen (30 Min bis 4 Std) oder Uhrzeit → die Restzeit steht beim Parkplatz, die Erinnerung kommt je nach Fußweg zum Auto rechtzeitig (Gehzeit + 5 Min Puffer, mindestens 10 Min vorher).
 - **Verlauf** der letzten 30 Parkplätze.
 - **Diagnose:** letzte 100 Ereignisse, Berechtigungen, Transmitter-Statistik –
   mit „Kopieren“ zum Weiterschicken.

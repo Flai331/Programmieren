@@ -382,8 +382,8 @@ class SpotView extends StatelessWidget {
       SnackBar(
         content: Text(
           error ??
-              'Parkschein bis ${formatClock(until)} · Erinnerung um '
-                  '${formatClock(until.subtract(const Duration(minutes: 15)))}',
+              'Parkschein bis ${formatClock(until)} · Erinnerung rechtzeitig '
+                  'je nach Fußweg zum Auto',
         ),
       ),
     );

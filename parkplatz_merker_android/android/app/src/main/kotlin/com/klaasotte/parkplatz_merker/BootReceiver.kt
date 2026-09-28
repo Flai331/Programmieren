@@ -10,9 +10,6 @@ class BootReceiver : BroadcastReceiver() {
         Transitions.register(context)
         BeaconBackground.start(context)
 
-        val reminderAt = Config.reminderAt
-        if (reminderAt > System.currentTimeMillis()) {
-            Reminder.schedule(context, reminderAt, Config.reminderText)
-        }
+        Reminder.onBoot(context)
     }
 }

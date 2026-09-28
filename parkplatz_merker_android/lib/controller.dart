@@ -369,14 +369,17 @@ class AppController extends ChangeNotifier {
   }
 
   Future<String?> setReminder(String spotId, DateTime until) async {
-    final atMs = until.millisecondsSinceEpoch - (15 * 60 * 1000);
-    if (atMs < DateTime.now().millisecondsSinceEpoch) {
-      return 'Das ist in weniger als 15 Minuten – keine Erinnerung möglich.';
+    final spotIdx = _spots.indexWhere((s) => s.id == spotId);
+    if (spotIdx == -1) return 'Parkplatz nicht gefunden.';
+    if (until.difference(DateTime.now()).inMinutes < 10) {
+      return 'Das ist in weniger als 10 Minuten – keine Erinnerung möglich.';
     }
 
     final text =
         'Dein Parkschein läuft um ${until.hour.toString().padLeft(2, '0')}:${until.minute.toString().padLeft(2, '0')} ab.';
-    final ok = await NativeBridge.scheduleReminder(atMs, text);
+    final spot = _spots[spotIdx];
+    final ok = await NativeBridge.scheduleTicket(
+        until.millisecondsSinceEpoch, spot.lat, spot.lng, text);
     if (!ok) return 'Erinnerung konnte nicht gestellt werden.';
 
     // Es gibt nur eine Erinnerung: bei allen anderen Einträgen entfernen.
