@@ -43,6 +43,19 @@ String formatClock(DateTime dt) {
   return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 }
 
+/// Restzeit bis [until]: „noch 1 Std 5 Min“, „noch 12 Min“ oder „abgelaufen“.
+String remainingText(DateTime until, DateTime now) {
+  final left = until.difference(now);
+  if (left.inSeconds <= 0) return 'abgelaufen';
+  // Angefangene Minute zählt mit.
+  final minutes = (left.inSeconds + 59) ~/ 60;
+  final h = minutes ~/ 60;
+  final m = minutes % 60;
+  if (h == 0) return 'noch $m Min';
+  if (m == 0) return 'noch $h Std';
+  return 'noch $h Std $m Min';
+}
+
 /// Gibt "seit HH:MM", "seit gestern, HH:MM" oder "seit Mo., TT.MM., HH:MM" zurück.
 String sinceText(DateTime parked, DateTime now) {
   final clock = formatClock(parked);

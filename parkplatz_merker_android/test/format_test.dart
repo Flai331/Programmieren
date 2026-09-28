@@ -54,6 +54,15 @@ void main() {
       expect(distance, lessThan(3500));
     });
 
+    test('remainingText: Stunden, Minuten, abgelaufen', () {
+      final now = DateTime(2026, 9, 28, 14, 0, 0);
+      expect(remainingText(DateTime(2026, 9, 28, 15, 5), now), 'noch 1 Std 5 Min');
+      expect(remainingText(DateTime(2026, 9, 28, 16, 0), now), 'noch 2 Std');
+      expect(remainingText(DateTime(2026, 9, 28, 14, 12), now), 'noch 12 Min');
+      expect(remainingText(DateTime(2026, 9, 28, 14, 0, 30), now), 'noch 1 Min');
+      expect(remainingText(DateTime(2026, 9, 28, 13, 59), now), 'abgelaufen');
+    });
+
     test('formatClock: formats time correctly', () {
       final dt = DateTime(2026, 9, 24, 14, 32, 45);
 
