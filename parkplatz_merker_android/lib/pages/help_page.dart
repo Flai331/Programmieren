@@ -163,7 +163,8 @@ const _sections = <_Section>[
   ]),
   _Section(HelpTopic.extras, Icons.sticky_note_2_outlined, 'Notiz, Foto, Parkschein, Verlauf', [
     'Notiz und Foto: beim Parkplatz auf „Notiz“ bzw. „Foto“ tippen (z. B. „Parkhaus Ebene 3, Platz 112“).',
-    'Parkschein: „Parkschein“ → Uhrzeit wählen, bis wann er gilt. 15 Minuten vorher kommt eine Erinnerung.',
+    'Parkschein: „Parkschein“ → wählen, wie lange er gilt (30 Minuten bis 4 Stunden) oder „Uhrzeit wählen …“. '
+        'Beim Parkplatz steht dann „Parkschein bis 15:30 · noch 1 Std 5 Min“. 15 Minuten vor Ablauf kommt eine Erinnerung.',
     'Verlauf: Uhr-Symbol oben – die letzten 30 Parkplätze. Wischen oder „Falsch erkannt“ löscht einen Eintrag.',
     'Navigation zum Auto öffnet den Fußweg in Google Maps (sonst eine andere Karten-App).',
   ]),

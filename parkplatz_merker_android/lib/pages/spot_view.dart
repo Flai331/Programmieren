@@ -120,7 +120,7 @@ class SpotView extends StatelessWidget {
             icon: Icons.alarm,
             text:
                 'Parkschein bis ${formatClock(DateTime.fromMillisecondsSinceEpoch(reminderAt))}'
-                ' · Erinnerung ${formatClock(DateTime.fromMillisecondsSinceEpoch(reminderAt - 15 * 60 * 1000))}',
+                ' · ${remainingText(DateTime.fromMillisecondsSinceEpoch(reminderAt), DateTime.now())}',
           ),
         const SizedBox(height: 12),
         FilledButton.icon(
@@ -308,12 +308,13 @@ class SpotView extends StatelessWidget {
         builder: (dialogContext) => AlertDialog(
           title: const Text('Parkschein'),
           content: Text(
-            'Parkschein bis ${formatClock(DateTime.fromMillisecondsSinceEpoch(spot.reminderAt!))}.',
+            'Parkschein bis ${formatClock(DateTime.fromMillisecondsSinceEpoch(spot.reminderAt!))} '
+            '(${remainingText(DateTime.fromMillisecondsSinceEpoch(spot.reminderAt!), DateTime.now())}).',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Neue Uhrzeit'),
+              child: const Text('Neu stellen'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
@@ -329,17 +330,52 @@ class SpotView extends StatelessWidget {
       }
       if (!context.mounted) return;
     }
-    final time = await showTimePicker(
+    // Wie lange gilt der Parkschein? Stunden direkt wählen oder Uhrzeit.
+    final minutes = await showDialog<int>(
       context: context,
-      helpText: 'Parkschein gültig bis',
-      initialTime: TimeOfDay.fromDateTime(
-        DateTime.now().add(const Duration(hours: 1)),
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Parkschein gültig für'),
+        children: [
+          for (final m in const [30, 60, 90, 120, 180, 240])
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, m),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text(
+                  m < 60
+                      ? '$m Minuten'
+                      : m % 60 == 0
+                          ? '${m ~/ 60} ${m == 60 ? 'Stunde' : 'Stunden'}'
+                          : '${m ~/ 60},5 Stunden',
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ),
+            ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext, -1),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 6),
+              child: Text('Uhrzeit wählen …', style: TextStyle(fontSize: 16)),
+            ),
+          ),
+        ],
       ),
     );
-    if (time == null) return;
+    if (minutes == null || !context.mounted) return;
     final now = DateTime.now();
-    var until = DateTime(now.year, now.month, now.day, time.hour, time.minute);
-    if (until.isBefore(now)) until = until.add(const Duration(days: 1));
+    DateTime until;
+    if (minutes > 0) {
+      until = now.add(Duration(minutes: minutes));
+    } else {
+      final time = await showTimePicker(
+        context: context,
+        helpText: 'Parkschein gültig bis',
+        initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
+      );
+      if (time == null) return;
+      until = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+      if (until.isBefore(now)) until = until.add(const Duration(days: 1));
+    }
     final error = await controller.setReminder(spot.id, until);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
