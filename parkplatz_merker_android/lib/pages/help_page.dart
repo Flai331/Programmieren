@@ -142,7 +142,8 @@ const _sections = <_Section>[
     'Widget „Mein Auto“: Startbildschirm lange drücken → Widgets → Parkplatz-Merker → „Mein Auto“ '
         'hinziehen. Es zeigt eine kleine Karte, seit wann das Auto dort steht, Adresse und Notiz, '
         'dazu „Navigation“ und „Hier geparkt“. Nach dem Aussteigen aktualisiert es sich nach etwa '
-        '1 Minute von selbst.',
+        '1 Minute von selbst. Größe ändern: Widget lange drücken → Rahmen ziehen. Ab etwa 3 Zeilen '
+        'Höhe zeigt es eine große Karte oben, darunter Adresse und Knöpfe.',
     'Kleines Widget „Hier geparkt“: merkt mit einem Tipp die aktuelle Position.',
     'Schnelleinstellung: Benachrichtigungsleiste ganz herunterziehen → Stift/Bearbeiten → '
         '„Hier geparkt“ in die aktiven Kacheln ziehen.',
