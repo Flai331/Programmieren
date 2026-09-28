@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/db.dart';
@@ -45,8 +47,19 @@ class _CityScreenState extends State<CityScreen>
   (int, int)? _highlight;
   bool _zentriert = false;
 
+  // Die Betriebe arbeiten von selbst; einmal pro Minute neu zeichnen, damit
+  // Waren, Holz und Tageszeit mitlaufen.
+  late final Timer _uhr;
+
+  @override
+  void initState() {
+    super.initState();
+    _uhr = Timer.periodic(const Duration(minutes: 1), (_) => setState(() {}));
+  }
+
   @override
   void dispose() {
+    _uhr.cancel();
     _anim.dispose();
     _viewer.dispose();
     super.dispose();
@@ -153,13 +166,25 @@ class _CityScreenState extends State<CityScreen>
           : eigene.mitHilfe
           ? ' Mit ${typeById(bt.hilfe!)?.name} geht es schneller.'
           : ' Mit einer ${typeById(bt.hilfe!)?.name} ginge es schneller.';
+      final h = eigene.minutenJe / 60;
+      final takt = h == h.roundToDouble()
+          ? '${h.round()} Stunde${h == 1 ? '' : 'n'}'
+          : '${h.toStringAsFixed(1).replaceAll('.', ',')} Stunden';
+      final hatMarkt = store.buildings.any(
+        (x) => markttypen.contains(x.typeId),
+      );
       return [
         const SizedBox(height: 8),
         Text(
-          '${eigene.menge} ${bt.einheit} hergestellt, '
-          'je ${eigene.mitHilfe ? bt.seitenJeMitHilfe : bt.seitenJe} gelesene Seiten.$hilfe',
+          'Arbeitet von selbst, täglich $arbeitsBeginn–$arbeitsEnde Uhr: '
+          '1 ${bt.ware} alle $takt.$hilfe',
         ),
-        Text('Am Markt verkauft für ${eigene.erloes} Holz.'),
+        Text('Heute ${eigene.heute}, insgesamt ${eigene.menge} ${bt.einheit}.'),
+        Text(
+          hatMarkt
+              ? 'Am Markt verkauft für ${eigene.erloes} Holz.'
+              : 'Ohne Markt wird nichts verkauft.',
+        ),
       ];
     }
     if (markttypen.contains(b.typeId)) {
@@ -168,7 +193,8 @@ class _CityScreenState extends State<CityScreen>
         const SizedBox(height: 8),
         Text(
           alle.isEmpty
-              ? 'Hier verkaufen Bäckerei und Mühle ihre Waren, sobald es sie gibt.'
+              ? 'Hier verkaufen Bäckerei und Mühle ihre Waren. '
+                    'Baue eine davon, sie arbeiten von selbst.'
               : 'Verkauft: ${alle.map((p) => '${p.menge} ${p.betrieb.einheit}').join(', ')}. '
                     'Erlös: $summe Holz.',
         ),

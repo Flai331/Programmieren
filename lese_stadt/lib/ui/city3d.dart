@@ -232,6 +232,17 @@ Map<String, Object?> city3dJson(
     'baustellen': baustellen,
     'arbeitsplaetze': arbeit,
     'lieferungen': _lieferungen(scene.buildings),
+    // Heute hergestellte Waren liegen vor dem Betrieb.
+    'vorraete': [
+      for (final p in produktion(scene.buildings, now))
+        if (p.heute > 0)
+          [
+            p.gebaeude.x,
+            p.gebaeude.y,
+            p.betrieb.ware == 'Brot' ? 'korb' : 'sack',
+            p.heute,
+          ],
+    ],
     'placing': placing,
     'highlight': highlight == null ? null : [highlight.$1, highlight.$2],
   };

@@ -56,36 +56,42 @@ Series series(int id, {int? baende, bool fertig = false, int pos = 0}) =>
 
 void main() {
   group('Produktion', () {
-    final spaeter = DateTime(2026, 2, 1);
-    final eintraege = [
-      entry(1, 1, 0, 100), // vor dem Bau der Bäckerei
-      entry(2, 1, 100, 150, spaeter),
-    ];
+    // Gebaut am 1. Februar um 16 Uhr; jetzt ist der 2. Februar, 10 Uhr.
+    final gebaut = DateTime(2026, 2, 1, 16);
+    final jetzt = DateTime(2026, 2, 2, 10);
 
-    test('Bäckerei backt aus den Seiten seit ihrem Bau', () {
-      final p = produktion([
-        building(1, 'baeckerei', 0, 0, spaeter),
-      ], eintraege).single;
-      expect(p.menge, 2); // 50 Seiten / 25
-      expect(p.mitHilfe, isFalse);
-      expect(p.erloes, 4);
+    test('gearbeitet wird nur von 7 bis 18 Uhr', () {
+      expect(arbeitsminuten(gebaut, jetzt), 2 * 60 + 3 * 60);
+      expect(arbeitsminuten(jetzt, gebaut), 0);
+      expect(
+        arbeitsminuten(DateTime(2026, 2, 1), DateTime(2026, 2, 4)),
+        3 * 11 * 60,
+      );
+    });
+
+    test('Bäckerei backt von selbst, ohne Seiten', () {
+      final p = produktion([building(1, 'baeckerei', 0, 0, gebaut)], jetzt);
+      expect(p.single.menge, 1); // 300 Minuten / 180
+      expect(p.single.heute, 1); // gestern 120 Minuten: noch keins
+      expect(p.single.mitHilfe, isFalse);
+      expect(p.single.erloes, 2);
     });
 
     test('mit Wassermühle geht es schneller', () {
       final p = produktion([
-        building(1, 'baeckerei', 0, 0, spaeter),
-        building(2, 'wassermuehle', 1, 0, spaeter),
-      ], eintraege);
-      expect(p.first.menge, 5); // 50 / 10
+        building(1, 'baeckerei', 0, 0, gebaut),
+        building(2, 'wassermuehle', 1, 0, gebaut),
+      ], jetzt);
+      expect(p.first.menge, 3); // 300 / 90
       expect(p.first.mitHilfe, isTrue);
-      expect(p.last.menge, 3); // Mehl: 50 / 15
+      expect(p.last.menge, 2); // Mehl: 300 / 120
     });
 
     test('verkauft wird nur mit Markt', () {
-      final ohne = [building(1, 'baeckerei', 0, 0, spaeter)];
-      expect(marktErloes(ohne, eintraege), isEmpty);
+      final ohne = [building(1, 'baeckerei', 0, 0, gebaut)];
+      expect(marktErloes(ohne, jetzt), isEmpty);
       final mit = [...ohne, building(2, typDorfmarkt, 4, 4)];
-      expect(marktErloes(mit, eintraege), {Mat.holz: 4});
+      expect(marktErloes(mit, jetzt), {Mat.holz: 2});
     });
   });
 

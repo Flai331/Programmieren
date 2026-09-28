@@ -918,6 +918,57 @@ function setzeLast(huelle, ware) {
   return last;
 }
 
+// Was heute hergestellt wurde, liegt vor dem Betrieb: Mehlsäcke bzw.
+// Brotkisten, höchstens acht.
+const vorratGruppe = new THREE.Group();
+stadt.add(vorratGruppe);
+const vorratMat = {
+  sack: new THREE.MeshStandardMaterial({ color: LAST_FARBEN.sack, roughness: 0.95 }),
+  kiste: new THREE.MeshStandardMaterial({ color: 0x8a6440, roughness: 0.9 }),
+  brot: new THREE.MeshStandardMaterial({ color: LAST_FARBEN.brot, roughness: 0.8 }),
+};
+const vorratGeo = {
+  sack: new THREE.SphereGeometry(0.06, 10, 8),
+  kiste: new THREE.BoxGeometry(0.13, 0.06, 0.1),
+  brot: new THREE.SphereGeometry(0.025, 8, 6),
+};
+
+function setzeVorraete(z) {
+  vorratGruppe.clear();
+  for (const [x, y, ware, anzahl] of z.vorraete || []) {
+    const n = nachbarFeld(z, [x, y]);
+    if (!n) continue;
+    // Neben den Eingang, etwas zur Seite gerückt.
+    const bx = x + 0.5 + n[2] * 0.62 + n[3] * 0.25;
+    const bz = y + 0.5 + n[3] * 0.62 + n[2] * 0.25;
+    for (let i = 0; i < Math.min(anzahl, 8); i++) {
+      const lage = Math.floor(i / 4);
+      const j = i % 4;
+      const ox = ((j % 2) - 0.5) * 0.14;
+      const oz = (Math.floor(j / 2) - 0.5) * 0.12;
+      if (ware === 'korb') {
+        const kiste = new THREE.Mesh(vorratGeo.kiste, vorratMat.kiste);
+        kiste.position.set(bx + ox, 0.03 + lage * 0.06, bz + oz);
+        kiste.castShadow = true;
+        vorratGruppe.add(kiste);
+        for (let k = 0; k < 2; k++) {
+          const brot = new THREE.Mesh(vorratGeo.brot, vorratMat.brot);
+          brot.scale.set(1.6, 0.8, 1);
+          brot.position.set(bx + ox + (k - 0.5) * 0.05, 0.065 + lage * 0.06, bz + oz);
+          vorratGruppe.add(brot);
+        }
+      } else {
+        const sack = new THREE.Mesh(vorratGeo.sack, vorratMat.sack);
+        sack.scale.set(1, 0.75, 0.8);
+        sack.rotation.y = i * 0.7;
+        sack.position.set(bx + ox, 0.045 + lage * 0.08, bz + oz);
+        sack.castShadow = true;
+        vorratGruppe.add(sack);
+      }
+    }
+  }
+}
+
 function bewegeLaeufer(m, dt) {
   const l = m.laeufer;
   if (!l || !zustand) return;
@@ -1053,6 +1104,7 @@ window.LeseStadt = {
       JSON.stringify(alt.lieferungen) !== JSON.stringify(z.lieferungen) ||
       JSON.stringify(alt.gebaeude.map((g) => [g.x, g.y])) !== JSON.stringify(z.gebaeude.map((g) => [g.x, g.y]));
     if (menschenNeu) setzeMenschen(z);
+    if (lageNeu || JSON.stringify(alt?.vorraete) !== JSON.stringify(z.vorraete)) setzeVorraete(z);
     melde({ typ: 'bereit' });
   },
 };

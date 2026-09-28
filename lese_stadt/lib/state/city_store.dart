@@ -53,11 +53,11 @@ class CityStore extends ChangeNotifier {
     boni: [
       for (final d in districts)
         if (d.komplett) seriesBonus(d.baende, d.genre),
-      marktErloes(buildings, entries),
+      marktErloes(buildings, now),
     ],
   );
 
-  List<Produktion> get betriebsProduktion => produktion(buildings, entries);
+  List<Produktion> get betriebsProduktion => produktion(buildings, now);
 
   int get aktivitaet => activityValue(entries, now);
   Belebung get belebung => belebungFuer(aktivitaet);
