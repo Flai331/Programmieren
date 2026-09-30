@@ -10,6 +10,7 @@ import '../ai/ai_extraction_service.dart';
 import '../app_services.dart';
 import '../backup/backup_service.dart';
 import '../lock/lock_gate.dart';
+import '../scan/blank_pages.dart';
 import '../scan/scan_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -21,6 +22,8 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _lockEnabled = false;
+  bool _blankEnabled = true;
+  BlankSensitivity _blankSensitivity = BlankSensitivity.normal;
   bool _busy = false;
   bool _aiInstalled = false;
   bool _aiEnabled = false;
@@ -31,6 +34,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     AppLockSettings.isEnabled().then((value) {
       if (mounted) setState(() => _lockEnabled = value);
+    });
+    BlankPageSettings.isEnabled().then((value) {
+      if (mounted) setState(() => _blankEnabled = value);
+    });
+    BlankPageSettings.sensitivity().then((value) {
+      if (mounted) setState(() => _blankSensitivity = value);
     });
     _refreshAiState();
   }
@@ -249,6 +258,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
               setState(() => _lockEnabled = value);
             },
           ),
+          const Divider(),
+          SwitchListTile(
+            secondary: const Icon(Icons.content_cut),
+            title: const Text('Leerseiten trennen & löschen'),
+            subtitle: const Text(
+                'Ein leeres Blatt im Stapel trennt die Dokumente. Leere '
+                'Seiten werden nicht gespeichert.'),
+            value: _blankEnabled,
+            onChanged: (value) async {
+              await BlankPageSettings.setEnabled(value);
+              setState(() => _blankEnabled = value);
+            },
+          ),
+          if (_blankEnabled)
+            ListTile(
+              leading: const SizedBox(width: 24),
+              title: const Text('Empfindlichkeit'),
+              subtitle: const Text(
+                  'Vorsichtig: nur ganz weiße Blätter · Großzügig: auch '
+                  'Blätter mit Staub oder Flecken'),
+              trailing: DropdownButton<BlankSensitivity>(
+                value: _blankSensitivity,
+                onChanged: (value) async {
+                  if (value == null) return;
+                  await BlankPageSettings.setSensitivity(value);
+                  setState(() => _blankSensitivity = value);
+                },
+                items: [
+                  for (final s in BlankSensitivity.values)
+                    DropdownMenuItem(value: s, child: Text(s.label)),
+                ],
+              ),
+            ),
           const Divider(),
           if (!_aiInstalled)
             ListTile(

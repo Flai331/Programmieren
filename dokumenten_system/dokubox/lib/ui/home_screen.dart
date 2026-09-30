@@ -58,63 +58,78 @@ class _HomeScreenState extends State<HomeScreen> {
     // verwerfen.
     LockController.suppressAutoLock = true;
     try {
-      final outcome = await services.scanner.scan();
-      if (outcome == null) return; // Nutzer hat abgebrochen.
+      final result = await services.scanner.scan();
+      if (result == null) return; // Nutzer hat abgebrochen.
 
-      final docNumber = await services.repository.nextDocNumber();
-      final pdfPath = await services.scanner
-          .renamePdf(outcome.relativePdfPath, docNumber);
-      final draft = await services.suggestions.buildDraft(outcome.ocrText);
-      await _refineWithAi(draft, outcome.ocrText, outcome.firstPageOcr);
-
-      if (!mounted) {
-        // Sollte nach dem Overlay-Fix nicht mehr vorkommen; falls doch,
-        // keine verwaiste PDF/Nummer hinterlassen.
-        await services.scanner.deletePdf(pdfPath);
-        await services.repository.releaseDocNumberIfUnused(docNumber);
+      if (result.documents.isEmpty) {
+        _snack('Nur leere Seiten erkannt – nichts gespeichert.');
         return;
       }
-      final confirmed = await Navigator.of(context).push<DocumentDraft>(
-        MaterialPageRoute(
-          builder: (_) => ConfirmScreen(draft: draft, docNumber: docNumber),
-        ),
-      );
-
-      if (confirmed == null) {
-        // Verworfen: PDF löschen, Nummer wenn möglich wieder freigeben.
-        await services.scanner.deletePdf(pdfPath);
-        await services.repository.releaseDocNumberIfUnused(docNumber);
-        return;
+      if (result.documents.length > 1 || result.blankPages > 0) {
+        _snack('${result.documents.length} Dokument(e) erkannt, '
+            '${result.blankPages} Leerseite(n) entfernt');
       }
 
-      final doc = await services.repository.createDocument(
-        docNumber: docNumber,
-        draft: confirmed,
-        pdfPath: pdfPath,
-        pageCount: outcome.pageCount,
-        ocrText: outcome.ocrText,
-        refs: extractRefs(outcome.ocrText),
-      );
-      await services.notifications.scheduleFor(doc);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                '$docNumber gespeichert – Original vorne in die Box legen'),
-          ),
-        );
+      // Jedes Dokument des Stapels einzeln bestätigen. „Zurück" verwirft nur
+      // dieses eine Dokument, die übrigen bleiben im Ablauf.
+      var saved = 0;
+      for (final outcome in result.documents) {
+        if (await _confirmAndSave(outcome)) saved++;
       }
+      if (saved > 1 && mounted) _snack('$saved Dokumente gespeichert');
     } on DocScanException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Scan fehlgeschlagen: ${e.message}')),
-        );
-      }
+      _snack('Scan fehlgeschlagen: ${e.message}');
     } finally {
       LockController.suppressAutoLock = false;
       if (mounted) setState(() => _scanning = false);
     }
+  }
+
+  void _snack(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  /// Vergibt die Nummer, füllt vor, lässt bestätigen und speichert ein
+  /// Dokument. Liefert `true`, wenn es gespeichert wurde.
+  Future<bool> _confirmAndSave(ScanOutcome outcome) async {
+    final docNumber = await services.repository.nextDocNumber();
+    final pdfPath =
+        await services.scanner.renamePdf(outcome.relativePdfPath, docNumber);
+    final draft = await services.suggestions.buildDraft(outcome.ocrText);
+    await _refineWithAi(draft, outcome.ocrText, outcome.firstPageOcr);
+
+    if (!mounted) {
+      // Sollte nach dem Overlay-Fix nicht mehr vorkommen; falls doch,
+      // keine verwaiste PDF/Nummer hinterlassen.
+      await services.scanner.deletePdf(pdfPath);
+      await services.repository.releaseDocNumberIfUnused(docNumber);
+      return false;
+    }
+    final confirmed = await Navigator.of(context).push<DocumentDraft>(
+      MaterialPageRoute(
+        builder: (_) => ConfirmScreen(draft: draft, docNumber: docNumber),
+      ),
+    );
+
+    if (confirmed == null) {
+      // Verworfen: PDF löschen, Nummer wenn möglich wieder freigeben.
+      await services.scanner.deletePdf(pdfPath);
+      await services.repository.releaseDocNumberIfUnused(docNumber);
+      return false;
+    }
+
+    final doc = await services.repository.createDocument(
+      docNumber: docNumber,
+      draft: confirmed,
+      pdfPath: pdfPath,
+      pageCount: outcome.pageCount,
+      ocrText: outcome.ocrText,
+      refs: extractRefs(outcome.ocrText),
+    );
+    await services.notifications.scheduleFor(doc);
+    _snack('$docNumber gespeichert – Original vorne in die Box legen');
+    return true;
   }
 
   /// Verfeinert den Regel-Entwurf mit dem lokalen KI-Modell (falls

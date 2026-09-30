@@ -6,6 +6,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import 'blank_pages.dart';
+
 /// Ergebnis eines abgeschlossenen Scan-Durchlaufs.
 class ScanOutcome {
   /// Pfad der erzeugten PDF, relativ zum App-Dokumentenverzeichnis.
@@ -25,6 +27,15 @@ class ScanOutcome {
     required this.ocrText,
     required this.firstPageOcr,
   });
+}
+
+/// Ergebnis eines Scanner-Durchlaufs: ein oder mehrere Dokumente (der Stapel
+/// wird an Leerseiten getrennt) plus Anzahl der entfernten Leerseiten.
+class ScanResult {
+  final List<ScanOutcome> documents;
+  final int blankPages;
+
+  const ScanResult({required this.documents, required this.blankPages});
 }
 
 /// Kapselt Scanner (ML Kit / VisionKit), PDF-Erzeugung und On-Device-OCR.
@@ -48,12 +59,16 @@ class ScanService {
 
   /// Startet den Scanner. Liefert `null`, wenn der Nutzer abbricht.
   ///
-  /// Die PDF bekommt zunächst einen temporären Namen; erst wenn die Nummer
+  /// Leere Seiten werden erkannt und entfernt; an ihnen wird der Stapel in
+  /// einzelne Dokumente getrennt (abschaltbar in den Einstellungen).
+  ///
+  /// Jede PDF bekommt zunächst einen temporären Namen; erst wenn die Nummer
   /// vergeben ist, wird sie per [renamePdf] umbenannt. So verbrennt ein
   /// abgebrochener Scan keine Dokumentnummer.
-  Future<ScanOutcome?> scan() async {
-    final docNumber = 'scan_${DateTime.now().millisecondsSinceEpoch}';
-    final result = await _scanner.getScannedDocumentAsImages(page: 20);
+  Future<ScanResult?> scan() async {
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    // Großzügiges Limit: ein Stapel mit Trenn-Blättern hat schnell viele Seiten.
+    final result = await _scanner.getScannedDocumentAsImages(page: 40);
     if (result == null || result.images.isEmpty) return null;
 
     // Android liefert file://-URIs, iOS Dateipfade — beides normalisieren.
@@ -62,22 +77,42 @@ class ScanService {
         raw.startsWith('file://') ? Uri.parse(raw).toFilePath() : raw,
     ];
 
-    final pages = await _runOcr(imagePaths);
-    final relativePdfPath = await _buildPdf(imagePaths, docNumber);
+    try {
+      final blank = List<bool>.filled(imagePaths.length, false);
+      final detect = await BlankPageSettings.isEnabled();
+      if (detect) {
+        final threshold = (await BlankPageSettings.sensitivity()).inkThreshold;
+        for (var i = 0; i < imagePaths.length; i++) {
+          blank[i] = await isBlankImageFile(imagePaths[i],
+              inkThreshold: threshold);
+        }
+      }
 
-    // Scanner-Zwischendateien aufräumen (liegen im Cache).
-    for (final path in imagePaths) {
-      try {
-        await File(path).delete();
-      } catch (_) {/* Cache räumt das System notfalls selbst auf */}
+      final groups = groupPagesAtBlanks(blank, split: detect);
+      final documents = <ScanOutcome>[];
+      for (var n = 0; n < groups.length; n++) {
+        final paths = [for (final i in groups[n]) imagePaths[i]];
+        final pages = await _runOcr(paths);
+        final relativePdfPath = await _buildPdf(paths, 'scan_${stamp}_${n + 1}');
+        documents.add(ScanOutcome(
+          relativePdfPath: relativePdfPath,
+          pageCount: paths.length,
+          ocrText: pages.join('\n\n'),
+          firstPageOcr: pages.isNotEmpty ? pages.first : '',
+        ));
+      }
+      return ScanResult(
+        documents: documents,
+        blankPages: blank.where((b) => b).length,
+      );
+    } finally {
+      // Scanner-Zwischendateien aufräumen (liegen im Cache).
+      for (final path in imagePaths) {
+        try {
+          await File(path).delete();
+        } catch (_) {/* Cache räumt das System notfalls selbst auf */}
+      }
     }
-
-    return ScanOutcome(
-      relativePdfPath: relativePdfPath,
-      pageCount: imagePaths.length,
-      ocrText: pages.join('\n\n'),
-      firstPageOcr: pages.isNotEmpty ? pages.first : '',
-    );
   }
 
   /// Benennt die temporäre Scan-PDF auf die endgültige Nummer um.

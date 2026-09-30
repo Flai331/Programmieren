@@ -8,6 +8,7 @@ Konzept: siehe [`../KONZEPT.md`](../KONZEPT.md).
 ## Funktionsumfang (MVP, alle 6 Phasen umgesetzt)
 
 - **Scannen** mit automatischer Randerkennung (ML Kit / VisionKit), mehrseitig → PDF
+- **Leerseiten trennen & löschen:** Ein leeres Blatt im Stapel trennt die Dokumente, leere Seiten werden nicht gespeichert. Jedes Dokument bekommt eine eigene Nummer und wird einzeln bestätigt. Ein/aus und Empfindlichkeit (Vorsichtig/Normal/Großzügig) in den Einstellungen. Das Desktop-Gegenstück für Scans vom Flachbett-/Einzugsscanner: [`../../scan_trenner`](../../scan_trenner).
 - **Automatische Nummernvergabe** `JJJJ-NNNN` — Nummer aufs Original schreiben, vorne in die Box legen
 - **On-Device-OCR** (Google ML Kit) direkt nach dem Scan
 - **Auto-Auslesen (lokal, kostenlos):** Datum, Dokumenttyp (Keyword-Regeln), IBAN/Versicherungsschein-/Kundennummern, lernende Absender-Wiedererkennung — Bestätigen-Screen zeigt alles vorausgefüllt
