@@ -1,24 +1,86 @@
 import 'package:flutter/material.dart';
 import '../app_colors.dart';
+import '../diary/diary_models.dart';
 import '../diary/diary_screen.dart';
+import '../diary/diary_storage.dart';
+import '../untils/feedback_service.dart';
 import 'starter_models.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  STARTER DONE SCREEN — Celebration
 // ═══════════════════════════════════════════════════════════════
 
-class StarterDoneScreen extends StatelessWidget {
+class StarterDoneScreen extends StatefulWidget {
   final StarterJourney journey;
 
   const StarterDoneScreen({super.key, required this.journey});
 
   @override
+  State<StarterDoneScreen> createState() => _StarterDoneScreenState();
+}
+
+class _StarterDoneScreenState extends State<StarterDoneScreen> {
+  bool _exporting = false;
+
+  Future<void> _exportToDiary() async {
+    setState(() => _exporting = true);
+    int count = 0;
+    for (final day in widget.journey.days) {
+      if (!day.isComplete && day.notes.isEmpty && day.photoPath == null) {
+        continue; // Leere Tage überspringen
+      }
+      // Typ bestimmen
+      final hasFed = day.checks[StarterDayActivity.feeding] == true;
+      final type = hasFed ? DiaryEntryType.feeding : DiaryEntryType.observation;
+
+      // Text zusammenstellen
+      final parts = <String>[];
+      parts.add('Starter-Tag ${day.dayNumber} – ${widget.journey.starterName}');
+      if (day.notes.isNotEmpty) parts.add(day.notes);
+      if (day.floatTestDone) {
+        parts.add(day.floatTestPassed
+            ? '🥄 Float-Test: geschwommen ✓'
+            : '🥄 Float-Test: gesunken ✗');
+      }
+
+      final entry = DiaryEntry(
+        id: '${DateTime.now().millisecondsSinceEpoch}_starter_${day.dayNumber}',
+        timestamp: day.date,
+        type: type,
+        text: parts.join('\n'),
+        temperature: day.temperature,
+        photoPath: day.photoPath,
+      );
+      await DiaryStorage.save(entry);
+      count++;
+    }
+    FeedbackService.log(
+        'Starter "${widget.journey.starterName}" → $count Tagebuch-Einträge exportiert');
+    if (!mounted) return;
+    setState(() => _exporting = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('$count Tage ins Tagebuch übertragen ✓'),
+      backgroundColor: AppColors.green,
+    ));
+    await Future.delayed(const Duration(milliseconds: 800));
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const DiaryScreen()),
+      (route) => route.isFirst,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final completedDays = journey.days.where((d) => d.isComplete).length;
+    final completedDays = widget.journey.days.where((d) => d.isComplete).length;
     final daysWithTemp =
-        journey.days.where((d) => d.temperature != null).length;
-    final floatPassed =
-        journey.days.where((d) => d.floatTestDone && d.floatTestPassed).length;
+        widget.journey.days.where((d) => d.temperature != null).length;
+    final floatPassed = widget.journey.days
+        .where((d) => d.floatTestDone && d.floatTestPassed)
+        .length;
+    final daysWithPhoto =
+        widget.journey.days.where((d) => d.photoPath != null).length;
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -36,7 +98,7 @@ class StarterDoneScreen extends StatelessWidget {
             const Text('🎉', style: TextStyle(fontSize: 72)),
             const SizedBox(height: 16),
             Text(
-              '${journey.starterName} ist bereit!',
+              '${widget.journey.starterName} ist bereit!',
               style: const TextStyle(
                 color: AppColors.gold,
                 fontSize: 24,
@@ -65,17 +127,17 @@ class StarterDoneScreen extends StatelessWidget {
                   _StatRow(
                     emoji: '📅',
                     label: 'Gestartet am',
-                    value: _formatDate(journey.startedAt),
+                    value: _formatDate(widget.journey.startedAt),
                   ),
                   _StatRow(
                     emoji: '⏱️',
                     label: 'Gesamtdauer',
-                    value: '${journey.days.length} Tage',
+                    value: '${widget.journey.days.length} Tage',
                   ),
                   _StatRow(
                     emoji: '✅',
                     label: 'Erledigte Tage',
-                    value: '$completedDays/${journey.days.length}',
+                    value: '$completedDays/${widget.journey.days.length}',
                   ),
                   if (daysWithTemp > 0)
                     _StatRow(
@@ -88,6 +150,12 @@ class StarterDoneScreen extends StatelessWidget {
                       emoji: '🥄',
                       label: 'Float-Test bestanden',
                       value: '$floatPassed ×',
+                    ),
+                  if (daysWithPhoto > 0)
+                    _StatRow(
+                      emoji: '📷',
+                      label: 'Fotos aufgenommen',
+                      value: '$daysWithPhoto Tage',
                     ),
                 ],
               ),
@@ -109,17 +177,41 @@ class StarterDoneScreen extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
+                onPressed: _exporting ? null : _exportToDiary,
+                icon: _exporting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.bg))
+                    : const Icon(Icons.upload_outlined),
+                label: Text(_exporting
+                    ? 'Wird übertragen ...'
+                    : 'Mit allen Daten ins Tagebuch'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.green,
+                  foregroundColor: AppColors.bg,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
                 onPressed: () => Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(builder: (_) => const DiaryScreen()),
                   (route) => route.isFirst,
                 ),
-                icon: const Icon(Icons.book_outlined),
-                label: const Text('Ins Tagebuch'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.orange,
-                  foregroundColor: AppColors.bg,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                icon: const Icon(Icons.book_outlined, size: 18),
+                label: const Text('Tagebuch öffnen (ohne Export)'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.text2,
+                  side: const BorderSide(color: AppColors.border),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                 ),

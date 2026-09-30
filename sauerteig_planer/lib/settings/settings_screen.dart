@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 import '../app_colors.dart';
@@ -21,6 +22,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _tutorialEnabled = false;
   bool _starterNotifEnabled = false;
+  TimeOfDay _notifTime = const TimeOfDay(hour: 8, minute: 0);
 
   final _notifPlugin = FlutterLocalNotificationsPlugin();
 
@@ -33,10 +35,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     final notifEnabled = await StarterStorage.isNotificationEnabled();
+    final time = await StarterStorage.getNotificationTime();
     setState(() {
-      // onboarding_done == false → Tutorial ist aktiv
       _tutorialEnabled = !(prefs.getBool('onboarding_done') ?? true);
       _starterNotifEnabled = notifEnabled;
+      _notifTime = TimeOfDay(hour: time.hour, minute: time.minute);
     });
   }
 
@@ -48,15 +51,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _toggleStarterNotif(bool value) async {
+    FeedbackService.log('Starter-Erinnerung ${value ? 'aktiviert' : 'deaktiviert'}');
     await StarterStorage.setNotificationEnabled(value);
     setState(() => _starterNotifEnabled = value);
-
     if (kIsWeb) return;
-
     if (value) {
       await _scheduleStarterReminder();
     } else {
       await _notifPlugin.cancel(200);
+      FeedbackService.log('Starter-Erinnerung abgebrochen (ID 200)');
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _notifTime,
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: AppColors.green,
+            surface: AppColors.surface,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    await StarterStorage.setNotificationTime(picked.hour, picked.minute);
+    setState(() => _notifTime = picked);
+    if (_starterNotifEnabled && !kIsWeb) {
+      await _scheduleStarterReminder();
     }
   }
 
@@ -71,22 +96,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
     const details = NotificationDetails(android: androidDetails);
 
     final now = tz.TZDateTime.now(tz.local);
-    var scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, 8);
+    var scheduled = tz.TZDateTime(
+        tz.local, now.year, now.month, now.day, _notifTime.hour, _notifTime.minute);
     if (scheduled.isBefore(now)) {
       scheduled = scheduled.add(const Duration(days: 1));
     }
 
-    await _notifPlugin.zonedSchedule(
-      200,
-      '🌱 Starter-Erinnerung',
-      'Zeit deinen Sauerteig-Starter zu kontrollieren!',
-      scheduled,
-      details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-    );
+    try {
+      await _notifPlugin.zonedSchedule(
+        200,
+        '🌱 Starter-Erinnerung',
+        'Zeit deinen Sauerteig-Starter zu kontrollieren!',
+        scheduled,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        matchDateTimeComponents: DateTimeComponents.time,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } on PlatformException catch (e) {
+      if (e.code == 'exact_alarms_not_permitted') {
+        FeedbackService.log('Starter-Erinnerung: Exakte Benachrichtigungen nicht erlaubt, fallback auf inexactAllowWhileIdle');
+        await _notifPlugin.zonedSchedule(
+          200,
+          '🌱 Starter-Erinnerung',
+          'Zeit deinen Sauerteig-Starter zu kontrollieren!',
+          scheduled,
+          details,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          matchDateTimeComponents: DateTimeComponents.time,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+      } else {
+        rethrow;
+      }
+    }
+    FeedbackService.log(
+        'Starter-Erinnerung neu geplant: ${_notifTime.hour}:${_notifTime.minute.toString().padLeft(2, '0')} täglich');
   }
 
   @override
@@ -116,7 +163,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SwitchListTile(
             value: _starterNotifEnabled,
             onChanged: kIsWeb ? null : _toggleStarterNotif,
-            title: const Text('Tägliche Erinnerung um 8:00 Uhr',
+            title: const Text('Tägliche Erinnerung',
                 style: TextStyle(color: AppColors.text)),
             subtitle: const Text(
               kIsWeb
@@ -126,6 +173,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             activeThumbColor: AppColors.green,
           ),
+          if (!kIsWeb)
+            ListTile(
+              leading: const Icon(Icons.access_time, color: AppColors.text2),
+              title: const Text('Uhrzeit der Erinnerung',
+                  style: TextStyle(color: AppColors.text)),
+              trailing: Text(
+                '${_notifTime.hour.toString().padLeft(2, '0')}:${_notifTime.minute.toString().padLeft(2, '0')} Uhr',
+                style: const TextStyle(
+                    color: AppColors.green, fontWeight: FontWeight.bold),
+              ),
+              onTap: _pickTime,
+            ),
           const Divider(color: AppColors.border, height: 1),
           _sectionHeader('Feedback'),
           ListTile(

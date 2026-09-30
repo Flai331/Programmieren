@@ -11,6 +11,7 @@ import 'diary_models.dart';
 
 class DiaryStorage {
   static const _key = 'diary_entries';
+  static const _starterNamesKey = 'known_starter_names';
 
   static Future<List<DiaryEntry>> loadAll() async {
     try {
@@ -83,5 +84,19 @@ class DiaryStorage {
       final f = File(path);
       if (await f.exists()) await f.delete();
     } catch (_) {}
+  }
+
+  static Future<List<String>> loadStarterNames() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_starterNamesKey) ?? [];
+  }
+
+  static Future<void> addStarterName(String name) async {
+    final prefs = await SharedPreferences.getInstance();
+    final names = prefs.getStringList(_starterNamesKey) ?? [];
+    if (!names.contains(name)) {
+      names.add(name);
+      await prefs.setStringList(_starterNamesKey, names);
+    }
   }
 }

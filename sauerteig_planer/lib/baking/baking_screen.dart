@@ -34,6 +34,10 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
   void initState() {
     super.initState();
     _steps = widget.recipe.freshSteps();
+    FeedbackService.log(
+      'Backtimer geöffnet: "${widget.recipe.name}", '
+      '${_steps.length} Schritte',
+    );
     _initNotifications();
     WidgetsBinding.instance.addObserver(this);
   }
@@ -47,16 +51,21 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
   }
 
   void _syncTimerOnResume() {
-    if (_activeIndex < 0) return;
+    if (_activeIndex < 0) {
+      FeedbackService.log('App resumed – kein aktiver Timer');
+      return;
+    }
     final step = _steps[_activeIndex];
     if (step.startedAt == null || step.status != StepStatus.active) return;
     final elapsed = DateTime.now().difference(step.startedAt!);
     final remaining = step.duration - elapsed;
     if (remaining.inSeconds <= 0) {
+      FeedbackService.log('App resumed – Timer "${step.name}" bereits abgelaufen (${elapsed.inMinutes} min vergangen)');
       _ticker?.cancel();
       setState(() => _steps[_activeIndex].remaining = Duration.zero);
       _onTimerDone(_activeIndex);
     } else {
+      FeedbackService.log('App resumed – Timer "${step.name}" noch ${remaining.inMinutes} min verbleibend');
       setState(() => _steps[_activeIndex].remaining = remaining);
     }
   }
@@ -126,7 +135,11 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
   void _startStep(int index) async {
     final step = _steps[index];
 
-    FeedbackService.log('Backschritt gestartet: ${step.name} (${step.duration.inMinutes} min)');
+    FeedbackService.log(
+      'Backschritt gestartet: ${step.name} (${step.duration.inMinutes} min), '
+      'Schritt ${index + 1}/${_steps.length}, '
+      'nativer Timer: ${step.useNativeTimer}',
+    );
     _ticker?.cancel();
 
 
@@ -146,6 +159,7 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
         );
         await intent.launch();
         nativeTimerLaunched = true;
+        FeedbackService.log('Nativer Timer gestartet: "${step.name}" (${step.duration.inSeconds}s)');
       } catch (e, stack) {
         FeedbackService.log('SET_TIMER Intent fehlgeschlagen: $e\n$stack');
         if (mounted) {
@@ -170,6 +184,7 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
     // Wanduhr-basiert: remaining = duration - (now - startedAt)
     // → korrekt auch nach App-Pause / Display-aus, da keine Ticks gezählt werden.
     if (!nativeTimerLaunched) {
+      FeedbackService.log('App-Timer aktiv für "${step.name}"');
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
         if (!mounted) return;
         final startedAt = _steps[index].startedAt;
@@ -249,6 +264,7 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
   }
 
   void _skipStep(int index) {
+    FeedbackService.log('Backschritt übersprungen: ${_steps[index].name} (Schritt ${index + 1}/${_steps.length})');
     _ticker?.cancel();
     setState(() {
       _steps[index].status = StepStatus.skipped;

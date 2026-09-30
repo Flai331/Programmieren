@@ -32,7 +32,16 @@
       "Bash(py --version)",
       "Bash(where py:*)",
       "Bash(py -c \"import reportlab; print\\(reportlab.Version\\)\")",
-      "Bash(py generate_flutter_pdf.py)"
+      "Bash(py generate_flutter_pdf.py)",
+      "mcp__gmail-rhs__gmail_list_emails",
+      "mcp__gmail-rhs__gmail_read_email",
+      "mcp__gmail-rhs__gmail_move_to_processed",
+      "Bash(jq -e '.hooks.PostToolUse[] | select\\(.matcher == \"\"mcp__gmail-rhs__gmail_read_email\"\"\\) | .hooks[] | select\\(.type == \"\"agent\"\"\\) | .prompt' \"C:\\\\Users\\\\klaas\\\\.claude\\\\settings.json\")",
+      "Bash(python -c \"import json; d=json.load\\(open\\(r''C:\\\\Users\\\\klaas\\\\.claude\\\\settings.json''\\)\\); print\\(''OK:'', d[''hooks''][''PostToolUse''][0][''matcher'']\\)\")",
+      "Bash(node -e \"const d=require\\(''C:/Users/klaas/.claude/settings.json''\\); console.log\\(''OK:'', d.hooks.PostToolUse[0].matcher\\)\")"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "gmail-rhs"
+  ]
 }

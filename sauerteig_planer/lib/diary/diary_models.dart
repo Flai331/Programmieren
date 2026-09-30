@@ -69,6 +69,8 @@ class DiaryEntry {
   final double? temperature;
   final int? activityRating; // 1–5
   final String? photoPath;
+  final String? starterName;
+  final String? flourType; // Mehlsorte bei Fütterung
 
   DiaryEntry({
     required this.id,
@@ -78,6 +80,8 @@ class DiaryEntry {
     this.temperature,
     this.activityRating,
     this.photoPath,
+    this.starterName,
+    this.flourType,
   });
 
   DiaryEntry copyWith({
@@ -87,9 +91,13 @@ class DiaryEntry {
     double? temperature,
     int? activityRating,
     String? photoPath,
+    String? starterName,
+    String? flourType,
     bool clearPhoto = false,
     bool clearTemp = false,
     bool clearRating = false,
+    bool clearStarterName = false,
+    bool clearFlourType = false,
   }) {
     return DiaryEntry(
       id: id,
@@ -100,6 +108,9 @@ class DiaryEntry {
       activityRating:
           clearRating ? null : (activityRating ?? this.activityRating),
       photoPath: clearPhoto ? null : (photoPath ?? this.photoPath),
+      starterName:
+          clearStarterName ? null : (starterName ?? this.starterName),
+      flourType: clearFlourType ? null : (flourType ?? this.flourType),
     );
   }
 
@@ -111,6 +122,8 @@ class DiaryEntry {
         'temperature': temperature,
         'activityRating': activityRating,
         'photoPath': photoPath,
+        if (starterName != null) 'starterName': starterName,
+        if (flourType != null) 'flourType': flourType,
       };
 
   factory DiaryEntry.fromJson(Map<String, dynamic> j) {
@@ -125,6 +138,8 @@ class DiaryEntry {
       temperature: (j['temperature'] as num?)?.toDouble(),
       activityRating: j['activityRating'] as int?,
       photoPath: j['photoPath'] as String?,
+      starterName: j['starterName'] as String?,
+      flourType: j['flourType'] as String?,
     );
   }
 

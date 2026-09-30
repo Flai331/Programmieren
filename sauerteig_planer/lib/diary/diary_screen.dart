@@ -5,6 +5,7 @@ import 'diary_storage.dart';
 import 'diary_entry_card.dart';
 import 'diary_entry_edit_screen.dart';
 import 'diary_search_screen.dart';
+import '../untils/feedback_service.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  DIARY SCREEN — Timeline
@@ -19,6 +20,8 @@ class DiaryScreen extends StatefulWidget {
 
 class _DiaryScreenState extends State<DiaryScreen> {
   List<DiaryEntry> _entries = [];
+  List<String> _starterNames = [];
+  String? _selectedStarter;
   bool _loading = true;
 
   @override
@@ -29,8 +32,10 @@ class _DiaryScreenState extends State<DiaryScreen> {
 
   Future<void> _load() async {
     final entries = await DiaryStorage.loadAll();
+    final starterNames = await DiaryStorage.loadStarterNames();
     setState(() {
       _entries = entries;
+      _starterNames = starterNames;
       _loading = false;
     });
   }
@@ -38,7 +43,11 @@ class _DiaryScreenState extends State<DiaryScreen> {
   Future<void> _newEntry() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const DiaryEntryEditScreen()),
+      MaterialPageRoute(
+        builder: (_) => DiaryEntryEditScreen(
+          preselectedStarter: _selectedStarter,
+        ),
+      ),
     );
     _load();
   }
@@ -66,6 +75,11 @@ class _DiaryScreenState extends State<DiaryScreen> {
                       ),
                     ),
           ),
+          IconButton(
+            icon: const Icon(Icons.bug_report_outlined, color: AppColors.text2),
+            tooltip: 'Fehler melden',
+            onPressed: () => FeedbackService.showReportDialog(context),
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -80,7 +94,65 @@ class _DiaryScreenState extends State<DiaryScreen> {
               child: CircularProgressIndicator(color: AppColors.orange))
           : _entries.isEmpty
               ? _buildEmpty()
-              : _buildTimeline(),
+              : Column(
+                  children: [
+                    if (_starterNames.isNotEmpty) _buildFilterChips(),
+                    Expanded(child: _buildTimeline()),
+                  ],
+                ),
+    );
+  }
+
+  Widget _buildFilterChips() {
+    return Container(
+      color: AppColors.surface,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            FilterChip(
+              label: const Text('Alle'),
+              selected: _selectedStarter == null,
+              onSelected: (_) => setState(() => _selectedStarter = null),
+              selectedColor: AppColors.orange.withValues(alpha: 0.3),
+              checkmarkColor: AppColors.orange,
+              labelStyle: TextStyle(
+                color: _selectedStarter == null
+                    ? AppColors.orange
+                    : AppColors.text2,
+              ),
+              backgroundColor: AppColors.surface2,
+              side: BorderSide(
+                color: _selectedStarter == null
+                    ? AppColors.orange
+                    : AppColors.border,
+              ),
+            ),
+            ..._starterNames.map((n) {
+              final selected = _selectedStarter == n;
+              return Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: FilterChip(
+                  label: Text(n),
+                  selected: selected,
+                  onSelected: (_) =>
+                      setState(() => _selectedStarter = selected ? null : n),
+                  selectedColor: AppColors.green.withValues(alpha: 0.3),
+                  checkmarkColor: AppColors.green,
+                  labelStyle: TextStyle(
+                    color: selected ? AppColors.green : AppColors.text2,
+                  ),
+                  backgroundColor: AppColors.surface2,
+                  side: BorderSide(
+                    color: selected ? AppColors.green : AppColors.border,
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
     );
   }
 
@@ -115,11 +187,25 @@ class _DiaryScreenState extends State<DiaryScreen> {
   }
 
   Widget _buildTimeline() {
+    // Filtere nach ausgewähltem Starter
+    final filtered = _selectedStarter == null
+        ? _entries
+        : _entries.where((e) => e.starterName == _selectedStarter).toList();
+
     // Gruppiere nach Monat
     final groups = <String, List<DiaryEntry>>{};
-    for (final e in _entries) {
+    for (final e in filtered) {
       final key = _monthKey(e.timestamp);
       groups.putIfAbsent(key, () => []).add(e);
+    }
+
+    if (filtered.isEmpty) {
+      return const Center(
+        child: Text(
+          'Keine Einträge für diesen Starter.',
+          style: TextStyle(color: AppColors.text3),
+        ),
+      );
     }
 
     final monthKeys = groups.keys.toList();

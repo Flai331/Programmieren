@@ -66,6 +66,19 @@
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </receiver>
+
+        <!-- 💡 Ideen-Widget: schnelle Ideeneingabe vom Homescreen -->
+        <receiver
+            android:name=".IdeenWidget"
+            android:exported="true"
+            android:label="💡 Neue Idee">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ideen_widget_info" />
+        </receiver>
     </application>
 
     <queries>

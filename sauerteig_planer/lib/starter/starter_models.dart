@@ -2,6 +2,16 @@
 //  STARTER MODELS
 // ═══════════════════════════════════════════════════════════════
 
+const kFlourOptions = [
+  'Roggenmehl 1150',
+  'Weizenmehl 550',
+  'Weizenmehl 1050',
+  'Dinkelmehl 630',
+  'Vollkornmehl (Roggen)',
+  'Vollkornmehl (Weizen)',
+  'Mischung',
+];
+
 enum StarterDayActivity { morningCheck, feeding, eveningCheck, observation }
 
 const kActivityLabels = {
@@ -61,9 +71,9 @@ const kDayDescriptions = {
       '💡 Der Geruch verändert sich: von hefig zu angenehm säuerlich bis leicht joghurtartig. '
       'Das ist genau richtig! Falls er nach Nagellack oder Aceton riecht, '
       'hat er Hunger – öfter füttern hilft.',
-  5: '🥄 Float-Test – ist dein Starter bereit?\n\n'
+  5: '🥄 Schwimmtest (Float-Test) – ist dein Starter bereit?\n\n'
       'Hälfte verwerfen, mit 50g Mehl + 50g Wasser füttern.\n\n'
-      'Heute führst du zum ersten Mal den Float-Test durch: '
+      'Heute führst du zum ersten Mal den Schwimmtest (Float-Test) durch: '
       'Gib 2–3 Stunden nach dem Füttern einen Teelöffel Starter in ein Glas Wasser.\n\n'
       '✅ Schwimmt er → Der Starter ist voller CO₂-Bläschen und gut aktiv. Fast backbereit!\n'
       '❌ Sinkt er → Noch nicht ganz – kein Problem, weiter füttern.\n\n'
@@ -72,13 +82,13 @@ const kDayDescriptions = {
   6: '🚀 Auf der Zielgeraden!\n\n'
       'Hälfte verwerfen, mit 50g Mehl + 50g Wasser füttern.\n\n'
       'Ein aktiver Starter verdoppelt sich jetzt innerhalb von 4–8 Stunden nach dem Füttern. '
-      'Führe den Float-Test erneut durch – wenn er besteht, ist dein Starter fast fertig!\n\n'
+      'Führe den Schwimmtest (Float-Test) erneut durch – wenn er besteht, ist dein Starter fast fertig!\n\n'
       '💡 Achte auf den idealen Erntezeitpunkt: Kurz vor oder auf dem Höhepunkt '
       '(wenn der Starter am größten ist, bevor er wieder zusammenfällt). '
       'Dann ist er am stärksten für dein erstes Brot.',
   7: '🎉 Letzter Tag der Grundphase!\n\n'
       'Hälfte verwerfen, mit 50g Mehl + 50g Wasser füttern.\n\n'
-      'Führe nach 4–6 Stunden den Float-Test durch:\n\n'
+      'Führe nach 4–6 Stunden den Schwimmtest (Float-Test) durch:\n\n'
       '✅ Schwimmt er → Herzlichen Glückwunsch! Dein Starter ist backbereit. '
       'Du kannst dein erstes Sauerteig-Brot backen!\n'
       '❌ Sinkt er noch → Kein Stress! Füge einfach einen weiteren Tag hinzu '
@@ -145,7 +155,7 @@ const kStarterTips = [
     title: 'Flüssigkeit oben drauf – was ist das?',
     symptom: 'Eine graue oder braune Flüssigkeit hat sich oben auf dem Starter abgesetzt.',
     solution:
-        'Das nennt man "Hooch" – eine alkoholhaltige Flüssigkeit, die entsteht wenn der Starter Hunger hat. '
+        'Das nennt man Flüssigkeitsschicht (Hooch) – eine alkoholhaltige Flüssigkeit, die entsteht wenn der Starter Hunger hat. '
         'Sie ist harmlos! Einfach abgießen oder einrühren. '
         'Danach sofort füttern und ab jetzt öfter (2× täglich) füttern.',
   ),
@@ -171,6 +181,8 @@ class StarterDayLog {
   final double? temperature;
   final bool floatTestDone;
   final bool floatTestPassed;
+  final String? photoPath;
+  final String? flourType;
 
   StarterDayLog({
     required this.dayNumber,
@@ -180,6 +192,8 @@ class StarterDayLog {
     this.temperature,
     this.floatTestDone = false,
     this.floatTestPassed = false,
+    this.photoPath,
+    this.flourType,
   }) : checks = checks ??
             {for (var a in StarterDayActivity.values) a: false};
 
@@ -192,6 +206,9 @@ class StarterDayLog {
     double? temperature,
     bool? floatTestDone,
     bool? floatTestPassed,
+    String? photoPath,
+    String? flourType,
+    bool clearPhoto = false,
   }) {
     return StarterDayLog(
       dayNumber: dayNumber,
@@ -201,18 +218,21 @@ class StarterDayLog {
       temperature: temperature ?? this.temperature,
       floatTestDone: floatTestDone ?? this.floatTestDone,
       floatTestPassed: floatTestPassed ?? this.floatTestPassed,
+      photoPath: clearPhoto ? null : (photoPath ?? this.photoPath),
+      flourType: flourType ?? this.flourType,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'dayNumber': dayNumber,
         'date': date.toIso8601String(),
-        'checks':
-            checks.map((k, v) => MapEntry(k.name, v)),
+        'checks': checks.map((k, v) => MapEntry(k.name, v)),
         'notes': notes,
         'temperature': temperature,
         'floatTestDone': floatTestDone,
         'floatTestPassed': floatTestPassed,
+        'photoPath': photoPath,
+        if (flourType != null) 'flourType': flourType,
       };
 
   factory StarterDayLog.fromJson(Map<String, dynamic> j) {
@@ -229,6 +249,8 @@ class StarterDayLog {
       temperature: (j['temperature'] as num?)?.toDouble(),
       floatTestDone: j['floatTestDone'] as bool? ?? false,
       floatTestPassed: j['floatTestPassed'] as bool? ?? false,
+      photoPath: j['photoPath'] as String?,
+      flourType: j['flourType'] as String?,
     );
   }
 }
@@ -240,6 +262,7 @@ class StarterJourney {
   final List<StarterDayLog> days;
   final bool isCompleted;
   final DateTime? completedAt;
+  final String? flourType;
 
   StarterJourney({
     required this.id,
@@ -248,6 +271,7 @@ class StarterJourney {
     required this.days,
     this.isCompleted = false,
     this.completedAt,
+    this.flourType,
   });
 
   int get currentDayNumber {
@@ -276,6 +300,7 @@ class StarterJourney {
     bool? isCompleted,
     DateTime? completedAt,
     String? starterName,
+    String? flourType,
   }) {
     return StarterJourney(
       id: id,
@@ -284,6 +309,7 @@ class StarterJourney {
       days: days ?? this.days,
       isCompleted: isCompleted ?? this.isCompleted,
       completedAt: completedAt ?? this.completedAt,
+      flourType: flourType ?? this.flourType,
     );
   }
 
@@ -294,6 +320,7 @@ class StarterJourney {
         'days': days.map((d) => d.toJson()).toList(),
         'isCompleted': isCompleted,
         'completedAt': completedAt?.toIso8601String(),
+        if (flourType != null) 'flourType': flourType,
       };
 
   factory StarterJourney.fromJson(Map<String, dynamic> j) {
@@ -308,6 +335,7 @@ class StarterJourney {
       completedAt: j['completedAt'] != null
           ? DateTime.parse(j['completedAt'] as String)
           : null,
+      flourType: j['flourType'] as String?,
     );
   }
 

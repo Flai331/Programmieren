@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/rendering.dart';
 import 'package:flutter_email_sender/flutter_email_sender.dart';
@@ -10,35 +12,46 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app_colors.dart';
+import '../build_info.dart';
+import '../secrets.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  FEEDBACK & ERROR LOGGER
 //
-//  Primär: Telegram Bot → sendet Text + Screenshot direkt aus der App.
-//  Fallback: öffnet E-Mail-App (ohne Bildanhang).
+//  Primär: Notion-Datenbank → sendet Text direkt aus der App.
+//  Fallback: öffnet E-Mail-App.
 //
-//  SETUP Telegram (einmalig, ~5 Minuten):
-//  1. Öffne Telegram → schreibe @BotFather: /newbot
-//  2. Folge den Anweisungen → du erhältst einen Bot-Token
-//  3. Schreibe deinem neuen Bot eine beliebige Nachricht
-//  4. Öffne im Browser:
-//     https://api.telegram.org/bot<TOKEN>/getUpdates
-//     → kopiere den Wert "id" aus "chat" → das ist deine Chat-ID
-//  5. Trage beide Werte unten ein
+//  SETUP Notion (einmalig, ~5 Minuten):
+//  1. Öffne https://www.notion.so/my-integrations
+//  2. Klicke „+ New integration" → Namen eingeben → Submit
+//  3. Kopiere den „Internal Integration Token" (nts_...)
+//  4. Trage den Token unten bei _notionToken ein
+//  5. Öffne die Notion-Datenbank „🐛 Fehlerberichte" →
+//     oben rechts „..." → „+ Add connections" → deine Integration auswählen
 // ═══════════════════════════════════════════════════════════════
 
 class FeedbackService {
-  // ── Telegram-Konfiguration ──────────────────────────────────
+  // ── Notion-Konfiguration ────────────────────────────────────
+  static const String _notionToken = kNotionFehlerToken;
+  static const String _notionDbId  = '0f6395ea950a4e61a0b5f2a0e507f99f';
+
+  // ── Telegram-Konfiguration (optional) ──────────────────────
   static const String _botToken = 'DEIN_BOT_TOKEN';
   static const String _chatId   = 'DEINE_CHAT_ID';
 
-  // E-Mail-Fallback
-  static const String _supportEmail = 'trail.kauri7760@eagereverest.com';
+  // E-Mail-Empfänger (Fallback)
+  static const String _supportEmail = 'rhsTagebuch@gmail.com';
 
+  static bool get _notionConfigured  => _notionToken != 'DEIN_NOTION_TOKEN';
   static bool get _telegramConfigured =>
       _botToken != 'DEIN_BOT_TOKEN' && _chatId != 'DEINE_CHAT_ID';
 
   static final List<String> _log = [];
+
+  // ── Screen-Tracking ─────────────────────────────────────────
+  static String _currentScreen = '';
+  static void setCurrentScreen(String name) => _currentScreen = name;
+  static NavigatorObserver get screenObserver => _ScreenObserver();
 
   // Key vom RepaintBoundary in main.dart (für Auto-Screenshot)
   static GlobalKey? _repaintKey;
@@ -116,6 +129,10 @@ class FeedbackService {
     BuildContext context, {
     bool isAutoError = false,
   }) async {
+    // Aktuellen Screen loggen
+    if (_currentScreen.isNotEmpty) {
+      log('${isAutoError ? 'Auto-Fehler' : 'Manueller Fehlerbericht'} auf Screen: $_currentScreen');
+    }
     // Einen Frame warten damit alle Animationen/Rebuilds abgeschlossen sind
     await Future.delayed(Duration.zero);
     final screenshotPath = await _captureScreenshot();
@@ -124,14 +141,15 @@ class FeedbackService {
       context: context,
       barrierDismissible: !isAutoError,
       builder: (_) => _FeedbackDialog(
-        telegramAvailable: _telegramConfigured && !isAutoError,
+        notionAvailable: _notionConfigured,
+        telegramAvailable: _telegramConfigured && !isAutoError && !_notionConfigured,
         isAutoError: isAutoError,
         supportEmail: _supportEmail,
         initialPhotoPaths: screenshotPath != null ? [screenshotPath] : [],
         onSend: (note, photoPaths) => sendReport(
           userNote: note,
           photoPaths: photoPaths,
-          forceEmail: isAutoError,
+          forceEmail: isAutoError && !_notionConfigured,
         ),
       ),
     );
@@ -143,26 +161,83 @@ class FeedbackService {
     List<String>? photoPaths,
     bool forceEmail = false,
   }) async {
-    final htmlText = _buildHtml(userNote);
-    final plainText = _buildPlain(userNote);
-
-    // Bei automatischem Fehler: direkt E-Mail-App öffnen (mit Anhang wenn möglich)
-    if (forceEmail) {
-      return _sendEmailWithAttachments(plainText, photoPaths ?? []);
+    // Notion: primärer Kanal (kein Benutzereingriff nötig)
+    if (_notionConfigured) {
+      final ok = await _notionSend(userNote);
+      if (ok) {
+        // Screenshots zusätzlich per Telegram wenn konfiguriert
+        if (_telegramConfigured && !kIsWeb && photoPaths != null) {
+          for (final p in photoPaths) { await _tgSendPhoto(p); }
+        }
+        return true;
+      }
+      // Notion fehlgeschlagen → E-Mail-Fallback
+      log('Notion fehlgeschlagen – öffne E-Mail-Fallback');
+      return _sendEmailWithAttachments(_buildPlain(userNote), photoPaths ?? []);
     }
 
-    if (_telegramConfigured) {
-      final ok = await _tgSendMessage(htmlText);
+    // Telegram (optional, ohne Notion)
+    if (!forceEmail && _telegramConfigured) {
+      final ok = await _tgSendMessage(_buildHtml(userNote));
       if (!kIsWeb && photoPaths != null) {
-        for (final path in photoPaths) {
-          await _tgSendPhoto(path);
-        }
+        for (final path in photoPaths) { await _tgSendPhoto(path); }
       }
       return ok;
     }
 
     // E-Mail-Fallback
-    return _sendEmailWithAttachments(plainText, photoPaths ?? []);
+    return _sendEmailWithAttachments(_buildPlain(userNote), photoPaths ?? []);
+  }
+
+  // ── Notion: Fehlerbericht als Seite anlegen ─────────────────
+  static Future<bool> _notionSend(String? userNote) async {
+    try {
+      final now = DateTime.now();
+      String pad(int n) => n.toString().padLeft(2, '0');
+      final titel = 'Fehlerbericht ${pad(now.day)}.${pad(now.month)}.${now.year} '
+          '${pad(now.hour)}:${pad(now.minute)}';
+
+      final protokoll = _log.join('\n');
+      // Notion rich_text: max. 2000 Zeichen pro Block → neueste Einträge behalten
+      final protokollTrunc = protokoll.length > 1990
+          ? '…${protokoll.substring(protokoll.length - 1989)}'
+          : protokoll;
+
+      String os = 'Web';
+      if (!kIsWeb) {
+        try { os = '${Platform.operatingSystem} ${Platform.operatingSystemVersion}'; }
+        catch (_) {}
+      }
+
+      final props = <String, dynamic>{
+        'Titel':      {'title':     [{'text': {'content': titel}}]},
+        'Status':     {'select':    {'name': 'Offen'}},
+        'App-Version':{'rich_text': [{'text': {'content': 'Build $kBuildNumber'}}]},
+        'Protokoll':  {'rich_text': [{'text': {'content': protokollTrunc}}]},
+        'OS':         {'rich_text': [{'text': {'content': os}}]},
+        'Zeitstempel':{'date':      {'start': now.toIso8601String()}},
+      };
+      if (userNote != null && userNote.isNotEmpty) {
+        final desc = userNote.length > 2000 ? userNote.substring(0, 2000) : userNote;
+        props['Beschreibung'] = {'rich_text': [{'text': {'content': desc}}]};
+      }
+
+      final res = await http.post(
+        Uri.parse('https://api.notion.com/v1/pages'),
+        headers: {
+          'Authorization': 'Bearer $_notionToken',
+          'Notion-Version': '2022-06-28',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'parent': {'database_id': _notionDbId}, 'properties': props}),
+      ).timeout(const Duration(seconds: 15));
+
+      log('Notion: ${res.statusCode}');
+      return res.statusCode == 200;
+    } catch (e) {
+      log('Notion Fehler: $e');
+      return false;
+    }
   }
 
   // ── Telegram: Text ──────────────────────────────────────────
@@ -208,7 +283,7 @@ class FeedbackService {
     try {
       final email = Email(
         recipients: [_supportEmail],
-        subject: 'Fehlerbericht – Sauerteig Planer',
+        subject: '[Sauerteig App] Fehlerbericht',
         body: body,
         attachmentPaths: attachments,
       );
@@ -227,7 +302,7 @@ class FeedbackService {
       scheme: 'mailto',
       path: _supportEmail,
       queryParameters: {
-        'subject': 'Fehlerbericht – Sauerteig Planer',
+        'subject': '[Sauerteig App] Fehlerbericht',
         'body': body,
       },
     );
@@ -239,6 +314,12 @@ class FeedbackService {
       return false;
     }
   }
+
+  /// Gibt lesbaren Report-Text zurück (für Kopier-Button im Dialog)
+  static String buildReportText(String? userNote) => _buildPlain(userNote);
+
+  /// Gibt die aktuellen Log-Einträge zurück (neueste zuletzt)
+  static List<String> get logEntries => List.unmodifiable(_log);
 
   static String _buildHtml(String? userNote) {
     final b = StringBuffer();
@@ -286,6 +367,7 @@ class FeedbackService {
 // ═══════════════════════════════════════════════════════════════
 
 class _FeedbackDialog extends StatefulWidget {
+  final bool notionAvailable;
   final bool telegramAvailable;
   final bool isAutoError;
   final String supportEmail;
@@ -293,6 +375,7 @@ class _FeedbackDialog extends StatefulWidget {
   final Future<bool> Function(String? note, List<String>? photoPaths) onSend;
 
   const _FeedbackDialog({
+    required this.notionAvailable,
     required this.telegramAvailable,
     required this.onSend,
     required this.supportEmail,
@@ -308,6 +391,8 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
   final _controller = TextEditingController();
   late List<String> _photoPaths;
   bool _sending = false;
+  bool _logExpanded = false;
+  bool _copied = false;
 
   @override
   void initState() {
@@ -342,9 +427,11 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
     messenger.showSnackBar(
       SnackBar(
         content: Text(ok
-            ? (widget.telegramAvailable
+            ? (widget.notionAvailable
                 ? '✓ Fehlerbericht gesendet.'
-                : '✓ E-Mail-App geöffnet.')
+                : widget.telegramAvailable
+                    ? '✓ Fehlerbericht gesendet.'
+                    : '✓ E-Mail-App geöffnet.')
             : '✗ Senden fehlgeschlagen – Verbindung prüfen.'),
         backgroundColor: ok ? AppColors.green : AppColors.red,
       ),
@@ -379,6 +466,7 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _InfoBanner(
+              notion: widget.notionAvailable,
               telegram: widget.telegramAvailable,
               hasPhotos: _photoPaths.isNotEmpty,
               isAutoError: widget.isAutoError,
@@ -480,11 +568,80 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
                 ),
               ),
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Sitzungs-Protokoll wird automatisch angehängt.',
-              style: TextStyle(color: AppColors.text3, fontSize: 11),
+            const SizedBox(height: 12),
+
+            // ── Protokoll-Anzeige ────────────────────────────
+            GestureDetector(
+              onTap: () => setState(() => _logExpanded = !_logExpanded),
+              child: Row(children: [
+                const Text('📋 Protokoll',
+                    style: TextStyle(color: AppColors.text2, fontSize: 13)),
+                const Spacer(),
+                Icon(
+                  _logExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: AppColors.text3,
+                  size: 18,
+                ),
+              ]),
             ),
+            if (_logExpanded) ...[
+              const SizedBox(height: 6),
+              Container(
+                height: 150,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.bg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: ListView.builder(
+                  itemCount: FeedbackService.logEntries.length,
+                  itemBuilder: (_, i) => Text(
+                    FeedbackService.logEntries[i],
+                    style: const TextStyle(
+                        color: AppColors.text3,
+                        fontSize: 10,
+                        fontFamily: 'monospace'),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 6),
+            Row(children: [
+              Expanded(
+                child: Text(
+                  '${FeedbackService.logEntries.length} Einträge · wird automatisch angehängt',
+                  style: const TextStyle(color: AppColors.text3, fontSize: 11),
+                ),
+              ),
+              GestureDetector(
+                onTap: () async {
+                  final text = FeedbackService.buildReportText(
+                      _controller.text.trim().isEmpty ? null : _controller.text.trim());
+                  await Clipboard.setData(ClipboardData(text: text));
+                  if (!mounted) return;
+                  setState(() => _copied = true);
+                  Future.delayed(const Duration(seconds: 2),
+                      () { if (mounted) setState(() => _copied = false); });
+                },
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: _copied
+                      ? const Row(key: ValueKey('ok'), mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.check, color: AppColors.green, size: 14),
+                          SizedBox(width: 4),
+                          Text('Kopiert!',
+                              style: TextStyle(color: AppColors.green, fontSize: 11)),
+                        ])
+                      : const Row(key: ValueKey('copy'), mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.copy, color: AppColors.text3, size: 14),
+                          SizedBox(width: 4),
+                          Text('Kopieren',
+                              style: TextStyle(color: AppColors.text3, fontSize: 11)),
+                        ]),
+                ),
+              ),
+            ]),
           ],
         ),
       ),
@@ -508,12 +665,14 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
                       strokeWidth: 2, color: AppColors.bg),
                 )
               : Icon(
-                  widget.telegramAvailable ? Icons.send : Icons.email,
+                  widget.notionAvailable || widget.telegramAvailable
+                      ? Icons.send
+                      : Icons.email,
                   size: 16,
                 ),
           label: Text(_sending
               ? 'Sende...'
-              : widget.telegramAvailable
+              : widget.notionAvailable || widget.telegramAvailable
                   ? 'Senden'
                   : 'Per E-Mail senden'),
         ),
@@ -525,11 +684,13 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
 // ── Hilfsmittel ─────────────────────────────────────────────────
 
 class _InfoBanner extends StatelessWidget {
+  final bool notion;
   final bool telegram;
   final bool hasPhotos;
   final bool isAutoError;
   final String supportEmail;
   const _InfoBanner({
+    required this.notion,
     required this.telegram,
     required this.hasPhotos,
     required this.isAutoError,
@@ -541,7 +702,11 @@ class _InfoBanner extends StatelessWidget {
     final IconData icon;
     final String text;
     final Color color;
-    if (isAutoError) {
+    if (notion) {
+      color = AppColors.green;
+      icon = Icons.send;
+      text = 'Wird direkt aus der App gesendet – kein Login nötig';
+    } else if (isAutoError) {
       color = AppColors.orange;
       icon = Icons.email_outlined;
       text = 'Wird per E-Mail gesendet an: $supportEmail';
@@ -595,5 +760,35 @@ class _SmallIconBtn extends StatelessWidget {
         child: Icon(icon, color: Colors.white, size: 15),
       ),
     );
+  }
+}
+
+// ── Screen-Observer ─────────────────────────────────────────────
+// Trackt automatisch die aktuelle Route und meldet sie an FeedbackService.
+class _ScreenObserver extends NavigatorObserver {
+  // Nur benannte Routen (z.B. '/') verwenden — anonyme MaterialPageRoutes
+  // werden ignoriert, damit manuell gesetzte Namen nicht überschrieben werden.
+  static String? _routeName(Route route) {
+    final name = route.settings.name;
+    if (name != null && name.isNotEmpty) return name;
+    return null;
+  }
+
+  @override
+  void didPush(Route route, Route? previousRoute) {
+    final name = _routeName(route);
+    if (name != null) FeedbackService.setCurrentScreen(name);
+  }
+
+  @override
+  void didPop(Route route, Route? previousRoute) {
+    final name = previousRoute != null ? _routeName(previousRoute) : null;
+    if (name != null) FeedbackService.setCurrentScreen(name);
+  }
+
+  @override
+  void didReplace({Route? newRoute, Route? oldRoute}) {
+    final name = newRoute != null ? _routeName(newRoute) : null;
+    if (name != null) FeedbackService.setCurrentScreen(name);
   }
 }

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "gmail-rhs": {
+      "command": "C:\\Users\\klaas\\AppData\\Local\\Python\\bin\\python.exe",
+      "args": ["C:\\Users\\klaas\\.claude\\gmail_mcp.py"]
+    }
+  }
+}

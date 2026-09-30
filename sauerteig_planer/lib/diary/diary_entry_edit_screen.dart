@@ -14,8 +14,9 @@ import 'diary_storage.dart';
 
 class DiaryEntryEditScreen extends StatefulWidget {
   final DiaryEntry? entry;
+  final String? preselectedStarter;
 
-  const DiaryEntryEditScreen({super.key, this.entry});
+  const DiaryEntryEditScreen({super.key, this.entry, this.preselectedStarter});
 
   @override
   State<DiaryEntryEditScreen> createState() => _DiaryEntryEditScreenState();
@@ -30,6 +31,22 @@ class _DiaryEntryEditScreenState extends State<DiaryEntryEditScreen> {
   String? _photoPath;
   String? _oldPhotoPath;
   bool _photoChanged = false;
+  String? _starterName;
+  String? _flourType;
+  List<String> _starterNames = [];
+
+  static const _flourOptions = [
+    'Weizenmehl 405',
+    'Weizenmehl 550',
+    'Weizenmehl 1050',
+    'Vollkornweizen',
+    'Roggenmehl 997',
+    'Roggenmehl 1150',
+    'Roggenvollkorn',
+    'Dinkelmehl 630',
+    'Dinkelvollkorn',
+    'Mischung',
+  ];
 
   @override
   void initState() {
@@ -43,6 +60,57 @@ class _DiaryEntryEditScreenState extends State<DiaryEntryEditScreen> {
     _rating = e?.activityRating;
     _photoPath = e?.photoPath;
     _oldPhotoPath = e?.photoPath;
+    _starterName = e?.starterName ?? widget.preselectedStarter;
+    _flourType = e?.flourType;
+    _loadStarterNames();
+  }
+
+  Future<void> _addNewStarter() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Neuer Sauerteig',
+            style: TextStyle(color: AppColors.gold)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: AppColors.text),
+          decoration: const InputDecoration(
+            hintText: 'z.B. Lievito Madre, Roggen-Starter…',
+            hintStyle: TextStyle(color: AppColors.text3),
+            enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: AppColors.border)),
+            focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: AppColors.orange)),
+          ),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Abbrechen',
+                  style: TextStyle(color: AppColors.text2))),
+          TextButton(
+              onPressed: () =>
+                  Navigator.pop(ctx, controller.text.trim()),
+              child: const Text('Anlegen',
+                  style: TextStyle(color: AppColors.orange))),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty) return;
+    await DiaryStorage.addStarterName(name);
+    setState(() {
+      _starterNames = [..._starterNames, name];
+      _starterName = name;
+    });
+  }
+
+  Future<void> _loadStarterNames() async {
+    final names = await DiaryStorage.loadStarterNames();
+    if (mounted) setState(() => _starterNames = names);
   }
 
   @override
@@ -159,8 +227,15 @@ class _DiaryEntryEditScreenState extends State<DiaryEntryEditScreen> {
       clearRating: _rating == null,
       photoPath: _photoPath,
       clearPhoto: _photoPath == null,
+      starterName: _starterName,
+      clearStarterName: _starterName == null,
+      flourType: _flourType,
+      clearFlourType: _flourType == null,
     );
 
+    if (_starterName != null) {
+      await DiaryStorage.addStarterName(_starterName!);
+    }
     await DiaryStorage.save(entry);
     if (mounted) Navigator.pop(context);
   }
@@ -214,6 +289,78 @@ class _DiaryEntryEditScreenState extends State<DiaryEntryEditScreen> {
           ),
 
           const SizedBox(height: 20),
+
+          // Starter-Zuordnung – immer sichtbar
+          _sectionLabel('Sauerteig'),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: DropdownButton<String?>(
+                    value: _starterNames.contains(_starterName) ? _starterName : null,
+                    isExpanded: true,
+                    dropdownColor: AppColors.surface,
+                    underline: const SizedBox(),
+                    hint: const Text('Auswählen …',
+                        style: TextStyle(color: AppColors.text3)),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Auswählen …',
+                            style: TextStyle(color: AppColors.text2)),
+                      ),
+                      ..._starterNames.map((n) => DropdownMenuItem<String?>(
+                            value: n,
+                            child: Text(n,
+                                style: const TextStyle(color: AppColors.text)),
+                          )),
+                    ],
+                    onChanged: (v) => setState(() => _starterName = v),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline, color: AppColors.orange),
+                tooltip: 'Neuen Starter anlegen',
+                onPressed: _addNewStarter,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Mehlsorte (nur bei Fütterung)
+          if (_type == DiaryEntryType.feeding) ...[
+            _sectionLabel('Mehlsorte'),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: _flourOptions.map((f) {
+                final selected = _flourType == f;
+                return ChoiceChip(
+                  label: Text(f,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: selected ? AppColors.bg : AppColors.text2,
+                      )),
+                  selected: selected,
+                  selectedColor: AppColors.green,
+                  backgroundColor: AppColors.surface,
+                  side: BorderSide(
+                      color: selected ? AppColors.green : AppColors.border),
+                  onSelected: (_) =>
+                      setState(() => _flourType = selected ? null : f),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 20),
+          ],
 
           // Datum / Uhrzeit
           _sectionLabel('Zeitpunkt'),

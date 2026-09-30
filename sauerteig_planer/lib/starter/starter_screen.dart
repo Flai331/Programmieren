@@ -1,14 +1,17 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:timezone/timezone.dart' as tz;
 import '../app_colors.dart';
 import '../untils/feedback_service.dart';
+import '../untils/discard_recipes.dart';
 import 'starter_models.dart';
 import 'starter_storage.dart';
 import 'starter_day_screen.dart';
 import 'starter_tips_screen.dart';
 import 'starter_done_screen.dart';
+import 'my_starters_screen.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  STARTER SCREEN — Übersicht
@@ -25,8 +28,12 @@ class _StarterScreenState extends State<StarterScreen> {
   StarterJourney? _journey;
   bool _loading = true;
   bool _notifEnabled = false;
+  TimeOfDay _notifTime = const TimeOfDay(hour: 8, minute: 0);
   final _nameController = TextEditingController(text: 'Mein Sauerteig');
   final _notifPlugin = FlutterLocalNotificationsPlugin();
+
+  // Überschuss-Rechner (Discard)
+  double _discardAmount = 50;
 
   @override
   void initState() {
@@ -43,9 +50,11 @@ class _StarterScreenState extends State<StarterScreen> {
   Future<void> _load() async {
     final journey = await StarterStorage.load();
     final notifEnabled = await StarterStorage.isNotificationEnabled();
+    final time = await StarterStorage.getNotificationTime();
     setState(() {
       _journey = journey;
       _notifEnabled = notifEnabled;
+      _notifTime = TimeOfDay(hour: time.hour, minute: time.minute);
       _loading = false;
     });
   }
@@ -117,6 +126,26 @@ class _StarterScreenState extends State<StarterScreen> {
     setState(() => _journey = updated);
   }
 
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _notifTime,
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: AppColors.green,
+            surface: AppColors.surface,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    await StarterStorage.setNotificationTime(picked.hour, picked.minute);
+    setState(() => _notifTime = picked);
+    if (_notifEnabled && !kIsWeb) await _scheduleReminder();
+  }
+
   Future<void> _scheduleReminder() async {
     const details = NotificationDetails(
       android: AndroidNotificationDetails(
@@ -128,53 +157,101 @@ class _StarterScreenState extends State<StarterScreen> {
       ),
     );
     final now = tz.TZDateTime.now(tz.local);
-    var scheduled =
-        tz.TZDateTime(tz.local, now.year, now.month, now.day, 8);
+    var scheduled = tz.TZDateTime(
+        tz.local, now.year, now.month, now.day, _notifTime.hour, _notifTime.minute);
     if (scheduled.isBefore(now)) {
       scheduled = scheduled.add(const Duration(days: 1));
     }
-    await _notifPlugin.zonedSchedule(
-      200,
-      '🌱 Starter-Erinnerung',
-      'Zeit deinen Sauerteig-Starter zu kontrollieren!',
-      scheduled,
-      details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-    );
-    FeedbackService.log('Starter-Erinnerung geplant für ${scheduled.hour}:${scheduled.minute.toString().padLeft(2, '0')} täglich');
+    try {
+      await _notifPlugin.zonedSchedule(
+        200,
+        '🌱 Starter-Erinnerung',
+        'Zeit deinen Sauerteig-Starter zu kontrollieren!',
+        scheduled,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        matchDateTimeComponents: DateTimeComponents.time,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } on PlatformException catch (e) {
+      if (e.code == 'exact_alarms_not_permitted') {
+        FeedbackService.log('Starter-Erinnerung: Exakte Benachrichtigungen nicht erlaubt, fallback auf inexactAllowWhileIdle');
+        await _notifPlugin.zonedSchedule(
+          200,
+          '🌱 Starter-Erinnerung',
+          'Zeit deinen Sauerteig-Starter zu kontrollieren!',
+          scheduled,
+          details,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          matchDateTimeComponents: DateTimeComponents.time,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+      } else {
+        rethrow;
+      }
+    }
+    FeedbackService.log('Starter-Erinnerung geplant für ${_notifTime.hour}:${_notifTime.minute.toString().padLeft(2, '0')} täglich');
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        title: const Text('🌱 Starter-Guide',
-            style: TextStyle(color: AppColors.gold)),
-        iconTheme: const IconThemeData(color: AppColors.gold),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.lightbulb_outline, color: AppColors.text2),
-            tooltip: 'Problemlöser',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const StarterTipsScreen()),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: AppColors.bg,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          title: const Text('🌱 Starter-Guide',
+              style: TextStyle(color: AppColors.gold)),
+          iconTheme: const IconThemeData(color: AppColors.gold),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.kitchen_outlined, color: AppColors.text2),
+              tooltip: 'Meine Starter',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MyStartersScreen()),
+              ),
             ),
+            IconButton(
+              icon: const Icon(Icons.lightbulb_outline, color: AppColors.text2),
+              tooltip: 'Problemlöser',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const StarterTipsScreen()),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.bug_report_outlined, color: AppColors.text2),
+              tooltip: 'Fehler melden',
+              onPressed: () => FeedbackService.showReportDialog(context),
+            ),
+          ],
+          bottom: const TabBar(
+            indicatorColor: AppColors.green,
+            labelColor: AppColors.green,
+            unselectedLabelColor: AppColors.text2,
+            tabs: [
+              Tab(icon: Icon(Icons.grass, size: 18), text: 'Guide'),
+              Tab(icon: Icon(Icons.handyman_outlined, size: 18), text: 'Pflege'),
+            ],
           ),
-        ],
+        ),
+        body: TabBarView(
+          children: [
+            _loading
+                ? const Center(child: CircularProgressIndicator(color: AppColors.green))
+                : _journey == null
+                    ? _buildStart()
+                    : _journey!.isCompleted
+                        ? _buildCompleted()
+                        : _buildActive(),
+            _buildPflegeTab(),
+          ],
+        ),
       ),
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.green))
-          : _journey == null
-              ? _buildStart()
-              : _journey!.isCompleted
-                  ? _buildCompleted()
-                  : _buildActive(),
     );
   }
 
@@ -197,7 +274,7 @@ class _StarterScreenState extends State<StarterScreen> {
           const SizedBox(height: 8),
           const Text(
             'Der 7-Tage-Begleiter führt dich Schritt für Schritt durch das Ansetzen '
-            'deines Starters – mit täglichen Checklisten, Float-Test und Tipps.',
+            'deines Starters – mit täglichen Checklisten, Schwimmtest (Float-Test) und Tipps.',
             style: TextStyle(color: AppColors.text2, height: 1.5),
           ),
           const SizedBox(height: 24),
@@ -233,10 +310,26 @@ class _StarterScreenState extends State<StarterScreen> {
                 await StarterStorage.setNotificationEnabled(v);
                 setState(() => _notifEnabled = v);
               },
-              title: const Text('Tägliche Erinnerung um 8:00',
+              title: const Text('Tägliche Erinnerung',
                   style: TextStyle(color: AppColors.text)),
               activeThumbColor: AppColors.green,
               contentPadding: EdgeInsets.zero,
+            ),
+            GestureDetector(
+              onTap: _pickTime,
+              child: Row(
+                children: [
+                  const Icon(Icons.access_time, color: AppColors.text3, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${_notifTime.hour.toString().padLeft(2, '0')}:${_notifTime.minute.toString().padLeft(2, '0')} Uhr – antippen zum Ändern',
+                      style: const TextStyle(color: AppColors.green, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
           const SizedBox(height: 24),
@@ -255,6 +348,27 @@ class _StarterScreenState extends State<StarterScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('💡', style: TextStyle(fontSize: 16)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Im Tab "Pflege" findest du den Auffrischungsrechner (Levain-Rechner) '
+                  'und Rezeptideen für deinen Überschuss (Discard).',
+                  style: TextStyle(color: AppColors.text2, fontSize: 12, height: 1.4),
+                ),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 32),
         ],
       ),
     );
@@ -279,11 +393,30 @@ class _StarterScreenState extends State<StarterScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(journey.starterName,
-                      style: const TextStyle(
-                          color: AppColors.text,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(journey.starterName,
+                            style: const TextStyle(
+                                color: AppColors.text,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16)),
+                        if (journey.flourType != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              '🌾 ${journey.flourType}',
+                              style: const TextStyle(
+                                color: AppColors.text3,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                   Text('Tag ${journey.currentDayNumber}/${journey.days.length}',
                       style: const TextStyle(
                           color: AppColors.green, fontWeight: FontWeight.bold)),
@@ -413,14 +546,311 @@ class _StarterScreenState extends State<StarterScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('💡', style: TextStyle(fontSize: 16)),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Im Tab "Pflege" findest du den Auffrischungsrechner '
+                    'und Ideen für deinen Überschuss (Discard).',
+                    style: TextStyle(color: AppColors.text2, fontSize: 12, height: 1.4),
+                  ),
+                ),
+              ]),
+            ),
           ],
         ),
       ),
     );
   }
 
+  // ── Pflege-Tab ──────────────────────────────────────────────
+  Widget _buildPflegeTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _buildMaintenanceContent(),
+      ),
+    );
+  }
+
+  List<Widget> _buildMaintenanceContent() {
+    return [
+      // ── Auffrischen-Hinweis ─────────────────────────────────
+      Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.green.withValues(alpha: 0.4)),
+        ),
+        child: const Row(children: [
+          Text('🧮', style: TextStyle(fontSize: 22)),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Auffrischungsplan im Planer',
+                  style: TextStyle(color: AppColors.green, fontWeight: FontWeight.w600, fontSize: 13)),
+              SizedBox(height: 4),
+              Text('Im Planer kannst du einstellen wie oft du auffrischen möchtest — er rechnet automatisch den Zeitplan aus.',
+                  style: TextStyle(color: AppColors.text2, fontSize: 12, height: 1.4)),
+            ]),
+          ),
+        ]),
+      ),
+      const SizedBox(height: 20),
+
+      const SizedBox(height: 28),
+
+      // ── Tests ───────────────────────────────────────────────
+      _sectionHeader('🧪 Tests: Muss ich jetzt auffrischen?'),
+      const SizedBox(height: 12),
+      _testCard(
+        emoji: '📏',
+        title: 'Volumen-Test',
+        ok: 'Hat sich seit letzter Fütterung verdoppelt oder mehr → noch aktiv',
+        notOk: 'Kein oder kaum Volumenwachstum, ist schon wieder gesunken → auffrischen',
+      ),
+      const SizedBox(height: 8),
+      _testCard(
+        emoji: '👃',
+        title: 'Geruchs-Test',
+        ok: 'Angenehm säuerlich, leicht joghurtartig → fit',
+        notOk: 'Beißend nach Essig, Aceton oder Nagellackentferner → dringend auffrischen',
+      ),
+      const SizedBox(height: 8),
+      _testCard(
+        emoji: '🫧',
+        title: 'Bläschen-Test',
+        ok: 'Viele Bläschen sichtbar, lockere Struktur → aktiv',
+        notOk: 'Kaum Bläschen, flüssig-kompakt, Flüssigkeitsschicht (Hooch) oben → auffrischen',
+      ),
+      const SizedBox(height: 8),
+      _testCard(
+        emoji: '🌊',
+        title: 'Schwimmtest (Float-Test) (vor dem Backen)',
+        ok: 'Kleines Stück in Wasser geben: schwimmt → backfertig',
+        notOk: 'Sinkt sofort → noch 1–2 Stunden warten oder nochmal auffrischen',
+      ),
+      const SizedBox(height: 8),
+      _testCard(
+        emoji: '🕐',
+        title: 'Zeit-Test',
+        ok: 'Kühlschrank: < 1 Woche seit letzter Fütterung → ok',
+        notOk: 'Kühlschrank: > 2 Wochen; Raumtemperatur: > 24 h → auffrischen',
+      ),
+
+      const SizedBox(height: 16),
+      _infoCard('🚨 Zeichen, dass dein Starter Hunger hat',
+          '• Graue/schwarze Flüssigkeit (Hooch) oben drauf\n'
+          '• Sehr starker Essig- oder Acetongeruch\n'
+          '• Keine Bläschen mehr sichtbar\n'
+          '• Kaum Volumenveränderung nach dem Füttern'),
+      const SizedBox(height: 8),
+      _infoCard('✅ Zeichen eines aktiven Starters',
+          '• Bläschen sichtbar\n'
+          '• Angenehm säuerlicher Geruch\n'
+          '• Volumen verdoppelt sich 4–8h nach dem Füttern\n'
+          '• Schwimmtest (Float-Test) bestanden (schwimmt im Wasser)'),
+
+      const SizedBox(height: 28),
+
+      // ── Überschuss-Ideen (Discard) ──────────────────────────
+      _sectionHeader('♻️ Ideen für den Überschuss (Discard)'),
+      const SizedBox(height: 4),
+      const Text(
+        'Den übrig gebliebenen Starter nicht wegwerfen — er steckt voller Aromen!',
+        style: TextStyle(color: AppColors.text3, fontSize: 13, height: 1.4),
+      ),
+      const SizedBox(height: 16),
+
+      // Einstellbare Restmenge
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(children: [
+          const Text('Meine Restmenge:',
+              style: TextStyle(color: AppColors.text2, fontSize: 13)),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => setState(() => _discardAmount = (_discardAmount - 10).clamp(10, 500)),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface2,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: const Text('−', style: TextStyle(color: AppColors.text, fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              '${_discardAmount.round()} g',
+              style: const TextStyle(color: AppColors.green, fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => setState(() => _discardAmount = (_discardAmount + 10).clamp(10, 500)),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface2,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: const Text('+', style: TextStyle(color: AppColors.text, fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      Builder(builder: (ctx) {
+        final amount = _discardAmount.round();
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _DiscardChip('🥞', 'Pfannkuchen', onTap: () => showDiscardRecipe(ctx, 'Pfannkuchen', amount)),
+            _DiscardChip('🧇', 'Waffeln', onTap: () => showDiscardRecipe(ctx, 'Waffeln', amount)),
+            _DiscardChip('🍕', 'Pizza-Teig', onTap: () => showDiscardRecipe(ctx, 'Pizza-Teig', amount)),
+            _DiscardChip('🫓', 'Focaccia', onTap: () => showDiscardRecipe(ctx, 'Focaccia', amount)),
+            _DiscardChip('🍌', 'Bananenbrot', onTap: () => showDiscardRecipe(ctx, 'Bananenbrot', amount)),
+            _DiscardChip('🍪', 'Kekse & Cracker', onTap: () => showDiscardRecipe(ctx, 'Kekse & Cracker', amount)),
+            _DiscardChip('🌮', 'Tortillas', onTap: () => showDiscardRecipe(ctx, 'Tortillas', amount)),
+            _DiscardChip('🧁', 'Muffins', onTap: () => showDiscardRecipe(ctx, 'Muffins', amount)),
+            _DiscardChip('🍲', 'Soße andicken', onTap: () => showDiscardRecipe(ctx, 'Soße andicken', amount)),
+            _DiscardChip('🍜', 'Nudelteig', onTap: () => showDiscardRecipe(ctx, 'Nudelteig', amount)),
+          ],
+        );
+      }),
+      const SizedBox(height: 8),
+      const Text(
+        'Tipp: Der Überschuss (Discard) ist ungefüttert, hat weniger Triebkraft (Levain-Kraft) — '
+        'ideal für Rezepte die kein Aufgehen brauchen.',
+        style: TextStyle(color: AppColors.text3, fontSize: 11, height: 1.4),
+      ),
+      const SizedBox(height: 32),
+    ];
+  }
+
+
+  Widget _sectionHeader(String text) => Text(
+        text,
+        style: const TextStyle(
+            color: AppColors.gold,
+            fontSize: 17,
+            fontWeight: FontWeight.bold),
+      );
+
+  Widget _testCard({
+    required String emoji,
+    required String title,
+    required String ok,
+    required String notOk,
+  }) =>
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text(emoji, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(title,
+                  style: const TextStyle(
+                      color: AppColors.text,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13)),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('✅ ', style: TextStyle(fontSize: 12)),
+            Expanded(
+                child: Text(ok,
+                    style: const TextStyle(
+                        color: AppColors.green, fontSize: 12, height: 1.4))),
+          ]),
+          const SizedBox(height: 4),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('⚠️ ', style: TextStyle(fontSize: 12)),
+            Expanded(
+                child: Text(notOk,
+                    style: const TextStyle(
+                        color: AppColors.orange, fontSize: 12, height: 1.4))),
+          ]),
+        ]),
+      );
+
+  Widget _infoCard(String title, String body) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title,
+              style: const TextStyle(
+                  color: AppColors.text,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13)),
+          const SizedBox(height: 6),
+          Text(body,
+              style: const TextStyle(
+                  color: AppColors.text2, fontSize: 12, height: 1.5)),
+        ]),
+      );
+
   String _formatDate(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+}
+
+// ── Discard Chip ────────────────────────────────────────────────
+
+class _DiscardChip extends StatelessWidget {
+  final String emoji, label;
+  final VoidCallback? onTap;
+  const _DiscardChip(this.emoji, this.label, {this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(emoji, style: const TextStyle(fontSize: 14)),
+          const SizedBox(width: 4),
+          Text(label,
+              style: const TextStyle(color: AppColors.text2, fontSize: 12)),
+        ]),
+      ),
+    );
+  }
 }
 
 // ── Tageskarte ──────────────────────────────────────────────────
@@ -472,9 +902,27 @@ class _DayCard extends StatelessWidget {
         title: Text('Tag ${day.dayNumber}',
             style: TextStyle(
                 color: color, fontWeight: FontWeight.w600)),
-        subtitle: Text(
-          isFuture ? 'Noch nicht verfügbar' : _subtitle(),
-          style: const TextStyle(color: AppColors.text3, fontSize: 12),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Kurze Tages-Überschrift aus kDayDescriptions (erste Zeile)
+            Text(
+              _dayHeadline(),
+              style: TextStyle(
+                color: isFuture ? AppColors.text3 : color,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (!isFuture) ...[
+              const SizedBox(height: 2),
+              Text(
+                _subtitle(),
+                style: const TextStyle(color: AppColors.text3, fontSize: 11),
+              ),
+            ],
+          ],
         ),
         trailing: isToday
             ? const Chip(
@@ -490,6 +938,12 @@ class _DayCard extends StatelessWidget {
                 : null,
       ),
     );
+  }
+
+  String _dayHeadline() {
+    final desc = kDayDescriptions[day.dayNumber] ?? '';
+    // Erste Zeile = "🌱 Heute legst du den Grundstein!"
+    return desc.split('\n').first.trim();
   }
 
   String _subtitle() {

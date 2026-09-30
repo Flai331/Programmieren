@@ -1,5 +1,9 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../app_colors.dart';
+import '../diary/diary_storage.dart';
 import '../untils/feedback_service.dart';
 import '../untils/temp_utils.dart';
 import 'starter_models.dart';
@@ -28,6 +32,8 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
   late StarterJourney _journey;
   final _noteController = TextEditingController();
   final _tempController = TextEditingController();
+  String? _photoPath; // gespeicherter Pfad im App-Verzeichnis
+  String? _selectedFlour;
 
   static const _quickChips = [
     'Bläschen sichtbar',
@@ -44,6 +50,8 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
     _journey = widget.journey;
     _day = _journey.days[widget.dayIndex];
     _noteController.text = _day.notes;
+    _photoPath = _day.photoPath;
+    _selectedFlour = _day.flourType ?? _journey.flourType;
     if (_day.temperature != null) {
       _tempController.text = _day.temperature!.toStringAsFixed(1);
     }
@@ -71,6 +79,9 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
     final updated = _day.copyWith(
       notes: _noteController.text.trim(),
       temperature: temp,
+      photoPath: _photoPath,
+      clearPhoto: _photoPath == null,
+      flourType: _selectedFlour,
     );
 
     final newDays = List<StarterDayLog>.from(_journey.days);
@@ -115,6 +126,22 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
       _day = updated;
       _journey = newJourney;
     });
+  }
+
+  Future<void> _pickPhoto(ImageSource source) async {
+    if (kIsWeb) return;
+    try {
+      final xFile = await ImagePicker()
+          .pickImage(source: source, imageQuality: 80, maxWidth: 1200);
+      if (xFile == null) return;
+      final saved = await DiaryStorage.savePhoto(xFile.path);
+      if (saved != null) setState(() => _photoPath = saved);
+    } catch (_) {}
+  }
+
+  Future<void> _removePhoto() async {
+    if (_photoPath != null) await DiaryStorage.deletePhoto(_photoPath!);
+    setState(() => _photoPath = null);
   }
 
   void _addQuickChip(String text) {
@@ -169,8 +196,8 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
 
           // Checkliste
           _sectionTitle('Aufgaben'),
-          ...StarterDayActivity.values.map((activity) {
-            return CheckboxListTile(
+          ...StarterDayActivity.values.expand((activity) {
+            final tile = CheckboxListTile(
               value: _day.checks[activity] ?? false,
               onChanged: (v) => _toggleCheck(activity, v ?? false),
               title: Text(
@@ -182,6 +209,42 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
             );
+            if (activity == StarterDayActivity.feeding &&
+                (_day.checks[StarterDayActivity.feeding] == true)) {
+              return [
+                tile,
+                Padding(
+                  padding: const EdgeInsets.only(left: 16, top: 4, bottom: 8),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: kFlourOptions
+                        .map((flour) => ChoiceChip(
+                              label: Text(flour,
+                                  style: const TextStyle(fontSize: 12)),
+                              selected: _selectedFlour == flour,
+                              onSelected: (sel) => setState(
+                                  () => _selectedFlour = sel ? flour : null),
+                              selectedColor:
+                                  AppColors.gold.withValues(alpha: 0.3),
+                              labelStyle: TextStyle(
+                                color: _selectedFlour == flour
+                                    ? AppColors.gold
+                                    : AppColors.text2,
+                              ),
+                              backgroundColor: AppColors.surface2,
+                              side: BorderSide(
+                                color: _selectedFlour == flour
+                                    ? AppColors.gold
+                                    : AppColors.border,
+                              ),
+                            ))
+                        .toList(),
+                  ),
+                ),
+              ];
+            }
+            return [tile];
           }),
 
           const SizedBox(height: 20),
@@ -258,14 +321,16 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
                           : AppColors.red,
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      _day.floatTestPassed
-                          ? 'Geschwommen ✓ – Starter ist aktiv!'
-                          : 'Gesunken ✗ – Noch etwas Geduld',
-                      style: TextStyle(
-                        color: _day.floatTestPassed
-                            ? AppColors.green
-                            : AppColors.red,
+                    Flexible(
+                      child: Text(
+                        _day.floatTestPassed
+                            ? 'Geschwommen ✓ – Starter ist aktiv!'
+                            : 'Gesunken ✗ – Noch etwas Geduld',
+                        style: TextStyle(
+                          color: _day.floatTestPassed
+                              ? AppColors.green
+                              : AppColors.red,
+                        ),
                       ),
                     ),
                   ],
@@ -348,6 +413,54 @@ class _StarterDayScreenState extends State<StarterDayScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 20),
+
+          // Foto
+          _sectionTitle('Foto'),
+          if (_photoPath != null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.file(File(_photoPath!),
+                  width: double.infinity, height: 180, fit: BoxFit.cover),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: _removePhoto,
+              icon: const Icon(Icons.delete_outline,
+                  color: AppColors.red, size: 18),
+              label: const Text('Foto entfernen',
+                  style: TextStyle(color: AppColors.red, fontSize: 13)),
+            ),
+          ] else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _pickPhoto(ImageSource.camera),
+                    icon: const Icon(Icons.camera_alt, size: 18),
+                    label: const Text('Kamera'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.text2,
+                      side: const BorderSide(color: AppColors.border),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _pickPhoto(ImageSource.gallery),
+                    icon: const Icon(Icons.photo_library, size: 18),
+                    label: const Text('Galerie'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.text2,
+                      side: const BorderSide(color: AppColors.border),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:background="@drawable/ideen_widget_bg"
+    android:gravity="center_vertical"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="💡"
+        android:textSize="22sp"
+        android:layout_marginEnd="10dp" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Neue Idee"
+            android:textColor="#C8A84B"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sauerteig Planer"
+            android:textColor="#88888888"
+            android:textSize="11sp" />
+
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="+"
+        android:textColor="#C8A84B"
+        android:textSize="24sp"
+        android:textStyle="bold" />
+
+</LinearLayout>

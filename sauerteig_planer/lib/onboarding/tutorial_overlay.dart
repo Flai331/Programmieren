@@ -53,6 +53,10 @@ class _TutorialOverlayState extends State<TutorialOverlay>
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
     _pulseAnim = CurvedAnimation(parent: _pulse, curve: Curves.easeInOut);
+    // Ersten Frame abwarten → GlobalKeys haben dann korrekte RenderObject-Positionen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -81,11 +85,9 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     if (ctx == null) return Rect.zero;
     final box = ctx.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return Rect.zero;
-    // ancestor = Overlay-RenderBox → Koordinaten relativ zur Overlay-Fläche,
-    // nicht zum physischen Bildschirm. Verhindert Versatz bei Transforms/Padding.
-    final overlayBox =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    final pos = box.localToGlobal(Offset.zero, ancestor: overlayBox);
+    // localToGlobal ohne ancestor → Flutter-Globalkoordinaten,
+    // die direkt mit dem OverlayEntry-Koordinatensystem übereinstimmen.
+    final pos = box.localToGlobal(Offset.zero);
     return pos & box.size;
   }
 
