@@ -30,10 +30,8 @@ dependencies:
   timezone: ^0.9.4
   # Fotos im Tagebuch aufnehmen
   image_picker: ^1.1.2
-  # Fehlerberichte direkt aus der App senden (Telegram Bot)
+  # Fehlerberichte direkt aus der App senden (Notion, siehe lib/fehlerbericht.dart)
   http: ^1.2.0
-  # E-Mail mit Anhang öffnen (Android + iOS)
-  flutter_email_sender: ^6.0.3
 
 dev_dependencies:
   flutter_test:

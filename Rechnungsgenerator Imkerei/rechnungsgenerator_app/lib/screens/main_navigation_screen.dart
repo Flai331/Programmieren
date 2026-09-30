@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import '../utils/feedback_service.dart';
-import '../widgets/feedback_actions.dart';
+import '../fehlerbericht.dart';
 import 'screens.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -30,8 +29,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   void _goToTab(int index) {
     setState(() => _selectedIndex = index);
-    FeedbackService.logUserAction('Tab gewechselt (Dashboard)',
-        context: {'tab': index.toString()});
+    Fehlerbericht.logAktion('Tab gewechselt (Dashboard)',
+        kontext: {'tab': index.toString()});
   }
 
   late final List<Widget> _screens = [
@@ -97,7 +96,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   void initState() {
     super.initState();
-    FeedbackService.logScreenLoad('MainNavigation');
+    Fehlerbericht.logSeite('MainNavigation');
   }
 
   @override
@@ -105,7 +104,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_selectedIndex]),
-        actions: const [FeedbackActions()],
+        
       ),
       body: _screens[_selectedIndex],
       // FAB nur auf Rechnungen-Tab (Index 2). Völker (Index 1) hat eigenen FAB.
@@ -128,9 +127,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           indicatorColor: _peach.withAlpha(51), // 20% per design system
           onDestinationSelected: (int index) {
             setState(() => _selectedIndex = index);
-            FeedbackService.logScreenLoad(_titles[index]);
-            FeedbackService.logUserAction('Tab gewechselt',
-                context: {'tab': index.toString()});
+            Fehlerbericht.logSeite(_titles[index]);
+            Fehlerbericht.logAktion('Tab gewechselt',
+                kontext: {'tab': index.toString()});
           },
           destinations: _destinations,
         ),
@@ -151,7 +150,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               title: const Text('Neue Rechnung'),
               onTap: () {
                 Navigator.pop(ctx);
-                FeedbackService.logUserAction('Neue Rechnung (FAB)');
+                Fehlerbericht.logAktion('Neue Rechnung (FAB)');
                 Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => const InvoiceEditScreen(documentType: 'invoice'),
                 ));
@@ -162,7 +161,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               title: const Text('Neues Angebot'),
               onTap: () {
                 Navigator.pop(ctx);
-                FeedbackService.logUserAction('Neues Angebot (FAB)');
+                Fehlerbericht.logAktion('Neues Angebot (FAB)');
                 Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => const InvoiceEditScreen(documentType: 'quote'),
                 ));
@@ -173,7 +172,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               title: const Text('Neuer Brief'),
               onTap: () {
                 Navigator.pop(ctx);
-                FeedbackService.logUserAction('Neuer Brief (FAB)');
+                Fehlerbericht.logAktion('Neuer Brief (FAB)');
                 Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => const LetterEditScreen(),
                 ));

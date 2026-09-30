@@ -3,7 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/design_template_service.dart';
-import '../utils/feedback_service.dart';
+import '../fehlerbericht.dart';
 import 'design_customizer_screen.dart';
 
 class TemplatesScreen extends StatefulWidget {
@@ -20,7 +20,7 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
   @override
   void initState() {
     super.initState();
-    FeedbackService.logScreenLoad('Vorlagen');
+    Fehlerbericht.logSeite('Vorlagen');
     _load();
   }
 
@@ -87,7 +87,7 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
         await db.insertDesignSettings(settings);
       }
       _snack('✓ „${t.name}" angewendet');
-      FeedbackService.log('Template angewendet: ${t.name}');
+      Fehlerbericht.log('Template angewendet: ${t.name}');
     } catch (e) {
       _snack('Fehler: $e');
     }

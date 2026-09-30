@@ -12,11 +12,10 @@ import '../services/services.dart';
 import '../services/pdf_service.dart';
 import '../models/models.dart';
 import '../utils/utils.dart';
-import '../utils/feedback_service.dart';
+import '../fehlerbericht.dart';
 import '../widgets/invoice_item_widget.dart';
 import '../widgets/invoice_layout_canvas.dart';
 import '../widgets/gradient_button.dart';
-import '../widgets/feedback_actions.dart';
 import 'pdf_preview_screen.dart';
 import 'design_customizer_screen.dart';
 
@@ -153,8 +152,8 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
       ctrl.addListener(_schedulePreviewRefresh);
     }
 
-    FeedbackService.logScreenLoad('InvoiceEdit',
-        additionalInfo: widget.invoiceId == null ? 'neu' : 'bearbeiten');
+    Fehlerbericht.logSeite('InvoiceEdit',
+        info: widget.invoiceId == null ? 'neu' : 'bearbeiten');
     _initialize();
   }
 
@@ -193,7 +192,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
         _invoiceDateCtrl.text = AppUtils.formatDate(DateTime.now());
       }
     } catch (e) {
-      FeedbackService.logError(e.toString(), context: 'InvoiceEdit._initialize');
+      Fehlerbericht.logFehler(e.toString(), kontext: 'InvoiceEdit._initialize');
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Fehler: $e')));
@@ -306,15 +305,15 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
         data: invoice.toMap(),
       );
 
-      FeedbackService.logUserAction('Rechnung gespeichert',
-          context: {'nr': invoice.invoiceNumber});
+      Fehlerbericht.logAktion('Rechnung gespeichert',
+          kontext: {'nr': invoice.invoiceNumber});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('✓ Rechnung gespeichert')));
         Navigator.of(context).pop();
       }
     } catch (e) {
-      FeedbackService.logError(e.toString(), context: 'saveInvoice');
+      Fehlerbericht.logFehler(e.toString(), kontext: 'saveInvoice');
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Fehler: $e')));
@@ -409,7 +408,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
         Navigator.of(context).pop();
       }
     } catch (e) {
-      FeedbackService.logError(e.toString(), context: 'saveAndSend');
+      Fehlerbericht.logFehler(e.toString(), kontext: 'saveAndSend');
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Fehler: $e')));
@@ -441,7 +440,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
       final companyForPdf = _buildCompanyFromFields();
       final ds = _designSettings ?? _defaultDesignSettings();
 
-      FeedbackService.logUserAction('PDF-Vorschau geöffnet');
+      Fehlerbericht.logAktion('PDF-Vorschau geöffnet');
       if (mounted) {
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => PdfPreviewScreen(
@@ -454,7 +453,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
         ));
       }
     } catch (e) {
-      FeedbackService.logError(e.toString(), context: 'previewPdf');
+      Fehlerbericht.logFehler(e.toString(), kontext: 'previewPdf');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red));
@@ -497,7 +496,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
       );
       return doc.save();
     } catch (e) {
-      FeedbackService.logError(e.toString(), context: 'LivePreview');
+      Fehlerbericht.logFehler(e.toString(), kontext: 'LivePreview');
       // Fallback: leeres PDF mit Fehlermeldung
       final doc = pw.Document();
       doc.addPage(pw.Page(
@@ -668,7 +667,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
           );
     setState(() => _items.add(newItem));
     _schedulePreviewRefresh();
-    FeedbackService.logUserAction('Position hinzugefügt');
+    Fehlerbericht.logAktion('Position hinzugefügt');
   }
 
   Future<void> _showAddItemSheet() async {
@@ -765,7 +764,6 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
             tooltip: 'Speichern & Senden',
             onPressed: _isLoading ? null : _saveAndSend,
           ),
-          const FeedbackActions(),
         ],
       ),
       body: LayoutBuilder(
@@ -1100,7 +1098,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
                       setState(() => _designSettings = ds);
                       _schedulePreviewRefresh();
                     }
-                    FeedbackService.logUserAction('Design bearbeitet');
+                    Fehlerbericht.logAktion('Design bearbeitet');
                   }
                 : null,
           ),
@@ -1222,7 +1220,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
                   }
                 }
                 _schedulePreviewRefresh();
-                FeedbackService.logSelection('Kunde', selected.name);
+                Fehlerbericht.logAuswahl('Kunde', selected.name);
               }
             },
             icon: const Icon(Icons.contacts_outlined, color: _peach),

@@ -1,0 +1,4 @@
+# Nur Werkzeug-Ordner für die lokale Prüfung (flutter analyze / test)
+.dart_tool/
+build/
+pubspec.lock

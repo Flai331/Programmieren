@@ -4,7 +4,7 @@ import 'recipe_storage.dart';
 import 'recipe_edit_screen.dart';
 import 'baking_screen.dart';
 import '../app_colors.dart';
-import '../untils/feedback_service.dart';
+import '../fehlerbericht.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  REZEPTE-ÜBERSICHT
@@ -40,17 +40,20 @@ class _RecipeListScreenState extends State<RecipeListScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: const Text('Rezept löschen?', style: TextStyle(color: AppColors.text)),
+        title: const Text('Rezept löschen?',
+            style: TextStyle(color: AppColors.text)),
         content: Text('„${recipe.name}" wird unwiderruflich gelöscht.',
             style: const TextStyle(color: AppColors.text2)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Abbrechen', style: TextStyle(color: AppColors.text2)),
+            child: const Text('Abbrechen',
+                style: TextStyle(color: AppColors.text2)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Löschen', style: TextStyle(color: AppColors.red)),
+            child:
+                const Text('Löschen', style: TextStyle(color: AppColors.red)),
           ),
         ],
       ),
@@ -93,16 +96,17 @@ class _RecipeListScreenState extends State<RecipeListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-            appBar: AppBar(
+      appBar: AppBar(
         backgroundColor: AppColors.surface,
-        title: const Text('⏱️ Backtimer', style: TextStyle(color: AppColors.gold)),
+        title:
+            const Text('⏱️ Backtimer', style: TextStyle(color: AppColors.gold)),
         iconTheme: const IconThemeData(color: AppColors.gold),
         actions: [
           // --- HIER DEN BUTTON EINFÜGEN ---
           IconButton(
             icon: const Icon(Icons.bug_report, color: AppColors.red),
             tooltip: 'Fehler melden',
-            onPressed: () => FeedbackService.showReportDialog(context),
+            onPressed: () => Fehlerbericht.melden(context),
           ),
           IconButton(
             icon: const Icon(Icons.add, color: AppColors.gold),
@@ -112,7 +116,8 @@ class _RecipeListScreenState extends State<RecipeListScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.gold))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.gold))
           : _recipes.isEmpty
               ? _buildEmpty()
               : _buildList(),
@@ -173,7 +178,6 @@ class _RecipeListScreenState extends State<RecipeListScreen> {
       },
     );
   }
-
 }
 
 class _RecipeCard extends StatelessWidget {
@@ -225,7 +229,8 @@ class _RecipeCard extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.edit, color: AppColors.text3, size: 20),
+                  icon:
+                      const Icon(Icons.edit, color: AppColors.text3, size: 20),
                   onPressed: onEdit,
                   tooltip: 'Bearbeiten',
                   padding: EdgeInsets.zero,
@@ -233,7 +238,8 @@ class _RecipeCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline, color: AppColors.red, size: 20),
+                  icon: const Icon(Icons.delete_outline,
+                      color: AppColors.red, size: 20),
                   onPressed: onDelete,
                   tooltip: 'Löschen',
                   padding: EdgeInsets.zero,
@@ -278,7 +284,8 @@ class _RecipeCard extends StatelessWidget {
         color: AppColors.surface2,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(label, style: const TextStyle(color: AppColors.text2, fontSize: 12)),
+      child: Text(label,
+          style: const TextStyle(color: AppColors.text2, fontSize: 12)),
     );
   }
 }

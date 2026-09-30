@@ -4,8 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'baking_models.dart';
 import '../app_colors.dart';
-import '../untils/feedback_service.dart';
-
+import '../fehlerbericht.dart';
 
 // android_intent_plus wird nur auf Android verwendet
 import 'package:android_intent_plus/android_intent.dart'
@@ -25,7 +24,8 @@ class BakingScreen extends StatefulWidget {
   State<BakingScreen> createState() => _BakingScreenState();
 }
 
-class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver {
+class _BakingScreenState extends State<BakingScreen>
+    with WidgetsBindingObserver {
   late List<BakingStep> _steps;
   Timer? _ticker;
   int _activeIndex = -1;
@@ -84,10 +84,13 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
     super.dispose();
   }
 
-  int get _completedCount =>
-      _steps.where((s) => s.status == StepStatus.completed || s.status == StepStatus.skipped).length;
+  int get _completedCount => _steps
+      .where((s) =>
+          s.status == StepStatus.completed || s.status == StepStatus.skipped)
+      .length;
 
-  bool get _hasActiveTimer => _activeIndex >= 0 && _steps[_activeIndex].status == StepStatus.active;
+  bool get _hasActiveTimer =>
+      _activeIndex >= 0 && _steps[_activeIndex].status == StepStatus.active;
 
   // ── Abbruch-Bestätigung ───────────────────────────────────
   Future<void> _confirmExit() async {
@@ -114,8 +117,8 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Beenden',
-                style: TextStyle(color: AppColors.red)),
+            child:
+                const Text('Beenden', style: TextStyle(color: AppColors.red)),
           ),
         ],
       ),
@@ -126,9 +129,9 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
   void _startStep(int index) async {
     final step = _steps[index];
 
-    FeedbackService.log('Backschritt gestartet: ${step.name} (${step.duration.inMinutes} min)');
+    Fehlerbericht.log(
+        'Backschritt gestartet: ${step.name} (${step.duration.inMinutes} min)');
     _ticker?.cancel();
-
 
     // Nativen Handy-Timer öffnen (optional, nur Android)
     // Bei Fehler: Fallback auf App-Timer
@@ -147,10 +150,11 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
         await intent.launch();
         nativeTimerLaunched = true;
       } catch (e, stack) {
-        FeedbackService.log('SET_TIMER Intent fehlgeschlagen: $e\n$stack');
+        Fehlerbericht.log('SET_TIMER Intent fehlgeschlagen: $e\n$stack');
         if (mounted) {
           messenger.showSnackBar(const SnackBar(
-            content: Text('Nativer Timer nicht verfügbar – App-Timer läuft stattdessen.'),
+            content: Text(
+                'Nativer Timer nicht verfügbar – App-Timer läuft stattdessen.'),
             backgroundColor: Color(0xFF2A1E08),
             duration: Duration(seconds: 4),
           ));
@@ -162,7 +166,8 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
       _steps[index].status = StepStatus.active;
       _steps[index].remaining = _steps[index].duration;
       _steps[index].startedAt = DateTime.now();
-      _steps[index].useNativeTimer = nativeTimerLaunched; // false → zeigt Countdown
+      _steps[index].useNativeTimer =
+          nativeTimerLaunched; // false → zeigt Countdown
       _activeIndex = index;
     });
 
@@ -192,17 +197,21 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
   void _onTimerDone(int index) {
     final step = _steps[index];
     final nextName = index + 1 < _steps.length ? _steps[index + 1].name : null;
-    FeedbackService.log('Backschritt abgeschlossen: ${step.name} → ${nextName != null ? 'weiter mit $nextName' : 'alle Schritte fertig'}');
+    Fehlerbericht.log(
+        'Backschritt abgeschlossen: ${step.name} → ${nextName != null ? 'weiter mit $nextName' : 'alle Schritte fertig'}');
 
     // Benachrichtigung
     if (!kIsWeb) {
       _notifications.show(
         100 + index,
         '${step.emoji} ${step.name} fertig!',
-        nextName != null ? 'Nächster Schritt: $nextName' : 'Alle Schritte abgeschlossen! 🎉',
+        nextName != null
+            ? 'Nächster Schritt: $nextName'
+            : 'Alle Schritte abgeschlossen! 🎉',
         const NotificationDetails(
           android: AndroidNotificationDetails(
-            'sauerteig_baking', 'Backmodus',
+            'sauerteig_baking',
+            'Backmodus',
             channelDescription: 'Timer für Backschritte',
             importance: Importance.max,
             priority: Priority.max,
@@ -234,7 +243,8 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
               Navigator.pop(context);
               _completeStep(index);
             },
-            child: const Text('Weiter', style: TextStyle(color: AppColors.gold)),
+            child:
+                const Text('Weiter', style: TextStyle(color: AppColors.gold)),
           ),
         ],
       ),
@@ -274,65 +284,68 @@ class _BakingScreenState extends State<BakingScreen> with WidgetsBindingObserver
         if (!didPop) _confirmExit();
       },
       child: Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _confirmExit,
-        ),
-        title: Text(widget.recipe.name,
-            style: const TextStyle(color: AppColors.gold)),
-        iconTheme: const IconThemeData(color: AppColors.gold),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(4),
-          child: LinearProgressIndicator(
-            value: progress,
-            backgroundColor: AppColors.border,
-            color: AppColors.gold,
+        backgroundColor: AppColors.bg,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _confirmExit,
           ),
-        ),
-      ),
-      body: Column(
-        children: [
-          // Fortschritt-Text
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '$_completedCount / ${_steps.length} Schritte erledigt',
-                  style: const TextStyle(color: AppColors.text2, fontSize: 13),
-                ),
-                if (_completedCount == _steps.length && _steps.isNotEmpty)
-                  const Text('🎉 Fertig!',
-                      style: TextStyle(color: AppColors.green, fontWeight: FontWeight.bold)),
-              ],
+          title: Text(widget.recipe.name,
+              style: const TextStyle(color: AppColors.gold)),
+          iconTheme: const IconThemeData(color: AppColors.gold),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: AppColors.border,
+              color: AppColors.gold,
             ),
           ),
-
-          // Schritte
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: _steps.length,
-              itemBuilder: (_, i) => _BakingStepCard(
-                step: _steps[i],
-                index: i,
-                isBlockedByActive: _activeIndex >= 0 && _activeIndex != i,
-                onStart: () => _startStep(i),
-                onComplete: () => _completeStep(i),
-                onSkip: () => _skipStep(i),
-                onUndo: () => _undoStep(i),
-                onNativeTimerToggle: (val) {
-                  setState(() => _steps[i].useNativeTimer = val);
-                },
+        ),
+        body: Column(
+          children: [
+            // Fortschritt-Text
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '$_completedCount / ${_steps.length} Schritte erledigt',
+                    style:
+                        const TextStyle(color: AppColors.text2, fontSize: 13),
+                  ),
+                  if (_completedCount == _steps.length && _steps.isNotEmpty)
+                    const Text('🎉 Fertig!',
+                        style: TextStyle(
+                            color: AppColors.green,
+                            fontWeight: FontWeight.bold)),
+                ],
               ),
             ),
-          ),
-        ],
-      ),
+
+            // Schritte
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: _steps.length,
+                itemBuilder: (_, i) => _BakingStepCard(
+                  step: _steps[i],
+                  index: i,
+                  isBlockedByActive: _activeIndex >= 0 && _activeIndex != i,
+                  onStart: () => _startStep(i),
+                  onComplete: () => _completeStep(i),
+                  onSkip: () => _skipStep(i),
+                  onUndo: () => _undoStep(i),
+                  onNativeTimerToggle: (val) {
+                    setState(() => _steps[i].useNativeTimer = val);
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
       ), // PopScope
     );
   }
@@ -410,9 +423,7 @@ class _BakingStepCard extends StatelessWidget {
                   child: Text(
                     step.name,
                     style: TextStyle(
-                      color: isSkipped
-                          ? AppColors.text3
-                          : AppColors.text,
+                      color: isSkipped ? AppColors.text3 : AppColors.text,
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                       decoration: isSkipped ? TextDecoration.lineThrough : null,
@@ -420,7 +431,8 @@ class _BakingStepCard extends StatelessWidget {
                   ),
                 ),
                 if (isDone)
-                  const Icon(Icons.check_circle, color: AppColors.green, size: 20),
+                  const Icon(Icons.check_circle,
+                      color: AppColors.green, size: 20),
                 if (isSkipped)
                   const Icon(Icons.skip_next, color: AppColors.text3, size: 20),
               ],
@@ -470,7 +482,9 @@ class _BakingStepCard extends StatelessWidget {
             ],
 
             // Nativer Timer Checkbox (pending + aktiv ohne native)
-            if (!kIsWeb && (step.status == StepStatus.pending || (isActive && !step.useNativeTimer))) ...[
+            if (!kIsWeb &&
+                (step.status == StepStatus.pending ||
+                    (isActive && !step.useNativeTimer))) ...[
               const SizedBox(height: 8),
               Row(
                 children: [
