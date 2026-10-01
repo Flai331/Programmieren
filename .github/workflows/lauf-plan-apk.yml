@@ -1,0 +1,92 @@
+name: Laufplan APK Build
+
+# Baut die Laufplan-APK auf einem GitHub-Runner (lokal gibt es kein Android-SDK).
+# Der android/-Ordner wird per `flutter create` erzeugt, falls er fehlt.
+# Danach wird das Release "lauf-plan" aktualisiert:
+# https://github.com/Flai331/Programmieren/releases/download/lauf-plan/Laufplan.apk
+
+on:
+  push:
+    branches:
+      - main
+      - claude/lauf-plan-**
+    paths:
+      - 'lauf_plan/**'
+      - '.github/workflows/lauf-plan-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lauf-plan-apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: lauf_plan
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.1'
+          channel: stable
+          cache: true
+
+      - name: Android-Projekt erzeugen (falls nicht eingecheckt)
+        run: |
+          if [ ! -d android ]; then
+            flutter create --platforms=android --project-name lauf_plan --org de.klaas .
+            # Vorlagen-Test von flutter create passt nicht zur App (MyApp gibt es nicht).
+            rm -f test/widget_test.dart
+            # App-Name auf dem Homescreen
+            sed -i 's/android:label="lauf_plan"/android:label="Laufplan"/' android/app/src/main/AndroidManifest.xml
+          fi
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Run analyzer
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build APK
+        # Fortlaufende Versionsnummer, damit Android jede neue APK als Update sieht.
+        run: flutter build apk --release --build-number=${{ github.run_number }}
+
+      - name: Upload APK to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Laufplan-${{ github.sha }}
+          path: lauf_plan/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk Laufplan.apk
+          if gh release view lauf-plan > /dev/null 2>&1; then
+            gh release upload lauf-plan Laufplan.apk --clobber
+          else
+            gh release create lauf-plan Laufplan.apk --target "${{ github.sha }}" \
+              --title "Laufplan" \
+              --notes "4-Wochen-Trainingsplan (Laufen + Gym). Automatisch gebaut. APK herunterladen und auf dem Handy installieren."
+          fi

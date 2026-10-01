@@ -1,0 +1,6 @@
+# Bewusst ohne flutter_lints (keine zusätzliche Abhängigkeit).
+# Liegt im Repo, damit `flutter create` im Workflow keine Datei mit
+# `include: package:flutter_lints/...` erzeugt.
+analyzer:
+  errors:
+    deprecated_member_use: ignore
