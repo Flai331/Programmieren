@@ -1,0 +1,130 @@
+name: Anker APK Build
+
+# Baut die Anker-APK (nfc_riegel) auf einem GitHub-Runner — lokal in der
+# Cloud-Sitzung gibt es kein Android-SDK.
+#
+# Signiert wird mit dem eigenen Release-Schlüssel aus den Secrets. Nur so
+# lässt sich die APK über die installierte App legen: der Geräteadministrator
+# verweigert die Deinstallation, die eine anders signierte APK verlangen würde.
+# Fehlen die Secrets, entsteht nur ein Artefakt mit Debug-Schlüssel und kein
+# Release.
+#
+# Mit Schlüssel liegt die APK danach immer unter:
+# https://github.com/Flai331/Programmieren/releases/download/anker-android/Anker.apk
+
+on:
+  push:
+    branches:
+      - main
+      - feature/nfc-riegel
+      - ccr-**
+      - claude/**
+    paths:
+      - 'nfc_riegel/**'
+      - '.github/workflows/anker-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: nfc_riegel
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: secrets.dart anlegen
+        env:
+          RIEGEL_NOTION_TOKEN: ${{ secrets.RIEGEL_NOTION_TOKEN }}
+        # Ohne Token fallen Fehlerberichte auf E-Mail zurück — der Build läuft trotzdem.
+        run: |
+          cp lib/secrets.template.dart lib/secrets.dart
+          if [ -n "$RIEGEL_NOTION_TOKEN" ]; then
+            sed -i "s|notionToken = ''|notionToken = '$RIEGEL_NOTION_TOKEN'|" lib/secrets.dart
+          else
+            echo "::warning::Secret RIEGEL_NOTION_TOKEN fehlt – Fehlerberichte gehen per E-Mail."
+          fi
+
+      - name: Release-Schlüssel einrichten
+        id: schluessel
+        env:
+          RIEGEL_KEYSTORE_BASE64: ${{ secrets.RIEGEL_KEYSTORE_BASE64 }}
+          RIEGEL_STORE_PASSWORD: ${{ secrets.RIEGEL_STORE_PASSWORD }}
+          RIEGEL_KEY_ALIAS: ${{ secrets.RIEGEL_KEY_ALIAS }}
+          RIEGEL_KEY_PASSWORD: ${{ secrets.RIEGEL_KEY_PASSWORD }}
+        run: |
+          if [ -z "$RIEGEL_KEYSTORE_BASE64" ] || [ -z "$RIEGEL_STORE_PASSWORD" ] \
+              || [ -z "$RIEGEL_KEY_ALIAS" ] || [ -z "$RIEGEL_KEY_PASSWORD" ]; then
+            echo "::warning::Release-Schlüssel fehlt – APK wird mit Debug-Schlüssel signiert und nicht veröffentlicht."
+            echo "signiert=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$RIEGEL_KEYSTORE_BASE64" | base64 -d > android/app/anker-release.jks
+          # storeFile ist relativ zu android/app, wie in build.gradle.kts.
+          {
+            echo "storeFile=anker-release.jks"
+            echo "storePassword=$RIEGEL_STORE_PASSWORD"
+            echo "keyAlias=$RIEGEL_KEY_ALIAS"
+            echo "keyPassword=$RIEGEL_KEY_PASSWORD"
+          } > android/key.properties
+          echo "signiert=true" >> "$GITHUB_OUTPUT"
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Run analyzer
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Kotlin-Tests
+        # Die Dauer-Tests rechnen in deutscher Zeit. gradlew entsteht erst beim Build.
+        working-directory: nfc_riegel/android
+        env:
+          TZ: Europe/Berlin
+        run: ./gradlew :app:testReleaseUnitTest
+
+      - name: Upload APK to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Anker-${{ github.sha }}
+          path: nfc_riegel/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create or update GitHub release
+        if: steps.schluessel.outputs.signiert == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk Anker.apk
+          NOTIZ="Gebaut aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7})."
+          if gh release view anker-android > /dev/null 2>&1; then
+            gh release upload anker-android Anker.apk --clobber
+            gh release edit anker-android --notes "$NOTIZ"
+          else
+            gh release create anker-android Anker.apk --title "Anker" --notes "$NOTIZ" --target "$GITHUB_SHA"
+          fi
