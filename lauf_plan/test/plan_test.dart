@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -44,6 +45,39 @@ void main() {
     }
     expect(videoUri('Hip Thrust').toString(),
         'https://www.youtube.com/results?search_query=Hip+Thrust');
+  });
+
+  test('Wechselpausen: in Kraft-Einheiten zwischen allen Übungen, nie nach der letzten', () {
+    for (final session in [upperBody, legA, legB]) {
+      final ex = session.exercises;
+      for (var i = 0; i < ex.length - 1; i++) {
+        expect(ex[i].restAfter, inInclusiveRange(30, 300), reason: ex[i].name);
+      }
+      expect(ex.last.restAfter, 0, reason: ex.last.name);
+    }
+    for (final run in [...qualityRuns, ...longRuns, restDay]) {
+      for (final e in run.exercises) {
+        expect(e.restAfter, 0);
+      }
+    }
+  });
+
+  testWidgets('Pausen-Timer zählt runter und zeigt die nächste Übung', (tester) async {
+    // Systemtöne/Vibration gibt es im Test nicht.
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (_) async => null);
+    await tester.pumpWidget(MaterialApp(
+        home: RestScreen(seconds: 5, next: legA.exercises[1])));
+    expect(find.text('Kniebeuge (Langhantel)'), findsOneWidget);
+    expect(find.text('0:05'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('0:03'), findsOneWidget);
+    await tester.tap(find.text('+30 Sek.'));
+    await tester.pump();
+    expect(find.text('0:33'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 33));
+    expect(find.text('Los'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
   });
 
   test('fmt formatiert Minuten und Sekunden', () {

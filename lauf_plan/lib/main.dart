@@ -42,7 +42,11 @@ class Exercise {
   final String name;
   final String detail;
   final TimerConfig? timer;
-  const Exercise(this.name, this.detail, [this.timer]);
+
+  /// Geschätzte Wechselpause bis zur nächsten Übung in Sekunden
+  /// (Durchatmen, Gewichte/Station umbauen). 0 = keine.
+  final int restAfter;
+  const Exercise(this.name, this.detail, [this.timer, this.restAfter = 0]);
 }
 
 class Session {
@@ -58,40 +62,40 @@ class Session {
 
 const upperBody = Session('Oberkörper', Icons.fitness_center, 45, [
   Exercise('Aufwärmen', '5 Min. Rudern locker, Schultern mobilisieren',
-      TimerConfig(work: 300, workLabel: 'Aufwärmen')),
+      TimerConfig(work: 300, workLabel: 'Aufwärmen'), 60),
   Exercise('Dips EMOM', '10 Min. – jede Minute 10 Wdh.',
-      TimerConfig(work: 60, rounds: 10, workLabel: 'Minute')),
+      TimerConfig(work: 60, rounds: 10, workLabel: 'Minute'), 120),
   Exercise('Klimmzüge EMOM', '10 Min. – jede Minute 7 Wdh.',
-      TimerConfig(work: 60, rounds: 10, workLabel: 'Minute')),
-  Exercise('Toes to Bar', '3 × 10–12', TimerConfig(rest: 90, rounds: 3)),
+      TimerConfig(work: 60, rounds: 10, workLabel: 'Minute'), 120),
+  Exercise('Toes to Bar', '3 × 10–12', TimerConfig(rest: 90, rounds: 3), 90),
   Exercise('Liegestütze', '40 breit, 20 eng, 15 Diamond',
       TimerConfig(rest: 60, rounds: 3, workLabel: 'Variante')),
 ]);
 
 const legA = Session('Beine A – Kraft', Icons.fitness_center, 60, [
   Exercise('Aufwärmen', '8 Min. Rudern + Glute Bridges, Ausfallschritte',
-      TimerConfig(work: 480, workLabel: 'Aufwärmen')),
+      TimerConfig(work: 480, workLabel: 'Aufwärmen'), 60),
   Exercise('Kniebeuge (Langhantel)', '4 × 5, 2 Wdh. im Tank lassen',
-      TimerConfig(rest: 150, rounds: 4)),
-  Exercise('Rumänisches Kreuzheben', '3 × 8', TimerConfig(rest: 120, rounds: 3)),
+      TimerConfig(rest: 150, rounds: 4), 180),
+  Exercise('Rumänisches Kreuzheben', '3 × 8', TimerConfig(rest: 120, rounds: 3), 150),
   Exercise('Bulgarian Split Squat', '3 × 8 pro Bein',
-      TimerConfig(rest: 90, rounds: 3)),
+      TimerConfig(rest: 90, rounds: 3), 120),
   Exercise('Wadenheben einbeinig halten',
       '5 × 45 Sek. pro Bein, abwechselnd. Schmerz max. 3/10',
-      TimerConfig(work: 45, rest: 30, rounds: 10, workLabel: 'Halten')),
+      TimerConfig(work: 45, rest: 30, rounds: 10, workLabel: 'Halten'), 60),
   Exercise('Copenhagen Plank', '3 × 20 Sek. pro Seite, abwechselnd',
       TimerConfig(work: 20, rest: 20, rounds: 6, workLabel: 'Halten')),
 ]);
 
 const legB = Session('Beine B – Stabilität', Icons.accessibility_new, 50, [
   Exercise('Aufwärmen', '8 Min. Rudern + Mobilisation',
-      TimerConfig(work: 480, workLabel: 'Aufwärmen')),
-  Exercise('Hip Thrust', '3 × 8', TimerConfig(rest: 90, rounds: 3)),
+      TimerConfig(work: 480, workLabel: 'Aufwärmen'), 60),
+  Exercise('Hip Thrust', '3 × 8', TimerConfig(rest: 90, rounds: 3), 120),
   Exercise('Einbeiniges Kreuzheben (KH)', '3 × 8 pro Bein',
-      TimerConfig(rest: 90, rounds: 3)),
+      TimerConfig(rest: 90, rounds: 3), 90),
   Exercise('Monster Walks mit Band', '3 × 15 Schritte pro Richtung',
-      TimerConfig(rest: 45, rounds: 3)),
-  Exercise('Tibialis Raises', '2 × 15', TimerConfig(rest: 45, rounds: 2)),
+      TimerConfig(rest: 45, rounds: 3), 60),
+  Exercise('Tibialis Raises', '2 × 15', TimerConfig(rest: 45, rounds: 2), 90),
   Exercise('Finisher', '3 Runden locker: 20 m Schlitten + 250 m Rudern',
       TimerConfig(rest: 60, rounds: 3, workLabel: 'Runde')),
 ]);
@@ -166,6 +170,11 @@ String dateLabel(DateTime d) => '${weekdays[d.weekday - 1]}, ${d.day}.${d.month}
 int todayIndex() {
   final n = DateTime.now();
   return DateTime.utc(n.year, n.month, n.day).difference(planStart).inDays;
+}
+
+/// Bildschirm anlassen; Fehler (z. B. ohne Plugin im Test) sind egal.
+void keepScreenOn(bool on) {
+  WakelockPlus.toggle(enable: on).catchError((_) {});
 }
 
 String fmt(int s) => '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
@@ -415,7 +424,7 @@ class _SessionScreenState extends State<SessionScreen> {
   @override
   void dispose() {
     ticker?.cancel();
-    WakelockPlus.disable();
+    keepScreenOn(false);
     super.dispose();
   }
 
@@ -423,10 +432,10 @@ class _SessionScreenState extends State<SessionScreen> {
     if (sw.isRunning) {
       sw.stop();
       ticker?.cancel();
-      WakelockPlus.disable();
+      keepScreenOn(false);
     } else {
       sw.start();
-      WakelockPlus.enable();
+      keepScreenOn(true);
       ticker = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) setState(() {});
       });
@@ -439,11 +448,28 @@ class _SessionScreenState extends State<SessionScreen> {
     widget.store.setExDone(widget.day, i, v);
   }
 
+  Exercise? _next(int i) => i + 1 < s.exercises.length ? s.exercises[i + 1] : null;
+
   Future<void> _openTimer(int i) async {
-    final ok = await Navigator.push<bool>(
-        context, MaterialPageRoute(builder: (_) => TimerScreen(exercise: s.exercises[i])));
-    if (sw.isRunning) WakelockPlus.enable();
-    if (ok == true) _setCheck(i, true);
+    final result = await Navigator.push<TimerResult>(
+        context,
+        MaterialPageRoute(
+            builder: (_) => TimerScreen(exercise: s.exercises[i], next: _next(i))));
+    if (sw.isRunning) keepScreenOn(true);
+    if (result != null) _setCheck(i, true);
+    if (result == TimerResult.rest) await _openRest(i);
+  }
+
+  /// Wechselpause nach Übung [i]; danach direkt den Timer der nächsten Übung öffnen.
+  Future<void> _openRest(int i) async {
+    final next = _next(i);
+    if (next == null || !mounted) return;
+    final go = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+            builder: (_) => RestScreen(seconds: s.exercises[i].restAfter, next: next)));
+    if (sw.isRunning) keepScreenOn(true);
+    if (go == true && next.timer != null && mounted) await _openTimer(i + 1);
   }
 
   bool _hasInfo(Exercise e) =>
@@ -557,7 +583,7 @@ class _SessionScreenState extends State<SessionScreen> {
               ),
             ),
           const SizedBox(height: 8),
-          for (var i = 0; i < s.exercises.length; i++)
+          for (var i = 0; i < s.exercises.length; i++) ...[
             Card(
               elevation: 0,
               color: cs.surfaceContainerHighest.withOpacity(0.5),
@@ -593,6 +619,9 @@ class _SessionScreenState extends State<SessionScreen> {
                 ),
               ),
             ),
+            if (s.exercises[i].restAfter > 0 && _next(i) != null)
+              _RestTile(seconds: s.exercises[i].restAfter, onTap: () => _openRest(i)),
+          ],
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -615,9 +644,13 @@ class _SessionScreenState extends State<SessionScreen> {
 
 enum Phase { ready, work, rest, done }
 
+/// Rückgabe des Übungs-Timers: nur abhaken oder abhaken + Wechselpause starten.
+enum TimerResult { done, rest }
+
 class TimerScreen extends StatefulWidget {
   final Exercise exercise;
-  const TimerScreen({super.key, required this.exercise});
+  final Exercise? next;
+  const TimerScreen({super.key, required this.exercise, this.next});
   @override
   State<TimerScreen> createState() => _TimerScreenState();
 }
@@ -635,13 +668,13 @@ class _TimerScreenState extends State<TimerScreen> {
   @override
   void initState() {
     super.initState();
-    WakelockPlus.enable();
+    keepScreenOn(true);
   }
 
   @override
   void dispose() {
     ticker?.cancel();
-    WakelockPlus.disable();
+    keepScreenOn(false);
     super.dispose();
   }
 
@@ -782,9 +815,19 @@ class _TimerScreenState extends State<TimerScreen> {
           OutlinedButton(onPressed: _skipRest, child: const Text('Pause überspringen')),
         ],
       Phase.done => [
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Abhaken und zurück')),
+          if (widget.next != null && widget.exercise.restAfter > 0) ...[
+            FilledButton.icon(
+                onPressed: () => Navigator.pop(context, TimerResult.rest),
+                icon: const Icon(Icons.hourglass_bottom),
+                label: Text('Abhaken + Pause ${fmt(widget.exercise.restAfter)}')),
+            const SizedBox(height: 8),
+            OutlinedButton(
+                onPressed: () => Navigator.pop(context, TimerResult.done),
+                child: const Text('Abhaken und zurück')),
+          ] else
+            FilledButton(
+                onPressed: () => Navigator.pop(context, TimerResult.done),
+                child: const Text('Abhaken und zurück')),
           const SizedBox(height: 8),
           OutlinedButton(onPressed: _reset, child: const Text('Neu starten')),
         ],
@@ -839,6 +882,186 @@ class _TimerScreenState extends State<TimerScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: buttons,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Wechselpause zwischen zwei Übungen
+// ---------------------------------------------------------------------------
+
+class _RestTile extends StatelessWidget {
+  final int seconds;
+  final VoidCallback onTap;
+  const _RestTile({required this.seconds, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
+            children: [
+              Icon(Icons.hourglass_bottom, size: 18, color: cs.tertiary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Pause ca. ${fmt(seconds)} bis zur nächsten Übung',
+                    style: TextStyle(color: cs.tertiary)),
+              ),
+              Icon(Icons.play_arrow, size: 20, color: cs.tertiary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class RestScreen extends StatefulWidget {
+  final int seconds;
+  final Exercise next;
+  const RestScreen({super.key, required this.seconds, required this.next});
+  @override
+  State<RestScreen> createState() => _RestScreenState();
+}
+
+class _RestScreenState extends State<RestScreen> {
+  late int remaining = widget.seconds;
+  bool running = true;
+  Timer? ticker;
+
+  bool get finished => remaining <= 0;
+
+  @override
+  void initState() {
+    super.initState();
+    keepScreenOn(true);
+    _run();
+  }
+
+  @override
+  void dispose() {
+    ticker?.cancel();
+    keepScreenOn(false);
+    super.dispose();
+  }
+
+  void _run() {
+    ticker?.cancel();
+    running = true;
+    ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+  }
+
+  void _tick() {
+    if (!mounted) return;
+    setState(() => remaining--);
+    if (remaining > 0 && remaining <= 3) SystemSound.play(SystemSoundType.click);
+    if (remaining <= 0) {
+      ticker?.cancel();
+      running = false;
+      HapticFeedback.heavyImpact();
+      HapticFeedback.vibrate();
+      SystemSound.play(SystemSoundType.alert);
+    }
+  }
+
+  void _togglePause() {
+    if (running) {
+      ticker?.cancel();
+      setState(() => running = false);
+    } else {
+      _run();
+      setState(() {});
+    }
+  }
+
+  void _add30() {
+    setState(() => remaining += 30);
+    if (!running) _run();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final anim = exerciseAnims[widget.next.name];
+    final bg = finished ? cs.primaryContainer : cs.tertiaryContainer;
+    final fg = finished ? cs.onPrimaryContainer : cs.onTertiaryContainer;
+
+    return Scaffold(
+      backgroundColor: bg,
+      appBar: AppBar(
+        backgroundColor: bg,
+        foregroundColor: fg,
+        title: const Text('Pause'),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Text('Als Nächstes', style: tt.labelLarge?.copyWith(color: fg)),
+              Text(widget.next.name,
+                  textAlign: TextAlign.center, style: tt.headlineSmall?.copyWith(color: fg)),
+              Text(widget.next.detail,
+                  textAlign: TextAlign.center, style: tt.bodyLarge?.copyWith(color: fg)),
+              if (anim != null) ...[
+                const SizedBox(height: 8),
+                Expanded(child: ExerciseAnimation(anim: anim)),
+                Text(anim.cue,
+                    textAlign: TextAlign.center, style: tt.bodyMedium?.copyWith(color: fg)),
+                const SizedBox(height: 12),
+              ] else
+                const Spacer(),
+              Text(finished ? 'Pause vorbei' : 'Durchatmen, Station vorbereiten',
+                  style: tt.titleMedium?.copyWith(color: fg)),
+              FittedBox(
+                child: Text(finished ? 'Los' : fmt(remaining),
+                    style: tt.displayLarge?.copyWith(
+                        color: fg,
+                        fontSize: anim == null ? 120 : 88,
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const [FontFeature.tabularFigures()])),
+              ),
+              if (anim == null) const Spacer() else const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: Text(widget.next.timer != null
+                          ? 'Nächste Übung starten'
+                          : 'Weiter zur nächsten Übung'),
+                    ),
+                    if (!finished) ...[
+                      const SizedBox(height: 8),
+                      Row(children: [
+                        Expanded(
+                          child: OutlinedButton(
+                              onPressed: _togglePause,
+                              child: Text(running ? 'Anhalten' : 'Weiter')),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton(
+                              onPressed: _add30, child: const Text('+30 Sek.')),
+                        ),
+                      ]),
+                    ],
+                  ],
                 ),
               ),
             ],

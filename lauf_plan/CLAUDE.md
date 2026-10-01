@@ -5,6 +5,7 @@ Persönlicher 4-Wochen-Trainingsplan (Laufen + Gym), Start Do 01.10.2026.
 - Startseite: heutige Einheit, alle 28 Tage mit Datum, geschätzter Dauer, Erledigt-Haken
 - Einheit: Stoppuhr gegen geschätzte Zeit, Übungen abhaken, Hinweise
 - Timer pro Übung: EMOM, Halten (Arbeit/Pause automatisch), manuelle Sätze mit Pausen-Countdown
+- Wechselpausen zwischen den Kraftübungen (geschätzt, `Exercise.restAfter`): Pausen-Timer mit Vorschau der nächsten Übung, danach direkt deren Timer
 - Strichfiguren-Animationen für alle Gym-Übungen (CustomPainter, Start-/Endpose interpoliert)
 - Erklärvideo-Knopf nur für die Bein-Übungen (öffnet YouTube-Suche), im Übungsfenster und im Timer
 - UI-Sprache: Deutsch
