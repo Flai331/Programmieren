@@ -13,7 +13,7 @@ Persönlicher 4-Wochen-Trainingsplan (Laufen + Gym), Start Do 01.10.2026.
 - `lib/animations.dart` – Posen und Painter; Zuordnung über den Übungsnamen (`exerciseAnims`)
 - Liegt als Ordner `lauf_plan/` im Repo `Flai331/Programmieren` (wie der Parkplatz-Merker).
 - `../.github/workflows/lauf-plan-apk.yml` – baut bei Push (main, `claude/lauf-plan-**`) eine Release-APK und aktualisiert das GitHub Release `lauf-plan` (`Laufplan.apk`)
-- Der `android/`-Ordner wird im Workflow per `flutter create` erzeugt, falls er fehlt. Er darf aber auch lokal erzeugt und eingecheckt werden.
+- Der `android/`-Ordner wird im Workflow per `flutter create` erzeugt, falls er fehlt. Eingecheckt ist nur `android/app/build.gradle.kts`: feste Signatur mit `spotify_merker_android/android/app/merker-release.p12` (wie Parkplatz-Merker), Passwort aus dem Secret `MERKER_KEYSTORE_PASSWORD`. So lassen sich neue APKs als Update installieren.
 
 ## Aufgabe
 1. Projekt lokal prüfen: `flutter pub get`, `flutter analyze` – Fehler beheben (Warnungen wie `withOpacity` deprecated sind egal).

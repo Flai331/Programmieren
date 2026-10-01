@@ -13,6 +13,7 @@ on:
     paths:
       - 'lauf_plan/**'
       - '.github/workflows/lauf-plan-apk.yml'
+      - 'spotify_merker_android/android/app/merker-release.p12'
   workflow_dispatch:
 
 permissions:
@@ -48,8 +49,10 @@ jobs:
           cache: true
 
       - name: Android-Projekt erzeugen (falls nicht eingecheckt)
+        # android/app/build.gradle.kts (Signatur) ist eingecheckt und bleibt erhalten,
+        # flutter create ergänzt nur die fehlenden Dateien.
         run: |
-          if [ ! -d android ]; then
+          if [ ! -f android/settings.gradle.kts ]; then
             flutter create --platforms=android --project-name lauf_plan --org de.klaas .
             # Vorlagen-Test von flutter create passt nicht zur App (MyApp gibt es nicht).
             rm -f test/widget_test.dart
@@ -66,9 +69,32 @@ jobs:
       - name: Run tests
         run: flutter test
 
+      - name: Signatur-Secret prüfen
+        env:
+          MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
+        run: |
+          # Ohne festen Schlüssel ließe sich die APK nicht als Update installieren –
+          # dann lieber kein Release als ein unbrauchbares.
+          if [ -z "$MERKER_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Secret MERKER_KEYSTORE_PASSWORD fehlt – kein signierter Build möglich."
+            exit 1
+          fi
+
       - name: Build APK
+        env:
+          MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
         # Fortlaufende Versionsnummer, damit Android jede neue APK als Update sieht.
         run: flutter build apk --release --build-number=${{ github.run_number }}
+
+      - name: Signatur der APK prüfen
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          CERT=$(keytool -printcert -jarfile "$APK")
+          echo "$CERT" | head -5
+          if echo "$CERT" | grep -q "Android Debug"; then
+            echo "::error::APK ist mit dem Debug-Schlüssel signiert."
+            exit 1
+          fi
 
       - name: Upload APK to artifacts
         uses: actions/upload-artifact@v4
