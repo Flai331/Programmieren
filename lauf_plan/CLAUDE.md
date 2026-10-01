@@ -6,13 +6,13 @@ Persönlicher 4-Wochen-Trainingsplan (Laufen + Gym), Start Do 01.10.2026.
 - Einheit: Stoppuhr gegen geschätzte Zeit, Übungen abhaken, Hinweise
 - Timer pro Übung: EMOM, Halten (Arbeit/Pause automatisch), manuelle Sätze mit Pausen-Countdown
 - Strichfiguren-Animationen für alle Gym-Übungen (CustomPainter, Start-/Endpose interpoliert)
-- Erklärvideo-Knopf je Übung (öffnet YouTube-Suche), im Übungsfenster und im Timer
+- Erklärvideo-Knopf nur für die Bein-Übungen (öffnet YouTube-Suche), im Übungsfenster und im Timer
 - UI-Sprache: Deutsch
 
 ## Struktur
 - `lib/main.dart` – Plan-Daten, Screens (Home, Session, Timer), Speicherung (shared_preferences)
 - `lib/animations.dart` – Posen und Painter; Zuordnung über den Übungsnamen (`exerciseAnims`)
-- `lib/videos.dart` – Erklärvideos als YouTube-Suche je Übung (`exerciseVideos`, öffnet per `url_launcher`)
+- `lib/videos.dart` – Erklärvideos als YouTube-Suche, nur Bein-Übungen (`exerciseVideos`, öffnet per `url_launcher`)
 - Liegt als Ordner `lauf_plan/` im Repo `Flai331/Programmieren` (wie der Parkplatz-Merker).
 - `../.github/workflows/lauf-plan-apk.yml` – baut bei Push (main, `claude/lauf-plan-**`) eine Release-APK und aktualisiert das GitHub Release `lauf-plan` (`Laufplan.apk`)
 - Der `android/`-Ordner wird im Workflow per `flutter create` erzeugt, falls er fehlt. Eingecheckt ist nur `android/app/build.gradle.kts`: feste Signatur mit `spotify_merker_android/android/app/merker-release.p12` (wie Parkplatz-Merker), Passwort aus dem Secret `MERKER_KEYSTORE_PASSWORD`. So lassen sich neue APKs als Update installieren.

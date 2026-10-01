@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 // Erklärvideos: YouTube-Suche nach der richtigen Ausführung.
 // Bewusst eine Suche statt fester Video-Links – die gehen nie kaputt,
 // auch wenn einzelne Videos gelöscht werden.
+// Nur für das Beintraining (Beine A + B).
 // Schlüssel = Übungsname aus dem Plan.
 const Map<String, String> exerciseVideos = {
   // Beine A
@@ -18,17 +19,6 @@ const Map<String, String> exerciseVideos = {
   'Monster Walks mit Band': 'Monster Walks Miniband Ausführung',
   'Tibialis Raises': 'Tibialis Raises an der Wand Anleitung',
   'Finisher': 'Schlitten schieben Sled Push Technik',
-  // Oberkörper
-  'Dips EMOM': 'Dips Barren richtige Ausführung',
-  'Klimmzüge EMOM': 'Klimmzüge richtige Ausführung',
-  'Toes to Bar': 'Toes to Bar Anleitung',
-  'Liegestütze': 'Liegestütze breit eng Diamond richtige Ausführung',
-  // Laufen
-  'Steigerungen': 'Steigerungsläufe Laufen Erklärung',
-  'Bergsprints': 'Bergsprints Laufen Technik',
-  'Intervalle': '400m Intervalle Laufen Erklärung',
-  'Tempo': 'Tempodauerlauf Erklärung',
-  'Blackroll (optional)': 'Blackroll Hüfte Oberschenkel Waden Übungen',
 };
 
 Uri videoUri(String query) => Uri.https(

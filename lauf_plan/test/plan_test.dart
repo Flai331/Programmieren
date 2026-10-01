@@ -31,13 +31,12 @@ void main() {
     }
   });
 
-  test('Jedes Erklärvideo gehört zu einer Übung, alle Bein-Übungen haben eins', () {
-    final names = {
-      for (var d = 0; d < planDays; d++)
-        for (final e in sessionFor(d).exercises) e.name
+  test('Erklärvideos gibt es genau für die Bein-Übungen', () {
+    final legNames = {
+      for (final e in [...legA.exercises, ...legB.exercises]) e.name
     };
     for (final name in exerciseVideos.keys) {
-      expect(names, contains(name));
+      expect(legNames, contains(name));
     }
     for (final e in [...legA.exercises, ...legB.exercises]) {
       if (e.name == 'Aufwärmen') continue;
