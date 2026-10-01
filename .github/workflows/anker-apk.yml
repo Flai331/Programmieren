@@ -105,7 +105,7 @@ jobs:
         working-directory: nfc_riegel/android
         env:
           TZ: Europe/Berlin
-        run: ./gradlew :app:testReleaseUnitTest
+        run: ./gradlew :app:testDebugUnitTest
 
       - name: Upload APK to artifacts
         uses: actions/upload-artifact@v4
