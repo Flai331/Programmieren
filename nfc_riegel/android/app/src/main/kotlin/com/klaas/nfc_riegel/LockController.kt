@@ -121,6 +121,13 @@ class LockController(private val context: Context) {
         // einzelne Nummern, der Modus das ganze Telefon. Beides an derselben
         // Stelle, damit es nicht auseinanderlaufen kann.
         QuietRinger(context).apply(QuietPlanner.ringerMode(state, now))
+
+        // Lautstärken nach dem Klingelmodus: [LockVolume] fasst den Klingelton
+        // nur an, wenn das Telefon auf Laut steht, und muss deshalb den Modus
+        // sehen, den die Ruhe gerade gesetzt hat.
+        LockVolume(context).apply(
+            VolumePlanner.targets(state.profiles, engine.lockedProfileIds(state, now)),
+        )
     }
 
     /**

@@ -407,6 +407,49 @@ class LockCodecTest {
     }
 
     @Test
+    fun `Lautstaerken ueberstehen Kodieren und Dekodieren`() {
+        val profil = Profile(
+            "p1",
+            "Arbeit",
+            calendars = mapOf("3" to CalendarMatch.ALL),
+            volumes = mapOf(VolumeStream.MEDIEN to 0, VolumeStream.WECKER to 70),
+        )
+
+        val zurueck = LockCodec.decodeProfiles(LockCodec.encodeProfiles(listOf(profil))).single()
+
+        assertEquals(profil, zurueck)
+    }
+
+    @Test
+    fun `Profil mit einundzwanzig Feldern bekommt keine Lautstaerken`() {
+        val profil = Profile(
+            "p1",
+            "Arbeit",
+            keywordEverywhere = true,
+            volumes = mapOf(VolumeStream.MEDIEN to 30),
+        )
+
+        val zurueck = LockCodec.decodeProfiles(satzMit(profil, felder = 21)).single()
+
+        assertEquals(profil.copy(volumes = emptyMap()), zurueck)
+    }
+
+    @Test
+    fun `unbekannter Strom am Profil wird verworfen`() {
+        val profil = Profile(
+            "p1",
+            "Arbeit",
+            volumes = mapOf(VolumeStream.MEDIEN to 30, VolumeStream.WECKER to 50),
+        )
+        val roh = LockCodec.encodeProfiles(listOf(profil)).replace("WECKER", "QUATSCH")
+
+        assertEquals(
+            mapOf(VolumeStream.MEDIEN to 30),
+            LockCodec.decodeProfiles(roh).single().volumes,
+        )
+    }
+
+    @Test
     fun `Profil mit zwanzig Feldern ist kein gueltiger Satz`() {
         val profil = Profile("p1", "Arbeit", calendars = mapOf("3" to CalendarMatch.ALL))
 

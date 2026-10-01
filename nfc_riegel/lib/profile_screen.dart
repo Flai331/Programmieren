@@ -55,6 +55,9 @@ class _ProfileScreenState extends State<ProfileScreen>
     widget.profile.calendars,
   );
   late bool _stichwortUeberall = widget.profile.keywordEverywhere;
+  late final Map<VolumeStream, int> _lautstaerken = Map.of(
+    widget.profile.volumes,
+  );
   late CalendarInfo _kalender = widget.calendar;
   List<DeviceCalendarInfo> _geraeteKalender = const [];
   bool? _usageGranted;
@@ -290,6 +293,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         quietRinger: _quietRinger,
         calendars: _kalenderAuswahl,
         keywordEverywhere: _stichwortUeberall,
+        volumes: _lautstaerken,
       ),
     );
     if (!mounted) return;
@@ -315,6 +319,54 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
     }
   }
+
+  /// Vorgabe beim Einschalten: Medien ganz aus, alles andere leise, aber
+  /// hörbar — ein stummer Wecker wäre ein böser Überraschungseffekt.
+  static int _lautstaerkeVorgabe(VolumeStream s) =>
+      s == VolumeStream.medien ? 0 : 30;
+
+  List<Widget> _lautstaerkeAbschnitt() => [
+    const Text(
+      'Solange dieses Profil sperrt — per Chip, Zeit oder Termin. Danach '
+      'stellt Anker die Lautstärken von vorher wieder her.',
+      style: TextStyle(fontSize: 13, color: RiegelColors.fg2),
+    ),
+    for (final s in VolumeStream.values) ...[
+      SwitchListTile(
+        value: _lautstaerken.containsKey(s),
+        onChanged: (an) => setState(() {
+          if (an) {
+            _lautstaerken[s] = _lautstaerkeVorgabe(s);
+          } else {
+            _lautstaerken.remove(s);
+          }
+        }),
+        title: Text(streamLabel(s)),
+        subtitle: Text(
+          _lautstaerken[s] == null
+              ? 'Unverändert'
+              : 'Auf ${_lautstaerken[s]} %',
+        ),
+        contentPadding: EdgeInsets.zero,
+      ),
+      if (_lautstaerken[s] != null)
+        Slider(
+          value: _lautstaerken[s]!.toDouble().clamp(0, 100),
+          min: 0,
+          max: 100,
+          divisions: 20,
+          label: '${_lautstaerken[s]} %',
+          onChanged: (v) => setState(() => _lautstaerken[s] = v.round()),
+        ),
+    ],
+    if (_lautstaerken.containsKey(VolumeStream.klingelton) ||
+        _lautstaerken.containsKey(VolumeStream.benachrichtigung))
+      const Text(
+        'Klingelton und Benachrichtigungen gehen höchstens auf die leiseste '
+        'Stufe. Ganz still stellt der Klingelmodus unter „Ruhe".',
+        style: TextStyle(fontSize: 13, color: RiegelColors.fg2),
+      ),
+  ];
 
   List<Widget> _kalenderAbschnitt() {
     if (!_kalender.enabled || !_kalender.permissionGranted) {
@@ -478,6 +530,10 @@ class _ProfileScreenState extends State<ProfileScreen>
           Text('KALENDER', style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: RiegelSpacing.s2),
           ..._kalenderAbschnitt(),
+          const SizedBox(height: RiegelSpacing.s6),
+          Text('LAUTSTÄRKE', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: RiegelSpacing.s2),
+          ..._lautstaerkeAbschnitt(),
           const SizedBox(height: RiegelSpacing.s6),
           Text('ATEMPAUSE', style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: RiegelSpacing.s2),

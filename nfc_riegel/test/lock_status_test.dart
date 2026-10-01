@@ -348,6 +348,7 @@ void main() {
       quietRinger: RingerMode.vibrieren,
       calendars: {'cal1': CalendarMatch.keyword},
       keywordEverywhere: true,
+      volumes: {VolumeStream.medien: 10, VolumeStream.wecker: 60},
     );
 
     final neu = voll.withBlockedPackages(['x']);
@@ -373,5 +374,25 @@ void main() {
     expect(neu.quietRinger, voll.quietRinger);
     expect(neu.calendars, voll.calendars);
     expect(neu.keywordEverywhere, voll.keywordEverywhere);
+    expect(neu.volumes, voll.volumes);
+  });
+
+  test('Lautstaerken kommen je Strom an, Unbekanntes faellt weg', () {
+    final profil = ProfileInfo.fromMap({
+      'id': 'p1',
+      'name': 'Arbeit',
+      'volumes': {'MEDIEN': 20, 'KLINGELTON': 150, 'FLUESTERN': 5},
+    });
+
+    expect(profil.volumes, {
+      VolumeStream.medien: 20,
+      VolumeStream.klingelton: 100,
+    });
+  });
+
+  test('ohne Angabe bleiben alle Lautstaerken unveraendert', () {
+    final profil = ProfileInfo.fromMap({'id': 'p1', 'name': 'Arbeit'});
+
+    expect(profil.volumes, isEmpty);
   });
 }

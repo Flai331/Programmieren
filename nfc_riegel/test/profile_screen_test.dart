@@ -53,12 +53,17 @@ void main() {
   /// `ensureVisible` allein reicht bei der langen Liste nicht: Elemente weit
   /// unten (etwa im Abschnitt RUHE) sind ausserhalb der Vorbau-Reichweite der
   /// Sliver-Liste noch gar nicht im Baum. Erst dorthin scrollen, dann sichtbar
-  /// machen.
-  Future<void> scrolleZu(WidgetTester tester, Finder finder) async {
+  /// machen. [schritt] negativ scrollt nach oben — für Elemente, die über der
+  /// aktuellen Stelle liegen.
+  Future<void> scrolleZu(
+    WidgetTester tester,
+    Finder finder, {
+    double schritt = 300,
+  }) async {
     final scrollable = find
         .descendant(of: find.byType(ListView), matching: find.byType(Scrollable))
         .first;
-    await tester.scrollUntilVisible(finder, 300, scrollable: scrollable);
+    await tester.scrollUntilVisible(finder, schritt, scrollable: scrollable);
     await tester.pumpAndSettle();
     await tester.ensureVisible(finder);
     await tester.pumpAndSettle();
@@ -325,6 +330,37 @@ void main() {
     expect(gespeichert!['quietRinger'], 'VIBRIEREN');
   });
 
+  testWidgets('Medienlautstaerke wird je Profil gespeichert', (tester) async {
+    stub(usageGranted: true);
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+
+    final medien = find.widgetWithText(SwitchListTile, 'Medien');
+    await scrolleZu(tester, medien);
+    expect(find.text('Unverändert'), findsWidgets);
+    await tester.tap(medien);
+    await tester.pumpAndSettle();
+    expect(find.text('Auf 0 %'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Sichern'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sichern'));
+    await tester.pumpAndSettle();
+
+    expect(gespeichert!['volumes'], {'MEDIEN': 0});
+  });
+
+  testWidgets('ohne Vorgabe schickt das Profil keine Lautstaerken', (tester) async {
+    stub(usageGranted: true);
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Sichern'));
+    await tester.pumpAndSettle();
+
+    expect(gespeichert!['volumes'], isEmpty);
+  });
+
   testWidgets('ausgeschalteter Kalender zeigt nur den Hinweis', (tester) async {
     stub(usageGranted: true, kalender: [privat]);
     await tester.pumpWidget(kalenderSchirm(an: false));
@@ -383,8 +419,9 @@ void main() {
     await tester.tap(find.text('nur Stichwort').last);
     await tester.pumpAndSettle();
 
+    // Der Schalter steht über der Kalenderliste.
     final ueberall = find.textContaining('in jedem Kalender');
-    await scrolleZu(tester, ueberall);
+    await scrolleZu(tester, ueberall, schritt: -300);
     await tester.tap(ueberall);
     await tester.pumpAndSettle();
 

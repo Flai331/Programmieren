@@ -52,6 +52,33 @@ String ringerLabel(RingerMode mode) => switch (mode) {
   RingerMode.lautlos => 'Lautlos',
 };
 
+/// Lautstärken, die ein Profil während seiner Sperre einzeln setzt. Namen wie
+/// im Kotlin-Enum `VolumeStream`.
+enum VolumeStream { medien, klingelton, benachrichtigung, wecker }
+
+VolumeStream? _streamFrom(String? raw) => switch (raw) {
+  'MEDIEN' => VolumeStream.medien,
+  'KLINGELTON' => VolumeStream.klingelton,
+  'BENACHRICHTIGUNG' => VolumeStream.benachrichtigung,
+  'WECKER' => VolumeStream.wecker,
+  _ => null,
+};
+
+String streamToNative(VolumeStream s) => switch (s) {
+  VolumeStream.medien => 'MEDIEN',
+  VolumeStream.klingelton => 'KLINGELTON',
+  VolumeStream.benachrichtigung => 'BENACHRICHTIGUNG',
+  VolumeStream.wecker => 'WECKER',
+};
+
+/// Beschriftung für den Profilschirm.
+String streamLabel(VolumeStream s) => switch (s) {
+  VolumeStream.medien => 'Medien',
+  VolumeStream.klingelton => 'Klingelton',
+  VolumeStream.benachrichtigung => 'Benachrichtigungen',
+  VolumeStream.wecker => 'Wecker',
+};
+
 /// Kürzel der Wochentage nach `Calendar.DAY_OF_WEEK`: Sonntag ist die 1.
 const Map<int, String> kTagKuerzel = {
   2: 'Mo',
@@ -155,6 +182,7 @@ class ProfileInfo {
     this.quietRinger = RingerMode.unveraendert,
     this.calendars = const {},
     this.keywordEverywhere = false,
+    this.volumes = const {},
   });
 
   final String id;
@@ -200,6 +228,10 @@ class ProfileInfo {
   /// Termine mit dem Stichwort sperren dieses Profil, egal in welchem Kalender.
   final bool keywordEverywhere;
 
+  /// Lautstärke je Strom in Prozent, solange dieses Profil sperrt. Fehlt ein
+  /// Strom, bleibt er unverändert.
+  final Map<VolumeStream, int> volumes;
+
   /// Ob überhaupt ein Termin dieses Profil sperren kann.
   bool get usesCalendar => calendars.isNotEmpty || keywordEverywhere;
 
@@ -227,6 +259,7 @@ class ProfileInfo {
     quietRinger: quietRinger,
     calendars: calendars,
     keywordEverywhere: keywordEverywhere,
+    volumes: volumes,
   );
 
   factory ProfileInfo.fromMap(Map<dynamic, dynamic> map) {
@@ -263,6 +296,12 @@ class ProfileInfo {
             .map((e) => MapEntry(e.key, e.value!)),
       ),
       keywordEverywhere: map['keywordEverywhere'] as bool? ?? false,
+      volumes: Map.fromEntries(
+        (map['volumes'] as Map<dynamic, dynamic>? ?? {}).entries
+            .map((e) => MapEntry(_streamFrom(e.key as String?), e.value))
+            .where((e) => e.key != null && e.value is int)
+            .map((e) => MapEntry(e.key!, (e.value as int).clamp(0, 100))),
+      ),
     );
   }
 }

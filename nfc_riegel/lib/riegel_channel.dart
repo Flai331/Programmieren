@@ -57,7 +57,8 @@ class RiegelChannel {
       '${profile.quietSchedules.length} Zeitfenster), '
       // Kalender-IDs und -Namen bleiben draußen, die Anzahl genügt.
       '${profile.calendars.length} Kalender, '
-      'Stichwort überall ${profile.keywordEverywhere ? "an" : "aus"}',
+      'Stichwort überall ${profile.keywordEverywhere ? "an" : "aus"}, '
+      'Lautstärken ${profile.volumes.entries.map((e) => '${streamToNative(e.key)}=${e.value}').join(" ")}',
     );
     return await channel.invokeMethod<bool>('updateProfile', {
           'id': profile.id,
@@ -85,6 +86,9 @@ class RiegelChannel {
             (id, art) => MapEntry(id, matchToNative(art)),
           ),
           'keywordEverywhere': profile.keywordEverywhere,
+          'volumes': profile.volumes.map(
+            (s, prozent) => MapEntry(streamToNative(s), prozent),
+          ),
         }) ??
         false;
   }

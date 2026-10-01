@@ -42,6 +42,11 @@ data class Profile(
     val calendars: Map<String, CalendarMatch> = emptyMap(),
     /** Termine mit dem Stichwort im Titel sperren dieses Profil, egal in welchem Kalender. */
     val keywordEverywhere: Boolean = false,
+    /**
+     * Lautstärken in Prozent, solange dieses Profil sperrt — über Chip, Zeit
+     * oder Termin. Fehlt ein Strom, bleibt er, wie er ist.
+     */
+    val volumes: Map<VolumeStream, Int> = emptyMap(),
 )
 
 /**

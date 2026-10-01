@@ -12,8 +12,8 @@ object LockCodec {
     private const val ITEM = ''
     private const val PAIR = ''
 
-    /** Feldzahlen, die je Ausbaustufe entstanden sind: 7, 10/11, 17, 18, 19, 21. */
-    private val GUELTIGE_PROFILFELDER = setOf(7, 10, 11, 17, 18, 19, 21)
+    /** Feldzahlen, die je Ausbaustufe entstanden sind: 7, 10/11, 17, 18, 19, 21, 22. */
+    private val GUELTIGE_PROFILFELDER = setOf(7, 10, 11, 17, 18, 19, 21, 22)
 
     fun encodeProfiles(profiles: List<Profile>): String =
         profiles.joinToString(RECORD.toString()) { p ->
@@ -39,11 +39,12 @@ object LockCodec {
                 p.quiet.ringer.name,
                 encodeCalendarMatches(p.calendars),
                 if (p.keywordEverywhere) "1" else "0",
+                encodeVolumes(p.volumes),
             ).joinToString(FIELD.toString())
         }
 
     /**
-     * Liest einundzwanzig Felder (mit Kalenderauswahl), neunzehn (mit
+     * Liest zweiundzwanzig Felder (mit Lautstärken), einundzwanzig (mit Kalenderauswahl), neunzehn (mit
      * Klingelmodus), achtzehn (mit Freigabe auf Zeit), siebzehn (mit Ruhe), elf
      * und zehn (mit Atempause) und sieben (davor). Ein alter Satz bekommt die
      * Vorgaben — stillschweigend zu verwerfen hieße, gesperrte Apps zu vergessen.
@@ -100,6 +101,7 @@ object LockCodec {
                 // Felder 20 und 21 kamen gemeinsam mit der Kalenderauswahl am Profil.
                 calendars = if (f.size >= 21) decodeCalendarMatches(f[19]) else emptyMap(),
                 keywordEverywhere = f.size >= 21 && f[20] == "1",
+                volumes = if (f.size >= 22) decodeVolumes(f[21]) else emptyMap(),
             )
         }
     }
@@ -244,6 +246,18 @@ object LockCodec {
             if (teile.size != 2) null else teile[0] to teile[1]
         }.toMap()
     }
+
+    /** Lautstärken eines Profils als `STROM PAIR prozent`, durch ITEM getrennt. */
+    private fun encodeVolumes(volumes: Map<VolumeStream, Int>): String =
+        encodeMap(volumes.entries.associate { it.key.name to it.value.toString() })
+
+    /** Ein unbekannter Strom oder eine kaputte Zahl fällt weg — dann bleibt der Strom, wie er ist. */
+    private fun decodeVolumes(raw: String): Map<VolumeStream, Int> =
+        decodeMap(raw).mapNotNull { (strom, prozent) ->
+            val s = runCatching { VolumeStream.valueOf(strom) }.getOrNull() ?: return@mapNotNull null
+            val p = prozent.toIntOrNull() ?: return@mapNotNull null
+            s to p.coerceIn(0, 100)
+        }.toMap()
 
     /** Kalenderauswahl eines Profils als `id PAIR ALL|KEYWORD`, durch ITEM getrennt. */
     private fun encodeCalendarMatches(auswahl: Map<String, CalendarMatch>): String =

@@ -215,7 +215,7 @@ class LockEngine(private val store: LockStore) {
      * Hier und nur hier wirkt die Freigabe: die Chipsperre bleibt stehen, zählt
      * aber nicht, solange eine Freigabe für ihr Profil läuft.
      */
-    private fun lockedProfileIds(s: LockState, now: Long): Set<String> = buildSet {
+    fun lockedProfileIds(s: LockState, now: Long): Set<String> = buildSet {
         val freigabe = activeRelease(s, now)
         activeChipLock(s, now)
             ?.takeIf { it.profileId != freigabe?.profileId }

@@ -74,6 +74,7 @@ class RiegelChannel(private val activity: Activity) {
                             }
                             .toMap(),
                         keywordEverywhere = call.argument<Boolean>("keywordEverywhere") ?: false,
+                        volumes = lautstaerken(call.argument("volumes")),
                     )
                     val gespeichert = controller.updateProfile(profile, System.currentTimeMillis())
                     // Eine geänderte Kalenderauswahl soll sofort greifen, nicht
@@ -204,6 +205,15 @@ class RiegelChannel(private val activity: Activity) {
                                 System.currentTimeMillis(),
                             )
                         }"
+                    map["Lautstärke"] = "ist=${LockVolume(activity).current()}, " +
+                        "soll=${
+                            controller.engine.state().let { s ->
+                                VolumePlanner.targets(
+                                    s.profiles,
+                                    controller.engine.lockedProfileIds(s, System.currentTimeMillis()),
+                                )
+                            }
+                        }"
                     map["Nutzungsdaten"] =
                         if (AndroidUsageSource(activity).granted()) "erlaubt" else "VERWEIGERT"
                     map["Android"] = "SDK ${Build.VERSION.SDK_INT} (${Build.VERSION.RELEASE})"
@@ -288,6 +298,17 @@ class RiegelChannel(private val activity: Activity) {
             )
         }
 
+    /**
+     * Lautstärken aus Flutter: Strom → Prozent. Unbekannte Ströme fallen weg,
+     * statt den ganzen Aufruf scheitern zu lassen.
+     */
+    private fun lautstaerken(roh: Map<String, Any?>?): Map<VolumeStream, Int> =
+        roh.orEmpty().mapNotNull { (strom, prozent) ->
+            val s = runCatching { VolumeStream.valueOf(strom) }.getOrNull() ?: return@mapNotNull null
+            val p = (prozent as? Number)?.toInt() ?: return@mapNotNull null
+            s to p.coerceIn(0, 100)
+        }.toMap()
+
     private fun stateMap(): Map<String, Any?> {
         val s = controller.engine.state()
         val now = System.currentTimeMillis()
@@ -321,6 +342,7 @@ class RiegelChannel(private val activity: Activity) {
                     "quietRinger" to p.quiet.ringer.name,
                     "calendars" to p.calendars.mapValues { it.value.name },
                     "keywordEverywhere" to p.keywordEverywhere,
+                    "volumes" to p.volumes.entries.associate { it.key.name to it.value },
                 )
             },
             "tags" to s.tags.map { t ->
