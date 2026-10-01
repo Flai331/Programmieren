@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:lauf_plan/animations.dart';
 import 'package:lauf_plan/main.dart';
+import 'package:lauf_plan/videos.dart';
 
 void main() {
   test('Plan startet am Donnerstag, 1.10.2026', () {
@@ -28,6 +29,22 @@ void main() {
     for (final name in exerciseAnims.keys) {
       expect(names, contains(name));
     }
+  });
+
+  test('Jedes Erklärvideo gehört zu einer Übung, alle Bein-Übungen haben eins', () {
+    final names = {
+      for (var d = 0; d < planDays; d++)
+        for (final e in sessionFor(d).exercises) e.name
+    };
+    for (final name in exerciseVideos.keys) {
+      expect(names, contains(name));
+    }
+    for (final e in [...legA.exercises, ...legB.exercises]) {
+      if (e.name == 'Aufwärmen') continue;
+      expect(exerciseVideos, contains(e.name));
+    }
+    expect(videoUri('Hip Thrust').toString(),
+        'https://www.youtube.com/results?search_query=Hip+Thrust');
   });
 
   test('fmt formatiert Minuten und Sekunden', () {

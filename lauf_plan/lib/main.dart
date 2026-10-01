@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'animations.dart';
+import 'videos.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -445,8 +446,11 @@ class _SessionScreenState extends State<SessionScreen> {
     if (ok == true) _setCheck(i, true);
   }
 
+  bool _hasInfo(Exercise e) =>
+      exerciseAnims.containsKey(e.name) || exerciseVideos.containsKey(e.name);
+
   void _showAnim(Exercise e) {
-    final a = exerciseAnims[e.name]!;
+    final a = exerciseAnims[e.name];
     final tt = Theme.of(context).textTheme;
     showModalBottomSheet(
       context: context,
@@ -457,12 +461,18 @@ class _SessionScreenState extends State<SessionScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(e.name, style: tt.titleLarge),
-            const SizedBox(height: 8),
-            ExerciseAnimation(anim: a, size: 240),
-            const SizedBox(height: 12),
-            Text(a.cue, textAlign: TextAlign.center, style: tt.bodyLarge),
+            if (a != null) ...[
+              const SizedBox(height: 8),
+              ExerciseAnimation(anim: a, size: 240),
+              const SizedBox(height: 12),
+              Text(a.cue, textAlign: TextAlign.center, style: tt.bodyLarge),
+            ],
             const SizedBox(height: 4),
             Text(e.detail, textAlign: TextAlign.center, style: tt.bodyMedium),
+            if (exerciseVideos.containsKey(e.name)) ...[
+              const SizedBox(height: 16),
+              VideoButton(exerciseName: e.name),
+            ],
           ],
         ),
       ),
@@ -561,13 +571,13 @@ class _SessionScreenState extends State<SessionScreen> {
                             decoration: TextDecoration.lineThrough, color: cs.outline)
                         : null),
                 subtitle: Text(s.exercises[i].detail),
-                onTap: exerciseAnims[s.exercises[i].name] == null
+                onTap: !_hasInfo(s.exercises[i])
                     ? null
                     : () => _showAnim(s.exercises[i]),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (exerciseAnims[s.exercises[i].name] != null)
+                    if (_hasInfo(s.exercises[i]))
                       IconButton(
                         icon: const Icon(Icons.play_circle_outline),
                         tooltip: 'Ausführung ansehen',
@@ -787,6 +797,11 @@ class _TimerScreenState extends State<TimerScreen> {
         foregroundColor: fg,
         title: Text(widget.exercise.name),
         actions: [
+          if (exerciseVideos.containsKey(widget.exercise.name))
+            IconButton(
+                icon: const Icon(Icons.smart_display_outlined),
+                tooltip: 'Erklärvideo',
+                onPressed: () => openVideo(context, widget.exercise.name)),
           IconButton(
               icon: const Icon(Icons.restart_alt), tooltip: 'Zurücksetzen', onPressed: _reset),
         ],
