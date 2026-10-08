@@ -9,11 +9,15 @@ Persönlicher 4-Wochen-Trainingsplan (Laufen + Gym), Start Do 01.10.2026.
 - Wechselpausen zwischen den Kraftübungen (geschätzt, `Exercise.restAfter`): Pausen-Timer mit Vorschau der nächsten Übung, danach direkt deren Timer
 - Strichfiguren-Animationen für alle Gym-Übungen (CustomPainter, Start-/Endpose interpoliert)
 - Erklärvideo-Knopf nur für die Bein-Übungen (öffnet YouTube-Suche), im Übungsfenster und im Timer
-- UI-Sprache: Deutsch
+- Kalender-Export (.ics): alle offenen Einheiten ab heute (Startseite) oder einzeln (Einheit), Uhrzeit oder ganztägig wählbar; feste UID je Plan-Tag, erneuter Export aktualisiert Termine
+- Freie Einheiten (z. B. Dehnen) mit Datum/Uhrzeit/Dauer/Notizen anlegen, einzeln als .ics exportieren
+- UI-Sprache: Deutsch (auch Datums-/Uhrzeitauswahl via `flutter_localizations`)
 
 ## Struktur
 - `lib/main.dart` – Plan-Daten, Screens (Home, Session, Timer), Speicherung (shared_preferences)
 - `lib/animations.dart` – Posen und Painter; Zuordnung über den Übungsnamen (`exerciseAnims`)
+- `lib/calendar.dart` – .ics erzeugen (RFC 5545, Ortszeit ohne Zeitzone) und über `share_plus` teilen
+- `lib/free_sessions.dart` – freie Einheiten: Modell, Speicher (JSON in `free_sessions`), Bearbeiten-Seite
 - `lib/videos.dart` – Erklärvideos als YouTube-Suche, nur Bein-Übungen (`exerciseVideos`, öffnet per `url_launcher`)
 - Liegt als Ordner `lauf_plan/` im Repo `Flai331/Programmieren` (wie der Parkplatz-Merker).
 - `../.github/workflows/lauf-plan-apk.yml` – baut bei Push (main, `claude/lauf-plan-**`) eine Release-APK und aktualisiert das GitHub Release `lauf-plan` (`Laufplan.apk`)
