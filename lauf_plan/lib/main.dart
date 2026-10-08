@@ -167,9 +167,54 @@ Session sessionFor(int day) {
 
 DateTime dateOf(int day) => planStart.add(Duration(days: day));
 String dateLabel(DateTime d) => '${weekdays[d.weekday - 1]}, ${d.day}.${d.month}.';
-int todayIndex() {
+DateTime todayDate() {
   final n = DateTime.now();
-  return DateTime.utc(n.year, n.month, n.day).difference(planStart).inDays;
+  return DateTime.utc(n.year, n.month, n.day);
+}
+
+String isoDate(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+DateTime? parseIsoDate(String? s) => s == null ? null : DateTime.tryParse('${s}T00:00:00Z');
+
+DateTime _later(DateTime a, DateTime b) => a.isAfter(b) ? a : b;
+
+/// Ein Tag des Plans mit dem tatsächlichen (ggf. verschobenen) Datum.
+class PlanDay {
+  final int slot;
+
+  /// Datum, an dem die Einheit liegt (bzw. erledigt wurde).
+  final DateTime date;
+
+  /// Datum, an dem die Einheit ohne Nachrücken auf heute fällig gewesen wäre.
+  final DateTime due;
+  const PlanDay(this.slot, this.date, this.due);
+
+  /// Tage, um die die Einheit gegenüber dem ursprünglichen Plan verschoben ist.
+  int get shiftDays => date.difference(dateOf(slot)).inDays;
+}
+
+/// Verschiebbarer Plan: Die Einheiten bleiben in ihrer Reihenfolge. Eine nicht
+/// erledigte Trainingseinheit rückt auf heute vor, alle folgenden Tage
+/// verschieben sich mit. Erledigte Einheiten bleiben an ihrem Erledigt-Datum,
+/// Ruhetage verschieben nichts.
+List<PlanDay> computeSchedule(DateTime today, bool Function(int) isDone,
+    DateTime? Function(int) doneOn) {
+  final result = <PlanDay>[];
+  var cursor = planStart;
+  for (var slot = 0; slot < planDays; slot++) {
+    final DateTime date;
+    if (isDone(slot)) {
+      // Ohne gespeichertes Datum (ältere App-Version): wie ursprünglich geplant.
+      date = doneOn(slot) ?? dateOf(slot);
+    } else if (sessionFor(slot).isRest) {
+      date = cursor;
+    } else {
+      date = _later(cursor, today);
+    }
+    result.add(PlanDay(slot, date, cursor));
+    cursor = _later(cursor, date.add(const Duration(days: 1)));
+  }
+  return result;
 }
 
 /// Bildschirm anlassen; Fehler (z. B. ohne Plugin im Test) sind egal.
@@ -195,7 +240,18 @@ class Store {
   final SharedPreferences p;
   Store(this.p);
   bool done(int d) => p.getBool('done_$d') ?? false;
-  Future<void> setDone(int d, bool v) => p.setBool('done_$d', v);
+  DateTime? doneOn(int d) => parseIsoDate(p.getString('doneOn_$d'));
+  Future<void> setDone(int d, bool v, {DateTime? on}) async {
+    await p.setBool('done_$d', v);
+    if (v) {
+      await p.setString('doneOn_$d', isoDate(on ?? todayDate()));
+    } else {
+      await p.remove('doneOn_$d');
+    }
+  }
+
+  List<PlanDay> schedule([DateTime? today]) =>
+      computeSchedule(today ?? todayDate(), done, doneOn);
   bool exDone(int d, int i) => p.getBool('ex_${d}_$i') ?? false;
   Future<void> setExDone(int d, int i, bool v) => p.setBool('ex_${d}_$i', v);
 }
@@ -262,7 +318,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final ti = todayIndex();
+    final today = todayDate();
+    final plan = widget.store.schedule(today);
     final trainingDays = [for (var d = 0; d < planDays; d++) if (!sessionFor(d).isRest) d];
     final doneCount = trainingDays.where(widget.store.done).length;
 
@@ -279,7 +336,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          _TodayCard(ti: ti, onOpen: _open, done: ti >= 0 && ti < planDays && widget.store.done(ti)),
+          _TodayCard(plan: plan, today: today, store: widget.store, onOpen: _open),
           const SizedBox(height: 12),
           Text('$doneCount von ${trainingDays.length} Einheiten erledigt',
               style: Theme.of(context).textTheme.bodyMedium),
@@ -297,10 +354,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             for (var d = w * 7; d < w * 7 + 7; d++)
               _DayTile(
-                day: d,
-                isToday: d == ti,
+                day: plan[d],
+                isToday: plan[d].date == today,
                 done: widget.store.done(d),
-                onTap: () => _open(d),
+                onTap: () => _open(plan[d].slot),
                 cs: cs,
               ),
           ],
@@ -311,33 +368,54 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _TodayCard extends StatelessWidget {
-  final int ti;
-  final bool done;
+  final List<PlanDay> plan;
+  final DateTime today;
+  final Store store;
   final void Function(int) onOpen;
-  const _TodayCard({required this.ti, required this.onOpen, required this.done});
+  const _TodayCard(
+      {required this.plan, required this.today, required this.store, required this.onOpen});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    if (ti < 0) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text('Der Plan startet am ${dateLabel(planStart)}', style: tt.titleMedium),
-        ),
-      );
+    Widget info(String text) => Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(text, style: tt.titleMedium),
+          ),
+        );
+
+    if (today.isBefore(planStart)) {
+      return info('Der Plan startet am ${dateLabel(planStart)}');
     }
-    if (ti >= planDays) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text('Plan abgeschlossen. Zeit für die nächsten 4 Wochen!',
-              style: tt.titleMedium),
-        ),
-      );
+    final allDone = [
+      for (final p in plan)
+        if (!sessionFor(p.slot).isRest) p
+    ].every((p) => store.done(p.slot));
+    if (allDone) return info('Plan abgeschlossen. Zeit für die nächsten 4 Wochen!');
+
+    // Heute: zuerst eine offene Trainingseinheit, sonst was sonst heute liegt.
+    final todays = plan.where((p) => p.date == today).toList()
+      ..sort((a, b) {
+        int rank(PlanDay p) =>
+            (store.done(p.slot) ? 2 : 0) + (sessionFor(p.slot).isRest ? 1 : 0);
+        return rank(a).compareTo(rank(b));
+      });
+    final PlanDay p;
+    final bool isToday;
+    if (todays.isNotEmpty) {
+      p = todays.first;
+      isToday = true;
+    } else {
+      final upcoming = plan.where((x) => x.date.isAfter(today)).toList();
+      if (upcoming.isEmpty) return info('Plan abgeschlossen. Zeit für die nächsten 4 Wochen!');
+      p = upcoming.first;
+      isToday = false;
     }
-    final s = sessionFor(ti);
+    final s = sessionFor(p.slot);
+    final done = store.done(p.slot);
+    final on = cs.onPrimaryContainer;
     return Card(
       color: cs.primaryContainer,
       child: Padding(
@@ -345,21 +423,23 @@ class _TodayCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Heute', style: tt.labelLarge?.copyWith(color: cs.onPrimaryContainer)),
+            Text(isToday ? 'Heute' : 'Als Nächstes: ${dateLabel(p.date)}',
+                style: tt.labelLarge?.copyWith(color: on)),
             const SizedBox(height: 4),
             Row(children: [
-              Icon(s.icon, color: cs.onPrimaryContainer, size: 28),
+              Icon(s.icon, color: on, size: 28),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(s.title,
-                    style: tt.headlineSmall?.copyWith(color: cs.onPrimaryContainer)),
+                child: Text(s.title, style: tt.headlineSmall?.copyWith(color: on)),
               ),
             ]),
             const SizedBox(height: 4),
             Text(done ? 'Erledigt ✓' : 'ca. ${s.minutes} Min.',
-                style: tt.bodyLarge?.copyWith(color: cs.onPrimaryContainer)),
+                style: tt.bodyLarge?.copyWith(color: on)),
+            if (!done && p.shiftDays > 0)
+              Text(shiftText(p.shiftDays), style: tt.bodyMedium?.copyWith(color: on)),
             const SizedBox(height: 12),
-            FilledButton(onPressed: () => onOpen(ti), child: const Text('Training öffnen')),
+            FilledButton(onPressed: () => onOpen(p.slot), child: const Text('Training öffnen')),
           ],
         ),
       ),
@@ -367,8 +447,11 @@ class _TodayCard extends StatelessWidget {
   }
 }
 
+String shiftText(int days) =>
+    'Verschoben um $days ${days == 1 ? 'Tag' : 'Tage'} – der Plan rückt nach.';
+
 class _DayTile extends StatelessWidget {
-  final int day;
+  final PlanDay day;
   final bool isToday;
   final bool done;
   final VoidCallback onTap;
@@ -382,8 +465,9 @@ class _DayTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = sessionFor(day);
-    final d = dateOf(day);
+    final s = sessionFor(day.slot);
+    final d = day.date;
+    final shifted = !s.isRest && day.shiftDays > 0;
     return Card(
       elevation: 0,
       color: isToday ? cs.secondaryContainer : cs.surfaceContainerHighest.withOpacity(0.5),
@@ -392,7 +476,10 @@ class _DayTile extends StatelessWidget {
         onTap: onTap,
         leading: Icon(s.icon, color: s.isRest ? cs.outline : cs.primary),
         title: Text(s.title),
-        subtitle: Text(s.isRest ? dateLabel(d) : '${dateLabel(d)}  ca. ${s.minutes} Min.'),
+        subtitle: Text(s.isRest
+            ? dateLabel(d)
+            : '${dateLabel(d)}  ca. ${s.minutes} Min.'
+                '${shifted ? '  (+${day.shiftDays} ${day.shiftDays == 1 ? 'Tag' : 'Tage'})' : ''}'),
         trailing: done
             ? Icon(Icons.check_circle, color: cs.primary)
             : const Icon(Icons.chevron_right),
@@ -507,7 +594,31 @@ class _SessionScreenState extends State<SessionScreen> {
 
   Future<void> _toggleDone() async {
     final v = !done;
-    await widget.store.setDone(widget.day, v);
+    DateTime? on;
+    if (v) {
+      final today = todayDate();
+      final due = widget.store.schedule(today)[widget.day].due;
+      // Nachgerückte Einheit: vielleicht doch am geplanten Tag gemacht, nur
+      // vergessen abzuhaken – dann soll sich nichts verschieben.
+      if (!s.isRest && due.isBefore(today)) {
+        on = await showDialog<DateTime>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Wann hast du trainiert?'),
+            content: Text('Geplant war die Einheit für ${dateLabel(due)}.'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, due),
+                  child: Text('Am ${dateLabel(due)}')),
+              FilledButton(
+                  onPressed: () => Navigator.pop(ctx, today), child: const Text('Heute')),
+            ],
+          ),
+        );
+        if (on == null) return;
+      }
+    }
+    await widget.store.setDone(widget.day, v, on: on);
     if (v && sw.isRunning) _toggleStopwatch();
     setState(() => done = v);
     if (v && mounted) Navigator.pop(context);
@@ -530,7 +641,15 @@ class _SessionScreenState extends State<SessionScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
         children: [
-          Text(dateLabel(dateOf(widget.day)), style: tt.bodyMedium),
+          Builder(builder: (_) {
+            final pd = widget.store.schedule()[widget.day];
+            final shifted = !done && !s.isRest && pd.shiftDays > 0;
+            return Text(
+                shifted
+                    ? '${dateLabel(pd.date)} – ursprünglich ${dateLabel(dateOf(widget.day))}'
+                    : dateLabel(pd.date),
+                style: tt.bodyMedium);
+          }),
           if (!s.isRest) ...[
             const SizedBox(height: 12),
             Card(
