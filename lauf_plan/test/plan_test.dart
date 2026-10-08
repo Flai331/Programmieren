@@ -80,6 +80,58 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  group('Plan verschiebt sich', () {
+    DateTime day(int n) => dateOf(n);
+    List<PlanDay> plan(DateTime today, Map<int, DateTime?> done) =>
+        computeSchedule(today, done.containsKey, (d) => done[d]);
+
+    test('alles im Plan: Datum wie ursprünglich', () {
+      final p = plan(day(0), {});
+      for (var d = 0; d < planDays; d++) {
+        expect(p[d].date, dateOf(d));
+        expect(p[d].shiftDays, 0);
+      }
+    });
+
+    test('verpasste Einheit rückt auf heute, alles danach wandert mit', () {
+      // Do erledigt, Fr verpasst, heute ist Sa.
+      final p = plan(day(2), {0: day(0)});
+      expect(p[0].date, day(0));
+      expect(p[1].date, day(2));
+      expect(p[1].due, day(1));
+      for (var d = 1; d < planDays; d++) {
+        expect(p[d].shiftDays, 1, reason: 'Tag $d');
+      }
+    });
+
+    test('mehrere Tage nichts gemacht: Verschiebung wächst', () {
+      final p = plan(day(3), {});
+      expect(p[0].date, day(3));
+      expect(p.last.date, day(planDays - 1 + 3));
+    });
+
+    test('nachträglich am geplanten Tag abgehakt: keine Verschiebung', () {
+      final p = plan(day(2), {0: day(0), 1: day(1)});
+      for (var d = 0; d < planDays; d++) {
+        expect(p[d].date, dateOf(d));
+      }
+    });
+
+    test('nicht abgehakter Ruhetag verschiebt nichts', () {
+      // Do–Di (Tag 0–5) erledigt, Mi = Ruhetag, heute ist Do (Tag 7).
+      final p = plan(day(7), {for (var d = 0; d < 6; d++) d: day(d)});
+      expect(p[6].date, day(6));
+      expect(p[7].date, day(7));
+      expect(p[7].shiftDays, 0);
+    });
+
+    test('alte Haken ohne Datum zählen am ursprünglichen Tag', () {
+      final p = plan(day(1), {0: null});
+      expect(p[0].date, day(0));
+      expect(p[1].date, day(1));
+    });
+  });
+
   test('fmt formatiert Minuten und Sekunden', () {
     expect(fmt(0), '0:00');
     expect(fmt(65), '1:05');
