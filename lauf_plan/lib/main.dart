@@ -3,10 +3,13 @@ import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'animations.dart';
+import 'calendar.dart';
+import 'free_sessions.dart';
 import 'videos.dart';
 
 Future<void> main() async {
@@ -250,6 +253,12 @@ class Store {
     }
   }
 
+  FreeStore get free => FreeStore(p);
+
+  /// Zuletzt gewählte Uhrzeit für den Kalender-Export.
+  int get exportStart => p.getInt('export_start') ?? 18 * 60;
+  Future<void> setExportStart(int m) => p.setInt('export_start', m);
+
   List<PlanDay> schedule([DateTime? today]) =>
       computeSchedule(today ?? todayDate(), done, doneOn);
   bool exDone(int d, int i) => p.getBool('ex_${d}_$i') ?? false;
@@ -273,6 +282,9 @@ class TrainingApp extends StatelessWidget {
       theme: ThemeData(colorSchemeSeed: seed, useMaterial3: true),
       darkTheme: ThemeData(
           colorSchemeSeed: seed, brightness: Brightness.dark, useMaterial3: true),
+      locale: const Locale('de'),
+      supportedLocales: const [Locale('de')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       home: HomeScreen(store: store),
     );
   }
@@ -290,6 +302,30 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.push(context,
         MaterialPageRoute(builder: (_) => SessionScreen(day: day, store: widget.store)));
     setState(() {});
+  }
+
+  Future<void> _openFree([FreeSession? f]) async {
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => FreeSessionScreen(store: widget.store.free, session: f)));
+    setState(() {});
+  }
+
+  Future<void> _exportAll() async {
+    final today = todayDate();
+    final open = [
+      for (final d in widget.store.schedule(today))
+        if (!sessionFor(d.slot).isRest &&
+            !widget.store.done(d.slot) &&
+            !d.date.isBefore(today))
+          d
+    ];
+    await exportPlanDays(context, widget.store, open,
+        title: 'Plan in den Kalender',
+        fileName: 'laufplan-einheiten.ics',
+        info: '${open.length} offene Einheiten ab heute. Verschiebt sich der Plan, '
+            'einfach erneut exportieren – die Termine werden aktualisiert.');
   }
 
   void _showRules() {
@@ -320,6 +356,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final cs = Theme.of(context).colorScheme;
     final today = todayDate();
     final plan = widget.store.schedule(today);
+    // Freie Einheiten: ab einer Woche zurück, ältere ausblenden.
+    final free = widget.store.free
+        .all()
+        .where((f) => !f.date.isBefore(today.subtract(const Duration(days: 7))))
+        .toList();
     final trainingDays = [for (var d = 0; d < planDays; d++) if (!sessionFor(d).isRest) d];
     final doneCount = trainingDays.where(widget.store.done).length;
 
@@ -327,6 +368,10 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Laufplan'),
         actions: [
+          IconButton(
+              icon: const Icon(Icons.event_available),
+              tooltip: 'Alle Einheiten in den Kalender (.ics)',
+              onPressed: _exportAll),
           IconButton(
               icon: const Icon(Icons.info_outline),
               tooltip: 'Regeln',
@@ -346,6 +391,24 @@ class _HomeScreenState extends State<HomeScreen> {
             minHeight: 6,
             borderRadius: BorderRadius.circular(3),
           ),
+          Padding(
+            padding: const EdgeInsets.only(top: 24, bottom: 4),
+            child: Row(children: [
+              Expanded(
+                child: Text('Freie Einheiten',
+                    style: Theme.of(context).textTheme.titleMedium),
+              ),
+              TextButton.icon(
+                onPressed: () => _openFree(),
+                icon: const Icon(Icons.add),
+                label: const Text('Neu'),
+              ),
+            ]),
+          ),
+          if (free.isEmpty)
+            Text('Z. B. Dehnen anlegen und als Termin in deinen Tagesplan exportieren.',
+                style: Theme.of(context).textTheme.bodySmall),
+          for (final f in free) FreeSessionTile(session: f, onTap: () => _openFree(f)),
           for (var w = 0; w < 4; w++) ...[
             Padding(
               padding: const EdgeInsets.only(top: 24, bottom: 4),
@@ -445,6 +508,37 @@ class _TodayCard extends StatelessWidget {
       ),
     );
   }
+}
+
+CalEvent planEvent(PlanDay d, ExportChoice c) {
+  final s = sessionFor(d.slot);
+  final lines = [
+    for (final e in s.exercises) '• ${e.name}: ${e.detail}',
+    if (s.hint != null) '',
+    if (s.hint != null) s.hint!,
+    '',
+    'Woche ${d.slot ~/ 7 + 1}: ${weekFocus[d.slot ~/ 7]} · ca. ${s.minutes} Min.',
+  ];
+  return CalEvent(
+    uid: 'laufplan-tag-${d.slot}@klaas.de',
+    title: s.title,
+    day: d.date,
+    startMinutes: c.startMinutes,
+    minutes: s.minutes,
+    allDay: c.allDay,
+    description: lines.join('\n'),
+  );
+}
+
+/// Eine oder mehrere Plan-Einheiten mit Uhrzeit-Abfrage exportieren.
+Future<void> exportPlanDays(BuildContext context, Store store, List<PlanDay> days,
+    {required String title, required String fileName, String? info}) async {
+  final choice = await askExportTime(context,
+      title: title, initialMinutes: store.exportStart, info: info);
+  if (choice == null || !context.mounted) return;
+  if (!choice.allDay) await store.setExportStart(choice.startMinutes);
+  if (!context.mounted) return;
+  await shareIcs(context, [for (final d in days) planEvent(d, choice)], fileName);
 }
 
 String shiftText(int days) =>
@@ -637,7 +731,19 @@ class _SessionScreenState extends State<SessionScreen> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: Text(s.title)),
+      appBar: AppBar(title: Text(s.title), actions: [
+        IconButton(
+          icon: const Icon(Icons.event_available),
+          tooltip: 'In den Kalender (.ics)',
+          onPressed: () {
+            final pd = widget.store.schedule()[widget.day];
+            exportPlanDays(context, widget.store, [pd],
+                title: 'In den Kalender',
+                fileName: icsFileName(s.title, pd.date),
+                info: '${s.title} am ${dateLabel(pd.date)}');
+          },
+        ),
+      ]),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
         children: [

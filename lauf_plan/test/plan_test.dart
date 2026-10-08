@@ -1,9 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:lauf_plan/animations.dart';
+import 'package:lauf_plan/calendar.dart';
+import 'package:lauf_plan/free_sessions.dart';
 import 'package:lauf_plan/main.dart';
 import 'package:lauf_plan/videos.dart';
 
@@ -130,6 +134,100 @@ void main() {
       expect(p[0].date, day(0));
       expect(p[1].date, day(1));
     });
+  });
+
+  group('Kalender-Export (.ics)', () {
+    final now = DateTime.utc(2026, 10, 8, 9, 30);
+
+    test('Termin mit Uhrzeit', () {
+      final ics = buildIcs([
+        CalEvent(
+            uid: 'a@x', title: 'Beine A – Kraft', day: DateTime.utc(2026, 10, 9),
+            startMinutes: 18 * 60 + 30, minutes: 60, description: 'Zeile 1\nZeile 2; mit, Zeichen'),
+      ], now: now);
+      expect(ics, startsWith('BEGIN:VCALENDAR\r\nVERSION:2.0\r\n'));
+      expect(ics, endsWith('END:VCALENDAR\r\n'));
+      expect(ics, contains('DTSTART:20261009T183000\r\n'));
+      expect(ics, contains('DTEND:20261009T193000\r\n'));
+      expect(ics, contains('DTSTAMP:20261008T093000Z'));
+      expect(ics, contains('SUMMARY:Beine A – Kraft'));
+      expect(ics, contains('DESCRIPTION:Zeile 1\\nZeile 2\\; mit\\, Zeichen'));
+      expect(ics, contains('TRIGGER:-PT30M'));
+    });
+
+    test('ganztägig und über Mitternacht', () {
+      final ics = buildIcs([
+        CalEvent(uid: 'b@x', title: 'Lauf', day: DateTime.utc(2026, 10, 31), allDay: true),
+        CalEvent(
+            uid: 'c@x', title: 'Spät', day: DateTime.utc(2026, 10, 31),
+            startMinutes: 23 * 60 + 30, minutes: 60),
+      ], now: now);
+      expect(ics, contains('DTSTART;VALUE=DATE:20261031\r\nDTEND;VALUE=DATE:20261101'));
+      expect(ics, contains('DTEND:20261101T003000'));
+      expect('BEGIN:VEVENT'.allMatches(ics).length, 2);
+    });
+
+    test('lange Zeilen werden auf 75 Bytes umbrochen', () {
+      final ics = buildIcs([
+        CalEvent(uid: 'd@x', title: 'Ü' * 100, day: DateTime.utc(2026, 10, 9)),
+      ], now: now);
+      for (final line in ics.split('\r\n')) {
+        expect(utf8.encode(line).length, lessThanOrEqualTo(75));
+      }
+      final unfolded = ics.replaceAll('\r\n ', '');
+      expect(unfolded, contains('SUMMARY:${'Ü' * 100}'));
+    });
+
+    test('Plan-Einheit als Termin', () {
+      final d = PlanDay(0, dateOf(0), dateOf(0));
+      final e = planEvent(d, const ExportChoice(7 * 60, false));
+      expect(e.title, legA.title);
+      expect(e.minutes, legA.minutes);
+      expect(e.uid, 'laufplan-tag-0@klaas.de');
+      expect(e.description, contains('Kniebeuge (Langhantel): 4 × 5'));
+    });
+
+    test('Dateiname', () {
+      expect(icsFileName('Beine A – Kraft', DateTime.utc(2026, 10, 9)),
+          'beine-a-kraft-2026-10-09.ics');
+      expect(icsFileName('Dehnen & Rücken', DateTime.utc(2026, 1, 2)),
+          'dehnen-ruecken-2026-01-02.ics');
+    });
+  });
+
+  test('Freie Einheiten speichern, ändern, löschen', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = FreeStore(await SharedPreferences.getInstance());
+    expect(store.all(), isEmpty);
+    final a = FreeSession(id: '1', title: 'Dehnen', date: DateTime.utc(2026, 10, 10),
+        startMinutes: 7 * 60, minutes: 15, notes: 'Hüfte');
+    final b = FreeSession(id: '2', title: 'Yoga', date: DateTime.utc(2026, 10, 9));
+    await store.upsert(a);
+    await store.upsert(b);
+    expect(store.all().map((s) => s.id), ['2', '1']);
+    await store.upsert(a.copyWith(title: 'Dehnen lang', minutes: 30));
+    final saved = store.all().last;
+    expect(saved.title, 'Dehnen lang');
+    expect(saved.minutes, 30);
+    expect(saved.notes, 'Hüfte');
+    expect(saved.toEvent().uid, 'laufplan-frei-1@klaas.de');
+    await store.remove('2');
+    expect(store.all().map((s) => s.id), ['1']);
+  });
+
+  testWidgets('Freie Einheit anlegen', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    await tester.pumpWidget(TrainingApp(store: Store(prefs)));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Neu'), 200);
+    await tester.tap(find.text('Neu'));
+    await tester.pumpAndSettle();
+    expect(find.text('Freie Einheit'), findsOneWidget);
+    await tester.tap(find.text('Speichern'));
+    await tester.pumpAndSettle();
+    expect(FreeStore(prefs).all().single.title, 'Dehnen');
+    expect(find.text('Dehnen'), findsOneWidget);
   });
 
   test('fmt formatiert Minuten und Sekunden', () {
