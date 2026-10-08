@@ -63,6 +63,23 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Android-NDK vorab installieren (mit Wiederholung)
+        # Gradle lädt das NDK sonst selbst – bricht der Download ab
+        # ("Error on ZipFile unknown archive"), scheitert der ganze Build.
+        # Version = flutter.ndkVersion von Flutter 3.47.1.
+        env:
+          NDK_VERSION: 28.2.13676358
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          for i in 1 2 3; do
+            if [ -f "$ANDROID_HOME/ndk/$NDK_VERSION/source.properties" ]; then break; fi
+            rm -rf "$ANDROID_HOME/ndk/$NDK_VERSION"
+            printf 'y\n%.0s' $(seq 20) | "$SDKM" --install "ndk;$NDK_VERSION" > /dev/null \
+              || echo "NDK-Download fehlgeschlagen (Versuch $i)"
+            sleep 5
+          done
+          test -f "$ANDROID_HOME/ndk/$NDK_VERSION/source.properties"
+
       - name: Run analyzer
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
