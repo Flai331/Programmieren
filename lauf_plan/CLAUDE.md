@@ -3,7 +3,7 @@
 ## Was die App ist
 Persönlicher 4-Wochen-Trainingsplan (Laufen + Gym), Start Do 01.10.2026.
 - Startseite: heutige Einheit, alle 28 Tage mit Datum, geschätzter Dauer, Erledigt-Haken
-- Plan verschiebt sich: nicht erledigte Trainingseinheit rückt auf heute, alle folgenden Tage wandern mit (`computeSchedule`); Erledigt-Datum wird gespeichert (`doneOn_<tag>`), Nachtragen (`pickDoneDate`): beim Abhaken einer nachgerückten Einheit und über „Nachträglich abhaken“ auf der Heute-Karte Auswahl Heute/Gestern/wie geplant/anderes Datum; Erledigt-Datum in der Einheit änderbar – der Plan rückt entsprechend wieder vor
+- Plan verschiebt sich: nicht erledigte Trainingseinheit rückt auf heute, alle folgenden Tage wandern mit (`computeSchedule`); Erledigt-Datum wird gespeichert (`doneOn_<tag>`), Nachtragen (`pickDoneDate`): beim Abhaken einer nachgerückten Einheit und über „Nachträglich abhaken“ auf der Heute-Karte Auswahl der letzten 7 Tage mit Wochentag (Heute, Gestern, Freitag …, geplanter Tag markiert) oder anderes Datum; Erledigt-Datum in der Einheit änderbar – der Plan rückt entsprechend wieder vor
 - Einheit: Stoppuhr gegen geschätzte Zeit, Übungen abhaken, Hinweise
 - Timer pro Übung: EMOM, Halten (Arbeit/Pause automatisch), manuelle Sätze mit Pausen-Countdown
 - Wechselpausen zwischen den Kraftübungen (geschätzt, `Exercise.restAfter`): Pausen-Timer mit Vorschau der nächsten Übung, danach direkt deren Timer
