@@ -43,7 +43,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Überwacht Ladestand und Temperatur eines beschädigten Akkus und warnt beim Erreichen der Ladegrenze." />
+                android:value="Überwacht Ladestand und Temperatur eines beschädigten Akkus, warnt beim Erreichen der Ladegrenze und beendet auf Wunsch beim Ausschalten des Bildschirms unwichtige Hintergrund-Apps." />
         </service>
 
         <service

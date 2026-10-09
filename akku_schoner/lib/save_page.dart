@@ -49,8 +49,44 @@ const _tips = [
   'Benachrichtigungen unwichtiger Apps abschalten – jede weckt das Handy auf.',
 ];
 
-class SavePage extends StatelessWidget {
+/// Nur auf Samsung-Handys (One UI) – öffnet die „Gerätewartung“.
+const _samsung = [
+  _Shortcut(Icons.shield_outlined, 'Samsung: Akku schützen',
+      'Wichtigste Einstellung für einen kaputten Akku: Akku → Weitere Akkueinstellungen → „Akku schützen“ '
+          '(lädt nur bis 80–85 %). Wirkt direkt im Ladechip – besser als jede Warnung.',
+      'samsungBattery'),
+  _Shortcut(Icons.bedtime_outlined, 'Samsung: Schlafende Apps',
+      'Akku → Hintergrund-Nutzungsbegrenzungen: selten genutzte Apps in „Tief schlafende Apps“ legen. '
+          'Spotify, Messenger und Wecker NICHT – sonst geht Play am Kopfhörer bzw. kommen keine Nachrichten.',
+      'samsungSleeping'),
+];
+
+class SavePage extends StatefulWidget {
   const SavePage({super.key});
+
+  @override
+  State<SavePage> createState() => _SavePageState();
+}
+
+class _SavePageState extends State<SavePage> {
+  bool _samsungPhone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Native.status().then((s) {
+      final m = (s['manufacturer'] as String? ?? '').toLowerCase();
+      if (mounted) setState(() => _samsungPhone = m.contains('samsung'));
+    }).catchError((_) {});
+  }
+
+  Widget _tile(_Shortcut s, ColorScheme cs) => ListTile(
+        leading: Icon(s.icon, color: cs.primary),
+        title: Text(s.title),
+        subtitle: Text(s.text),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Native.openSettings(s.setting),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -58,14 +94,11 @@ class SavePage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
-        for (final s in _shortcuts)
-          ListTile(
-            leading: Icon(s.icon, color: cs.primary),
-            title: Text(s.title),
-            subtitle: Text(s.text),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Native.openSettings(s.setting),
-          ),
+        if (_samsungPhone) ...[
+          for (final s in _samsung) _tile(s, cs),
+          const Divider(),
+        ],
+        for (final s in _shortcuts) _tile(s, cs),
         const Divider(),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -109,11 +142,22 @@ class HelpPage extends StatelessWidget {
               'Zeigt Ladestand, Temperatur, Spannung, Strom und Zustand. Hinweise erscheinen, wenn der Akku zu warm, zu voll oder zu leer ist.\n\n'
                   'Der Akku-Wächter läuft unauffällig im Hintergrund und meldet sich nur, wenn die Ladegrenze (z. B. 80 %) erreicht ist, der Akku fast leer ist oder zu heiß wird. '
                   'Er nutzt nur die Akku-Meldungen, die Android ohnehin verschickt – kein Timer, kein GPS, kein Internet.'),
-          section('Reiter „Apps“',
-              'Listet alle Apps. „Aktiv“ heißt: Android hat die App seit dem letzten Beenden wieder gestartet – sie kann im Hintergrund laufen, Push-Nachrichten empfangen und Strom ziehen. '
-                  'Mit Nutzungszugriff siehst du zusätzlich, wie lange eine App in den letzten 24 h im Hintergrund lief (z. B. Musik, Standort, Synchronisation).\n\n'
-                  '★ markiert wichtige Apps (Messenger, Wecker, Telefon …). Sie werden nie beendet. Startbildschirm und Tastatur sind immer geschützt, vorinstallierte Apps werden nur einzeln beendet.\n\n'
-                  '„Unwichtige Apps beenden“ beendet alle anderen aktiven Apps komplett („Beenden erzwingen“). Danach laufen sie nicht mehr im Hintergrund, bis du sie selbst wieder öffnest.'),
+          section('Reiter „Apps“ – drei Stufen',
+              'Jede App hat eine Stufe. Die Automatik wählt sie nach deiner Nutzung der letzten 7 Tage:\n'
+                  '• Wichtig (an mindestens 4 Tagen benutzt): wird nie angefasst. Eine App, die du ständig öffnest, '
+                  'jedes Mal kalt neu zu starten, kostet mehr Strom als sie im Speicher zu lassen.\n'
+                  '• Sanft (ab und zu benutzt, Musik-Apps wie Spotify, Messenger, Wecker, Navigation): fliegt nur aus dem Speicher. '
+                  'Push-Nachrichten kommen weiter an, und Play am Kopfhörer startet Spotify wieder – auch bei gesperrtem Handy.\n'
+                  '• Komplett (7 Tage nicht benutzt): „Beenden erzwingen“. Läuft gar nicht mehr, bis du die App selbst öffnest.\n\n'
+                  'Antippen einer App: Stufe von Hand festlegen (umrandet = von Hand) oder zurück auf „Automatisch“. '
+                  'Startbildschirm und Tastatur sind immer geschützt, vorinstallierte Apps automatisch „Wichtig“.\n\n'
+                  'Ohne Nutzungszugriff weiß die App nicht, was du oft benutzt – dann ist alles vorsichtshalber „Sanft“.'),
+          section('Automatik',
+              'Bildschirm aus: 15 s nach dem Ausschalten werden „Sanft“- und „Komplett“-Apps sanft beendet. Geht ohne Entsperren und ist unsichtbar. '
+                  'Gerade laufende Musik bleibt an.\n\n'
+                  'Entsperren: War der Bildschirm länger aus (einstellbar, Standard 30 min), werden „Komplett“-Apps, die sich inzwischen wieder gestartet haben, '
+                  'komplett beendet. Dabei blitzt kurz die App-Info auf, danach landest du auf dem Startbildschirm. Bei einem Anruf passiert nichts.\n\n'
+                  'Die Automatik läuft im selben unauffälligen Dienst wie der Akku-Wächter (eine stille Benachrichtigung „Akku-Schoner“).'),
           section('Warum braucht das die Bedienungshilfe?',
               'Android erlaubt keiner normalen App, andere Apps zu beenden. Ohne Bedienungshilfe kann der Akku-Schoner Apps nur „sanft“ beenden – Apps mit eigenem Dienst starten dann sofort neu.\n\n'
                   'Mit Bedienungshilfe öffnet die App für jede gewählte App die App-Info und drückt „Beenden erzwingen“ – genau so, wie du es von Hand tun würdest. '
@@ -121,7 +165,8 @@ class HelpPage extends StatelessWidget {
                   'Einschalten: Einstellungen → Bedienungshilfen → Installierte Apps → „Akku-Schoner: Apps beenden“. '
                   'Ist der Schalter ausgegraut, zuerst App-Info → ⋮ (oben rechts) → „Eingeschränkte Einstellungen zulassen“.'),
           section('Dauerhaft statt immer wieder beenden',
-              'Am wirksamsten: Für Apps, die nicht im Hintergrund laufen sollen, in der App-Info unter „Akku“ die Option „Eingeschränkt“ wählen (Samsung: „Tief schlafende Apps“). '
+              'Am wirksamsten: Für Apps, die nicht im Hintergrund laufen sollen, in der App-Info unter „Akku“ die Option „Eingeschränkt“ wählen (Samsung: „Tief schlafende Apps“, Reiter „Sparen“). '
+                  'Nicht für Spotify/Musik-Apps – die dürfen dann bei gesperrtem Handy nicht mehr spielen. '
                   'Dann hält Android sie selbst dauerhaft an. Im Reiter „Apps“ führt dich „Akkunutzung einschränken“ direkt dorthin.'),
           section('Grenzen',
               'Die App kann die Akku-Kapazität nicht messen oder reparieren und das Laden nicht selbst stoppen – sie warnt dich nur. '

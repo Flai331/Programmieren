@@ -10,12 +10,18 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 
 /**
- * Akku-Wächter: hört nur auf die ohnehin verschickte Akku-Meldung des Systems
- * (kein Timer, kein GPS, kein Netz) und warnt bei Ladegrenze, niedrigem Stand und Hitze.
+ * Hintergrund-Dienst für Akku-Wächter und Automatik. Hört nur auf System-Meldungen,
+ * die ohnehin verschickt werden (Akku, Bildschirm an/aus, Entsperren) – kein Timer, kein GPS, kein Netz.
+ *  - Wächter: warnt bei Ladegrenze, niedrigem Stand und Hitze.
+ *  - Bildschirm aus: Apps der Stufen sanft/komplett sanft beenden.
+ *  - Entsperren nach längerer Pause: Apps der Stufe komplett erzwungen beenden.
  */
 class WatcherService : Service() {
 
@@ -28,7 +34,7 @@ class WatcherService : Service() {
 
         fun sync(ctx: Context) {
             val intent = Intent(ctx, WatcherService::class.java)
-            if (Prefs.watcherEnabled(ctx)) {
+            if (Prefs.serviceNeeded(ctx)) {
                 try {
                     if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(intent) else ctx.startService(intent)
                 } catch (_: Exception) {
@@ -53,6 +59,10 @@ class WatcherService : Service() {
     }
 
     private var receiver: BroadcastReceiver? = null
+    private var screenReceiver: BroadcastReceiver? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var screenOffAt = 0L
+    private val softRun = Runnable { softCleanup() }
     private var lastLevel = -1
     private var lastCharging = false
     private var lastTempTenth = Int.MIN_VALUE
@@ -78,6 +88,61 @@ class WatcherService : Service() {
         } else {
             registerReceiver(r, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         }
+
+        val sr = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) = onScreen(intent.action ?: "")
+        }
+        screenReceiver = sr
+        val f = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(sr, f, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(sr, f)
+        }
+    }
+
+    private fun onScreen(action: String) {
+        when (action) {
+            Intent.ACTION_SCREEN_OFF -> {
+                screenOffAt = System.currentTimeMillis()
+                // Kurz warten: wer den Bildschirm gleich wieder anmacht, merkt nichts.
+                if (Prefs.autoSoft(this)) handler.postDelayed(softRun, 15_000L)
+            }
+            Intent.ACTION_SCREEN_ON -> handler.removeCallbacks(softRun)
+            Intent.ACTION_USER_PRESENT -> {
+                val off = screenOffAt
+                screenOffAt = 0L
+                if (!Prefs.autoFull(this) || off == 0L) return
+                if (System.currentTimeMillis() - off < Prefs.unlockAfterMin(this) * 60_000L) return
+                if (inCall() || ForceStopService.busy() || ForceStopService.instance == null) return
+                Thread {
+                    val pkgs = try { Apps.running(this, Policy.FULL) } catch (_: Exception) { emptyList() }
+                    if (pkgs.isEmpty()) return@Thread
+                    Apps.killBackground(this, pkgs)
+                    // Erst den Startbildschirm fertig zeigen lassen.
+                    handler.postDelayed({ ForceStopService.request(this, pkgs, returnToApp = false) }, 1200L)
+                }.start()
+            }
+        }
+    }
+
+    private fun softCleanup() {
+        Thread {
+            try {
+                val pkgs = Apps.running(this, Policy.SOFT) + Apps.running(this, Policy.FULL)
+                Apps.killBackground(this, pkgs)
+            } catch (_: Exception) {
+            }
+        }.start()
+    }
+
+    private fun inCall(): Boolean {
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+        return am.mode == AudioManager.MODE_IN_CALL || am.mode == AudioManager.MODE_IN_COMMUNICATION
     }
 
     /** Muss nach jedem startForegroundService() aufgerufen werden, sonst beendet Android die App. */
@@ -92,7 +157,7 @@ class WatcherService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         goForeground()
-        if (!Prefs.watcherEnabled(this)) {
+        if (!Prefs.serviceNeeded(this)) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -107,6 +172,9 @@ class WatcherService : Service() {
     override fun onDestroy() {
         receiver?.let { unregisterReceiver(it) }
         receiver = null
+        screenReceiver?.let { unregisterReceiver(it) }
+        screenReceiver = null
+        handler.removeCallbacksAndMessages(null)
         running = false
         super.onDestroy()
     }
@@ -128,6 +196,7 @@ class WatcherService : Service() {
 
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(ID_STATUS, statusNotification(intent))
+        if (!Prefs.watcherEnabled(this)) return
 
         val upper = Prefs.upperLimit(this)
         val lower = Prefs.lowerLimit(this)
@@ -170,11 +239,16 @@ class WatcherService : Service() {
         val text = buildString {
             append("$level %")
             append(" · ${"%.1f".format(temp)} °C")
-            if (charging) append(" · lädt (Grenze ${Prefs.upperLimit(this@WatcherService)} %)")
+            if (charging && Prefs.watcherEnabled(this@WatcherService)) {
+                append(" · lädt (Grenze ${Prefs.upperLimit(this@WatcherService)} %)")
+            }
+            if (Prefs.autoSoft(this@WatcherService) || Prefs.autoFull(this@WatcherService)) {
+                append(" · Automatik an")
+            }
         }
         return builder(CH_STATUS)
             .setSmallIcon(android.R.drawable.ic_lock_idle_low_battery)
-            .setContentTitle("Akku-Wächter")
+            .setContentTitle("Akku-Schoner")
             .setContentText(text)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

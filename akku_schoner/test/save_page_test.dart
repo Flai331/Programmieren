@@ -11,6 +11,6 @@ void main() {
 
   testWidgets('Hilfe-Seite lässt sich öffnen', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: HelpPage()));
-    expect(find.text('Reiter „Apps“'), findsOneWidget);
+    expect(find.text('Reiter „Apps“ – drei Stufen'), findsOneWidget);
   });
 }

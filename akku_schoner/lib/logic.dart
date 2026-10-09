@@ -1,25 +1,29 @@
 import 'dart:typed_data';
 
-/// Apps, die standardmäßig als „wichtig“ gelten (werden nie automatisch beendet),
-/// solange du selbst noch nichts markiert hast. Wer hier beendet wird,
-/// bekommt keine Nachrichten/Wecker mehr, bis er wieder geöffnet wird.
-const defaultImportant = <String>{
-  'com.whatsapp',
-  'com.whatsapp.w4b',
-  'org.thoughtcrime.securesms', // Signal
-  'org.telegram.messenger',
-  'ch.threema.app',
-  'com.google.android.deskclock',
-  'com.sec.android.app.clockpackage',
-  'com.android.deskclock',
-  'com.google.android.dialer',
-  'com.samsung.android.dialer',
-  'com.google.android.apps.messaging',
-  'com.samsung.android.messaging',
-  'com.google.android.gm', // Gmail
-  'com.google.android.calendar',
-  'com.spotify.music',
-};
+/// Stufen (Entscheidung im Kotlin-Teil, `Policy.kt`):
+/// keep = nie anfassen, soft = nur aus dem Speicher werfen (Push-Nachrichten und
+/// Kopfhörer-Play funktionieren weiter), full = „Beenden erzwingen“.
+enum Level { keep, soft, full }
+
+Level parseLevel(Object? s) => switch (s) {
+      'soft' => Level.soft,
+      'full' => Level.full,
+      _ => Level.keep,
+    };
+
+String levelName(Level l) => switch (l) {
+      Level.keep => 'Wichtig',
+      Level.soft => 'Sanft',
+      Level.full => 'Komplett',
+    };
+
+String levelHint(Level l) => switch (l) {
+      Level.keep => 'Wird nie beendet.',
+      Level.soft =>
+        'Nur aus dem Speicher werfen. Nachrichten, Wecker und Play am Kopfhörer funktionieren weiter.',
+      Level.full =>
+        '„Beenden erzwingen“ – läuft gar nicht mehr, bis du die App selbst öffnest. Keine Benachrichtigungen.',
+    };
 
 class AppEntry {
   final String pkg;
@@ -27,6 +31,12 @@ class AppEntry {
   final bool system;
   final bool stopped;
   final bool protected;
+  final bool audio;
+
+  /// Tage mit Nutzung in den letzten 7 Tagen, null = unbekannt (kein Nutzungszugriff).
+  final int? days7;
+  final Level autoLevel;
+  final Level level;
   final DateTime? lastUsed;
   final Duration foreground;
   final Duration fgService;
@@ -38,11 +48,15 @@ class AppEntry {
     this.system = false,
     this.stopped = false,
     this.protected = false,
+    this.audio = false,
+    this.days7,
+    this.autoLevel = Level.soft,
+    Level? level,
     this.lastUsed,
     this.foreground = Duration.zero,
     this.fgService = Duration.zero,
     this.icon,
-  });
+  }) : level = level ?? autoLevel;
 
   factory AppEntry.fromMap(Map<dynamic, dynamic> m) {
     final last = (m['lastUsed'] as num?)?.toInt() ?? 0;
@@ -52,6 +66,10 @@ class AppEntry {
       system: m['system'] == true,
       stopped: m['stopped'] == true,
       protected: m['protected'] == true,
+      audio: m['audio'] == true,
+      days7: (m['days7'] as num?)?.toInt(),
+      autoLevel: parseLevel(m['autoLevel']),
+      level: parseLevel(m['level']),
       lastUsed: last > 0 ? DateTime.fromMillisecondsSinceEpoch(last) : null,
       foreground: Duration(milliseconds: (m['foregroundMs'] as num?)?.toInt() ?? 0),
       fgService: Duration(milliseconds: (m['fgServiceMs'] as num?)?.toInt() ?? 0),
@@ -59,27 +77,54 @@ class AppEntry {
     );
   }
 
-  AppEntry copyWith({bool? stopped}) => AppEntry(
+  AppEntry copyWith({Level? level}) => AppEntry(
         pkg: pkg,
         label: label,
         system: system,
-        stopped: stopped ?? this.stopped,
+        stopped: stopped,
         protected: protected,
+        audio: audio,
+        days7: days7,
+        autoLevel: autoLevel,
+        level: level ?? this.level,
         lastUsed: lastUsed,
         foreground: foreground,
         fgService: fgService,
         icon: icon,
       );
 
-  /// Darf überhaupt beendet werden (Startbildschirm, Tastatur nie).
-  bool get stoppable => !protected && !stopped;
+  bool get manual => level != autoLevel;
+
+  /// Läuft und darf angefasst werden.
+  bool get running => !stopped && !protected;
 }
 
-/// Apps, die „Unwichtige beenden“ erfasst: laufend, keine System-App,
-/// nicht geschützt und nicht als wichtig markiert.
-List<AppEntry> stopCandidates(List<AppEntry> apps, Set<String> important) => apps
-    .where((a) => a.stoppable && !a.system && !important.contains(a.pkg))
-    .toList();
+/// Was „Aufräumen“ tut: sanft = Stufen soft + full, komplett = nur full.
+class Cleanup {
+  final List<AppEntry> soft;
+  final List<AppEntry> full;
+  const Cleanup(this.soft, this.full);
+  bool get isEmpty => soft.isEmpty && full.isEmpty;
+  int get count => soft.length + full.length;
+}
+
+Cleanup planCleanup(List<AppEntry> apps) => Cleanup(
+      apps.where((a) => a.running && a.level == Level.soft).toList(),
+      apps.where((a) => a.running && a.level == Level.full).toList(),
+    );
+
+/// Warum die Automatik diese Stufe gewählt hat (spiegelt `Policy.autoLevel` in Kotlin).
+String autoReason(AppEntry a) {
+  final d = a.days7;
+  if (a.protected) return 'Startbildschirm/Tastatur';
+  if (a.system) return 'vorinstalliert';
+  if (d != null && d >= 4) return 'oft benutzt ($d von 7 Tagen)';
+  if (a.audio) return 'Musik/Audio – Kopfhörer-Play soll gehen';
+  if (a.autoLevel == Level.soft && d == 0) return 'Messenger/Wecker/Musik/Navigation';
+  if (d == null) return 'ohne Nutzungszugriff vorsichtig';
+  if (d >= 1) return 'ab und zu benutzt ($d von 7 Tagen)';
+  return '7 Tage nicht benutzt';
+}
 
 /// Sortierung: laufende zuerst, dann wer am meisten im Hintergrund lief,
 /// dann zuletzt benutzt, dann Name.

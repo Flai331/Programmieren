@@ -15,10 +15,14 @@ class AppsPage extends StatefulWidget {
 
 class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
   List<AppEntry>? _apps;
-  Set<String> _important = {...defaultImportant};
   Map<dynamic, dynamic> _status = {};
   bool _showSystem = false;
   bool _loading = false;
+
+  // Automatik
+  bool _autoSoft = false;
+  bool _autoFull = false;
+  double _unlockAfter = 30;
 
   // Laufender Auftrag „Beenden erzwingen“
   Timer? _poll;
@@ -29,7 +33,7 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadImportant();
+    _loadAuto();
   }
 
   @override
@@ -51,12 +55,23 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  Future<void> _loadImportant() async {
+  Future<void> _loadAuto() async {
     try {
-      final saved = await Native.important();
-      if (saved != null && mounted) setState(() => _important = saved);
+      final w = await Native.watcher();
+      if (!mounted) return;
+      setState(() {
+        _autoSoft = w['autoSoft'] == true;
+        _autoFull = w['autoFull'] == true;
+        _unlockAfter = ((w['unlockAfterMin'] as num?) ?? 30).toDouble();
+      });
     } catch (_) {}
   }
+
+  Future<void> _saveAuto() => Native.setWatcher({
+        'autoSoft': _autoSoft,
+        'autoFull': _autoFull,
+        'unlockAfterMin': _unlockAfter.round(),
+      });
 
   Future<void> _load() async {
     if (_loading) return;
@@ -80,11 +95,14 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
   bool get _usageAccess => _status['usageAccess'] == true;
   bool get _accessibility => _status['accessibility'] == true;
 
-  void _toggleImportant(AppEntry a) {
+  Future<void> _setLevel(AppEntry a, Level? level) async {
+    await Native.setLevel(a.pkg, level);
     setState(() {
-      if (!_important.remove(a.pkg)) _important.add(a.pkg);
+      _apps = [
+        for (final x in _apps ?? <AppEntry>[])
+          x.pkg == a.pkg ? x.copyWith(level: level ?? x.autoLevel) : x
+      ];
     });
-    Native.setImportant(_important);
   }
 
   void _snack(String text) {
@@ -93,30 +111,39 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
       ..showSnackBar(SnackBar(content: Text(text)));
   }
 
-  Future<void> _stopAll() async {
-    final candidates = stopCandidates(_apps ?? [], _important);
-    if (candidates.isEmpty) {
-      _snack('Keine unwichtige App läuft gerade.');
+  Future<void> _cleanupNow() async {
+    final plan = planCleanup(_apps ?? []);
+    if (plan.isEmpty) {
+      _snack('Keine App zum Aufräumen aktiv.');
       return;
     }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('${candidates.length} Apps beenden?'),
+        title: Text('${plan.count} Apps aufräumen?'),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(candidates.map((a) => a.label).join(', ')),
-              const SizedBox(height: 12),
+              if (plan.full.isNotEmpty) ...[
+                const Text('Komplett beenden:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(plan.full.map((a) => a.label).join(', ')),
+                const SizedBox(height: 8),
+              ],
+              if (plan.soft.isNotEmpty) ...[
+                const Text('Sanft beenden:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(plan.soft.map((a) => a.label).join(', ')),
+                const SizedBox(height: 8),
+              ],
               Text(
-                _accessibility
-                    ? 'Für jede App öffnet sich kurz die App-Info und „Beenden erzwingen“ wird gedrückt. '
-                        'Bitte so lange das Handy nicht bedienen.\n\n'
-                        'Beendete Apps schicken keine Benachrichtigungen mehr, bis du sie wieder öffnest.'
-                    : 'Ohne Bedienungshilfe kann Android die Apps nur sanft beenden – '
-                        'Apps mit eigenem Dienst laufen dann weiter.',
+                plan.full.isEmpty
+                    ? 'Sanft beendete Apps starten bei Bedarf wieder (Nachricht, Play am Kopfhörer).'
+                    : _accessibility
+                        ? 'Für jede „Komplett“-App öffnet sich kurz die App-Info. Bitte so lange das Handy nicht bedienen.'
+                        : 'Ohne Bedienungshilfe werden auch die „Komplett“-Apps nur sanft beendet.',
                 style: Theme.of(ctx).textTheme.bodySmall,
               ),
             ],
@@ -128,18 +155,24 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
               child: const Text('Abbrechen')),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Beenden')),
+              child: const Text('Aufräumen')),
         ],
       ),
     );
     if (ok != true) return;
-    await _stop(candidates.map((a) => a.pkg).toList());
+    await Native.killBackground([...plan.soft, ...plan.full].map((a) => a.pkg).toList());
+    if (plan.full.isEmpty || !_accessibility) {
+      _snack('${plan.count} Apps sanft beendet.');
+      _load();
+      return;
+    }
+    await _forceStop(plan.full.map((a) => a.pkg).toList());
   }
 
-  Future<void> _stop(List<String> pkgs) async {
-    final soft = await Native.killBackground(pkgs);
+  Future<void> _forceStop(List<String> pkgs) async {
     if (!_accessibility) {
-      _snack('$soft Apps sanft beendet. Für komplettes Beenden die Bedienungshilfe einschalten.');
+      await Native.killBackground(pkgs);
+      _snack('Nur sanft beendet – für komplettes Beenden die Bedienungshilfe einschalten.');
       _load();
       return;
     }
@@ -180,7 +213,7 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('$stopped von ${results.length} beendet'),
+        title: Text('$stopped von ${results.length} komplett beendet'),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,61 +228,84 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
           ),
         ),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
         ],
       ),
     );
   }
 
   void _details(AppEntry a) {
-    final important = _important.contains(a.pkg);
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: _AppIcon(a),
-              title: Text(a.label),
-              subtitle: Text(a.pkg),
-            ),
-            const Divider(height: 1),
-            if (a.stoppable)
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               ListTile(
-                leading: const Icon(Icons.stop_circle_outlined),
-                title: const Text('Jetzt beenden'),
-                subtitle: a.system
-                    ? const Text('Vorinstallierte App – nur beenden, wenn du sicher bist.')
-                    : null,
+                leading: _AppIcon(a),
+                title: Text(a.label),
+                subtitle: Text(a.pkg),
+              ),
+              const Divider(height: 1),
+              if (a.protected)
+                const ListTile(
+                  leading: Icon(Icons.lock_outline),
+                  title: Text('Geschützt'),
+                  subtitle: Text('Startbildschirm und Tastatur werden nie beendet.'),
+                )
+              else ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Text('Stufe', style: Theme.of(ctx).textTheme.titleSmall),
+                ),
+                RadioListTile<Level?>(
+                  value: null,
+                  groupValue: a.manual ? a.level : null,
+                  title: Text('Automatisch: ${levelName(a.autoLevel)}'),
+                  subtitle: Text(autoReason(a)),
+                  onChanged: (_) {
+                    Navigator.pop(ctx);
+                    _setLevel(a, null);
+                  },
+                ),
+                for (final l in Level.values)
+                  RadioListTile<Level?>(
+                    value: l,
+                    groupValue: a.manual ? a.level : null,
+                    title: Text(levelName(l)),
+                    subtitle: Text(levelHint(l)),
+                    onChanged: (_) {
+                      Navigator.pop(ctx);
+                      _setLevel(a, l);
+                    },
+                  ),
+                const Divider(height: 1),
+                if (a.running)
+                  ListTile(
+                    leading: const Icon(Icons.stop_circle_outlined),
+                    title: const Text('Jetzt komplett beenden'),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _forceStop([a.pkg]);
+                    },
+                  ),
+              ],
+              ListTile(
+                leading: const Icon(Icons.battery_alert_outlined),
+                title: const Text('Akkunutzung einschränken'),
+                subtitle: const Text(
+                    'App-Info → Akku → „Eingeschränkt“. Wirkt dauerhaft. '
+                    'Nicht bei Spotify & Co., sonst bricht die Musik bei gesperrtem Handy ab.'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _stop([a.pkg]);
+                  Native.openAppDetails(a.pkg);
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.battery_alert_outlined),
-              title: const Text('Akkunutzung einschränken'),
-              subtitle: const Text(
-                  'Öffnet die App-Info → „Akku“ → „Eingeschränkt“. Wirkt dauerhaft, '
-                  'die App darf dann nicht mehr im Hintergrund laufen.'),
-              onTap: () {
-                Navigator.pop(ctx);
-                Native.openAppDetails(a.pkg);
-              },
-            ),
-            if (!a.protected)
-              ListTile(
-                leading: Icon(important ? Icons.star : Icons.star_border),
-                title: Text(important ? 'Nicht mehr wichtig' : 'Als wichtig markieren'),
-                subtitle: const Text('Wichtige Apps werden nie automatisch beendet.'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _toggleImportant(a);
-                },
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -263,7 +319,7 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
       return const Center(child: CircularProgressIndicator());
     }
     final visible = apps.where((a) => _showSystem || !a.system).toList();
-    final candidates = stopCandidates(apps, _important);
+    final plan = planCleanup(apps);
     final running = visible.where((a) => !a.stopped).length;
     final now = DateTime.now();
 
@@ -276,15 +332,15 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
             _PermCard(
               icon: Icons.query_stats,
               title: 'Nutzungszugriff erlauben',
-              text: 'Damit siehst du, welche App wie lange im Hintergrund lief. '
-                  'In der Liste „Akku-Schoner“ antippen und erlauben.',
+              text: 'Nötig, damit die Stufen nach deiner Nutzung gewählt werden (oft benutzt = wichtig, '
+                  'lange nicht benutzt = komplett beenden). In der Liste „Akku-Schoner“ antippen und erlauben.',
               onTap: () => Native.openSettings('usage'),
             ),
           if (!_accessibility)
             _PermCard(
               icon: Icons.accessibility_new,
               title: 'Bedienungshilfe einschalten',
-              text: 'Nur damit lassen sich Apps wirklich komplett beenden. '
+              text: 'Nur damit lassen sich Apps komplett beenden. '
                   'Bedienungshilfen → Installierte Apps → „Akku-Schoner: Apps beenden“. '
                   'Ausgegraut? In der App-Info oben rechts ⋮ → „Eingeschränkte Einstellungen zulassen“.',
               onTap: () => Native.openSettings('accessibility'),
@@ -302,7 +358,7 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
                   children: [
                     Text('Beende Apps … $_done von $_total'),
                     const SizedBox(height: 8),
-                    LinearProgressIndicator(value: _total == 0 ? null : _done / _total),
+                    LinearProgressIndicator(value: _done / _total),
                     TextButton(
                       onPressed: () => Native.cancelForceStop(),
                       child: const Text('Abbrechen'),
@@ -316,10 +372,66 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
             child: FilledButton.icon(
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
               icon: const Icon(Icons.cleaning_services),
-              label: Text(candidates.isEmpty
-                  ? 'Keine unwichtige App läuft'
-                  : '${candidates.length} unwichtige Apps beenden'),
-              onPressed: candidates.isEmpty || _total > 0 ? null : _stopAll,
+              label: Text(plan.isEmpty
+                  ? 'Nichts aufzuräumen'
+                  : 'Jetzt aufräumen (${plan.full.length} komplett, ${plan.soft.length} sanft)'),
+              onPressed: plan.isEmpty || _total > 0 ? null : _cleanupNow,
+            ),
+          ),
+          Card(
+            margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Column(
+              children: [
+                SwitchListTile(
+                  title: const Text('Bei Bildschirm-Aus sanft aufräumen'),
+                  subtitle: const Text(
+                      '15 s nach dem Ausschalten fliegen „Sanft“- und „Komplett“-Apps aus dem Speicher. '
+                      'Laufende Musik bleibt an, Play am Kopfhörer geht weiter.'),
+                  value: _autoSoft,
+                  onChanged: (v) {
+                    setState(() => _autoSoft = v);
+                    _saveAuto();
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('Beim Entsperren komplett beenden'),
+                  subtitle: Text(
+                      'War der Bildschirm mindestens ${_unlockAfter.round()} min aus, werden „Komplett“-Apps '
+                      'beendet, die sich wieder eingeschlichen haben (App-Info blitzt kurz auf). '
+                      'Nicht während eines Anrufs.'),
+                  value: _autoFull,
+                  onChanged: _accessibility
+                      ? (v) {
+                          setState(() => _autoFull = v);
+                          _saveAuto();
+                        }
+                      : null,
+                ),
+                if (_autoFull)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        const Text('Pause ab'),
+                        Expanded(
+                          child: Slider(
+                            value: _unlockAfter.clamp(10, 180),
+                            min: 10,
+                            max: 180,
+                            divisions: 17,
+                            label: '${_unlockAfter.round()} min',
+                            onChanged: (v) => setState(() => _unlockAfter = v),
+                            onChangeEnd: (_) => _saveAuto(),
+                          ),
+                        ),
+                        SizedBox(
+                            width: 60,
+                            child: Text('${_unlockAfter.round()} min',
+                                textAlign: TextAlign.end)),
+                      ],
+                    ),
+                  ),
+              ],
             ),
           ),
           Padding(
@@ -328,7 +440,7 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
               children: [
                 Expanded(
                   child: Text(
-                    '$running von ${visible.length} Apps sind aktiv · ★ = wichtig, wird nie beendet',
+                    '$running von ${visible.length} Apps aktiv · Antippen ändert die Stufe',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -347,17 +459,8 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
               subtitle: Text(_subtitle(a, now)),
               onTap: () => _details(a),
               trailing: a.protected
-                  ? const Tooltip(
-                      message: 'Startbildschirm/Tastatur – wird nie beendet',
-                      child: Icon(Icons.lock_outline))
-                  : IconButton(
-                      tooltip: 'Wichtig',
-                      icon: Icon(
-                        _important.contains(a.pkg) ? Icons.star : Icons.star_border,
-                        color: _important.contains(a.pkg) ? Colors.amber : null,
-                      ),
-                      onPressed: () => _toggleImportant(a),
-                    ),
+                  ? const Icon(Icons.lock_outline)
+                  : _LevelChip(a),
             ),
         ],
       ),
@@ -370,10 +473,35 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
       if (a.fgService > const Duration(minutes: 1)) {
         parts.add('${formatDuration(a.fgService)} im Hintergrund');
       }
+      if (a.days7 != null) parts.add('${a.days7}/7 Tage');
       parts.add('benutzt ${formatAgo(a.lastUsed, now)}');
     }
     if (a.system) parts.add('vorinstalliert');
     return parts.join(' · ');
+  }
+}
+
+class _LevelChip extends StatelessWidget {
+  final AppEntry app;
+  const _LevelChip(this.app);
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (app.level) {
+      Level.keep => Colors.green,
+      Level.soft => Colors.blue,
+      Level.full => Colors.red,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: app.manual ? Border.all(color: color) : null,
+      ),
+      child: Text(levelName(app.level),
+          style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+    );
   }
 }
 

@@ -29,9 +29,8 @@ class MainActivity : FlutterActivity() {
                             val apps = try { Apps.list(this) } catch (e: Exception) { emptyList() }
                             runOnUiThread { result.success(apps) }
                         }.start()
-                        "getImportant" -> result.success(Prefs.important(this))
-                        "setImportant" -> {
-                            Prefs.setImportant(this, call.argument<List<String>>("pkgs") ?: emptyList())
+                        "setLevel" -> {
+                            Prefs.setOverride(this, call.argument<String>("pkg") ?: "", call.argument<String>("level"))
                             result.success(null)
                         }
                         "killBackground" ->
@@ -47,7 +46,7 @@ class MainActivity : FlutterActivity() {
                         "setWatcher" -> {
                             val map = call.arguments as? Map<*, *> ?: emptyMap<String, Any>()
                             Prefs.setWatcher(this, map)
-                            if (Prefs.watcherEnabled(this)) askNotificationPermission()
+                            if (Prefs.serviceNeeded(this)) askNotificationPermission()
                             WatcherService.sync(this)
                             result.success(null)
                         }
@@ -109,7 +108,18 @@ class MainActivity : FlutterActivity() {
             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
             else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
         "appInfo" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
+        "samsungBattery" -> samsungIntent("com.samsung.android.sm.ui.battery.BatteryActivity")
+        "samsungSleeping" -> samsungIntent("com.samsung.android.sm.ui.appsleeping.AppSleepSettingActivity")
         else -> Intent(Settings.ACTION_SETTINGS)
+    }
+
+    /** Samsung "Gerätewartung" – Klassennamen ändern sich mit One UI, daher mit Ausweichziel. */
+    private fun samsungIntent(cls: String): Intent {
+        for (pkg in listOf("com.samsung.android.lool", "com.samsung.android.sm")) {
+            val i = Intent().setClassName(pkg, cls)
+            if (i.resolveActivity(packageManager) != null) return i
+        }
+        return Intent(Intent.ACTION_POWER_USAGE_SUMMARY)
     }
 
     /** Einstellungsseite öffnen; gibt es sie auf dem Handy nicht, die Einstellungen-Startseite. */

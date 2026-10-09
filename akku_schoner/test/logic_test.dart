@@ -6,6 +6,10 @@ AppEntry app(String pkg,
         bool stopped = false,
         bool protected = false,
         int bgMin = 0,
+        Level level = Level.soft,
+        Level? auto,
+        int? days7,
+        bool audio = false,
         DateTime? last}) =>
     AppEntry(
       pkg: pkg,
@@ -14,22 +18,58 @@ AppEntry app(String pkg,
       stopped: stopped,
       protected: protected,
       fgService: Duration(minutes: bgMin),
+      autoLevel: auto ?? level,
+      level: level,
+      days7: days7,
+      audio: audio,
       lastUsed: last,
     );
 
 void main() {
-  group('stopCandidates', () {
-    test('nur laufende, nicht wichtige, nicht geschützte Nutzer-Apps', () {
-      final apps = [
-        app('a'),
-        app('b', stopped: true),
-        app('c', system: true),
-        app('d', protected: true),
-        app('com.whatsapp'),
-        app('e'),
-      ];
-      final result = stopCandidates(apps, {...defaultImportant, 'e'});
-      expect(result.map((a) => a.pkg), ['a']);
+  group('planCleanup', () {
+    test('sanft = Stufe soft, komplett = Stufe full, nur laufende, nie geschützte', () {
+      final plan = planCleanup([
+        app('keep', level: Level.keep),
+        app('soft'),
+        app('full', level: Level.full),
+        app('fullStopped', level: Level.full, stopped: true),
+        app('launcher', level: Level.full, protected: true),
+      ]);
+      expect(plan.soft.map((a) => a.pkg), ['soft']);
+      expect(plan.full.map((a) => a.pkg), ['full']);
+      expect(plan.count, 2);
+    });
+
+    test('von Hand gesetzte Stufe erkennbar', () {
+      expect(app('a', level: Level.full, auto: Level.soft).manual, isTrue);
+      expect(app('a').manual, isFalse);
+      expect(app('a').copyWith(level: Level.keep).level, Level.keep);
+    });
+  });
+
+  group('Stufen', () {
+    test('parseLevel und Begründung', () {
+      expect(parseLevel('full'), Level.full);
+      expect(parseLevel('soft'), Level.soft);
+      expect(parseLevel(null), Level.keep);
+      expect(autoReason(app('a', level: Level.keep, days7: 6)), contains('oft benutzt'));
+      expect(autoReason(app('s', audio: true, days7: 0)), contains('Kopfhörer'));
+      expect(autoReason(app('x', level: Level.full, days7: 0)), '7 Tage nicht benutzt');
+      expect(autoReason(app('y', days7: null)), contains('Nutzungszugriff'));
+    });
+
+    test('fromMap liest Stufen aus Kotlin', () {
+      final a = AppEntry.fromMap({
+        'pkg': 'com.spotify.music',
+        'label': 'Spotify',
+        'autoLevel': 'soft',
+        'level': 'full',
+        'days7': 2,
+      });
+      expect(a.level, Level.full);
+      expect(a.autoLevel, Level.soft);
+      expect(a.manual, isTrue);
+      expect(a.days7, 2);
     });
   });
 

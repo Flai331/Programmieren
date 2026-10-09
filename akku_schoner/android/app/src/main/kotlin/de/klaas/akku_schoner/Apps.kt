@@ -48,18 +48,22 @@ object Apps {
         true
     }
 
-    /** Alle Apps mit Symbol im App-Menü, inkl. Nutzungsdaten der letzten 24 h (falls erlaubt). */
-    fun list(ctx: Context): List<Map<String, Any?>> {
+    private data class Usage(val lastUsed: Long, val foreground: Long, val fgService: Long)
+
+    /** Alle Apps mit Symbol im App-Menü, inkl. Nutzungsdaten und Stufe (keep/soft/full). */
+    fun list(ctx: Context, withIcons: Boolean = true): List<Map<String, Any?>> {
         val pm = ctx.packageManager
         val protected = protectedPackages(ctx)
+        val overrides = Prefs.overrides(ctx)
 
         val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val launchable = pm.queryIntentActivities(launcher, 0)
             .map { it.activityInfo.packageName }
             .toSet()
 
-        data class Usage(val lastUsed: Long, val foreground: Long, val fgService: Long)
         val usage = mutableMapOf<String, Usage>()
+        // Paket -> an wie vielen der letzten 7 Tage benutzt; null-Map = kein Nutzungszugriff
+        var days: Map<String, Int>? = null
         if (hasUsageAccess(ctx)) {
             val usm = ctx.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
             val now = System.currentTimeMillis()
@@ -68,6 +72,13 @@ object Apps {
                     val fgs = if (Build.VERSION.SDK_INT >= 29) s.totalTimeForegroundServiceUsed else 0L
                     usage[pkg] = Usage(s.lastTimeUsed, s.totalTimeInForeground, fgs)
                 }
+                val daySets = mutableMapOf<String, MutableSet<Long>>()
+                usm?.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 7 * 24 * 3600_000L, now)
+                    ?.filter { it.totalTimeInForeground > 30_000L }
+                    ?.forEach { s ->
+                        daySets.getOrPut(s.packageName) { mutableSetOf() }.add(s.firstTimeStamp / (24 * 3600_000L))
+                    }
+                days = daySets.mapValues { it.value.size }
             } catch (_: Exception) {
             }
         }
@@ -81,22 +92,38 @@ object Apps {
                 continue
             }
             val u = usage[pkg]
+            val system = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            val isProtected = protected.contains(pkg)
+            val audio = Build.VERSION.SDK_INT >= 26 && info.category == ApplicationInfo.CATEGORY_AUDIO
+            val days7 = days?.let { it[pkg] ?: 0 }
+            val auto = Policy.autoLevel(pkg, system, isProtected, audio, days7)
+            val level = if (isProtected) Policy.KEEP else overrides[pkg] ?: auto
             out.add(
                 mapOf(
                     "pkg" to pkg,
                     "label" to info.loadLabel(pm).toString(),
-                    "system" to ((info.flags and ApplicationInfo.FLAG_SYSTEM) != 0),
+                    "system" to system,
                     "stopped" to ((info.flags and ApplicationInfo.FLAG_STOPPED) != 0),
-                    "protected" to protected.contains(pkg),
+                    "protected" to isProtected,
+                    "audio" to audio,
+                    "days7" to days7,
+                    "autoLevel" to auto,
+                    "level" to level,
                     "lastUsed" to (u?.lastUsed ?: 0L),
                     "foregroundMs" to (u?.foreground ?: 0L),
                     "fgServiceMs" to (u?.fgService ?: 0L),
-                    "icon" to icon(ctx, info),
+                    "icon" to if (withIcons) icon(ctx, info) else null,
                 )
             )
         }
         return out
     }
+
+    /** Laufende Apps einer Stufe (für Automatik), ohne Symbole. */
+    fun running(ctx: Context, level: String): List<String> =
+        list(ctx, withIcons = false)
+            .filter { it["level"] == level && it["stopped"] != true && it["protected"] != true }
+            .map { it["pkg"] as String }
 
     private fun icon(ctx: Context, info: ApplicationInfo): ByteArray? = try {
         val d = info.loadIcon(ctx.packageManager)

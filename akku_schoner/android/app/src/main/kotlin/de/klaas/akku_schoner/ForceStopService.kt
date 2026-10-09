@@ -23,6 +23,7 @@ class ForceStopService : AccessibilityService() {
         private val pending: ArrayDeque<String> = ArrayDeque()
         private val results: MutableList<Map<String, String>> = mutableListOf()
         private var total = 0
+        private var returnToApp = true
 
         fun isEnabled(ctx: Context): Boolean {
             val enabled = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
@@ -30,13 +31,19 @@ class ForceStopService : AccessibilityService() {
             return enabled?.split(":")?.any { it.equals(me, ignoreCase = true) } ?: false
         }
 
-        /** Neuer Auftrag. false = Bedienungshilfe ist nicht eingeschaltet. */
-        fun request(ctx: Context, pkgs: List<String>): Boolean {
+        fun busy(): Boolean = pending.isNotEmpty()
+
+        /**
+         * Neuer Auftrag. false = Bedienungshilfe ist nicht eingeschaltet.
+         * returnToApp = am Ende den Akku-Schoner zeigen (sonst bleibt der Startbildschirm).
+         */
+        fun request(ctx: Context, pkgs: List<String>, returnToApp: Boolean = true): Boolean {
             val service = instance ?: return false
             val protected = Apps.protectedPackages(ctx)
             if (pending.isEmpty()) {
                 results.clear()
                 total = 0
+                this.returnToApp = returnToApp
             }
             for (pkg in pkgs) {
                 if (protected.contains(pkg) || pending.contains(pkg)) continue
@@ -214,7 +221,7 @@ class ForceStopService : AccessibilityService() {
     private fun next() {
         if (pending.isNotEmpty()) {
             tryRun()
-        } else {
+        } else if (returnToApp) {
             backToApp()
         }
     }

@@ -16,14 +16,9 @@ class Native {
     return list.map((e) => AppEntry.fromMap(e as Map)).toList();
   }
 
-  /// null = noch nie gespeichert (dann gelten die Standard-Apps).
-  static Future<Set<String>?> important() async {
-    final list = await _ch.invokeMethod<List>('getImportant');
-    return list?.cast<String>().toSet();
-  }
-
-  static Future<void> setImportant(Set<String> pkgs) =>
-      _ch.invokeMethod('setImportant', {'pkgs': pkgs.toList()});
+  /// level == null → wieder automatisch.
+  static Future<void> setLevel(String pkg, Level? level) =>
+      _ch.invokeMethod('setLevel', {'pkg': pkg, 'level': level?.name});
 
   static Future<int> killBackground(List<String> pkgs) async =>
       await _ch.invokeMethod<int>('killBackground', {'pkgs': pkgs}) ?? 0;
