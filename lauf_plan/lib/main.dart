@@ -662,6 +662,14 @@ Future<DateTime?> pickDoneDate(BuildContext context, {required DateTime due}) as
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
           child: Text('Geplant war ${dateLabel(due)}. Der Plan passt sich an das Datum an.'),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
+          child: DateTextField(
+            first: planStart,
+            last: today,
+            onDate: (d) => Navigator.pop(ctx, d),
+          ),
+        ),
         for (final d in options)
           SimpleDialogOption(
             onPressed: () => Navigator.pop(ctx, d),
@@ -684,8 +692,79 @@ Future<DateTime?> pickDoneDate(BuildContext context, {required DateTime due}) as
     initialDate: local(initial.isAfter(today) ? today : initial),
     firstDate: local(planStart.isAfter(today) ? today : planStart),
     lastDate: local(today),
+    initialEntryMode: DatePickerEntryMode.input,
   );
   return d == null ? null : DateTime.utc(d.year, d.month, d.day);
+}
+
+/// Datum als Freitext: „7.10.“, „7,10“, „7/10/26“, „07.10.2026“ (Jahr optional,
+/// dann das Jahr von [today]). null = nicht lesbar oder kein echtes Datum.
+DateTime? parseUserDate(String input, DateTime today) {
+  // Trenner: Punkt, Komma, Schrägstrich oder Bindestrich (je nach Tastatur).
+  final m = RegExp(r'^(\d{1,2})[.,/-](\d{1,2})[.,/-]?(\d{2}|\d{4})?$').firstMatch(input.trim());
+  if (m == null) return null;
+  final day = int.parse(m.group(1)!);
+  final month = int.parse(m.group(2)!);
+  var year = today.year;
+  final y = m.group(3);
+  if (y != null) year = y.length == 2 ? 2000 + int.parse(y) : int.parse(y);
+  final d = DateTime.utc(year, month, day);
+  if (d.day != day || d.month != month) return null; // z. B. 31.2.
+  return d;
+}
+
+/// Eingabefeld für ein Datum als Freitext mit Prüfung auf [first]..[last].
+class DateTextField extends StatefulWidget {
+  final DateTime first, last;
+  final ValueChanged<DateTime> onDate;
+  const DateTextField({super.key, required this.first, required this.last, required this.onDate});
+  @override
+  State<DateTextField> createState() => _DateTextFieldState();
+}
+
+class _DateTextFieldState extends State<DateTextField> {
+  final c = TextEditingController();
+  String? error;
+
+  @override
+  void dispose() {
+    c.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final d = parseUserDate(c.text, widget.last);
+    if (d == null) {
+      setState(() => error = 'Bitte so eingeben: 7.10. oder 07.10.2026');
+    } else if (d.isBefore(widget.first) || d.isAfter(widget.last)) {
+      setState(() => error =
+          'Nur zwischen ${dateLabel(widget.first)} und ${dateLabel(widget.last)} möglich');
+    } else {
+      widget.onDate(d);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: c,
+      keyboardType: TextInputType.datetime,
+      textInputAction: TextInputAction.done,
+      onSubmitted: (_) => _submit(),
+      decoration: InputDecoration(
+        labelText: 'Datum eintippen',
+        hintText: 'z. B. 7.10.',
+        errorText: error,
+        errorMaxLines: 2,
+        border: const OutlineInputBorder(),
+        suffixIcon: IconButton(
+          icon: const Icon(Icons.check),
+          tooltip: 'Übernehmen',
+          onPressed: _submit,
+        ),
+      ),
+    );
+  }
 }
 
 String shiftText(int days) =>

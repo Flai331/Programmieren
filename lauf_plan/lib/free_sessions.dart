@@ -212,6 +212,7 @@ class _FreeSessionScreenState extends State<FreeSessionScreen> {
       initialDate: DateTime(s.date.year, s.date.month, s.date.day),
       firstDate: DateTime(2026),
       lastDate: DateTime(2030, 12, 31),
+      initialEntryMode: DatePickerEntryMode.input,
     );
     if (d != null) setState(() => s = s.copyWith(date: DateTime.utc(d.year, d.month, d.day)));
   }

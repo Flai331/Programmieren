@@ -311,6 +311,44 @@ void main() {
     expect(after[2].shiftDays, 0);
   });
 
+  test('Datum als Freitext', () {
+    final today = DateTime.utc(2026, 10, 9);
+    expect(parseUserDate('7.10.', today), DateTime.utc(2026, 10, 7));
+    expect(parseUserDate(' 07.10.2026 ', today), DateTime.utc(2026, 10, 7));
+    expect(parseUserDate('7.10.26', today), DateTime.utc(2026, 10, 7));
+    expect(parseUserDate('7.10', today), DateTime.utc(2026, 10, 7));
+    expect(parseUserDate('7,10', today), DateTime.utc(2026, 10, 7));
+    expect(parseUserDate('7/10/2026', today), DateTime.utc(2026, 10, 7));
+    expect(parseUserDate('31.2.', today), isNull);
+    expect(parseUserDate('Freitag', today), isNull);
+    expect(parseUserDate('', today), isNull);
+  });
+
+  testWidgets('Datum im Abhaken-Fenster eintippen', (tester) async {
+    final today = todayDate();
+    if (today.difference(planStart).inDays < 1) return; // erst ab Tag 2 sinnvoll
+    DateTime? picked;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () async => picked = await pickDoneDate(context, due: today),
+          child: const Text('los'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('los'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'quatsch');
+    await tester.tap(find.byTooltip('Übernehmen'));
+    await tester.pump();
+    expect(find.textContaining('Bitte so eingeben'), findsOneWidget);
+    final start = planStart;
+    await tester.enterText(find.byType(TextField), '${start.day}.${start.month}.${start.year}');
+    await tester.tap(find.byTooltip('Übernehmen'));
+    await tester.pumpAndSettle();
+    expect(picked, start);
+  });
+
   test('fmt formatiert Minuten und Sekunden', () {
     expect(fmt(0), '0:00');
     expect(fmt(65), '1:05');
