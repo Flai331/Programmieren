@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'calendar.dart';
-import 'main.dart' show dateLabel, isoDate, parseIsoDate, todayDate;
+import 'main.dart'
+    show dateLabel, isoDate, parseIsoDate, todayDate, Exercise, TimerConfig, TimerScreen, TimerResult;
 
 // Freie Einheiten (z. B. Dehnen): selbst angelegt, mit Datum und Uhrzeit,
 // einzeln als .ics exportierbar. Unabhängig vom 4-Wochen-Plan.
@@ -21,6 +22,10 @@ class FreeSession {
   final String notes;
   final bool done;
 
+  /// true = ersetzt die Plan-Einheit an diesem Tag (die rückt einen Tag nach
+  /// hinten), false = zusätzlich zur Plan-Einheit.
+  final bool replacesPlan;
+
   const FreeSession({
     required this.id,
     required this.title,
@@ -29,6 +34,7 @@ class FreeSession {
     this.minutes = 15,
     this.notes = '',
     this.done = false,
+    this.replacesPlan = false,
   });
 
   FreeSession copyWith({
@@ -38,6 +44,7 @@ class FreeSession {
     int? minutes,
     String? notes,
     bool? done,
+    bool? replacesPlan,
   }) =>
       FreeSession(
         id: id,
@@ -47,6 +54,7 @@ class FreeSession {
         minutes: minutes ?? this.minutes,
         notes: notes ?? this.notes,
         done: done ?? this.done,
+        replacesPlan: replacesPlan ?? this.replacesPlan,
       );
 
   Map<String, dynamic> toJson() => {
@@ -57,6 +65,7 @@ class FreeSession {
         'minutes': minutes,
         'notes': notes,
         'done': done,
+        'replaces': replacesPlan,
       };
 
   static FreeSession? fromJson(Object? j) {
@@ -72,6 +81,7 @@ class FreeSession {
       minutes: (j['minutes'] as num?)?.toInt() ?? 15,
       notes: (j['notes'] as String?) ?? '',
       done: j['done'] == true,
+      replacesPlan: j['replaces'] == true,
     );
   }
 
@@ -117,6 +127,12 @@ class FreeStore {
   }
 
   Future<void> remove(String id) async => _save(all()..removeWhere((x) => x.id == id));
+
+  /// Tage, an denen eine freie Einheit die Plan-Einheit ersetzt.
+  Set<DateTime> blockedDates({String? exceptId}) => {
+        for (final s in all())
+          if (s.replacesPlan && s.id != exceptId) s.date
+      };
 }
 
 Future<void> exportFree(BuildContext context, FreeSession s) =>
@@ -133,7 +149,7 @@ class FreeSessionTile extends StatelessWidget {
     final past = session.date.isBefore(todayDate());
     return Card(
       elevation: 0,
-      color: cs.surfaceContainerHighest.withOpacity(past ? 0.25 : 0.5),
+      color: cs.tertiaryContainer.withOpacity(past ? 0.3 : 0.7),
       margin: const EdgeInsets.symmetric(vertical: 3),
       child: ListTile(
         onTap: onTap,
@@ -142,7 +158,9 @@ class FreeSessionTile extends StatelessWidget {
             color: past && !session.done ? cs.outline : cs.primary),
         title: Text(session.title),
         subtitle: Text('${dateLabel(session.date)}  ${timeLabel(session.startMinutes)}'
-            ' · ${session.minutes} Min.'),
+            ' · ${session.minutes} Min.'
+            '\n${session.replacesPlan ? 'Statt Plan-Einheit' : 'Zusätzlich zum Plan'}'),
+        isThreeLine: true,
         trailing: IconButton(
           icon: const Icon(Icons.event_available),
           tooltip: 'Als Kalenderdatei (.ics) exportieren',
@@ -156,7 +174,10 @@ class FreeSessionTile extends StatelessWidget {
 class FreeSessionScreen extends StatefulWidget {
   final FreeStore store;
   final FreeSession? session; // null = neu
-  const FreeSessionScreen({super.key, required this.store, this.session});
+
+  /// Titel der offenen Plan-Einheit an einem Tag (ohne diese freie Einheit).
+  final String? Function(DateTime date, String id)? planTitleOn;
+  const FreeSessionScreen({super.key, required this.store, this.session, this.planTitleOn});
 
   @override
   State<FreeSessionScreen> createState() => _FreeSessionScreenState();
@@ -201,6 +222,38 @@ class _FreeSessionScreenState extends State<FreeSessionScreen> {
       initialTime: TimeOfDay(hour: s.startMinutes ~/ 60, minute: s.startMinutes % 60),
     );
     if (t != null) setState(() => s = s.copyWith(startMinutes: t.hour * 60 + t.minute));
+  }
+
+  Future<void> _startTimer() async {
+    final c = current;
+    final result = await Navigator.push<TimerResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TimerScreen(
+          exercise: Exercise(
+            c.title,
+            c.notes.isEmpty ? '${c.minutes} Min.' : c.notes,
+            TimerConfig(work: c.minutes * 60, workLabel: c.title),
+          ),
+        ),
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() => s = s.copyWith(done: true));
+      await widget.store.upsert(current);
+    }
+  }
+
+  String _planInfo() {
+    final t = widget.planTitleOn?.call(s.date, s.id);
+    if (s.replacesPlan) {
+      return t == null
+          ? 'An diesem Tag liegt keine offene Plan-Einheit – es verschiebt sich nichts.'
+          : '„$t“ rückt dafür einen Tag nach hinten, der restliche Plan verschiebt sich mit.';
+    }
+    return t == null
+        ? 'An diesem Tag liegt keine offene Plan-Einheit.'
+        : 'Zusätzlich zu „$t“ an diesem Tag.';
   }
 
   Future<void> _save() async {
@@ -274,7 +327,42 @@ class _FreeSessionScreenState extends State<FreeSessionScreen> {
             ]),
           ),
           const SizedBox(height: 16),
-          Text('Dauer', style: tt.titleSmall),
+          Text('Im Plan', style: tt.titleSmall),
+          const SizedBox(height: 6),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(
+                  value: false, icon: Icon(Icons.add), label: Text('Zusätzlich')),
+              ButtonSegment(
+                  value: true, icon: Icon(Icons.swap_horiz), label: Text('Statt Plan-Einheit')),
+            ],
+            selected: {s.replacesPlan},
+            onSelectionChanged: (v) => setState(() => s = s.copyWith(replacesPlan: v.first)),
+          ),
+          const SizedBox(height: 6),
+          Text(_planInfo(), style: tt.bodySmall),
+          const SizedBox(height: 16),
+          Text('Dauer (Zeitansatz)', style: tt.titleSmall),
+          Row(children: [
+            IconButton.outlined(
+              icon: const Icon(Icons.remove),
+              tooltip: '5 Min. weniger',
+              onPressed: s.minutes > 5
+                  ? () => setState(() => s = s.copyWith(minutes: s.minutes - 5))
+                  : null,
+            ),
+            Expanded(
+              child: Text('${s.minutes} Min.',
+                  textAlign: TextAlign.center, style: tt.headlineSmall),
+            ),
+            IconButton.outlined(
+              icon: const Icon(Icons.add),
+              tooltip: '5 Min. mehr',
+              onPressed: s.minutes < 240
+                  ? () => setState(() => s = s.copyWith(minutes: s.minutes + 5))
+                  : null,
+            ),
+          ]),
           const SizedBox(height: 4),
           Wrap(spacing: 8, children: [
             for (final m in freeDurations)
@@ -299,6 +387,12 @@ class _FreeSessionScreenState extends State<FreeSessionScreen> {
             title: const Text('Erledigt'),
             value: s.done,
             onChanged: (v) => setState(() => s = s.copyWith(done: v)),
+          ),
+          const SizedBox(height: 8),
+          FilledButton.tonalIcon(
+            onPressed: _startTimer,
+            icon: const Icon(Icons.timer_outlined),
+            label: Text('Timer starten (${s.minutes} Min.)'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
