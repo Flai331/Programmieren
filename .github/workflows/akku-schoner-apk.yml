@@ -1,0 +1,134 @@
+name: Akku-Schoner APK Build
+
+# Baut die Akku-Schoner-APK auf einem GitHub-Runner (lokal gibt es kein Android-SDK).
+# Der android/-Ordner wird per `flutter create` erzeugt, falls er fehlt.
+# Danach wird das Release "akku-schoner" aktualisiert:
+# https://github.com/Flai331/Programmieren/releases/download/akku-schoner/Akku-Schoner.apk
+
+on:
+  push:
+    branches:
+      - main
+      - claude/akku-schoner-**
+      - ccr-993a59bd-hct6yt
+    paths:
+      - 'akku_schoner/**'
+      - '.github/workflows/akku-schoner-apk.yml'
+      - 'spotify_merker_android/android/app/merker-release.p12'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: akku-schoner-apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: akku_schoner
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.1'
+          channel: stable
+          cache: true
+
+      - name: Android-Projekt erzeugen (falls nicht eingecheckt)
+        # android/app/build.gradle.kts (Signatur) ist eingecheckt und bleibt erhalten,
+        # Manifest + Kotlin ebenso; flutter create ergänzt nur die fehlenden Dateien.
+        run: |
+          if [ ! -f android/settings.gradle.kts ]; then
+            flutter create --platforms=android --project-name akku_schoner --org de.klaas .
+            # Vorlagen-Test von flutter create passt nicht zur App (MyApp gibt es nicht).
+            rm -f test/widget_test.dart
+          fi
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Android-NDK vorab installieren (mit Wiederholung)
+        # Gradle lädt das NDK sonst selbst – bricht der Download ab
+        # ("Error on ZipFile unknown archive"), scheitert der ganze Build.
+        # Version = flutter.ndkVersion von Flutter 3.47.1.
+        env:
+          NDK_VERSION: 28.2.13676358
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          for i in 1 2 3; do
+            if [ -f "$ANDROID_HOME/ndk/$NDK_VERSION/source.properties" ]; then break; fi
+            rm -rf "$ANDROID_HOME/ndk/$NDK_VERSION"
+            printf 'y\n%.0s' $(seq 20) | "$SDKM" --install "ndk;$NDK_VERSION" > /dev/null \
+              || echo "NDK-Download fehlgeschlagen (Versuch $i)"
+            sleep 5
+          done
+          test -f "$ANDROID_HOME/ndk/$NDK_VERSION/source.properties"
+
+      - name: Run analyzer
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Signatur-Secret prüfen
+        env:
+          MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
+        run: |
+          # Ohne festen Schlüssel ließe sich die APK nicht als Update installieren –
+          # dann lieber kein Release als ein unbrauchbares.
+          if [ -z "$MERKER_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Secret MERKER_KEYSTORE_PASSWORD fehlt – kein signierter Build möglich."
+            exit 1
+          fi
+
+      - name: Build APK
+        env:
+          MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
+        # Fortlaufende Versionsnummer, damit Android jede neue APK als Update sieht.
+        run: flutter build apk --release --build-number=${{ github.run_number }}
+
+      - name: Signatur der APK prüfen
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          CERT=$(keytool -printcert -jarfile "$APK")
+          echo "$CERT" | head -5
+          if echo "$CERT" | grep -q "Android Debug"; then
+            echo "::error::APK ist mit dem Debug-Schlüssel signiert."
+            exit 1
+          fi
+
+      - name: Upload APK to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Akku-Schoner-${{ github.sha }}
+          path: akku_schoner/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk Akku-Schoner.apk
+          if gh release view akku-schoner > /dev/null 2>&1; then
+            gh release upload akku-schoner Akku-Schoner.apk --clobber
+          else
+            gh release create akku-schoner Akku-Schoner.apk --target "${{ github.sha }}" \
+              --title "Akku-Schoner" \
+              --notes "Schont einen schwachen Akku: beendet unwichtige Hintergrund-Apps, Akku-Wächter, Spar-Abkürzungen. Automatisch gebaut. APK herunterladen und auf dem Handy installieren."
+          fi

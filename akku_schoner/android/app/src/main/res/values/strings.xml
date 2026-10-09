@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="force_stop_description">Beendet die Apps, die du im Akku-Schoner als unwichtig zum Beenden auswählst, indem in der App-Info "Beenden erzwingen" gedrückt wird. Der Dienst wird nur aktiv, wenn du in der App auf "Beenden" tippst – sonst liest oder ändert er nichts.</string>
+</resources>
