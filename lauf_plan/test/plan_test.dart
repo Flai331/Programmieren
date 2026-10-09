@@ -287,9 +287,15 @@ void main() {
     ));
     await tester.tap(find.text('los'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Heute ('), findsOneWidget);
+    expect(find.textContaining('Heute, '), findsOneWidget);
     expect(find.textContaining('Anderes Datum'), findsOneWidget);
-    await tester.tap(find.textContaining('Gestern ('));
+    // Tage der letzten Woche stehen mit Wochentag zur Auswahl.
+    final threeAgo = today.subtract(const Duration(days: 3));
+    if (!threeAgo.isBefore(planStart)) {
+      expect(find.text('${weekdaysLong[threeAgo.weekday - 1]}, '
+          '${threeAgo.day}.${threeAgo.month}. – wie geplant'), findsOneWidget);
+    }
+    await tester.tap(find.textContaining('Gestern, '));
     await tester.pumpAndSettle();
     expect(picked, yesterday);
   });

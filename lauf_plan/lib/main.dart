@@ -25,6 +25,9 @@ Future<void> main() async {
 final DateTime planStart = DateTime.utc(2026, 10, 1); // Donnerstag
 const int planDays = 28;
 const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+const weekdaysLong = [
+  'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'
+];
 const weekFocus = ['Gewöhnung', 'Bergsprints', 'Intervalle', 'Tempo'];
 
 class TimerConfig {
@@ -631,16 +634,25 @@ Future<void> exportPlanDays(BuildContext context, Store store, List<PlanDay> day
 Future<DateTime?> pickDoneDate(BuildContext context, {required DateTime due}) async {
   final today = todayDate();
   final yesterday = today.subtract(const Duration(days: 1));
+  // Die letzten 7 Tage direkt zur Auswahl (z. B. „Freitag“), ältere über
+  // „Anderes Datum“.
   final options = <DateTime>[
-    today,
-    if (!yesterday.isBefore(planStart)) yesterday,
-    if (due.isBefore(yesterday) && !due.isBefore(planStart)) due,
+    for (var i = 0; i < 7; i++)
+      if (!today.subtract(Duration(days: i)).isBefore(planStart))
+        today.subtract(Duration(days: i)),
   ];
-  String label(DateTime d) => d == today
-      ? 'Heute (${dateLabel(d)})'
-      : d == yesterday
-          ? 'Gestern (${dateLabel(d)})'
-          : 'Wie geplant (${dateLabel(d)})';
+  if (!due.isBefore(planStart) && !options.contains(due) && due.isBefore(today)) {
+    options.add(due);
+  }
+  String label(DateTime d) {
+    final name = d == today
+        ? 'Heute'
+        : d == yesterday
+            ? 'Gestern'
+            : weekdaysLong[d.weekday - 1];
+    final planned = d == due ? ' – wie geplant' : '';
+    return '$name, ${d.day}.${d.month}.$planned';
+  }
   final choice = await showDialog<Object>(
     context: context,
     builder: (ctx) => SimpleDialog(
