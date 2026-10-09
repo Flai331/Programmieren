@@ -322,6 +322,17 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {});
   }
 
+  Future<void> _backfill(int slot, DateTime due) async {
+    final on = await pickDoneDate(context, due: due);
+    if (on == null) return;
+    await widget.store.setDone(slot, true, on: on);
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${sessionFor(slot).title} für ${dateLabel(on)} abgehakt – '
+            'der Plan ist angepasst.')));
+  }
+
   Future<void> _openFree([FreeSession? f]) async {
     await Navigator.push(
         context,
@@ -424,7 +435,12 @@ class _HomeScreenState extends State<HomeScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
         children: [
-          _TodayCard(plan: plan, today: today, store: widget.store, onOpen: _open),
+          _TodayCard(
+              plan: plan,
+              today: today,
+              store: widget.store,
+              onOpen: _open,
+              onBackfill: _backfill),
           ...todayFree,
           const SizedBox(height: 12),
           Text('$doneCount von ${trainingDays.length} Einheiten erledigt',
@@ -489,8 +505,13 @@ class _TodayCard extends StatelessWidget {
   final DateTime today;
   final Store store;
   final void Function(int) onOpen;
+  final void Function(int slot, DateTime due) onBackfill;
   const _TodayCard(
-      {required this.plan, required this.today, required this.store, required this.onOpen});
+      {required this.plan,
+      required this.today,
+      required this.store,
+      required this.onOpen,
+      required this.onBackfill});
 
   @override
   Widget build(BuildContext context) {
@@ -557,6 +578,15 @@ class _TodayCard extends StatelessWidget {
               Text(shiftText(p.shiftDays), style: tt.bodyMedium?.copyWith(color: on)),
             const SizedBox(height: 12),
             FilledButton(onPressed: () => onOpen(p.slot), child: const Text('Training öffnen')),
+            if (isToday && !done && !s.isRest && p.due.isBefore(today)) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(foregroundColor: on),
+                onPressed: () => onBackfill(p.slot, p.due),
+                icon: const Icon(Icons.history),
+                label: const Text('Vergessen abzuhaken? Nachträglich abhaken'),
+              ),
+            ],
           ],
         ),
       ),
@@ -593,6 +623,57 @@ Future<void> exportPlanDays(BuildContext context, Store store, List<PlanDay> day
   if (!choice.allDay) await store.setExportStart(choice.startMinutes);
   if (!context.mounted) return;
   await shareIcs(context, [for (final d in days) planEvent(d, choice)], fileName);
+}
+
+/// Nachtragen: Fragt, an welchem Tag eine Einheit gemacht wurde.
+/// Der Plan richtet sich danach (Folgetage rücken entsprechend nach).
+/// null = abgebrochen.
+Future<DateTime?> pickDoneDate(BuildContext context, {required DateTime due}) async {
+  final today = todayDate();
+  final yesterday = today.subtract(const Duration(days: 1));
+  final options = <DateTime>[
+    today,
+    if (!yesterday.isBefore(planStart)) yesterday,
+    if (due.isBefore(yesterday) && !due.isBefore(planStart)) due,
+  ];
+  String label(DateTime d) => d == today
+      ? 'Heute (${dateLabel(d)})'
+      : d == yesterday
+          ? 'Gestern (${dateLabel(d)})'
+          : 'Wie geplant (${dateLabel(d)})';
+  final choice = await showDialog<Object>(
+    context: context,
+    builder: (ctx) => SimpleDialog(
+      title: const Text('Wann hast du trainiert?'),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+          child: Text('Geplant war ${dateLabel(due)}. Der Plan passt sich an das Datum an.'),
+        ),
+        for (final d in options)
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, d),
+            child: Text(label(d), style: Theme.of(ctx).textTheme.titleMedium),
+          ),
+        SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, 'pick'),
+          child: Text('Anderes Datum …', style: Theme.of(ctx).textTheme.titleMedium),
+        ),
+      ],
+    ),
+  );
+  if (choice is DateTime) return choice;
+  if (choice != 'pick' || !context.mounted) return null;
+  DateTime local(DateTime d) => DateTime(d.year, d.month, d.day);
+  final initial = yesterday.isBefore(planStart) ? planStart : yesterday;
+  final d = await showDatePicker(
+    context: context,
+    helpText: 'Wann hast du trainiert?',
+    initialDate: local(initial.isAfter(today) ? today : initial),
+    firstDate: local(planStart.isAfter(today) ? today : planStart),
+    lastDate: local(today),
+  );
+  return d == null ? null : DateTime.utc(d.year, d.month, d.day);
 }
 
 String shiftText(int days) =>
@@ -749,20 +830,7 @@ class _SessionScreenState extends State<SessionScreen> {
       // Nachgerückte Einheit: vielleicht doch am geplanten Tag gemacht, nur
       // vergessen abzuhaken – dann soll sich nichts verschieben.
       if (!s.isRest && due.isBefore(today)) {
-        on = await showDialog<DateTime>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Wann hast du trainiert?'),
-            content: Text('Geplant war die Einheit für ${dateLabel(due)}.'),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx, due),
-                  child: Text('Am ${dateLabel(due)}')),
-              FilledButton(
-                  onPressed: () => Navigator.pop(ctx, today), child: const Text('Heute')),
-            ],
-          ),
-        );
+        on = await pickDoneDate(context, due: due);
         if (on == null) return;
       }
     }
@@ -803,7 +871,24 @@ class _SessionScreenState extends State<SessionScreen> {
         children: [
           Builder(builder: (_) {
             final pd = widget.store.schedule()[widget.day];
-            final shifted = !done && !s.isRest && pd.shiftDays > 0;
+            if (done) {
+              return Row(children: [
+                Expanded(
+                  child: Text('Erledigt am ${dateLabel(pd.date)}', style: tt.bodyMedium),
+                ),
+                TextButton.icon(
+                  onPressed: () async {
+                    final on = await pickDoneDate(context, due: pd.due);
+                    if (on == null) return;
+                    await widget.store.setDone(widget.day, true, on: on);
+                    if (mounted) setState(() {});
+                  },
+                  icon: const Icon(Icons.edit_calendar, size: 18),
+                  label: const Text('Datum ändern'),
+                ),
+              ]);
+            }
+            final shifted = !s.isRest && pd.shiftDays > 0;
             return Text(
                 shifted
                     ? '${dateLabel(pd.date)} – ursprünglich ${dateLabel(dateOf(widget.day))}'

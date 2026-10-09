@@ -271,6 +271,40 @@ void main() {
     });
   });
 
+  testWidgets('Nachträglich abhaken: Gestern wählbar, Plan passt sich an', (tester) async {
+    final today = todayDate();
+    final yesterday = today.subtract(const Duration(days: 1));
+    if (yesterday.isBefore(planStart)) return; // nur sinnvoll ab Tag 2 des Plans
+    DateTime? picked;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () async =>
+              picked = await pickDoneDate(context, due: today.subtract(const Duration(days: 3))),
+          child: const Text('los'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('los'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Heute ('), findsOneWidget);
+    expect(find.textContaining('Anderes Datum'), findsOneWidget);
+    await tester.tap(find.textContaining('Gestern ('));
+    await tester.pumpAndSettle();
+    expect(picked, yesterday);
+  });
+
+  test('Für gestern abgehakt: Folgetage rücken wieder vor', () {
+    // Tag 0 erledigt, Tag 1 gestern gemacht aber erst heute (Tag 2) abgehakt.
+    final before = computeSchedule(dateOf(2), {0}.contains, (_) => dateOf(0));
+    expect(before[2].shiftDays, 1);
+    final after = computeSchedule(
+        dateOf(2), {0, 1}.contains, (d) => d == 0 ? dateOf(0) : dateOf(1));
+    expect(after[1].date, dateOf(1));
+    expect(after[2].date, dateOf(2));
+    expect(after[2].shiftDays, 0);
+  });
+
   test('fmt formatiert Minuten und Sekunden', () {
     expect(fmt(0), '0:00');
     expect(fmt(65), '1:05');
