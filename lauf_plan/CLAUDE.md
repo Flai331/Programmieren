@@ -10,7 +10,7 @@ Persönlicher 4-Wochen-Trainingsplan (Laufen + Gym), Start Do 01.10.2026.
 - Strichfiguren-Animationen für alle Gym-Übungen (CustomPainter, Start-/Endpose interpoliert)
 - Erklärvideo-Knopf nur für die Bein-Übungen (öffnet YouTube-Suche), im Übungsfenster und im Timer
 - Kalender-Export (.ics): alle offenen Einheiten ab heute (Startseite) oder einzeln (Einheit), Uhrzeit oder ganztägig wählbar; feste UID je Plan-Tag, erneuter Export aktualisiert Termine
-- Freie Einheiten (z. B. Dehnen) mit Datum/Uhrzeit/Dauer/Notizen anlegen, einzeln als .ics exportieren
+- Freie Einheiten (z. B. Dehnen): Knopf „Freie Einheit“ unten rechts auf der Startseite; Datum/Uhrzeit/Dauer (Zeitansatz)/Notizen, Timer, „Zusätzlich“ oder „Statt Plan-Einheit“ (dann rückt die Plan-Einheit einen Tag nach, `blockedDates`); stehen im Plan beim jeweiligen Tag, einzeln als .ics exportierbar
 - UI-Sprache: Deutsch (auch Datums-/Uhrzeitauswahl via `flutter_localizations`)
 
 ## Struktur

@@ -199,9 +199,11 @@ class PlanDay {
 /// Verschiebbarer Plan: Die Einheiten bleiben in ihrer Reihenfolge. Eine nicht
 /// erledigte Trainingseinheit rückt auf heute vor, alle folgenden Tage
 /// verschieben sich mit. Erledigte Einheiten bleiben an ihrem Erledigt-Datum,
-/// Ruhetage verschieben nichts.
+/// Ruhetage verschieben nichts. Tage in [blocked] sind durch eine freie
+/// Einheit "statt Plan-Einheit" belegt – offene Trainingseinheiten weichen aus.
 List<PlanDay> computeSchedule(DateTime today, bool Function(int) isDone,
-    DateTime? Function(int) doneOn) {
+    DateTime? Function(int) doneOn,
+    {Set<DateTime> blocked = const {}}) {
   final result = <PlanDay>[];
   var cursor = planStart;
   for (var slot = 0; slot < planDays; slot++) {
@@ -212,7 +214,11 @@ List<PlanDay> computeSchedule(DateTime today, bool Function(int) isDone,
     } else if (sessionFor(slot).isRest) {
       date = cursor;
     } else {
-      date = _later(cursor, today);
+      var d = _later(cursor, today);
+      while (blocked.contains(d)) {
+        d = d.add(const Duration(days: 1));
+      }
+      date = d;
     }
     result.add(PlanDay(slot, date, cursor));
     cursor = _later(cursor, date.add(const Duration(days: 1)));
@@ -259,8 +265,20 @@ class Store {
   int get exportStart => p.getInt('export_start') ?? 18 * 60;
   Future<void> setExportStart(int m) => p.setInt('export_start', m);
 
-  List<PlanDay> schedule([DateTime? today]) =>
-      computeSchedule(today ?? todayDate(), done, doneOn);
+  /// [exceptFree]: diese freie Einheit nicht berücksichtigen (beim Bearbeiten).
+  List<PlanDay> schedule([DateTime? today, String? exceptFree]) =>
+      computeSchedule(today ?? todayDate(), done, doneOn,
+          blocked: free.blockedDates(exceptId: exceptFree));
+
+  /// Offene Plan-Einheit, die (ohne [exceptFree]) an [date] liegt.
+  String? planTitleOn(DateTime date, {String? exceptFree}) {
+    for (final d in schedule(null, exceptFree)) {
+      if (d.date == date && !sessionFor(d.slot).isRest && !done(d.slot)) {
+        return sessionFor(d.slot).title;
+      }
+    }
+    return null;
+  }
   bool exDone(int d, int i) => p.getBool('ex_${d}_$i') ?? false;
   Future<void> setExDone(int d, int i, bool v) => p.setBool('ex_${d}_$i', v);
 }
@@ -308,7 +326,10 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.push(
         context,
         MaterialPageRoute(
-            builder: (_) => FreeSessionScreen(store: widget.store.free, session: f)));
+            builder: (_) => FreeSessionScreen(
+                store: widget.store.free,
+                session: f,
+                planTitleOn: (date, id) => widget.store.planTitleOn(date, exceptFree: id))));
     setState(() {});
   }
 
@@ -364,7 +385,29 @@ class _HomeScreenState extends State<HomeScreen> {
     final trainingDays = [for (var d = 0; d < planDays; d++) if (!sessionFor(d).isRest) d];
     final doneCount = trainingDays.where(widget.store.done).length;
 
+    // Freie Einheiten stehen im Plan beim jeweiligen Datum.
+    final pending = [...free];
+    List<Widget> takeFree(bool Function(FreeSession) test) {
+      final out = <Widget>[];
+      pending.removeWhere((f) {
+        if (!test(f)) return false;
+        out.add(FreeSessionTile(session: f, onTap: () => _openFree(f)));
+        return true;
+      });
+      return out;
+    }
+
+    final todayFree = [
+      for (final f in free)
+        if (f.date == today) FreeSessionTile(session: f, onTap: () => _openFree(f))
+    ];
+
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openFree(),
+        icon: const Icon(Icons.add),
+        label: const Text('Freie Einheit'),
+      ),
       appBar: AppBar(
         title: const Text('Laufplan'),
         actions: [
@@ -379,9 +422,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
         children: [
           _TodayCard(plan: plan, today: today, store: widget.store, onOpen: _open),
+          ...todayFree,
           const SizedBox(height: 12),
           Text('$doneCount von ${trainingDays.length} Einheiten erledigt',
               style: Theme.of(context).textTheme.bodyMedium),
@@ -405,17 +449,19 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ]),
           ),
-          if (free.isEmpty)
-            Text('Z. B. Dehnen anlegen und als Termin in deinen Tagesplan exportieren.',
-                style: Theme.of(context).textTheme.bodySmall),
-          for (final f in free) FreeSessionTile(session: f, onTap: () => _openFree(f)),
+          Text(
+              'Z. B. Dehnen mit Uhrzeit und Dauer anlegen – zusätzlich zur Plan-Einheit '
+              'oder statt ihr. Sie steht dann im Plan beim jeweiligen Tag und lässt sich '
+              'einzeln als Kalenderdatei exportieren.',
+              style: Theme.of(context).textTheme.bodySmall),
           for (var w = 0; w < 4; w++) ...[
             Padding(
               padding: const EdgeInsets.only(top: 24, bottom: 4),
               child: Text('Woche ${w + 1}: ${weekFocus[w]}',
                   style: Theme.of(context).textTheme.titleMedium),
             ),
-            for (var d = w * 7; d < w * 7 + 7; d++)
+            for (var d = w * 7; d < w * 7 + 7; d++) ...[
+              ...takeFree((f) => f.date.isBefore(plan[d].date)),
               _DayTile(
                 day: plan[d],
                 isToday: plan[d].date == today,
@@ -423,7 +469,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () => _open(plan[d].slot),
                 cs: cs,
               ),
+              ...takeFree((f) => f.date == plan[d].date),
+            ],
           ],
+          if (pending.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 24, bottom: 4),
+              child: Text('Nach dem Plan', style: Theme.of(context).textTheme.titleMedium),
+            ),
+          ...takeFree((_) => true),
         ],
       ),
     );

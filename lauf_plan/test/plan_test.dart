@@ -226,8 +226,49 @@ void main() {
     expect(find.text('Freie Einheit'), findsOneWidget);
     await tester.tap(find.text('Speichern'));
     await tester.pumpAndSettle();
-    expect(FreeStore(prefs).all().single.title, 'Dehnen');
-    expect(find.text('Dehnen'), findsOneWidget);
+    final saved = FreeStore(prefs).all().single;
+    expect(saved.title, 'Dehnen');
+    expect(saved.replacesPlan, isFalse);
+  });
+
+  testWidgets('Knopf „Freie Einheit“ auf der Startseite', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    await tester.pumpWidget(TrainingApp(store: Store(prefs)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FloatingActionButton, 'Freie Einheit'));
+    await tester.pumpAndSettle();
+    expect(find.text('Statt Plan-Einheit'), findsOneWidget);
+    expect(find.text('Zusätzlich'), findsOneWidget);
+    expect(find.text('Dauer (Zeitansatz)'), findsOneWidget);
+  });
+
+  group('Freie Einheit statt Plan-Einheit', () {
+    test('Plan-Einheit an dem Tag rückt einen Tag nach hinten', () {
+      final p = computeSchedule(dateOf(0), (_) => false, (_) => null,
+          blocked: {dateOf(1)});
+      expect(p[0].date, dateOf(0));
+      expect(p[1].date, dateOf(2));
+      expect(p[1].shiftDays, 1);
+      expect(p[2].date, dateOf(3));
+    });
+
+    test('zusätzlich verschiebt nichts', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final store = Store(prefs);
+      await store.free.upsert(FreeSession(id: 'z', title: 'Dehnen', date: dateOf(1)));
+      expect(store.free.blockedDates(), isEmpty);
+      await store.free.upsert(
+          FreeSession(id: 'z', title: 'Dehnen', date: dateOf(1), replacesPlan: true));
+      expect(store.free.blockedDates(), {dateOf(1)});
+      expect(store.free.blockedDates(exceptId: 'z'), isEmpty);
+      expect(store.free.all().single.replacesPlan, isTrue);
+      // Ohne die eigene Sperre liegt dort die Plan-Einheit.
+      final day1 = store.schedule(dateOf(0), 'z')[1];
+      expect(day1.date, dateOf(1));
+      expect(store.schedule(dateOf(0))[1].date, dateOf(2));
+    });
   });
 
   test('fmt formatiert Minuten und Sekunden', () {
