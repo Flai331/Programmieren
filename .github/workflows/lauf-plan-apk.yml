@@ -58,6 +58,11 @@ jobs:
             rm -f test/widget_test.dart
             # App-Name auf dem Homescreen
             sed -i 's/android:label="lauf_plan"/android:label="Laufplan"/' android/app/src/main/AndroidManifest.xml
+            # Kalender-Berechtigungen fuer "Alle Einheiten in den Kalender" (MainActivity.kt)
+            sed -i '0,/<application/s##<uses-permission android:name="android.permission.READ_CALENDAR"/>\n    <uses-permission android:name="android.permission.WRITE_CALENDAR"/>\n    <application#' android/app/src/main/AndroidManifest.xml
+            grep -q WRITE_CALENDAR android/app/src/main/AndroidManifest.xml
+            # Eigene MainActivity.kt muss erhalten bleiben (Kalender-Kanal)
+            grep -q lauf_plan/calendar android/app/src/main/kotlin/de/klaas/lauf_plan/MainActivity.kt
           fi
 
       - name: Get dependencies

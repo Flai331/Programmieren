@@ -9,13 +9,14 @@ Persönlicher 4-Wochen-Trainingsplan (Laufen + Gym), Start Do 01.10.2026.
 - Wechselpausen zwischen den Kraftübungen (geschätzt, `Exercise.restAfter`): Pausen-Timer mit Vorschau der nächsten Übung, danach direkt deren Timer
 - Strichfiguren-Animationen für alle Gym-Übungen (CustomPainter, Start-/Endpose interpoliert)
 - Erklärvideo-Knopf nur für die Bein-Übungen (öffnet YouTube-Suche), im Übungsfenster und im Timer
-- Kalender-Export (.ics): alle offenen Einheiten ab heute (Startseite) oder einzeln (Einheit), Uhrzeit oder ganztägig wählbar; feste UID je Plan-Tag, erneuter Export aktualisiert Termine
+- Kalender: „In den Kalender“ – einzelne Einheit/freie Einheit öffnet die Kalender-App mit vorausgefülltem Termin (Intent, ohne Berechtigung); alle offenen Einheiten werden direkt in einen gewählten Kalender geschrieben (READ/WRITE_CALENDAR, Termin-IDs in `cal_event_<kalender>_plan_<tag>`, erneutes Eintragen aktualisiert). Alternativ „Als Datei teilen“ (.ics; Google-Kalender-App öffnet .ics nicht)
 - Freie Einheiten (z. B. Dehnen): Knopf „Freie Einheit“ unten rechts auf der Startseite; Datum/Uhrzeit/Dauer (Zeitansatz)/Notizen, Timer, „Zusätzlich“ oder „Statt Plan-Einheit“ (dann rückt die Plan-Einheit einen Tag nach, `blockedDates`); stehen im Plan beim jeweiligen Tag, einzeln als .ics exportierbar
 - UI-Sprache: Deutsch (auch Datums-/Uhrzeitauswahl via `flutter_localizations`)
 
 ## Struktur
 - `lib/main.dart` – Plan-Daten, Screens (Home, Session, Timer), Speicherung (shared_preferences)
 - `lib/animations.dart` – Posen und Painter; Zuordnung über den Übungsnamen (`exerciseAnims`)
+- `lib/device_calendar.dart` – Kanal `lauf_plan/calendar` zu `android/app/src/main/kotlin/de/klaas/lauf_plan/MainActivity.kt` (eingecheckt; Workflow ergänzt die Kalender-Berechtigungen im Manifest)
 - `lib/calendar.dart` – .ics erzeugen (RFC 5545, Ortszeit ohne Zeitzone) und über `share_plus` teilen
 - `lib/free_sessions.dart` – freie Einheiten: Modell, Speicher (JSON in `free_sessions`), Bearbeiten-Seite
 - `lib/videos.dart` – Erklärvideos als YouTube-Suche, nur Bein-Übungen (`exerciseVideos`, öffnet per `url_launcher`)
