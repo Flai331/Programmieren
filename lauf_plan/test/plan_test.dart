@@ -50,6 +50,8 @@ void main() {
     }
     expect(videoUri('Hip Thrust').toString(),
         'https://www.youtube.com/results?search_query=Hip+Thrust');
+    expect(videoUri(exerciseVideos['Tibialis Raises']!).toString(),
+        'https://youtube.com/shorts/3p30KbEgJbo');
   });
 
   test('Wechselpausen: in Kraft-Einheiten zwischen allen Übungen, nie nach der letzten', () {
