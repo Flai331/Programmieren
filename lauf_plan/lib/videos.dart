@@ -5,7 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 // Bewusst eine Suche statt fester Video-Links – die gehen nie kaputt,
 // auch wenn einzelne Videos gelöscht werden.
 // Nur für das Beintraining (Beine A + B).
-// Schlüssel = Übungsname aus dem Plan.
+// Schlüssel = Übungsname aus dem Plan. Wert = Suchbegriff oder fester Link
+// (beginnt mit https://, z. B. ein vom Nutzer ausgesuchtes Video).
 const Map<String, String> exerciseVideos = {
   // Beine A
   'Kniebeuge (Langhantel)': 'Kniebeuge Langhantel richtige Ausführung',
@@ -17,12 +18,13 @@ const Map<String, String> exerciseVideos = {
   'Hip Thrust': 'Hip Thrust Langhantel richtige Ausführung',
   'Einbeiniges Kreuzheben (KH)': 'Einbeiniges Kreuzheben Kurzhantel Ausführung',
   'Monster Walks mit Band': 'Monster Walks Miniband Ausführung',
-  'Tibialis Raises': 'Tibialis Raises an der Wand Anleitung',
+  'Tibialis Raises': 'https://youtube.com/shorts/3p30KbEgJbo', // vom Nutzer gewählt
   'Finisher': 'Schlitten schieben Sled Push Technik',
 };
 
-Uri videoUri(String query) => Uri.https(
-    'www.youtube.com', '/results', {'search_query': query});
+Uri videoUri(String query) => query.startsWith('https://')
+    ? Uri.parse(query)
+    : Uri.https('www.youtube.com', '/results', {'search_query': query});
 
 Future<void> openVideo(BuildContext context, String exerciseName) async {
   final query = exerciseVideos[exerciseName];

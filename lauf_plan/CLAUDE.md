@@ -19,7 +19,7 @@ Persönlicher 4-Wochen-Trainingsplan (Laufen + Gym), Start Do 01.10.2026.
 - `lib/device_calendar.dart` – Kanal `lauf_plan/calendar` zu `android/app/src/main/kotlin/de/klaas/lauf_plan/MainActivity.kt` (eingecheckt; Workflow ergänzt die Kalender-Berechtigungen im Manifest)
 - `lib/calendar.dart` – .ics erzeugen (RFC 5545, Ortszeit ohne Zeitzone) und über `share_plus` teilen
 - `lib/free_sessions.dart` – freie Einheiten: Modell, Speicher (JSON in `free_sessions`), Bearbeiten-Seite
-- `lib/videos.dart` – Erklärvideos als YouTube-Suche, nur Bein-Übungen (`exerciseVideos`, öffnet per `url_launcher`)
+- `lib/videos.dart` – Erklärvideos als YouTube-Suche oder fester Link (Tibialis Raises: vom Nutzer gewähltes Short), nur Bein-Übungen (`exerciseVideos`, öffnet per `url_launcher`)
 - Liegt als Ordner `lauf_plan/` im Repo `Flai331/Programmieren` (wie der Parkplatz-Merker).
 - `../.github/workflows/lauf-plan-apk.yml` – baut bei Push (main, `claude/lauf-plan-**`) eine Release-APK und aktualisiert das GitHub Release `lauf-plan` (`Laufplan.apk`)
 - Der `android/`-Ordner wird im Workflow per `flutter create` erzeugt, falls er fehlt. Eingecheckt ist nur `android/app/build.gradle.kts`: feste Signatur mit `spotify_merker_android/android/app/merker-release.p12` (wie Parkplatz-Merker), Passwort aus dem Secret `MERKER_KEYSTORE_PASSWORD`. So lassen sich neue APKs als Update installieren.
