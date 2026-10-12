@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'calendar.dart';
+import 'device_calendar.dart';
 import 'main.dart'
     show dateLabel, isoDate, parseIsoDate, todayDate, Exercise, TimerConfig, TimerScreen, TimerResult;
 
@@ -135,8 +136,15 @@ class FreeStore {
       };
 }
 
-Future<void> exportFree(BuildContext context, FreeSession s) =>
-    shareIcs(context, [s.toEvent()], icsFileName(s.title, s.date));
+Future<void> exportFree(BuildContext context, FreeSession s) async {
+  final asFile = await askExportTarget(context);
+  if (asFile == null || !context.mounted) return;
+  if (asFile) {
+    await shareIcs(context, [s.toEvent()], icsFileName(s.title, s.date));
+  } else {
+    await addToCalendarApp(context, s.toEvent());
+  }
+}
 
 class FreeSessionTile extends StatelessWidget {
   final FreeSession session;
@@ -163,7 +171,7 @@ class FreeSessionTile extends StatelessWidget {
         isThreeLine: true,
         trailing: IconButton(
           icon: const Icon(Icons.event_available),
-          tooltip: 'Als Kalenderdatei (.ics) exportieren',
+          tooltip: 'In den Kalender',
           onPressed: () => exportFree(context, session),
         ),
       ),
@@ -399,7 +407,7 @@ class _FreeSessionScreenState extends State<FreeSessionScreen> {
           OutlinedButton.icon(
             onPressed: () => exportFree(context, current),
             icon: const Icon(Icons.event_available),
-            label: const Text('Als Kalenderdatei (.ics) exportieren'),
+            label: const Text('In den Kalender / als Datei teilen'),
           ),
         ],
       ),

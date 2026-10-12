@@ -9,6 +9,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'animations.dart';
 import 'calendar.dart';
+import 'device_calendar.dart';
 import 'free_sessions.dart';
 import 'videos.dart';
 
@@ -360,7 +361,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: 'Plan in den Kalender',
         fileName: 'laufplan-einheiten.ics',
         info: '${open.length} offene Einheiten ab heute. Verschiebt sich der Plan, '
-            'einfach erneut exportieren – die Termine werden aktualisiert.');
+            'einfach erneut eintragen – die Termine werden aktualisiert.');
   }
 
   void _showRules() {
@@ -427,7 +428,7 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(
               icon: const Icon(Icons.event_available),
-              tooltip: 'Alle Einheiten in den Kalender (.ics)',
+              tooltip: 'Alle Einheiten in den Kalender',
               onPressed: _exportAll),
           IconButton(
               icon: const Icon(Icons.info_outline),
@@ -625,7 +626,19 @@ Future<void> exportPlanDays(BuildContext context, Store store, List<PlanDay> day
   if (choice == null || !context.mounted) return;
   if (!choice.allDay) await store.setExportStart(choice.startMinutes);
   if (!context.mounted) return;
-  await shareIcs(context, [for (final d in days) planEvent(d, choice)], fileName);
+  final events = [for (final d in days) planEvent(d, choice)];
+  if (choice.asFile) {
+    await shareIcs(context, events, fileName);
+  } else if (events.length == 1) {
+    await addToCalendarApp(context, events.single);
+  } else {
+    final n = await writeToDeviceCalendar(
+        context, store.p, [for (final d in days) 'plan_${d.slot}'], events);
+    if (n != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('$n Termine im Kalender eingetragen bzw. aktualisiert.')));
+    }
+  }
 }
 
 /// Nachtragen: Fragt, an welchem Tag eine Einheit gemacht wurde.
@@ -947,7 +960,7 @@ class _SessionScreenState extends State<SessionScreen> {
       appBar: AppBar(title: Text(s.title), actions: [
         IconButton(
           icon: const Icon(Icons.event_available),
-          tooltip: 'In den Kalender (.ics)',
+          tooltip: 'In den Kalender',
           onPressed: () {
             final pd = widget.store.schedule()[widget.day];
             exportPlanDays(context, widget.store, [pd],

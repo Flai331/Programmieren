@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:lauf_plan/animations.dart';
 import 'package:lauf_plan/calendar.dart';
+import 'package:lauf_plan/device_calendar.dart';
 import 'package:lauf_plan/free_sessions.dart';
 import 'package:lauf_plan/main.dart';
 import 'package:lauf_plan/videos.dart';
@@ -185,6 +186,17 @@ void main() {
       expect(e.minutes, legA.minutes);
       expect(e.uid, 'laufplan-tag-0@klaas.de');
       expect(e.description, contains('Kniebeuge (Langhantel): 4 × 5'));
+    });
+
+    test('Argumente für den Handykalender', () {
+      final e = CalEvent(
+          uid: 'x', title: 'Dehnen', day: DateTime.utc(2026, 10, 12),
+          startMinutes: 7 * 60 + 15, minutes: 20, description: 'Hüfte');
+      expect(calendarArgs(e), {
+        'year': 2026, 'month': 10, 'day': 12, 'start': 435, 'minutes': 20,
+        'allDay': false, 'title': 'Dehnen', 'description': 'Hüfte', 'alarm': 30,
+      });
+      expect(calendarArgs(e, id: 42)['id'], 42);
     });
 
     test('Dateiname', () {

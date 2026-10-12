@@ -149,12 +149,36 @@ Future<void> shareIcs(BuildContext context, List<CalEvent> events, String fileNa
 
 String timeLabel(int minutes) => '${_two(minutes ~/ 60)}:${_two(minutes % 60)}';
 
-/// Auswahl beim Export: Uhrzeit oder ganztägig.
+/// Auswahl beim Export: Uhrzeit oder ganztägig, Kalender oder .ics-Datei.
 class ExportChoice {
   final int startMinutes;
   final bool allDay;
-  const ExportChoice(this.startMinutes, this.allDay);
+  final bool asFile;
+  const ExportChoice(this.startMinutes, this.allDay, {this.asFile = false});
 }
+
+/// Ziel für eine schon fertige Einheit: true = .ics-Datei, false = Kalender.
+Future<bool?> askExportTarget(BuildContext context) => showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.event_available),
+            title: const Text('In den Kalender eintragen'),
+            subtitle: const Text('Kalender-App öffnet sich mit dem fertigen Termin'),
+            onTap: () => Navigator.pop(ctx, false),
+          ),
+          ListTile(
+            leading: const Icon(Icons.ios_share),
+            title: const Text('Als Datei teilen (.ics)'),
+            subtitle: const Text('Z. B. per Mail an dich oder für den PC'),
+            onTap: () => Navigator.pop(ctx, true),
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
 
 Future<ExportChoice?> askExportTime(BuildContext context,
     {required String title, required int initialMinutes, String? info}) {
@@ -194,11 +218,15 @@ Future<ExportChoice?> askExportTime(BuildContext context,
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
+          TextButton.icon(
+            onPressed: () => Navigator.pop(ctx, ExportChoice(minutes, allDay, asFile: true)),
+            icon: const Icon(Icons.ios_share),
+            label: const Text('Als Datei teilen'),
+          ),
           FilledButton.icon(
             onPressed: () => Navigator.pop(ctx, ExportChoice(minutes, allDay)),
-            icon: const Icon(Icons.ios_share),
-            label: const Text('Exportieren'),
+            icon: const Icon(Icons.event_available),
+            label: const Text('In den Kalender'),
           ),
         ],
       ),
