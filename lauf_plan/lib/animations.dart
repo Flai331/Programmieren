@@ -154,7 +154,7 @@ final Map<String, ExerciseAnim> exerciseAnims = {
     props: [Prop.line(o(28, 5), o(28, 95))],
     cue: 'Rücken an die Wand, Fersen bleiben unten, Zehen hochziehen.',
   ),
-  'Dips EMOM': ExerciseAnim(
+  'Dips (gewichtet)': ExerciseAnim(
     pose(head: o(50, 19), neck: o(50, 28), hip: o(48, 56), elbow: o(51, 37), hand: o(51, 46),
         knee: o(52, 72), ankle: o(40, 80), toe: o(38, 84)),
     pose(head: o(55, 33), neck: o(53, 41), hip: o(47, 68), elbow: o(41, 45), hand: o(51, 46),
@@ -164,15 +164,15 @@ final Map<String, ExerciseAnim> exerciseAnims = {
       Prop.line(o(34, 46), o(34, 95)),
       Prop.line(o(66, 46), o(66, 95)),
     ],
-    cue: 'Leicht nach vorne lehnen, runter bis die Oberarme waagerecht sind.',
+    cue: 'Gewicht am Gürtel, leicht nach vorne lehnen, runter bis die Oberarme waagerecht sind.',
   ),
-  'Klimmzüge EMOM': ExerciseAnim(
+  'Klimmzüge (gewichtet)': ExerciseAnim(
     pose(head: o(51, 23), neck: o(50, 32), hip: o(49, 60), elbow: o(52, 21), hand: o(54, 10),
         knee: o(52, 77), ankle: o(46, 90), toe: o(44, 93)),
     pose(head: o(53, 5), neck: o(50, 14), hip: o(49, 42), elbow: o(44, 16), hand: o(54, 10),
         knee: o(52, 59), ankle: o(46, 72), toe: o(44, 75)),
     props: [_pullBar],
-    cue: 'Ohne Schwung, Kinn über die Stange, kontrolliert runter.',
+    cue: 'Gewicht am Gürtel, ohne Schwung, Kinn über die Stange, kontrolliert runter.',
   ),
   'Toes to Bar': ExerciseAnim(
     pose(head: o(51, 23), neck: o(50, 32), hip: o(49, 60), elbow: o(52, 21), hand: o(54, 10),

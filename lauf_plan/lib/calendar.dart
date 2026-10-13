@@ -154,7 +154,10 @@ class ExportChoice {
   final int startMinutes;
   final bool allDay;
   final bool asFile;
-  const ExportChoice(this.startMinutes, this.allDay, {this.asFile = false});
+
+  /// Frei gewählter Termin (nur beim Export einer einzelnen Einheit), sonst null.
+  final DateTime? date;
+  const ExportChoice(this.startMinutes, this.allDay, {this.asFile = false, this.date});
 }
 
 /// Ziel für eine schon fertige Einheit: true = .ics-Datei, false = Kalender.
@@ -181,9 +184,12 @@ Future<bool?> askExportTarget(BuildContext context) => showModalBottomSheet<bool
     );
 
 Future<ExportChoice?> askExportTime(BuildContext context,
-    {required String title, required int initialMinutes, String? info}) {
+    {required String title, required int initialMinutes, String? info, DateTime? initialDate}) {
   var minutes = initialMinutes;
   var allDay = false;
+  var date = initialDate;
+  const wd = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+  String dLabel(DateTime d) => '${wd[d.weekday - 1]}, ${d.day}.${d.month}.${d.year}';
   return showDialog<ExportChoice>(
     context: context,
     builder: (ctx) => StatefulBuilder(
@@ -194,6 +200,24 @@ Future<ExportChoice?> askExportTime(BuildContext context,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (info != null) ...[Text(info), const SizedBox(height: 12)],
+            if (date != null)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.calendar_today),
+                title: const Text('Datum'),
+                subtitle: date == initialDate ? const Text('wie im Plan – antippen zum Ändern') : null,
+                trailing: Text(dLabel(date!), style: Theme.of(ctx).textTheme.titleMedium),
+                onTap: () async {
+                  final d = await showDatePicker(
+                    context: ctx,
+                    initialDate: DateTime(date!.year, date!.month, date!.day),
+                    firstDate: DateTime(2026),
+                    lastDate: DateTime(2030, 12, 31),
+                    initialEntryMode: DatePickerEntryMode.input,
+                  );
+                  if (d != null) setState(() => date = DateTime.utc(d.year, d.month, d.day));
+                },
+              ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Ganztägig'),
@@ -219,12 +243,13 @@ Future<ExportChoice?> askExportTime(BuildContext context,
         ),
         actions: [
           TextButton.icon(
-            onPressed: () => Navigator.pop(ctx, ExportChoice(minutes, allDay, asFile: true)),
+            onPressed: () =>
+                Navigator.pop(ctx, ExportChoice(minutes, allDay, asFile: true, date: date)),
             icon: const Icon(Icons.ios_share),
             label: const Text('Als Datei teilen'),
           ),
           FilledButton.icon(
-            onPressed: () => Navigator.pop(ctx, ExportChoice(minutes, allDay)),
+            onPressed: () => Navigator.pop(ctx, ExportChoice(minutes, allDay, date: date)),
             icon: const Icon(Icons.event_available),
             label: const Text('In den Kalender'),
           ),

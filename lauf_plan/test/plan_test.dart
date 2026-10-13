@@ -201,6 +201,14 @@ void main() {
       expect(calendarArgs(e, id: 42)['id'], 42);
     });
 
+    test('Einzelne Einheit mit frei gewähltem Termin', () {
+      final d = PlanDay(1, dateOf(1), dateOf(1));
+      final e = planEvent(d, ExportChoice(6 * 60, false, date: DateTime.utc(2026, 10, 20)));
+      expect(e.day, DateTime.utc(2026, 10, 20));
+      expect(e.startMinutes, 6 * 60);
+      expect(e.uid, 'laufplan-tag-1@klaas.de');
+    });
+
     test('Dateiname', () {
       expect(icsFileName('Beine A – Kraft', DateTime.utc(2026, 10, 9)),
           'beine-a-kraft-2026-10-09.ics');
@@ -361,6 +369,18 @@ void main() {
     await tester.tap(find.byTooltip('Übernehmen'));
     await tester.pumpAndSettle();
     expect(picked, start);
+  });
+
+  test('Oberkörper: gewichtete Dips und Klimmzüge statt EMOM', () {
+    final names = upperBody.exercises.map((e) => e.name).toList();
+    expect(names, containsAll(['Dips (gewichtet)', 'Klimmzüge (gewichtet)']));
+    expect(names.where((n) => n.contains('EMOM')), isEmpty);
+    for (final n in ['Dips (gewichtet)', 'Klimmzüge (gewichtet)']) {
+      final e = upperBody.exercises.firstWhere((x) => x.name == n);
+      expect(e.timer!.rounds, 4);
+      expect(e.timer!.work, 0); // manuelle Sätze mit Pausen-Countdown
+      expect(exerciseAnims, contains(n));
+    }
   });
 
   test('fmt formatiert Minuten und Sekunden', () {

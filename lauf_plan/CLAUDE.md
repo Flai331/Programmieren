@@ -5,11 +5,12 @@ Persönlicher 4-Wochen-Trainingsplan (Laufen + Gym), Start Do 01.10.2026.
 - Startseite: heutige Einheit, alle 28 Tage mit Datum, geschätzter Dauer, Erledigt-Haken
 - Plan verschiebt sich: nicht erledigte Trainingseinheit rückt auf heute, alle folgenden Tage wandern mit (`computeSchedule`); Erledigt-Datum wird gespeichert (`doneOn_<tag>`), Nachtragen (`pickDoneDate`): beim Abhaken einer nachgerückten Einheit und über „Nachträglich abhaken“ auf der Heute-Karte Auswahl der letzten 7 Tage mit Wochentag (Heute, Gestern, Freitag …, geplanter Tag markiert) , Datum als Freitext (`parseUserDate`, `DateTextField`) oder anderes Datum; Erledigt-Datum in der Einheit änderbar – der Plan rückt entsprechend wieder vor
 - Einheit: Stoppuhr gegen geschätzte Zeit, Übungen abhaken, Hinweise
-- Timer pro Übung: EMOM, Halten (Arbeit/Pause automatisch), manuelle Sätze mit Pausen-Countdown
+- Timer pro Übung: Intervalle, Halten (Arbeit/Pause automatisch), manuelle Sätze mit Pausen-Countdown
+- Oberkörper: Dips und Klimmzüge gewichtet (je 4 Sätze mit Zusatzgewicht, Pause 2:00 / 2:30) statt EMOM – auf Wunsch des Nutzers geändert
 - Wechselpausen zwischen den Kraftübungen (geschätzt, `Exercise.restAfter`): Pausen-Timer mit Vorschau der nächsten Übung, danach direkt deren Timer
 - Strichfiguren-Animationen für alle Gym-Übungen (CustomPainter, Start-/Endpose interpoliert)
 - Erklärvideo-Knopf nur für die Bein-Übungen (öffnet YouTube-Suche), im Übungsfenster und im Timer
-- Kalender: „In den Kalender“ – einzelne Einheit/freie Einheit öffnet die Kalender-App mit vorausgefülltem Termin (Intent, ohne Berechtigung); alle offenen Einheiten werden direkt in einen gewählten Kalender geschrieben (READ/WRITE_CALENDAR, Termin-IDs in `cal_event_<kalender>_plan_<tag>`, erneutes Eintragen aktualisiert). Alternativ „Als Datei teilen“ (.ics; Google-Kalender-App öffnet .ics nicht)
+- Kalender: einzelne Einheit mit frei wählbarem Datum/Uhrzeit (`ExportChoice.date`, nur für den Termin, Plan bleibt); „In den Kalender“ – einzelne Einheit/freie Einheit öffnet die Kalender-App mit vorausgefülltem Termin (Intent, ohne Berechtigung); alle offenen Einheiten werden direkt in einen gewählten Kalender geschrieben (READ/WRITE_CALENDAR, Termin-IDs in `cal_event_<kalender>_plan_<tag>`, erneutes Eintragen aktualisiert). Alternativ „Als Datei teilen“ (.ics; Google-Kalender-App öffnet .ics nicht)
 - Freie Einheiten (z. B. Dehnen): Knopf „Freie Einheit“ unten rechts auf der Startseite; Datum/Uhrzeit/Dauer (Zeitansatz)/Notizen, Timer, „Zusätzlich“ oder „Statt Plan-Einheit“ (dann rückt die Plan-Einheit einen Tag nach, `blockedDates`); stehen im Plan beim jeweiligen Tag, einzeln als .ics exportierbar
 - UI-Sprache: Deutsch (auch Datums-/Uhrzeitauswahl via `flutter_localizations`)
 

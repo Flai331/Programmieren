@@ -70,10 +70,12 @@ class Session {
 const upperBody = Session('Oberkörper', Icons.fitness_center, 45, [
   Exercise('Aufwärmen', '5 Min. Rudern locker, Schultern mobilisieren',
       TimerConfig(work: 300, workLabel: 'Aufwärmen'), 60),
-  Exercise('Dips EMOM', '10 Min. – jede Minute 10 Wdh.',
-      TimerConfig(work: 60, rounds: 10, workLabel: 'Minute'), 120),
-  Exercise('Klimmzüge EMOM', '10 Min. – jede Minute 7 Wdh.',
-      TimerConfig(work: 60, rounds: 10, workLabel: 'Minute'), 120),
+  Exercise('Dips (gewichtet)',
+      '4 × 6–8 mit Zusatzgewicht (Gürtel oder KH zwischen den Füßen), 2 Wdh. im Tank',
+      TimerConfig(rest: 120, rounds: 4), 120),
+  Exercise('Klimmzüge (gewichtet)',
+      '4 × 5–6 mit Zusatzgewicht (Gürtel oder KH zwischen den Füßen), 2 Wdh. im Tank',
+      TimerConfig(rest: 150, rounds: 4), 120),
   Exercise('Toes to Bar', '3 × 10–12', TimerConfig(rest: 90, rounds: 3), 90),
   Exercise('Liegestütze', '40 breit, 20 eng, 15 Diamond',
       TimerConfig(rest: 60, rounds: 3, workLabel: 'Variante')),
@@ -610,7 +612,7 @@ CalEvent planEvent(PlanDay d, ExportChoice c) {
   return CalEvent(
     uid: 'laufplan-tag-${d.slot}@klaas.de',
     title: s.title,
-    day: d.date,
+    day: c.date ?? d.date,
     startMinutes: c.startMinutes,
     minutes: s.minutes,
     allDay: c.allDay,
@@ -621,14 +623,21 @@ CalEvent planEvent(PlanDay d, ExportChoice c) {
 /// Eine oder mehrere Plan-Einheiten mit Uhrzeit-Abfrage exportieren.
 Future<void> exportPlanDays(BuildContext context, Store store, List<PlanDay> days,
     {required String title, required String fileName, String? info}) async {
+  // Einzelne Einheit: Termin frei wählbar (Datum vorbelegt mit dem Plan-Tag).
   final choice = await askExportTime(context,
-      title: title, initialMinutes: store.exportStart, info: info);
+      title: title,
+      initialMinutes: store.exportStart,
+      info: info,
+      initialDate: days.length == 1 ? days.single.date : null);
   if (choice == null || !context.mounted) return;
   if (!choice.allDay) await store.setExportStart(choice.startMinutes);
   if (!context.mounted) return;
   final events = [for (final d in days) planEvent(d, choice)];
   if (choice.asFile) {
-    await shareIcs(context, events, fileName);
+    await shareIcs(context, events,
+        days.length == 1 && choice.date != null
+            ? icsFileName(sessionFor(days.single.slot).title, choice.date!)
+            : fileName);
   } else if (events.length == 1) {
     await addToCalendarApp(context, events.single);
   } else {
