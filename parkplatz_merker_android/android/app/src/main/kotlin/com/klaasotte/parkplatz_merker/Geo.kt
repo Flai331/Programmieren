@@ -37,6 +37,44 @@ object Geo {
         }
     }
 
+    /** Adresse suchen: bis zu 5 Treffer (lat, lng, label). Asynchron, done wird genau einmal aufgerufen. */
+    fun forward(ctx: Context, query: String, done: (List<Map<String, Any?>>) -> Unit) {
+        if (!Geocoder.isPresent() || query.isBlank()) {
+            done(emptyList())
+            return
+        }
+        val geocoder = Geocoder(ctx, Locale.GERMANY)
+        fun toMaps(list: List<Address>?): List<Map<String, Any?>> =
+            (list ?: emptyList()).filter { it.hasLatitude() && it.hasLongitude() }.map {
+                mapOf(
+                    "lat" to it.latitude,
+                    "lng" to it.longitude,
+                    "label" to (addressText(it) ?: query),
+                )
+            }
+        if (Build.VERSION.SDK_INT >= 33) {
+            geocoder.getFromLocationName(query, 5, object : Geocoder.GeocodeListener {
+                override fun onGeocode(addresses: MutableList<Address>) {
+                    done(toMaps(addresses))
+                }
+
+                override fun onError(errorMessage: String?) {
+                    done(emptyList())
+                }
+            })
+        } else {
+            Thread {
+                val found = try {
+                    @Suppress("DEPRECATION")
+                    toMaps(geocoder.getFromLocationName(query, 5))
+                } catch (e: Exception) {
+                    emptyList()
+                }
+                done(found)
+            }.start()
+        }
+    }
+
     private fun addressText(address: Address): String? {
         val line = address.getAddressLine(0)
         if (!line.isNullOrBlank()) return line

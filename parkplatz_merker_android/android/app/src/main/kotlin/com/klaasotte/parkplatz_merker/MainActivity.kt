@@ -79,6 +79,10 @@ class MainActivity : FlutterActivity() {
                                 Geo.reverse(this@MainActivity, lat, lng) { text -> runOnUiThread { result.success(text) } }
                             }
                         }
+                        "geocode" -> {
+                            val query = call.argument<String>("query") ?: ""
+                            Geo.forward(this@MainActivity, query) { found -> runOnUiThread { result.success(found) } }
+                        }
                         "updateWidget" -> {
                             @Suppress("UNCHECKED_CAST")
                             val args = call.arguments as? Map<String, Any?>

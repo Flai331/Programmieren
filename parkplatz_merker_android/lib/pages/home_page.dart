@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../controller.dart';
+import 'enter_spot_page.dart';
 import 'headphones_page.dart';
 import 'help_page.dart';
 import 'history_page.dart';
@@ -169,21 +170,36 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: FilledButton.tonalIcon(
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(52),
-            ),
-            onPressed: _locating ? null : _parkHere,
-            icon: _locating
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.local_parking),
-            label: Text(
-              _locating ? 'Standort wird bestimmt …' : 'Hier geparkt',
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                  ),
+                  onPressed: _locating ? null : _parkHere,
+                  icon: _locating
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.local_parking),
+                  label: Text(
+                    _locating ? 'Standort wird bestimmt …' : 'Hier geparkt',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                style: IconButton.styleFrom(minimumSize: const Size(52, 52)),
+                tooltip: 'Parkplatz eingeben',
+                icon: const Icon(Icons.edit_location_alt_outlined),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const EnterSpotPage()),
+                ),
+              ),
+            ],
           ),
         ),
       ),
