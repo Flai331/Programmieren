@@ -10,9 +10,12 @@ import 'package:lauf_plan/calendar.dart';
 import 'package:lauf_plan/device_calendar.dart';
 import 'package:lauf_plan/free_sessions.dart';
 import 'package:lauf_plan/main.dart';
+import 'package:lauf_plan/plan_edit.dart';
 import 'package:lauf_plan/videos.dart';
 
 void main() {
+  setUp(planOverrides.clear);
+
   test('Plan startet am Donnerstag, 1.10.2026', () {
     expect(planStart.weekday, DateTime.thursday);
     expect(dateLabel(dateOf(0)), 'Do, 1.10.');
@@ -381,6 +384,109 @@ void main() {
       expect(e.timer!.work, 0); // manuelle Sätze mit Pausen-Countdown
       expect(exerciseAnims, contains(n));
     }
+  });
+
+  group('Plan bearbeiten', () {
+    test('Bausteine passen zur bisherigen Reihenfolge', () {
+      expect(templateKeyFor(0), 'legA');
+      expect(templateKeyFor(1), 'upper');
+      expect(templateKeyFor(4), 'upper');
+      expect(templateKeyFor(9), 'quality1');
+      expect(templateKeyFor(26), 'long3');
+      expect(templateKeyFor(6), 'rest');
+      expect(sessionFor(9).title, 'Lauf: Bergsprints');
+    });
+
+    test('JSON hin und zurück', () {
+      final j = jsonDecode(jsonEncode(sessionToJson(legA)));
+      final back = sessionFromJson(j, legA)!;
+      expect(back.title, legA.title);
+      expect(back.minutes, legA.minutes);
+      expect(back.exercises.length, legA.exercises.length);
+      for (var i = 0; i < legA.exercises.length; i++) {
+        final a = legA.exercises[i], b = back.exercises[i];
+        expect(b.name, a.name);
+        expect(b.detail, a.detail);
+        expect(b.restAfter, a.restAfter);
+        expect(b.timer?.work, a.timer?.work);
+        expect(b.timer?.rest, a.timer?.rest);
+        expect(b.timer?.rounds, a.timer?.rounds);
+        expect(b.timer?.workLabel, a.timer?.workLabel);
+      }
+    });
+
+    test('Speichern gilt für alle Tage des Bausteins, Zurücksetzen stellt her', () async {
+      SharedPreferences.setMockInitialValues({'ex_1_0': true, 'ex_4_2': true, 'done_8': true, 'ex_8_0': true});
+      final prefs = await SharedPreferences.getInstance();
+      final store = Store(prefs);
+      final changed = Session('Oberkörper neu', upperBody.icon, 50, [
+        const Exercise('Bankdrücken', '4 × 6', TimerConfig(rest: 150, rounds: 4), 120),
+        ...upperBody.exercises,
+      ]);
+      await saveTemplate(store, 'upper', changed);
+      for (final d in [1, 4, 8, 11, 15, 18, 22, 25]) {
+        expect(sessionFor(d).title, 'Oberkörper neu', reason: 'Tag $d');
+        expect(sessionFor(d).exercises.first.name, 'Bankdrücken');
+      }
+      expect(sessionFor(0).title, legA.title);
+      // Übungs-Haken offener Tage zurückgesetzt, erledigte bleiben.
+      expect(store.exDone(1, 0), isFalse);
+      expect(store.exDone(4, 2), isFalse);
+      expect(store.exDone(8, 0), isTrue);
+      // Nach Neustart (neuer Store) weiterhin geändert.
+      planOverrides.clear();
+      Store(prefs);
+      expect(sessionFor(1).exercises.first.name, 'Bankdrücken');
+      expect(sessionFor(1).exercises.first.timer!.rounds, 4);
+      await saveTemplate(store, 'upper', null);
+      expect(sessionFor(1).title, upperBody.title);
+      expect(prefs.getString('tpl_upper'), isNull);
+    });
+
+    test('Eigene Strichfigur und eigenes Video', () {
+      const e = Exercise('Goblet Squat', '3 × 10', null, 0, 'Kniebeuge (Langhantel)', 'https://youtu.be/x');
+      expect(animFor(e), same(exerciseAnims['Kniebeuge (Langhantel)']));
+      expect(videoFor(e), 'https://youtu.be/x');
+      const none = Exercise('Hip Thrust', '', null, 0, '', '');
+      expect(animFor(none), isNull);
+      expect(videoFor(none), isNull);
+      const auto = Exercise('Hip Thrust', '');
+      expect(animFor(auto), isNotNull);
+      expect(videoFor(auto), isNotNull);
+      final back = exerciseFromJson(jsonDecode(jsonEncode(exerciseToJson(e))))!;
+      expect(back.anim, 'Kniebeuge (Langhantel)');
+      expect(back.video, 'https://youtu.be/x');
+    });
+
+    testWidgets('Editor: Baustein öffnen, Übung anlegen, speichern', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final store = Store(prefs);
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => SessionEditorScreen(store: store, templateKey: 'legB'))),
+            child: const Text('öffnen'),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('öffnen'));
+      await tester.pumpAndSettle();
+      expect(find.text('Hip Thrust'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FloatingActionButton, 'Übung'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Nordic Curl');
+      await tester.tap(find.text('Übernehmen'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Speichern'));
+      await tester.pumpAndSettle();
+      expect(sessionFor(3).exercises.last.name, 'Nordic Curl');
+      expect(sessionFor(3).exercises.last.timer!.rounds, 3);
+      expect(prefs.getString('tpl_legB'), contains('Nordic Curl'));
+    });
   });
 
   test('fmt formatiert Minuten und Sekunden', () {

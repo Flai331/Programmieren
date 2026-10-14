@@ -26,9 +26,8 @@ Uri videoUri(String query) => query.startsWith('https://')
     ? Uri.parse(query)
     : Uri.https('www.youtube.com', '/results', {'search_query': query});
 
-Future<void> openVideo(BuildContext context, String exerciseName) async {
-  final query = exerciseVideos[exerciseName];
-  if (query == null) return;
+/// [query]: Suchbegriff oder Link (siehe videoFor in main.dart).
+Future<void> openVideo(BuildContext context, String query) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
   var ok = false;
   try {
@@ -41,13 +40,13 @@ Future<void> openVideo(BuildContext context, String exerciseName) async {
 }
 
 class VideoButton extends StatelessWidget {
-  final String exerciseName;
-  const VideoButton({super.key, required this.exerciseName});
+  final String query;
+  const VideoButton({super.key, required this.query});
 
   @override
   Widget build(BuildContext context) {
     return OutlinedButton.icon(
-      onPressed: () => openVideo(context, exerciseName),
+      onPressed: () => openVideo(context, query),
       icon: const Icon(Icons.smart_display_outlined),
       label: const Text('Erklärvideo ansehen'),
     );

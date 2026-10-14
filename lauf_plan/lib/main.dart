@@ -11,6 +11,7 @@ import 'animations.dart';
 import 'calendar.dart';
 import 'device_calendar.dart';
 import 'free_sessions.dart';
+import 'plan_edit.dart';
 import 'videos.dart';
 
 Future<void> main() async {
@@ -53,8 +54,21 @@ class Exercise {
   /// Geschätzte Wechselpause bis zur nächsten Übung in Sekunden
   /// (Durchatmen, Gewichte/Station umbauen). 0 = keine.
   final int restAfter;
-  const Exercise(this.name, this.detail, [this.timer, this.restAfter = 0]);
+
+  /// Strichfigur: null = nach Name, '' = keine, sonst Name einer Figur.
+  final String? anim;
+
+  /// Erklärvideo: null = Standard nach Name, '' = keins, sonst Link/Suchbegriff.
+  final String? video;
+  const Exercise(this.name, this.detail,
+      [this.timer, this.restAfter = 0, this.anim, this.video]);
 }
+
+ExerciseAnim? animFor(Exercise e) =>
+    e.anim == null ? exerciseAnims[e.name] : (e.anim!.isEmpty ? null : exerciseAnims[e.anim]);
+
+String? videoFor(Exercise e) =>
+    e.video == null ? exerciseVideos[e.name] : (e.video!.isEmpty ? null : e.video);
 
 class Session {
   final String title;
@@ -153,25 +167,11 @@ const restDay = Session('Ruhetag', Icons.self_improvement, 15, [
   Exercise('Blackroll (optional)', 'Hüfte, Oberschenkel, Waden'),
 ], hint: 'Puffer: Fällt eine Einheit wegen Schicht aus, hier nachholen.', isRest: true);
 
-// Reihenfolge ab Donnerstag
+// Reihenfolge ab Donnerstag (siehe templateKeyFor); bearbeitete Bausteine
+// aus dem Plan-Editor haben Vorrang.
 Session sessionFor(int day) {
-  final week = day ~/ 7;
-  switch (day % 7) {
-    case 0:
-      return legA;
-    case 1:
-      return upperBody;
-    case 2:
-      return qualityRuns[week];
-    case 3:
-      return legB;
-    case 4:
-      return upperBody;
-    case 5:
-      return longRuns[week];
-    default:
-      return restDay;
-  }
+  final key = templateKeyFor(day);
+  return planOverrides[key] ?? defaultTemplate(key);
 }
 
 DateTime dateOf(int day) => planStart.add(Duration(days: day));
@@ -253,7 +253,9 @@ const rules = [
 
 class Store {
   final SharedPreferences p;
-  Store(this.p);
+  Store(this.p) {
+    loadPlanOverrides(p);
+  }
   bool done(int d) => p.getBool('done_$d') ?? false;
   DateTime? doneOn(int d) => parseIsoDate(p.getString('doneOn_$d'));
   Future<void> setDone(int d, bool v, {DateTime? on}) async {
@@ -432,6 +434,14 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: const Icon(Icons.event_available),
               tooltip: 'Alle Einheiten in den Kalender',
               onPressed: _exportAll),
+          IconButton(
+              icon: const Icon(Icons.edit_note),
+              tooltip: 'Plan bearbeiten',
+              onPressed: () async {
+                await Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => PlanEditorScreen(store: widget.store)));
+                setState(() {});
+              }),
           IconButton(
               icon: const Icon(Icons.info_outline),
               tooltip: 'Regeln',
@@ -845,9 +855,20 @@ class SessionScreen extends StatefulWidget {
 class _SessionScreenState extends State<SessionScreen> {
   final sw = Stopwatch();
   Timer? ticker;
-  late final Session s = sessionFor(widget.day);
-  late final List<bool> checks = List.generate(
-      s.exercises.length, (i) => widget.store.exDone(widget.day, i));
+  Session get s => sessionFor(widget.day);
+  late List<bool> checks = _loadChecks();
+
+  List<bool> _loadChecks() =>
+      List.generate(s.exercises.length, (i) => widget.store.exDone(widget.day, i));
+
+  Future<void> _editTemplate() async {
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => SessionEditorScreen(
+                store: widget.store, templateKey: templateKeyFor(widget.day))));
+    if (mounted) setState(() => checks = _loadChecks());
+  }
   late bool done = widget.store.done(widget.day);
 
   @override
@@ -902,10 +923,10 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   bool _hasInfo(Exercise e) =>
-      exerciseAnims.containsKey(e.name) || exerciseVideos.containsKey(e.name);
+      animFor(e) != null || videoFor(e) != null;
 
   void _showAnim(Exercise e) {
-    final a = exerciseAnims[e.name];
+    final a = animFor(e);
     final tt = Theme.of(context).textTheme;
     showModalBottomSheet(
       context: context,
@@ -924,9 +945,9 @@ class _SessionScreenState extends State<SessionScreen> {
             ],
             const SizedBox(height: 4),
             Text(e.detail, textAlign: TextAlign.center, style: tt.bodyMedium),
-            if (exerciseVideos.containsKey(e.name)) ...[
+            if (videoFor(e) != null) ...[
               const SizedBox(height: 16),
-              VideoButton(exerciseName: e.name),
+              VideoButton(query: videoFor(e)!),
             ],
           ],
         ),
@@ -967,6 +988,11 @@ class _SessionScreenState extends State<SessionScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(s.title), actions: [
+        IconButton(
+          icon: const Icon(Icons.edit_note),
+          tooltip: 'Einheit bearbeiten',
+          onPressed: _editTemplate,
+        ),
         IconButton(
           icon: const Icon(Icons.event_available),
           tooltip: 'In den Kalender',
@@ -1249,7 +1275,7 @@ class _TimerScreenState extends State<TimerScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final anim = exerciseAnims[widget.exercise.name];
+    final anim = animFor(widget.exercise);
 
     final (Color bg, Color fg) = switch (phase) {
       Phase.work => (cs.primaryContainer, cs.onPrimaryContainer),
@@ -1317,11 +1343,11 @@ class _TimerScreenState extends State<TimerScreen> {
         foregroundColor: fg,
         title: Text(widget.exercise.name),
         actions: [
-          if (exerciseVideos.containsKey(widget.exercise.name))
+          if (videoFor(widget.exercise) != null)
             IconButton(
                 icon: const Icon(Icons.smart_display_outlined),
                 tooltip: 'Erklärvideo',
-                onPressed: () => openVideo(context, widget.exercise.name)),
+                onPressed: () => openVideo(context, videoFor(widget.exercise)!)),
           IconButton(
               icon: const Icon(Icons.restart_alt), tooltip: 'Zurücksetzen', onPressed: _reset),
         ],
@@ -1472,7 +1498,7 @@ class _RestScreenState extends State<RestScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final anim = exerciseAnims[widget.next.name];
+    final anim = animFor(widget.next);
     final bg = finished ? cs.primaryContainer : cs.tertiaryContainer;
     final fg = finished ? cs.onPrimaryContainer : cs.onTertiaryContainer;
 

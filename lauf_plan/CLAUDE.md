@@ -12,6 +12,7 @@ Persönlicher 4-Wochen-Trainingsplan (Laufen + Gym), Start Do 01.10.2026.
 - Erklärvideo-Knopf nur für die Bein-Übungen (öffnet YouTube-Suche), im Übungsfenster und im Timer
 - Kalender: einzelne Einheit mit frei wählbarem Datum/Uhrzeit (`ExportChoice.date`, nur für den Termin, Plan bleibt); „In den Kalender“ – einzelne Einheit/freie Einheit öffnet die Kalender-App mit vorausgefülltem Termin (Intent, ohne Berechtigung); alle offenen Einheiten werden direkt in einen gewählten Kalender geschrieben (READ/WRITE_CALENDAR, Termin-IDs in `cal_event_<kalender>_plan_<tag>`, erneutes Eintragen aktualisiert). Alternativ „Als Datei teilen“ (.ics; Google-Kalender-App öffnet .ics nicht)
 - Freie Einheiten (z. B. Dehnen): Knopf „Freie Einheit“ unten rechts auf der Startseite; Datum/Uhrzeit/Dauer (Zeitansatz)/Notizen, Timer, „Zusätzlich“ oder „Statt Plan-Einheit“ (dann rückt die Plan-Einheit einen Tag nach, `blockedDates`); stehen im Plan beim jeweiligen Tag, einzeln als .ics exportierbar
+- Plan bearbeiten (`lib/plan_edit.dart`): Plan = Bausteine (`templateKeyFor`: legA, upper, legB, quality0-3, long0-3, rest); Änderungen je Baustein als JSON in `tpl_<key>`, geladen in `planOverrides` (Store-Konstruktor), gelten für alle Tage des Bausteins; Übungen hinzufügen/bearbeiten/löschen/sortieren, Timer-Art, Sätze, Pausen, Wechselpause, Strichfigur (`Exercise.anim`) und Video (`Exercise.video`) wählbar; „Auf Original zurücksetzen“. Einstieg: Stift-Symbol auf der Startseite und in jeder Einheit. Nächste Stufe geplant: KI-Suche für neue Übungen (braucht Server + API-Schlüssel)
 - UI-Sprache: Deutsch (auch Datums-/Uhrzeitauswahl via `flutter_localizations`)
 
 ## Struktur
@@ -33,5 +34,5 @@ Persönlicher 4-Wochen-Trainingsplan (Laufen + Gym), Start Do 01.10.2026.
 5. Am Ende den Link zum Release mit der `app-release.apk` ausgeben.
 
 ## Regeln
-- Plan-Inhalte (Übungen, Sätze, Zeiten) nicht ändern, nur Build-/Code-Fehler beheben.
+- Plan-Inhalte (Übungen, Sätze, Zeiten) nur auf ausdrücklichen Wunsch des Nutzers ändern; der Nutzer kann sie inzwischen selbst im Plan-Editor anpassen.
 - Keine neuen Abhängigkeiten ohne Grund.
