@@ -304,6 +304,28 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  /// Parkplatz an einem selbst gewählten Ort speichern (Adresse oder Karte).
+  Future<void> parkAt(double lat, double lng) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final event = RawEvent(
+      type: 'manual',
+      t: now,
+      data: {
+        'type': 'manual',
+        't': now,
+        'source': 'entry',
+        'lat': lat,
+        'lng': lng,
+        'acc': 0.0,
+        'error': null,
+      },
+    );
+    await refresh();
+    _events.add(event);
+    await _storage.saveEvents(_events);
+    await refresh();
+  }
+
   Future<void> deleteSpot(String id) async {
     _deletedIds.add(id);
     await _storage.saveDeletedIds(_deletedIds);

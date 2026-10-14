@@ -441,6 +441,7 @@ String _manualSourceLabel(String? source) {
     'widget' => 'Manuell (Widget)',
     'tile' => 'Manuell (Kachel)',
     'app' => 'Manuell (App)',
+    'entry' => 'Von dir eingegeben',
     _ => 'Manuell',
   };
 }

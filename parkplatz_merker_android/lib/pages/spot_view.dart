@@ -105,7 +105,10 @@ class SpotView extends StatelessWidget {
           icon: Icons.place,
           text: spot.address ?? 'Adresse wird gesucht …',
         ),
-        _InfoRow(icon: Icons.gps_fixed, text: accuracyText(spot.acc)),
+        _InfoRow(
+          icon: Icons.gps_fixed,
+          text: spot.acc <= 0 ? 'Ort von dir gewählt' : accuracyText(spot.acc),
+        ),
         if (distance != null)
           _InfoRow(
             icon: Icons.directions_walk,

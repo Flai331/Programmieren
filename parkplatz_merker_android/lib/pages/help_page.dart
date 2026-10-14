@@ -162,7 +162,10 @@ const _sections = <_Section>[
     'Testen: Kopfhörer verbinden → dann ausschalten oder ins Case legen. Nach ein paar Sekunden '
         'steht auf der Kopfhörer-Seite „Getrennt am …“ mit der Karte und dem Ort.',
   ]),
-  _Section(HelpTopic.extras, Icons.sticky_note_2_outlined, 'Notiz, Foto, Parkschein, Verlauf', [
+  _Section(HelpTopic.extras, Icons.sticky_note_2_outlined, 'Parkplatz eingeben, Notiz, Foto, Parkschein, Verlauf', [
+    'Parkplatz selbst eingeben (z. B. GPS war ungenau oder du trägst ihn später nach): auf der Startseite '
+        'unten den Stift-Knopf neben „Hier geparkt“ antippen. Adresse eintippen und suchen – oder die Karte '
+        'verschieben bzw. antippen, bis die rote Nadel auf deinem Auto steht – dann „Hier steht mein Auto“.',
     'Notiz und Foto: beim Parkplatz auf „Notiz“ bzw. „Foto“ tippen (z. B. „Parkhaus Ebene 3, Platz 112“).',
     'Parkschein: „Parkschein“ → wählen, wie lange er gilt (30 Minuten bis 4 Stunden) oder „Uhrzeit wählen …“. '
         'Beim Parkplatz steht dann „Parkschein bis 15:30 · noch 1 Std 5 Min“. Die Erinnerung kommt so früh, dass du zu Fuß rechtzeitig am Auto bist: '

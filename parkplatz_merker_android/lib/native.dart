@@ -184,6 +184,23 @@ class NativeBridge {
     }
   }
 
+  /// Sucht eine Adresse: Treffer mit `lat`, `lng`, `label`.
+  static Future<List<Map<String, dynamic>>> geocode(String query) async {
+    try {
+      final result = await _channel.invokeMethod('geocode', {'query': query});
+      if (result is! List) return [];
+      return result
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList();
+    } on PlatformException catch (e) {
+      print('geocode error: ${e.message}');
+      return [];
+    } on MissingPluginException {
+      return [];
+    }
+  }
+
   /// Macht eine Reverse-Geocoding-Anfrage.
   static Future<String?> reverseGeocode(double lat, double lng) async {
     try {

@@ -201,6 +201,7 @@ Mit dem Lautstärke-Profil stellst du dich automatisch auf feste Lautstärken um
 
 ## Weitere Funktionen
 
+- **Parkplatz eingeben:** Stift-Knopf neben „Hier geparkt“ → Adresse suchen oder Karte verschieben, bis die Nadel aufs Auto zeigt → „Hier steht mein Auto“.
 - **Notiz und Foto** zum Parkplatz (z. B. „Parkhaus Ebene 3, Platz 112“).
 - **Parkschein:** Dauer wählen (30 Min bis 4 Std) oder Uhrzeit → die Restzeit steht beim Parkplatz, die Erinnerung kommt je nach Fußweg zum Auto rechtzeitig (Gehzeit + 5 Min Puffer, mindestens 10 Min vorher).
 - **Verlauf** der letzten 30 Parkplätze.
