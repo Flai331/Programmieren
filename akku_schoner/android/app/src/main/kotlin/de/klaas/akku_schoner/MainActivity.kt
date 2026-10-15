@@ -46,8 +46,8 @@ class MainActivity : FlutterActivity() {
                         "setWatcher" -> {
                             val map = call.arguments as? Map<*, *> ?: emptyMap<String, Any>()
                             Prefs.setWatcher(this, map)
-                            if (Prefs.serviceNeeded(this)) askNotificationPermission()
-                            WatcherService.sync(this)
+                            if (Prefs.watcherEnabled(this)) askNotificationPermission()
+                            Monitor.refresh()
                             result.success(null)
                         }
                         "openAppDetails" -> {
@@ -75,7 +75,7 @@ class MainActivity : FlutterActivity() {
             "accessibility" to ForceStopService.isEnabled(this),
             "accessibilityConnected" to (ForceStopService.instance != null),
             "notifications" to nm.areNotificationsEnabled(),
-            "watcherRunning" to WatcherService.running,
+            "monitorRunning" to (Monitor.instance != null),
             "unrestricted" to pm.isIgnoringBatteryOptimizations(packageName),
             "sdk" to Build.VERSION.SDK_INT,
             "manufacturer" to Build.MANUFACTURER,

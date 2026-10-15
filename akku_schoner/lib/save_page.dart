@@ -140,7 +140,7 @@ class HelpPage extends StatelessWidget {
         children: [
           section('Reiter „Akku“',
               'Zeigt Ladestand, Temperatur, Spannung, Strom und Zustand. Hinweise erscheinen, wenn der Akku zu warm, zu voll oder zu leer ist.\n\n'
-                  'Der Akku-Wächter läuft unauffällig im Hintergrund und meldet sich nur, wenn die Ladegrenze (z. B. 80 %) erreicht ist, der Akku fast leer ist oder zu heiß wird. '
+                  'Der Akku-Wächter läuft ohne dauerhafte Benachrichtigung in der Bedienungshilfe mit und meldet sich nur, wenn die Ladegrenze (z. B. 80 %) erreicht ist, der Akku fast leer ist oder zu heiß wird. '
                   'Er nutzt nur die Akku-Meldungen, die Android ohnehin verschickt – kein Timer, kein GPS, kein Internet.'),
           section('Reiter „Apps“ – drei Stufen',
               'Jede App hat eine Stufe. Die Automatik wählt sie nach deiner Nutzung der letzten 7 Tage:\n'
@@ -157,7 +157,7 @@ class HelpPage extends StatelessWidget {
                   'Gerade laufende Musik bleibt an.\n\n'
                   'Entsperren: War der Bildschirm länger aus (einstellbar, Standard 30 min), werden „Komplett“-Apps, die sich inzwischen wieder gestartet haben, '
                   'komplett beendet. Dabei blitzt kurz die App-Info auf, danach landest du auf dem Startbildschirm. Bei einem Anruf passiert nichts.\n\n'
-                  'Die Automatik läuft im selben unauffälligen Dienst wie der Akku-Wächter (eine stille Benachrichtigung „Akku-Schoner“).'),
+                  'Automatik und Akku-Wächter laufen in der Bedienungshilfe mit – deshalb gibt es keine dauerhafte Benachrichtigung. Ohne Bedienungshilfe sind beide aus.'),
           section('Warum braucht das die Bedienungshilfe?',
               'Android erlaubt keiner normalen App, andere Apps zu beenden. Ohne Bedienungshilfe kann der Akku-Schoner Apps nur „sanft“ beenden – Apps mit eigenem Dienst starten dann sofort neu.\n\n'
                   'Mit Bedienungshilfe öffnet die App für jede gewählte App die App-Info und drückt „Beenden erzwingen“ – genau so, wie du es von Hand tun würdest. '

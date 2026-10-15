@@ -388,10 +388,12 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
                       '15 s nach dem Ausschalten fliegen „Sanft“- und „Komplett“-Apps aus dem Speicher. '
                       'Laufende Musik bleibt an, Play am Kopfhörer geht weiter.'),
                   value: _autoSoft,
-                  onChanged: (v) {
-                    setState(() => _autoSoft = v);
-                    _saveAuto();
-                  },
+                  onChanged: _accessibility
+                      ? (v) {
+                          setState(() => _autoSoft = v);
+                          _saveAuto();
+                        }
+                      : null,
                 ),
                 SwitchListTile(
                   title: const Text('Beim Entsperren komplett beenden'),
@@ -407,6 +409,11 @@ class _AppsPageState extends State<AppsPage> with WidgetsBindingObserver {
                         }
                       : null,
                 ),
+                if (!_accessibility)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Text('Die Automatik läuft in der Bedienungshilfe – so braucht sie keine dauerhafte Benachrichtigung. Erst Bedienungshilfe einschalten.'),
+                  ),
                 if (_autoFull)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),

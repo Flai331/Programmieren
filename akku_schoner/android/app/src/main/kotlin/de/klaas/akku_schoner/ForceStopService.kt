@@ -78,16 +78,24 @@ class ForceStopService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private val timeout = Runnable { finish("Zeitlimit – Knopf nicht gefunden") }
 
+    private var monitor: Monitor? = null
+
     override fun onServiceConnected() {
         instance = this
+        // Akku-Wächter + Automatik laufen hier mit – ohne Dauer-Benachrichtigung.
+        monitor = Monitor(this).also { it.start() }
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        monitor?.stop()
+        monitor = null
         instance = null
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
+        monitor?.stop()
+        monitor = null
         instance = null
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()

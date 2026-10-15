@@ -9,11 +9,8 @@
     <!-- Wer war wie lange aktiv / im Hintergrund – Nutzer muss "Nutzungszugriff" erlauben -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
-    <!-- Akku-Wächter -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Akku-Warnungen (einzeln, keine Dauer-Benachrichtigung) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:label="Akku-Schoner"
@@ -38,15 +35,6 @@
         </activity>
 
         <service
-            android:name=".WatcherService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Überwacht Ladestand und Temperatur eines beschädigten Akkus, warnt beim Erreichen der Ladegrenze und beendet auf Wunsch beim Ausschalten des Bildschirms unwichtige Hintergrund-Apps." />
-        </service>
-
-        <service
             android:name=".ForceStopService"
             android:exported="true"
             android:label="Akku-Schoner: Apps beenden"
@@ -58,15 +46,6 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/force_stop_service" />
         </service>
-
-        <receiver
-            android:name=".BootReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-            </intent-filter>
-        </receiver>
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

@@ -70,7 +70,7 @@ class _BatteryPageState extends State<BatteryPage> with WidgetsBindingObserver {
       if (!mounted) return;
       setState(() {
         _b = b;
-        _watcherRunning = s['watcherRunning'] == true;
+        _watcherRunning = s['monitorRunning'] == true;
       });
     } catch (_) {}
   }
@@ -147,10 +147,10 @@ class _BatteryPageState extends State<BatteryPage> with WidgetsBindingObserver {
                   title: const Text('Akku-Wächter'),
                   subtitle: Text(_watcherOn
                       ? (_watcherRunning
-                          ? 'Aktiv – warnt per Benachrichtigung'
-                          : 'Startet …')
+                          ? 'Aktiv – meldet sich nur bei einer Warnung'
+                          : 'Braucht die Bedienungshilfe (Reiter „Apps“) – erst dann aktiv.')
                       : 'Warnt beim Laden ab der Ladegrenze, bei wenig Akku und bei Hitze. '
-                          'Verbraucht praktisch nichts (kein Timer, kein GPS).'),
+                          'Keine Dauer-Benachrichtigung, verbraucht praktisch nichts. Braucht die Bedienungshilfe.'),
                   value: _watcherOn,
                   onChanged: (v) {
                     setState(() => _watcherOn = v);

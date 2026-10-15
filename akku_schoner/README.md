@@ -9,7 +9,8 @@ direkt zu den Einstellungen, die am meisten Strom sparen.
 ## Funktionen
 - **Akku**: Ladestand, Temperatur, Spannung, Strom, Zustand, Ladezyklen (Android 14+), Hinweise.
   **Akku-Wächter** (optional): Benachrichtigung bei Ladegrenze (Standard 80 %), unter 20 % und ab 40 °C.
-  Hört nur auf die Akku-Meldungen des Systems – kein Timer, kein GPS, kein Netz.
+  Hört nur auf die Akku-Meldungen des Systems – kein Timer, kein GPS, kein Netz, **keine Dauer-Benachrichtigung**
+  (läuft in der Bedienungshilfe mit; ohne sie sind Wächter und Automatik aus).
 - **Apps**: alle Apps mit Status „aktiv/beendet“, Hintergrundzeit (24 h) und Nutzungstagen (7 Tage).
   Jede App hat eine **Stufe**, automatisch nach Nutzung gewählt, pro App änderbar:
   - **Wichtig** (an ≥ 4 von 7 Tagen benutzt, vorinstallierte Apps): nie anfassen.

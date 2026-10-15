@@ -19,9 +19,6 @@ object Prefs {
     fun autoFull(ctx: Context) = p(ctx).getBoolean("autoFull", false)
     fun unlockAfterMin(ctx: Context) = p(ctx).getInt("unlockAfterMin", 30)
 
-    /** Der Dienst läuft, sobald Wächter oder Automatik an ist. */
-    fun serviceNeeded(ctx: Context) = watcherEnabled(ctx) || autoSoft(ctx) || autoFull(ctx)
-
     fun getWatcher(ctx: Context): Map<String, Any> = mapOf(
         "enabled" to watcherEnabled(ctx),
         "upper" to upperLimit(ctx),
