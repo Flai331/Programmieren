@@ -27,8 +27,9 @@ class ForceStopService : AccessibilityService() {
 
         fun isEnabled(ctx: Context): Boolean {
             val enabled = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-            val me = ComponentName(ctx, ForceStopService::class.java).flattenToString()
-            return enabled?.split(":")?.any { it.equals(me, ignoreCase = true) } ?: false
+            val me = ComponentName(ctx, ForceStopService::class.java)
+            // Je nach Handy als "pkg/.Klasse" oder "pkg/pkg.Klasse" gespeichert.
+            return enabled?.split(":")?.any { ComponentName.unflattenFromString(it) == me } ?: false
         }
 
         fun busy(): Boolean = pending.isNotEmpty()
@@ -154,14 +155,15 @@ class ForceStopService : AccessibilityService() {
                 .filter { it.text?.toString()?.lowercase()?.contains(text) == true }
         }
         for (node in candidates) {
-            if (!node.isEnabled) {
+            val button = clickable(node) ?: continue
+            // Ausgegraut (Knopf selbst oder Text darin) = App läuft nicht mehr.
+            if (!node.isEnabled || !button.isEnabled) {
                 finish("war schon beendet")
                 return
             }
-            if (click(node)) {
-                setStep(2)
-                return
-            }
+            button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            setStep(2)
+            return
         }
     }
 
@@ -197,18 +199,22 @@ class ForceStopService : AccessibilityService() {
         }, 1200L)
     }
 
-    private fun click(node: AccessibilityNodeInfo): Boolean {
+    /** Der Knoten selbst oder der nächste klickbare Elternknoten (max. 5 Ebenen). */
+    private fun clickable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         var n: AccessibilityNodeInfo? = node
         var depth = 0
         while (n != null && depth < 5) {
-            if (n.isClickable) {
-                n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                return true
-            }
+            if (n.isClickable) return n
             n = n.parent
             depth++
         }
-        return false
+        return null
+    }
+
+    private fun click(node: AccessibilityNodeInfo): Boolean {
+        val button = clickable(node) ?: return false
+        button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        return true
     }
 
     private fun record(pkg: String, result: String) {
