@@ -100,7 +100,9 @@ jobs:
         env:
           MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
         # Fortlaufende Versionsnummer, damit Android jede neue APK als Update sieht.
-        run: flutter build apk --release --build-number=${{ github.run_number }}
+        # Nur arm64 (alle aktuellen Handys, auch Samsung): APK etwa halb so groß,
+        # der Download auf dem Handy bricht nicht mehr ab.
+        run: flutter build apk --release --target-platform android-arm64 --build-number=${{ github.run_number }}
 
       - name: Signatur der APK prüfen
         run: |
