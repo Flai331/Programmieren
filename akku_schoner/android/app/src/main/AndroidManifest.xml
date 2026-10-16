@@ -3,9 +3,6 @@
 
     <!-- Andere Apps im Hintergrund beenden (nur zwischengespeicherte Prozesse) -->
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
-    <!-- Installierte Apps auflisten (App wird nicht über den Play Store verteilt) -->
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
-        tools:ignore="QueryAllPackagesPermission" />
     <!-- Wer war wie lange aktiv / im Hintergrund – Nutzer muss "Nutzungszugriff" erlauben -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
@@ -54,10 +51,18 @@
             android:value="2" />
     </application>
 
+    <!-- Statt QUERY_ALL_PACKAGES (wirkt auf Chrome/Play Protect verdächtig):
+         nur Apps mit Symbol im App-Menü, den Startbildschirm und Samsungs Gerätewartung sehen. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+        <package android:name="com.samsung.android.lool" />
+        <package android:name="com.samsung.android.sm" />
     </queries>
 </manifest>
