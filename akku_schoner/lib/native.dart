@@ -38,6 +38,25 @@ class Native {
   static Future<void> setWatcher(Map<String, Object> values) =>
       _ch.invokeMethod('setWatcher', values);
 
+  // ---------- Sparprofil ----------
+
+  static Future<Map<dynamic, dynamic>> profile() async =>
+      await _ch.invokeMethod<Map>('getProfile') ?? {};
+
+  static Future<void> setProfile(Map<String, Object> values) =>
+      _ch.invokeMethod('setProfile', values);
+
+  /// {state: {id: Wert}, saving: {id: bool}, canWrite: bool}
+  static Future<Map<dynamic, dynamic>> profileState() async =>
+      await _ch.invokeMethod<Map>('profileState') ?? {};
+
+  /// {direct: {id: Ergebnis}, toggles: [id], started: bool}
+  static Future<Map<dynamic, dynamic>> applyProfile(List<String> ids) async =>
+      await _ch.invokeMethod<Map>('applyProfile', {'ids': ids}) ?? {};
+
+  static Future<Map<dynamic, dynamic>> restoreProfile() async =>
+      await _ch.invokeMethod<Map>('restoreProfile') ?? {};
+
   static Future<void> openAppDetails(String pkg) =>
       _ch.invokeMethod('openAppDetails', {'pkg': pkg});
 

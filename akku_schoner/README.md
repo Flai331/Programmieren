@@ -22,8 +22,12 @@ https://github.com/Flai331/Programmieren/releases/download/akku-schoner/Akku-Sch
   - **Komplett** (7 Tage nicht benutzt): „Beenden erzwingen“ per Bedienungshilfe.
 - **Automatik**: 15 s nach Bildschirm-Aus „Sanft“+„Komplett“-Apps sanft beenden; beim Entsperren nach
   ≥ 30 min Pause (einstellbar) „Komplett“-Apps erzwungen beenden (nicht während Anrufen).
-- **Sparen**: auf Samsung „Akku schützen“ (Ladegrenze) und „Schlafende Apps“; Abkürzungen zu Energiesparmodus, Akkuverbrauch, Bildschirm, Standort, Bluetooth, WLAN, NFC,
-  Synchronisierung, Datensparmodus, Akku-Optimierung + Tipps für schwache Akkus.
+- **Sparprofil** (Reiter Sparen): stellt selbst um statt nur zu beschreiben – Energiesparmodus an, Bildschirm-Timeout 30 s,
+  Auto-Helligkeit, Vibration bei Berührung aus, NFC aus; optional Standort, Bluetooth, Synchronisierung aus.
+  „Zurücksetzen“ stellt die alten Werte wieder her; optional automatisch unter X % Akku.
+  Timeout/Helligkeit/Vibration direkt (Erlaubnis „Systemeinstellungen ändern“), Schalter per Bedienungshilfe.
+- **Sparen** (nur von Hand möglich): Links zu dunklem Design/60 Hz, Akkuverbrauch, WLAN, Datensparmodus,
+  Akku-Optimierung; auf Samsung „Akku schützen“ (Ladegrenze) und „Schlafende Apps“; Tipps für schwache Akkus.
 
 ## Einrichtung
 1. APK installieren und öffnen.

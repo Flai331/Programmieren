@@ -8,10 +8,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.app.KeyguardManager
 import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 
 /**
  * Akku-Wächter und Automatik – ohne eigenen Vordergrund-Dienst und damit ohne dauerhafte
@@ -20,12 +22,14 @@ import android.os.Looper
  *  - Wächter: einzelne Warnung bei Ladegrenze, niedrigem Stand und Hitze.
  *  - Bildschirm aus: Apps der Stufen sanft/komplett sanft beenden.
  *  - Entsperren nach längerer Pause: Apps der Stufe komplett erzwungen beenden.
+ *  - Sparprofil automatisch, sobald der Akku unter die eingestellte Grenze fällt.
  */
 class Monitor(private val ctx: Context) {
 
     companion object {
         private const val CH_ALARM = "alarm"
         private const val ID_ALARM = 2
+        private const val ID_PROFILE = 3
         @Volatile var instance: Monitor? = null
 
         /** Nach geänderten Einstellungen: Warnungen neu bewerten. */
@@ -45,6 +49,8 @@ class Monitor(private val ctx: Context) {
     private var upperWarned = false
     private var lowerWarned = false
     private var heatWarned = false
+    /** Sparprofil-Schalter warten auf das nächste Entsperren (Bedienungshilfe braucht entsperrtes Handy). */
+    private var profileTogglesPending = false
 
     fun start() {
         instance = this
@@ -108,6 +114,12 @@ class Monitor(private val ctx: Context) {
             }
             Intent.ACTION_SCREEN_ON -> handler.removeCallbacks(softRun)
             Intent.ACTION_USER_PRESENT -> {
+                if (profileTogglesPending && !inCall()) {
+                    profileTogglesPending = false
+                    handler.postDelayed({
+                        SaverProfile.apply(ctx, Prefs.profileIds(ctx), runToggles = true, returnToApp = false)
+                    }, 1200L)
+                }
                 val off = screenOffAt
                 screenOffAt = 0L
                 if (!Prefs.autoFull(ctx) || off == 0L) return
@@ -138,10 +150,35 @@ class Monitor(private val ctx: Context) {
         return am.mode == AudioManager.MODE_IN_CALL || am.mode == AudioManager.MODE_IN_COMMUNICATION
     }
 
+    /** Sparprofil einmal anwenden, wenn der Akku unter die Grenze fällt; nach dem Laden wieder scharf. */
+    private fun checkProfile(level: Int, charging: Boolean) {
+        if (!Prefs.profileAuto(ctx) || level < 0) return
+        val limit = Prefs.profileAutoLevel(ctx)
+        if (Prefs.profileAutoDone(ctx)) {
+            if (charging && level >= limit + 10) Prefs.setProfileAutoDone(ctx, false)
+            return
+        }
+        if (charging || level > limit) return
+        Prefs.setProfileAutoDone(ctx, true)
+        val ids = Prefs.profileIds(ctx)
+        val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val km = ctx.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        val now = pm.isInteractive && !km.isKeyguardLocked && !inCall() && !ForceStopService.busy()
+        SaverProfile.apply(ctx, ids, runToggles = now, returnToApp = false)
+        if (!now && ids.any { it in SaverProfile.TOGGLES }) profileTogglesPending = true
+        alarm(ID_PROFILE, "Sparprofil eingeschaltet",
+            "Akku unter $limit % – Stromspar-Einstellungen wurden umgestellt. Zurücksetzen im Reiter „Sparen“.")
+    }
+
     private fun onBattery(intent: Intent, force: Boolean = false) {
-        if (!Prefs.watcherEnabled(ctx)) return
         val level = BatteryInfo.level(intent)
         val charging = BatteryInfo.isCharging(intent)
+        if (level != lastLevel || charging != lastCharging) checkProfile(level, charging)
+        if (!Prefs.watcherEnabled(ctx)) {
+            lastLevel = level
+            lastCharging = charging
+            return
+        }
         val temp = BatteryInfo.temp(intent)
         val tempTenth = (temp * 10).toInt()
 
@@ -179,7 +216,9 @@ class Monitor(private val ctx: Context) {
         if (temp < maxTemp - 3) heatWarned = false
     }
 
-    private fun alarm(title: String, text: String) {
+    private fun alarm(title: String, text: String) = alarm(ID_ALARM, title, text)
+
+    private fun alarm(id: Int, title: String, text: String) {
         val open = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName) ?: Intent()
         val pi = PendingIntent.getActivity(ctx, 0, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(ctx, CH_ALARM)
@@ -191,6 +230,6 @@ class Monitor(private val ctx: Context) {
             .setAutoCancel(true)
             .setContentIntent(pi)
             .build()
-        (ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(ID_ALARM, n)
+        (ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(id, n)
     }
 }

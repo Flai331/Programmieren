@@ -250,3 +250,71 @@ List<Advice> batteryAdvice(BatteryState b, {int upper = 80, int lower = 20, int 
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Sparprofil
+// ---------------------------------------------------------------------------
+
+/// Wie ein Punkt umgesetzt wird.
+enum ProfileWay {
+  /// direkt, braucht „Systemeinstellungen ändern“
+  write,
+
+  /// direkt, ohne Extra-Erlaubnis
+  direct,
+
+  /// Bedienungshilfe öffnet die Seite und legt den Schalter um
+  accessibility,
+}
+
+class ProfileItem {
+  final String id;
+  final String title;
+
+  /// Was im Sparzustand passiert.
+  final String action;
+
+  /// Warum es hilft bzw. was man verliert.
+  final String note;
+  final ProfileWay way;
+  const ProfileItem(this.id, this.title, this.action, this.note, this.way);
+}
+
+/// Reihenfolge = Wirkung (größte zuerst). ids wie in `SaverProfile.kt`.
+const profileItems = [
+  ProfileItem('saver', 'Energiesparmodus', 'einschalten',
+      'Bremst Hintergrund, Synchronisation und Prozessor – größte Einzelwirkung.', ProfileWay.accessibility),
+  ProfileItem('timeout', 'Bildschirm-Timeout', 'auf 30 Sekunden',
+      'Der Bildschirm ist der größte Verbraucher.', ProfileWay.write),
+  ProfileItem('brightness', 'Helligkeit', 'automatisch',
+      'Passt die Helligkeit an die Umgebung an statt immer hell.', ProfileWay.write),
+  ProfileItem('haptic', 'Vibration bei Berührung', 'aus',
+      'Jedes Tippen bewegt den Vibrationsmotor.', ProfileWay.write),
+  ProfileItem('nfc', 'NFC', 'aus', 'Nicht, wenn du mit dem Handy bezahlst.', ProfileWay.accessibility),
+  ProfileItem('location', 'Standort', 'aus',
+      'Spart viel – aber Karten, Wetter und „Handy finden“ gehen dann nicht.', ProfileWay.accessibility),
+  ProfileItem('bluetooth', 'Bluetooth', 'aus',
+      'Nur wenn keine Kopfhörer/Uhr genutzt werden – sonst ist die Verbindung weg.', ProfileWay.accessibility),
+  ProfileItem('sync', 'Automatische Synchronisierung', 'aus',
+      'Konten gleichen sich nicht mehr selbst ab – E-Mails kommen evtl. erst beim Öffnen.', ProfileWay.direct),
+];
+
+/// Ist-Zustand als kurzer Text, z. B. „an“, „aus“, „1 min“.
+String profileStateText(String id, Object? v) {
+  if (v == null) return 'nicht vorhanden';
+  if (id == 'timeout' && v is num) {
+    final s = v ~/ 1000;
+    return s < 60 ? '$s s' : '${s ~/ 60} min';
+  }
+  if (id == 'brightness') return v == true ? 'automatisch' : 'fest';
+  return v == true ? 'an' : 'aus';
+}
+
+/// Lesbares Ergebnis eines Profil-Schritts aus Kotlin ("toggle:saver" → „Energiesparmodus“).
+String profileLabel(String key) {
+  final id = key.startsWith('toggle:') ? key.substring(7) : key;
+  for (final p in profileItems) {
+    if (p.id == id) return p.title;
+  }
+  return key;
+}

@@ -137,4 +137,26 @@ void main() {
       expect(b.health, 'unknown');
     });
   });
+
+  group('Sparprofil', () {
+    test('Zustandstexte', () {
+      expect(profileStateText('timeout', 30000), '30 s');
+      expect(profileStateText('timeout', 120000), '2 min');
+      expect(profileStateText('brightness', true), 'automatisch');
+      expect(profileStateText('nfc', false), 'aus');
+      expect(profileStateText('nfc', null), 'nicht vorhanden');
+    });
+
+    test('Ergebnis-Schlüssel lesbar', () {
+      expect(profileLabel('toggle:saver'), 'Energiesparmodus');
+      expect(profileLabel('timeout'), 'Bildschirm-Timeout');
+      expect(profileLabel('com.example'), 'com.example');
+    });
+
+    test('Bluetooth und Sync nicht im Standard, ids eindeutig', () {
+      final ids = profileItems.map((p) => p.id).toList();
+      expect(ids.toSet().length, ids.length);
+      expect(ids, containsAll(['saver', 'timeout', 'brightness', 'haptic', 'nfc', 'location', 'bluetooth', 'sync']));
+    });
+  });
 }

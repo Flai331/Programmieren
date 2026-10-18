@@ -12,15 +12,18 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
 /**
- * Bedienungshilfe, die für jede gewählte App die App-Info öffnet und
- * "Beenden erzwingen" + Bestätigen drückt. Ablauf übernommen vom Parkplatz-Merker.
- * Ohne Auftrag (step == 0) tut der Dienst nichts.
+ * Bedienungshilfe mit zwei Aufgaben (nur auf Auftrag, sonst tut sie nichts):
+ *  1. Apps beenden: App-Info öffnen, "Beenden erzwingen" + Bestätigen drücken (Ablauf vom Parkplatz-Merker).
+ *  2. Schalter umlegen (Sparprofil): Einstellungsseite öffnen und den obersten Schalter in die
+ *     gewünschte Stellung bringen – für Energiesparmodus, Bluetooth, NFC, Standort, die keine App direkt ändern darf.
+ * Nebenbei läuft hier der Monitor (Akku-Wächter + Automatik) ohne Dauer-Benachrichtigung.
  */
 class ForceStopService : AccessibilityService() {
 
     companion object {
         @Volatile var instance: ForceStopService? = null
         private val pending: ArrayDeque<String> = ArrayDeque()
+        private val toggles: ArrayDeque<Pair<String, Boolean>> = ArrayDeque()
         private val results: MutableList<Map<String, String>> = mutableListOf()
         private var total = 0
         private var returnToApp = true
@@ -32,20 +35,24 @@ class ForceStopService : AccessibilityService() {
             return enabled?.split(":")?.any { ComponentName.unflattenFromString(it) == me } ?: false
         }
 
-        fun busy(): Boolean = pending.isNotEmpty()
+        fun busy(): Boolean = pending.isNotEmpty() || toggles.isNotEmpty()
+
+        private fun startBatch(returnToApp: Boolean) {
+            if (!busy()) {
+                results.clear()
+                total = 0
+                this.returnToApp = returnToApp
+            }
+        }
 
         /**
-         * Neuer Auftrag. false = Bedienungshilfe ist nicht eingeschaltet.
+         * Apps erzwungen beenden. false = Bedienungshilfe ist nicht eingeschaltet.
          * returnToApp = am Ende den Akku-Schoner zeigen (sonst bleibt der Startbildschirm).
          */
         fun request(ctx: Context, pkgs: List<String>, returnToApp: Boolean = true): Boolean {
             val service = instance ?: return false
             val protected = Apps.protectedPackages(ctx)
-            if (pending.isEmpty()) {
-                results.clear()
-                total = 0
-                this.returnToApp = returnToApp
-            }
+            startBatch(returnToApp)
             for (pkg in pkgs) {
                 if (protected.contains(pkg) || pending.contains(pkg)) continue
                 pending.addLast(pkg)
@@ -55,13 +62,27 @@ class ForceStopService : AccessibilityService() {
             return true
         }
 
+        /** Schalter umlegen: (SaverProfile-id, soll danach an sein). */
+        fun requestToggles(ctx: Context, items: List<Pair<String, Boolean>>, returnToApp: Boolean = true): Boolean {
+            val service = instance ?: return false
+            startBatch(returnToApp)
+            for (item in items) {
+                if (toggles.any { it.first == item.first }) continue
+                toggles.addLast(item)
+                total++
+            }
+            service.tryRun()
+            return true
+        }
+
         fun cancel() {
             pending.clear()
+            toggles.clear()
             instance?.abort()
         }
 
         fun state(): Map<String, Any> = mapOf(
-            "pending" to pending.toList(),
+            "pending" to (pending.toList() + toggles.map { "toggle:" + it.first }),
             "total" to total,
             "results" to results.toList(),
         )
@@ -73,11 +94,22 @@ class ForceStopService : AccessibilityService() {
         "com.android.settings:id/button3", "com.miui.securitycenter:id/am_force_stop")
     private val OK_IDS = listOf("android:id/button1")
 
-    private var step = 0          // 0 frei, 1 warte auf Knopf, 2 warte auf Bestätigung, 3 prüft
+    // 0 frei | App beenden: 1 Knopf suchen, 2 Bestätigung, 3 prüfen | Schalter: 10 suchen, 11 prüfen
+    private var step = 0
     private var stepSince = 0L
-    private var current = ""
+    private var current = ""          // Paket oder "toggle:<id>" (für das Ergebnis)
+    private var currentToggle: Pair<String, Boolean>? = null
     private val handler = Handler(Looper.getMainLooper())
     private val timeout = Runnable { finish("Zeitlimit – Knopf nicht gefunden") }
+
+    /** Nicht nur auf Ereignisse warten: ist die Seite schon fertig, kommt evtl. keins mehr. */
+    private val poll = object : Runnable {
+        override fun run() {
+            if (step != 1 && step != 2 && step != 10) return
+            rootInActiveWindow?.let { process(it) }
+            if (step == 1 || step == 2 || step == 10) handler.postDelayed(this, 400L)
+        }
+    }
 
     private var monitor: Monitor? = null
 
@@ -104,9 +136,26 @@ class ForceStopService : AccessibilityService() {
 
     private fun tryRun() {
         if (step != 0) return
-        val pkg = pending.firstOrNull() ?: return
-        current = pkg
+        val pkg = pending.firstOrNull()
+        if (pkg != null) {
+            startStop(pkg)
+            return
+        }
+        val t = toggles.firstOrNull() ?: return
+        startToggle(t)
+    }
 
+    private fun open(intent: Intent): Boolean = try {
+        startActivity(intent.addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS))
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun startStop(pkg: String) {
+        current = pkg
+        currentToggle = null
         if (Apps.isStopped(this, pkg)) {
             // Schon gestoppt – App-Info gar nicht erst öffnen.
             record(pkg, "war schon beendet")
@@ -114,35 +163,54 @@ class ForceStopService : AccessibilityService() {
             handler.post { next() }
             return
         }
-
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", pkg, null))
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
-        try {
-            startActivity(intent)
-        } catch (e: Exception) {
+        setStep(1)
+        if (!open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", pkg, null)))) {
             finish("App-Info ließ sich nicht öffnen")
+        }
+    }
+
+    private fun startToggle(t: Pair<String, Boolean>) {
+        current = "toggle:" + t.first
+        currentToggle = t
+        if (SaverProfile.toggleIsOn(this, t.first) == t.second) {
+            record(current, "war schon so")
+            toggles.removeFirstOrNull()
+            handler.post { next() }
             return
         }
-        setStep(1)
+        setStep(10)
+        if (!open(SaverProfile.toggleIntent(t.first))) {
+            finish("Einstellung ließ sich nicht öffnen")
+        }
     }
 
     private fun setStep(s: Int) {
         step = s
         stepSince = System.currentTimeMillis()
         handler.removeCallbacks(timeout)
-        if (s == 1 || s == 2) handler.postDelayed(timeout, 8000L)
+        handler.removeCallbacks(poll)
+        if (s == 1 || s == 2 || s == 10) {
+            handler.postDelayed(timeout, 8000L)
+            handler.postDelayed(poll, 600L)
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (step != 1 && step != 2) return
-        // Kurz warten, bis wirklich die richtige App-Info / der Dialog angezeigt wird.
+        if (step != 1 && step != 2 && step != 10) return
+        rootInActiveWindow?.let { process(it) }
+    }
+
+    private fun process(root: AccessibilityNodeInfo) {
+        // Kurz warten, bis wirklich die richtige Seite / der Dialog angezeigt wird.
         if (System.currentTimeMillis() - stepSince < 500L) return
-        val root = rootInActiveWindow ?: return
         when (step) {
             1 -> findForceButton(root)
             2 -> clickOk(root)
+            10 -> findSwitch(root)
         }
     }
+
+    // ---------- Apps beenden ----------
 
     private fun findForceButton(root: AccessibilityNodeInfo) {
         val candidates = mutableListOf<AccessibilityNodeInfo>()
@@ -183,7 +251,7 @@ class ForceStopService : AccessibilityService() {
             for (node in root.findAccessibilityNodeInfosByViewId(id)) {
                 if (!node.isEnabled) continue
                 if (click(node)) {
-                    verify()
+                    verifyStop()
                     return
                 }
             }
@@ -191,13 +259,48 @@ class ForceStopService : AccessibilityService() {
     }
 
     /** Ehrlich prüfen, ob Android die App jetzt als gestoppt führt. */
-    private fun verify() {
+    private fun verifyStop() {
         setStep(3)
         val pkg = current
         handler.postDelayed({
             finish(if (Apps.isStopped(this, pkg)) "beendet" else "bestätigt, läuft aber noch")
         }, 1200L)
     }
+
+    // ---------- Schalter umlegen ----------
+
+    /** Oberster Ein/Aus-Schalter der Seite (Breitensuche = von oben nach unten). */
+    private fun findSwitch(root: AccessibilityNodeInfo) {
+        val t = currentToggle ?: return
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.addLast(root)
+        var seen = 0
+        while (queue.isNotEmpty() && seen < 400) {
+            val n = queue.removeFirst()
+            seen++
+            val cls = n.className?.toString() ?: ""
+            if (n.isCheckable && cls.contains("Switch", ignoreCase = true)) {
+                if (n.isChecked == t.second) {
+                    verifyToggle()
+                } else if (click(n)) {
+                    verifyToggle()
+                }
+                return
+            }
+            for (i in 0 until n.childCount) n.getChild(i)?.let { queue.addLast(it) }
+        }
+    }
+
+    private fun verifyToggle() {
+        setStep(11)
+        val t = currentToggle ?: return
+        handler.postDelayed({
+            finish(if (SaverProfile.toggleIsOn(this, t.first) == t.second) "erledigt"
+                   else "Schalter gedrückt, aber nicht umgestellt")
+        }, 1200L)
+    }
+
+    // ---------- gemeinsam ----------
 
     /** Der Knoten selbst oder der nächste klickbare Elternknoten (max. 5 Ebenen). */
     private fun clickable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
@@ -213,18 +316,20 @@ class ForceStopService : AccessibilityService() {
 
     private fun click(node: AccessibilityNodeInfo): Boolean {
         val button = clickable(node) ?: return false
+        if (!button.isEnabled) return false
         button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         return true
     }
 
-    private fun record(pkg: String, result: String) {
-        results.add(mapOf("pkg" to pkg, "result" to result))
+    private fun record(key: String, result: String) {
+        results.add(mapOf("pkg" to key, "result" to result))
     }
 
     private fun finish(reason: String) {
         if (step == 0) return
         record(current, reason)
-        pending.removeFirstOrNull()
+        if (currentToggle != null) toggles.removeFirstOrNull() else pending.removeFirstOrNull()
+        currentToggle = null
         setStep(0)
         handler.postDelayed({
             performGlobalAction(GLOBAL_ACTION_HOME)
@@ -233,7 +338,7 @@ class ForceStopService : AccessibilityService() {
     }
 
     private fun next() {
-        if (pending.isNotEmpty()) {
+        if (busy()) {
             tryRun()
         } else if (returnToApp) {
             backToApp()
@@ -243,6 +348,7 @@ class ForceStopService : AccessibilityService() {
     private fun abort() {
         if (step == 0) return
         record(current, "abgebrochen")
+        currentToggle = null
         setStep(0)
         backToApp()
     }

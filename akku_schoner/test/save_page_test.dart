@@ -5,8 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   testWidgets('Sparen-Seite zeigt Einstellungen und Tipps', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: SavePage())));
-    expect(find.text('Energiesparmodus'), findsOneWidget);
-    expect(find.text('Bildschirm'), findsOneWidget);
+    await tester.pump();
+    expect(find.text('Sparprofil'), findsOneWidget);
+    expect(find.text('Energiesparmodus → einschalten'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Akkuverbrauch ansehen'), 300);
+    expect(find.text('Akkuverbrauch ansehen'), findsOneWidget);
   });
 
   testWidgets('Hilfe-Seite lässt sich öffnen', (tester) async {

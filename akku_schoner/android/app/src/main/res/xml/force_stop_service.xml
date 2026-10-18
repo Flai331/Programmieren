@@ -4,6 +4,6 @@
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"
-    android:packageNames="com.android.settings,com.miui.securitycenter"
+    android:packageNames="com.android.settings,com.samsung.android.lool,com.miui.securitycenter"
     android:notificationTimeout="200"
     android:description="@string/force_stop_description" />

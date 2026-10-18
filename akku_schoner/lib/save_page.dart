@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import 'logic.dart';
 import 'native.dart';
 
 class _Shortcut {
@@ -10,28 +13,17 @@ class _Shortcut {
   const _Shortcut(this.icon, this.title, this.text, this.setting);
 }
 
-/// Die größten Stromfresser – jeweils direkt zur passenden Systemeinstellung.
+/// Was keine App selbst umstellen darf – hier nur der direkte Weg zur Einstellung.
 const _shortcuts = [
-  _Shortcut(Icons.battery_saver, 'Energiesparmodus',
-      'Bremst Hintergrund-Aktivität, Synchronisation und Animationen. Am besten automatisch ab 30–50 % einschalten.',
-      'batterySaver'),
   _Shortcut(Icons.pie_chart_outline, 'Akkuverbrauch ansehen',
       'Android zeigt, welche App wie viel Akku gebraucht hat. Große Verbraucher dort auf „Eingeschränkt“ stellen.',
       'batteryUsage'),
-  _Shortcut(Icons.brightness_6, 'Bildschirm',
-      'Der Bildschirm ist der größte Verbraucher: automatische Helligkeit, kurze Bildschirm-Zeitüberschreitung (30 s), 60 Hz statt 120 Hz, dunkles Design.',
+  _Shortcut(Icons.brightness_6, 'Dunkles Design & 60 Hz',
+      'Anzeige → Dunkler Modus an, Bewegungsglättung auf „Standard“ (60 Hz). Darf nur das System umschalten.',
       'display'),
-  _Shortcut(Icons.location_off_outlined, 'Standort',
-      'GPS aus, wenn du es nicht brauchst. Sonst Apps nur „Während der Nutzung“ erlauben.',
-      'location'),
-  _Shortcut(Icons.bluetooth_disabled, 'Bluetooth',
-      'Aus, wenn keine Kopfhörer/Uhr verbunden sind.', 'bluetooth'),
   _Shortcut(Icons.wifi, 'WLAN',
-      'Zuhause WLAN statt Mobilfunk – das braucht deutlich weniger Strom. „WLAN-Suche“ unter Standort ausschalten.',
+      'Zuhause WLAN statt Mobilfunk – das braucht deutlich weniger Strom.',
       'wifi'),
-  _Shortcut(Icons.nfc, 'NFC', 'Aus, wenn du nicht mit dem Handy bezahlst.', 'nfc'),
-  _Shortcut(Icons.sync_disabled, 'Konten-Synchronisierung',
-      'Automatische Synchronisierung für unwichtige Konten ausschalten.', 'sync'),
   _Shortcut(Icons.data_saver_on, 'Datensparmodus',
       'Verhindert, dass Apps im Hintergrund mobile Daten nutzen.', 'dataSaver'),
   _Shortcut(Icons.playlist_remove, 'Akku-Optimierung',
@@ -68,16 +60,107 @@ class SavePage extends StatefulWidget {
   State<SavePage> createState() => _SavePageState();
 }
 
-class _SavePageState extends State<SavePage> {
+class _SavePageState extends State<SavePage> with WidgetsBindingObserver {
   bool _samsungPhone = false;
+  bool _accessibility = false;
+  bool _canWrite = false;
+  Map<dynamic, dynamic> _state = {};
+  Map<dynamic, dynamic> _saving = {};
+  Set<String> _ids = {'saver', 'timeout', 'brightness', 'haptic', 'nfc'};
+  bool _auto = false;
+  double _autoLevel = 30;
+  bool _hasBackup = false;
+  bool _busy = false;
+  Timer? _poll;
 
   @override
   void initState() {
     super.initState();
-    Native.status().then((s) {
-      final m = (s['manufacturer'] as String? ?? '').toLowerCase();
-      if (mounted) setState(() => _samsungPhone = m.contains('samsung'));
-    }).catchError((_) {});
+    WidgetsBinding.instance.addObserver(this);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Zurück aus den Einstellungen (Erlaubnis erteilt, Schalter umgelegt …)
+    if (state == AppLifecycleState.resumed && _poll == null) _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final st = await Native.status();
+      final p = await Native.profile();
+      final ps = await Native.profileState();
+      if (!mounted) return;
+      setState(() {
+        _samsungPhone = (st['manufacturer'] as String? ?? '').toLowerCase().contains('samsung');
+        _accessibility = st['accessibility'] == true;
+        _ids = ((p['ids'] as List?) ?? []).cast<String>().toSet();
+        _auto = p['auto'] == true;
+        _autoLevel = ((p['autoLevel'] as num?) ?? 30).toDouble();
+        _hasBackup = p['hasBackup'] == true;
+        _state = (ps['state'] as Map?) ?? {};
+        _saving = (ps['saving'] as Map?) ?? {};
+        _canWrite = ps['canWrite'] == true;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _saveConfig() => Native.setProfile({
+        'ids': _ids.toList(),
+        'auto': _auto,
+        'autoLevel': _autoLevel.round(),
+      });
+
+  Future<void> _run(Future<Map<dynamic, dynamic>> Function() action) async {
+    setState(() => _busy = true);
+    final r = await action();
+    final direct = ((r['direct'] as Map?) ?? {}).cast<String, String>();
+    final toggles = ((r['toggles'] as List?) ?? []).cast<String>();
+    final started = r['started'] == true;
+    final lines = [
+      for (final e in direct.entries) '${profileLabel(e.key)}: ${e.value}',
+    ];
+    if (toggles.isNotEmpty && !started) {
+      lines.add('${toggles.map(profileLabel).join(', ')}: Bedienungshilfe ist aus');
+    }
+    if (started) {
+      // Die Bedienungshilfe arbeitet die Schalter ab – warten, dann alles zusammen zeigen.
+      _poll?.cancel();
+      _poll = Timer.periodic(const Duration(milliseconds: 800), (_) async {
+        final s = await Native.forceStopState();
+        if (((s['pending'] as List?) ?? []).isNotEmpty) return;
+        _poll?.cancel();
+        _poll = null;
+        for (final m in ((s['results'] as List?) ?? []).cast<Map>()) {
+          lines.add('${profileLabel(m['pkg'] as String)}: ${m['result']}');
+        }
+        _finish(lines);
+      });
+    } else {
+      _finish(lines);
+    }
+  }
+
+  Future<void> _finish(List<String> lines) async {
+    await _load();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sparprofil'),
+        content: Text(lines.isEmpty ? 'Alles war schon eingestellt.' : lines.join('\n')),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+      ),
+    );
   }
 
   Widget _tile(_Shortcut s, ColorScheme cs) => ListTile(
@@ -88,30 +171,145 @@ class _SavePageState extends State<SavePage> {
         onTap: () => Native.openSettings(s.setting),
       );
 
+  Widget _profileCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final needWrite = !_canWrite &&
+        profileItems.any((p) => _ids.contains(p.id) && p.way == ProfileWay.write);
+    final needA11y = !_accessibility &&
+        profileItems.any((p) => _ids.contains(p.id) && p.way == ProfileWay.accessibility);
+    final todo = profileItems
+        .where((p) => _ids.contains(p.id) && _state[p.id] != null && _saving[p.id] != true)
+        .length;
+
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            leading: Icon(Icons.eco, color: cs.primary),
+            title: const Text('Sparprofil', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(todo == 0
+                ? 'Alle gewählten Punkte sparen schon ✓'
+                : '$todo gewählte Punkte sind noch nicht im Sparzustand'),
+          ),
+          if (needWrite)
+            _hint(context, 'Für Timeout, Helligkeit und Vibration: „Systemeinstellungen ändern“ für den Akku-Schoner erlauben.',
+                'Erlauben', () => Native.openSettings('writeSettings')),
+          if (needA11y)
+            _hint(context, 'Energiesparmodus, NFC, Standort und Bluetooth darf keine App direkt umschalten – '
+                'das macht die Bedienungshilfe (Reiter „Apps“).',
+                'Einschalten', () => Native.openSettings('accessibility')),
+          for (final p in profileItems)
+            CheckboxListTile(
+              dense: true,
+              value: _ids.contains(p.id),
+              onChanged: _state[p.id] == null
+                  ? null
+                  : (v) {
+                      setState(() => v == true ? _ids.add(p.id) : _ids.remove(p.id));
+                      _saveConfig();
+                    },
+              title: Text('${p.title} → ${p.action}'),
+              subtitle: Text('${p.note}\nJetzt: ${profileStateText(p.id, _state[p.id])}'
+                  '${_saving[p.id] == true ? ' ✓' : ''}'),
+              isThreeLine: true,
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    icon: const Icon(Icons.bolt),
+                    label: const Text('Jetzt sparen'),
+                    onPressed: _busy || _ids.isEmpty
+                        ? null
+                        : () => _run(() => Native.applyProfile(_ids.toList())),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: _busy || !_hasBackup ? null : () => _run(Native.restoreProfile),
+                  child: const Text('Zurücksetzen'),
+                ),
+              ],
+            ),
+          ),
+          if (_busy) const LinearProgressIndicator(),
+          SwitchListTile(
+            title: Text('Automatisch unter ${_autoLevel.round()} %'),
+            subtitle: const Text('Fällt der Akku darunter, stellt die App das Profil selbst um '
+                '(Schalter beim nächsten Entsperren). Läuft in der Bedienungshilfe mit.'),
+            value: _auto,
+            onChanged: (v) {
+              setState(() => _auto = v);
+              _saveConfig();
+            },
+          ),
+          if (_auto)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Slider(
+                value: _autoLevel.clamp(10, 60),
+                min: 10,
+                max: 60,
+                divisions: 10,
+                label: '${_autoLevel.round()} %',
+                onChanged: (v) => setState(() => _autoLevel = v),
+                onChangeEnd: (_) => _saveConfig(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _hint(BuildContext context, String text, String button, VoidCallback onTap) => Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.secondaryContainer,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Expanded(child: Text(text)),
+            TextButton(onPressed: onTap, child: Text(button)),
+          ],
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      children: [
-        if (_samsungPhone) ...[
-          for (final s in _samsung) _tile(s, cs),
-          const Divider(),
-        ],
-        for (final s in _shortcuts) _tile(s, cs),
-        const Divider(),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Text('Tipps für einen schwachen Akku',
-              style: Theme.of(context).textTheme.titleMedium),
-        ),
-        for (final t in _tips)
-          ListTile(
-            dense: true,
-            leading: const Icon(Icons.lightbulb_outline),
-            title: Text(t),
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: [
+          _profileCard(context),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Text('Nur von Hand möglich', style: Theme.of(context).textTheme.titleMedium),
           ),
-      ],
+          if (_samsungPhone)
+            for (final s in _samsung) _tile(s, cs),
+          for (final s in _shortcuts) _tile(s, cs),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Text('Tipps für einen schwachen Akku',
+                style: Theme.of(context).textTheme.titleMedium),
+          ),
+          for (final t in _tips)
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.lightbulb_outline),
+              title: Text(t),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -158,6 +356,16 @@ class HelpPage extends StatelessWidget {
                   'Entsperren: War der Bildschirm länger aus (einstellbar, Standard 30 min), werden „Komplett“-Apps, die sich inzwischen wieder gestartet haben, '
                   'komplett beendet. Dabei blitzt kurz die App-Info auf, danach landest du auf dem Startbildschirm. Bei einem Anruf passiert nichts.\n\n'
                   'Automatik und Akku-Wächter laufen in der Bedienungshilfe mit – deshalb gibt es keine dauerhafte Benachrichtigung. Ohne Bedienungshilfe sind beide aus.'),
+          section('Reiter „Sparen“ – Sparprofil',
+              'Die App stellt die Spar-Einstellungen selbst um, statt sie nur zu beschreiben. Du hakst an, was umgestellt werden soll, und tippst „Jetzt sparen“. '
+                  '„Zurücksetzen“ stellt deine vorherigen Werte wieder her.\n\n'
+                  '• Bildschirm-Timeout (30 s), automatische Helligkeit, Vibration bei Berührung: stellt die App direkt um. Dafür einmal „Systemeinstellungen ändern“ erlauben.\n'
+                  '• Automatische Synchronisierung: direkt, ohne Extra-Erlaubnis (standardmäßig nicht angehakt, weil E-Mails dann evtl. später kommen).\n'
+                  '• Energiesparmodus, NFC, Standort, Bluetooth: Android lässt keine App diese Schalter direkt umlegen. Die Bedienungshilfe öffnet kurz die Einstellungsseite und drückt den Schalter – wie beim Beenden von Apps. '
+                  'Bluetooth ist standardmäßig nicht angehakt, sonst wären deine Kopfhörer getrennt.\n\n'
+                  'Automatisch: Fällt der Akku unter die eingestellte Grenze, wendet die App das Profil einmal selbst an (Schalter beim nächsten Entsperren) und meldet das. '
+                  'Nach dem Laden ist die Automatik wieder bereit.\n\n'
+                  'Nicht möglich (nur das System darf es): dunkles Design, 60/120 Hz, Samsungs „Akku schützen“ – dafür gibt es darunter die direkten Links.'),
           section('Warum braucht das die Bedienungshilfe?',
               'Android erlaubt keiner normalen App, andere Apps zu beenden. Ohne Bedienungshilfe kann der Akku-Schoner Apps nur „sanft“ beenden – Apps mit eigenem Dienst starten dann sofort neu.\n\n'
                   'Mit Bedienungshilfe öffnet die App für jede gewählte App die App-Info und drückt „Beenden erzwingen“ – genau so, wie du es von Hand tun würdest. '

@@ -6,7 +6,8 @@
   `Policy` (Stufen keep/soft/full nach Nutzungstagen – einzige Quelle der Regel), `Apps` (Liste, Nutzungsdaten, Stufe, sanft beenden, geschützte Pakete), `ForceStopService` (Bedienungshilfe,
   Ablauf vom Parkplatz-Merker übernommen, prüft danach `FLAG_STOPPED`), `Monitor` (Akku-Wächter + Automatik bei
   Bildschirm aus/Entsperren; läuft im Prozess der Bedienungshilfe, bewusst KEIN Vordergrunddienst –
-  Nutzer will keine Dauer-Benachrichtigung), `BatteryInfo`, `Prefs`.
+  Nutzer will keine Dauer-Benachrichtigung), `SaverProfile` (Sparprofil: direkt per WRITE_SETTINGS/Sync, Schalter Energiesparmodus/BT/NFC/Standort
+  über `ForceStopService.requestToggles` – oberster Switch der Einstellungsseite), `BatteryInfo`, `Prefs`.
 - Eingecheckt sind nur `build.gradle.kts`, Manifest, Kotlin und `res/xml`, `res/values/strings.xml`;
   den Rest von `android/` erzeugt der Workflow per `flutter create` (überschreibt nichts).
 - Signatur wie Laufplan/Parkplatz-Merker (`MERKER_KEYSTORE_PASSWORD`).

@@ -41,6 +41,47 @@ object Prefs {
         e.apply()
     }
 
+    // ---------- Sparprofil ----------
+
+    fun profileIds(ctx: Context): List<String> =
+        p(ctx).getString("profileIds", null)?.split(",")?.filter { it in SaverProfile.ALL }
+            ?: SaverProfile.DEFAULT
+
+    fun profileAuto(ctx: Context) = p(ctx).getBoolean("profileAuto", false)
+    fun profileAutoLevel(ctx: Context) = p(ctx).getInt("profileAutoLevel", 30)
+    fun profileAutoDone(ctx: Context) = p(ctx).getBoolean("profileAutoDone", false)
+    fun setProfileAutoDone(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("profileAutoDone", v).apply()
+
+    fun getProfile(ctx: Context): Map<String, Any> = mapOf(
+        "ids" to profileIds(ctx),
+        "auto" to profileAuto(ctx),
+        "autoLevel" to profileAutoLevel(ctx),
+        "hasBackup" to profileBackup(ctx).isNotEmpty(),
+    )
+
+    fun setProfile(ctx: Context, map: Map<*, *>) {
+        val e = p(ctx).edit()
+        (map["ids"] as? List<*>)?.let { l ->
+            e.putString("profileIds", l.filterIsInstance<String>().filter { it in SaverProfile.ALL }.joinToString(","))
+        }
+        (map["auto"] as? Boolean)?.let { e.putBoolean("profileAuto", it) }
+        (map["autoLevel"] as? Number)?.let { e.putInt("profileAutoLevel", it.toInt().coerceIn(10, 60)) }
+        e.apply()
+    }
+
+    /** Werte vor dem Sparprofil: id -> Zahl (Schalter 1/0). */
+    fun profileBackup(ctx: Context): Map<String, Int> =
+        (p(ctx).getString("profileBackup", "") ?: "").split(",")
+            .mapNotNull { e ->
+                val i = e.indexOf('=')
+                if (i <= 0) null else e.substring(i + 1).toIntOrNull()?.let { e.substring(0, i) to it }
+            }
+            .toMap()
+
+    fun setProfileBackup(ctx: Context, m: Map<String, Int>) {
+        p(ctx).edit().putString("profileBackup", m.entries.joinToString(",") { "${it.key}=${it.value}" }).apply()
+    }
+
     /** Von Hand gesetzte Stufen: Paketname -> keep/soft/full. */
     fun overrides(ctx: Context): Map<String, String> =
         (p(ctx).getString("overrides", "") ?: "").split("\n")

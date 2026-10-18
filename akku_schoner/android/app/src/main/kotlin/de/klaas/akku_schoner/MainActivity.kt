@@ -50,6 +50,25 @@ class MainActivity : FlutterActivity() {
                             Monitor.refresh()
                             result.success(null)
                         }
+                        "getProfile" -> result.success(Prefs.getProfile(this))
+                        "setProfile" -> {
+                            Prefs.setProfile(this, call.arguments as? Map<*, *> ?: emptyMap<String, Any>())
+                            if (Prefs.profileAuto(this)) askNotificationPermission()
+                            result.success(null)
+                        }
+                        "profileState" -> {
+                            val saving = SaverProfile.ALL.associateWith { SaverProfile.isSaving(this, it) }
+                            result.success(mapOf(
+                                "state" to SaverProfile.state(this),
+                                "saving" to saving,
+                                "canWrite" to SaverProfile.canWrite(this),
+                            ))
+                        }
+                        "applyProfile" -> {
+                            val ids = call.argument<List<String>>("ids") ?: Prefs.profileIds(this)
+                            result.success(SaverProfile.apply(this, ids))
+                        }
+                        "restoreProfile" -> result.success(SaverProfile.restore(this))
                         "openAppDetails" -> {
                             val pkg = call.argument<String>("pkg") ?: ""
                             open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", pkg, null)))
@@ -107,6 +126,7 @@ class MainActivity : FlutterActivity() {
         "notifications" -> if (Build.VERSION.SDK_INT >= 26)
             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
             else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
+        "writeSettings" -> Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName"))
         "appInfo" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
         "samsungBattery" -> samsungIntent("com.samsung.android.sm.ui.battery.BatteryActivity")
         "samsungSleeping" -> samsungIntent("com.samsung.android.sm.ui.appsleeping.AppSleepSettingActivity")
