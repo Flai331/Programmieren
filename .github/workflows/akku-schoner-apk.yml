@@ -127,10 +127,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk Akku-Schoner.apk
+          # Zusätzlich als ZIP: Chrome hält .apk-Downloads teils stillschweigend zurück
+          # ("Nicht bestätigt …crdownload"), ZIP-Dateien nicht.
+          zip -q -0 Akku-Schoner.zip Akku-Schoner.apk
           if gh release view akku-schoner > /dev/null 2>&1; then
-            gh release upload akku-schoner Akku-Schoner.apk --clobber
+            gh release upload akku-schoner Akku-Schoner.apk Akku-Schoner.zip --clobber
           else
-            gh release create akku-schoner Akku-Schoner.apk --target "${{ github.sha }}" \
+            gh release create akku-schoner Akku-Schoner.apk Akku-Schoner.zip --target "${{ github.sha }}" \
               --title "Akku-Schoner" \
               --notes "Schont einen schwachen Akku: beendet unwichtige Hintergrund-Apps, Akku-Wächter, Spar-Abkürzungen. Automatisch gebaut. APK herunterladen und auf dem Handy installieren."
           fi

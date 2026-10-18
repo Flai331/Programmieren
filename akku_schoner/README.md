@@ -5,7 +5,9 @@ warnt beim Laden ab einer Ladegrenze, bei wenig Akku und bei Hitze und führt
 direkt zu den Einstellungen, die am meisten Strom sparen.
 
 **APK:** https://github.com/Flai331/Programmieren/releases/download/akku-schoner/Akku-Schoner.apk
-(nur für 64-Bit-Handys/arm64 – das sind alle aktuellen, ca. 20 MB. Am besten mit Chrome im WLAN herunterladen.)
+(nur für 64-Bit-Handys/arm64 – das sind alle aktuellen, ca. 17 MB.)
+Hält Chrome die APK zurück („Nicht bestätigt …crdownload“), die ZIP nehmen, in *Eigene Dateien* entpacken und die APK darin installieren:
+https://github.com/Flai331/Programmieren/releases/download/akku-schoner/Akku-Schoner.zip
 
 ## Funktionen
 - **Akku**: Ladestand, Temperatur, Spannung, Strom, Zustand, Ladezyklen (Android 14+), Hinweise.
