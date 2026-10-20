@@ -13,6 +13,7 @@ import 'package:lauf_plan/main.dart';
 import 'package:lauf_plan/plan_edit.dart';
 import 'package:lauf_plan/videos.dart';
 import 'package:lauf_plan/weights.dart';
+import 'package:lauf_plan/run_log.dart';
 
 void main() {
   setUp(planOverrides.clear);
@@ -548,6 +549,69 @@ void main() {
       await tester.pumpAndSettle();
       expect(store.weights.forDay('Kniebeuge (Langhantel)', 7)!.kg, 62.5);
       expect(find.textContaining('Heute: 62,5 kg'), findsOneWidget);
+    });
+  });
+
+  group('Läufe', () {
+    test('Zeiten, Strecke, Tempo', () {
+      expect(parseDuration('34:10'), 34 * 60 + 10);
+      expect(parseDuration('1:05:30'), 3600 + 5 * 60 + 30);
+      expect(parseDuration('45'), 45 * 60);
+      expect(parseDuration('34:75'), isNull);
+      expect(parseDuration('abc'), isNull);
+      expect(fmtDuration(2050), '34:10');
+      expect(fmtDuration(3930), '1:05:30');
+      expect(kmLabel(6.2), '6,2 km');
+      expect(kmLabel(10), '10 km');
+      expect(paceLabel(6.2, 34 * 60 + 10), '5:31 /km');
+      expect(paceLabel(null, 100), isNull);
+      expect(parseSplits('1:32 1:30, 1:31'), [92, 90, 91]);
+      expect(parseSplits('92 90'), [92, 90]);
+      expect(parseSplits('1:32 x'), isNull);
+    });
+
+    test('Letztes Mal beim nächsten Lauf', () async {
+      SharedPreferences.setMockInitialValues({});
+      final log = RunLog(await SharedPreferences.getInstance());
+      await log.set('Intervalle',
+          RunEntry(16, dateOf(16), km: 5.4, secs: 1800, splits: [92, 90, 91, 93, 92, 90]));
+      final last = log.lastBefore('Intervalle', 23)!;
+      expect(runSummary(last, withDate: false), contains('5,4 km in 30:00'));
+      expect(runSummary(last, withDate: false), contains('6× Ø 1:31'));
+      expect(log.forDay('Intervalle', 16)!.splits.length, 6);
+      await log.remove('Intervalle', 16);
+      expect(log.history('Intervalle'), isEmpty);
+    });
+
+    test('Nur bei Lauf-Einheiten, Wiederholungszeiten bei Intervallen/Tempo', () {
+      expect(tracksRun(2, qualityRuns[0].exercises[0]), isTrue);
+      expect(tracksRun(5, longRuns[0].exercises[0]), isTrue);
+      expect(tracksRun(0, legA.exercises[1]), isFalse);
+      final intervals = qualityRuns[2].exercises.firstWhere((e) => e.name == 'Intervalle');
+      final tempo = qualityRuns[3].exercises.firstWhere((e) => e.name == 'Tempo');
+      expect(hasSplits(intervals), isTrue);
+      expect(hasSplits(tempo), isTrue);
+      expect(hasSplits(qualityRuns[0].exercises[0]), isFalse); // Locker laufen
+    });
+
+    testWidgets('Lauf-Einheit: eintragen und Tempo sehen', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final store = Store(prefs);
+      await store.runs.set('Locker laufen', RunEntry(5, dateOf(5), km: 8, secs: 48 * 60));
+      await tester.pumpWidget(MaterialApp(home: SessionScreen(day: 12, store: store)));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Letztes Mal: 8 km in 48:00 · 6:00 /km'), findsOneWidget);
+      await tester.tap(find.text('Strecke / Zeit eintragen'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Strecke'), '9');
+      await tester.enterText(find.widgetWithText(TextField, 'Zeit'), '51:45');
+      await tester.pump();
+      expect(find.text('Tempo: 5:45 /km'), findsOneWidget);
+      await tester.tap(find.text('Speichern'));
+      await tester.pumpAndSettle();
+      expect(store.runs.forDay('Locker laufen', 12)!.secs, 51 * 60 + 45);
+      expect(find.textContaining('Heute: 9 km in 51:45'), findsOneWidget);
     });
   });
 

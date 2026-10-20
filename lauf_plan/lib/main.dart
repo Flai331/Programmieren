@@ -12,6 +12,7 @@ import 'calendar.dart';
 import 'device_calendar.dart';
 import 'free_sessions.dart';
 import 'plan_edit.dart';
+import 'run_log.dart';
 import 'weights.dart';
 import 'videos.dart';
 
@@ -270,6 +271,7 @@ class Store {
 
   FreeStore get free => FreeStore(p);
   WeightLog get weights => WeightLog(p);
+  RunLog get runs => RunLog(p);
 
   /// Zuletzt gewählte Uhrzeit für den Kalender-Export.
   int get exportStart => p.getInt('export_start') ?? 18 * 60;
@@ -911,17 +913,32 @@ class _SessionScreenState extends State<SessionScreen> {
     }
   }
 
+  Future<void> _run(Exercise e) async {
+    final pd = widget.store.schedule()[widget.day];
+    if (await showRunDialog(context, widget.store.runs, e, widget.day, date: pd.date) &&
+        mounted) {
+      setState(() {});
+    }
+  }
+
   Future<void> _openTimer(int i) async {
     final e = s.exercises[i];
     final log = widget.store.weights;
-    final last = tracksWeight(widget.day, e) ? log.lastBefore(e.name, widget.day) : null;
+    final lastRun =
+        tracksRun(widget.day, e) ? widget.store.runs.lastBefore(e.name, widget.day) : null;
+    final lastW = tracksWeight(widget.day, e) ? log.lastBefore(e.name, widget.day) : null;
+    final info = lastW != null
+        ? 'Letztes Mal: ${weightSummary(lastW)}'
+        : lastRun != null
+            ? 'Letztes Mal: ${runSummary(lastRun)}'
+            : null;
     final result = await Navigator.push<TimerResult>(
         context,
         MaterialPageRoute(
             builder: (_) => TimerScreen(
                 exercise: e,
                 next: _next(i),
-                weightInfo: last == null ? null : 'Letztes Mal: ${weightSummary(last)}')));
+                weightInfo: info)));
     if (sw.isRunning) keepScreenOn(true);
     if (result != null) _setCheck(i, true);
     // Nach dem letzten Satz gleich ans Gewicht erinnern.
@@ -930,6 +947,14 @@ class _SessionScreenState extends State<SessionScreen> {
         tracksWeight(widget.day, e) &&
         log.forDay(e.name, widget.day) == null) {
       await _weight(e);
+    }
+    // Intervalle / Tempo-km: gleich die Zeiten eintragen.
+    if (result != null &&
+        mounted &&
+        tracksRun(widget.day, e) &&
+        hasSplits(e) &&
+        widget.store.runs.forDay(e.name, widget.day) == null) {
+      await _run(e);
     }
     if (result == TimerResult.rest) await _openRest(i);
   }
@@ -1137,7 +1162,21 @@ class _SessionScreenState extends State<SessionScreen> {
                           ),
                         ],
                       )
-                    : Text(s.exercises[i].detail),
+                    : tracksRun(widget.day, s.exercises[i])
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(s.exercises[i].detail),
+                              RunInfo(
+                                last: widget.store.runs
+                                    .lastBefore(s.exercises[i].name, widget.day),
+                                today: widget.store.runs
+                                    .forDay(s.exercises[i].name, widget.day),
+                                onTap: () => _run(s.exercises[i]),
+                              ),
+                            ],
+                          )
+                        : Text(s.exercises[i].detail),
                 onTap: !_hasInfo(s.exercises[i])
                     ? null
                     : () => _showAnim(s.exercises[i]),
