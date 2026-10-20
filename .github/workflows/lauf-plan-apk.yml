@@ -118,6 +118,33 @@ jobs:
             exit 1
           fi
 
+      - name: KVM für den Emulator aktivieren
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Starttest im Android-Emulator
+        # Release-APKs können Fehler haben, die Analyzer und Tests nicht sehen
+        # (z. B. von R8 entfernte Plugin-Methoden -> schwarzer Bildschirm).
+        # Jede Zeile läuft einzeln; schlägt eine fehl, scheitert der Schritt.
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          working-directory: lauf_plan
+          script: |
+            adb install -r build/app/outputs/flutter-apk/app-release.apk
+            adb logcat -c
+            adb shell monkey -p de.klaas.lauf_plan -c android.intent.category.LAUNCHER 1
+            sleep 20
+            adb logcat -d > /tmp/logcat.txt
+            grep -E " (E|F) (flutter|AndroidRuntime)" /tmp/logcat.txt | tail -60 || true
+            adb shell pidof de.klaas.lauf_plan
+            ! grep -qE "Unhandled Exception|FATAL EXCEPTION|LAUFPLAN STARTFEHLER" /tmp/logcat.txt
+
       - name: Upload APK to artifacts
         uses: actions/upload-artifact@v4
         with:
