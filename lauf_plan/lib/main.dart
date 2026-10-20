@@ -18,8 +18,34 @@ import 'videos.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final prefs = await SharedPreferences.getInstance();
-  runApp(TrainingApp(store: Store(prefs)));
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    runApp(TrainingApp(store: Store(prefs)));
+  } catch (e, st) {
+    // Lieber den Fehler zeigen als einen schwarzen Bildschirm.
+    debugPrint('LAUFPLAN STARTFEHLER: $e');
+    runApp(StartupErrorApp(error: '$e\n\n$st'));
+  }
+}
+
+class StartupErrorApp extends StatelessWidget {
+  final String error;
+  const StartupErrorApp({super.key, required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Laufplan – Startfehler')),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: SelectableText(
+              'Die App konnte nicht starten. Bitte einen Screenshot schicken.\n\n$error'),
+        ),
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
