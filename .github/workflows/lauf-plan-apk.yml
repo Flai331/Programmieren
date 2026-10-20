@@ -141,7 +141,7 @@ jobs:
             adb shell monkey -p de.klaas.lauf_plan -c android.intent.category.LAUNCHER 1
             sleep 20
             adb logcat -d > /tmp/logcat.txt
-            grep -E " (E|F) (flutter|AndroidRuntime)" /tmp/logcat.txt | tail -60 || true
+            grep -E -A12 "Unhandled Exception|FATAL EXCEPTION|LAUFPLAN STARTFEHLER" /tmp/logcat.txt | head -80 || true
             adb shell pidof de.klaas.lauf_plan
             ! grep -qE "Unhandled Exception|FATAL EXCEPTION|LAUFPLAN STARTFEHLER" /tmp/logcat.txt
 
