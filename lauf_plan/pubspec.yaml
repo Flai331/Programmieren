@@ -22,3 +22,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+# shared_preferences_android 2.5.x (Pigeon JNI) stürzt in der Release-APK beim
+# Start ab (NoSuchMethodError SharedPreferencesApiRegistrar.getAll) -> schwarzer
+# Bildschirm. Bis das behoben ist, die letzte Version davor verwenden.
+dependency_overrides:
+  shared_preferences_android: 2.4.28

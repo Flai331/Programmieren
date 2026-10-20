@@ -42,11 +42,6 @@ android {
 
     buildTypes {
         release {
-            // Eigene R8-Regeln (siehe proguard-rules.pro) zusätzlich zu Flutters.
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
-            )
             signingConfig = if (keystorePassword.isNullOrEmpty()) {
                 signingConfigs.getByName("debug")
             } else {
