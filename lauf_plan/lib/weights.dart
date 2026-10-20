@@ -245,8 +245,8 @@ Future<bool> showWeightDialog(BuildContext context, WeightLog log, String name, 
   );
   final kg = parseKg(kgCtl.text);
   final note = noteCtl.text.trim();
-  kgCtl.dispose();
-  noteCtl.dispose();
+  // Controller nicht sofort freigeben: Die Schließ-Animation des Dialogs
+  // baut die Felder noch einmal auf.
   if (result == 'delete') {
     await log.remove(name, day);
     return true;
