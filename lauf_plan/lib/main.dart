@@ -12,6 +12,7 @@ import 'calendar.dart';
 import 'device_calendar.dart';
 import 'free_sessions.dart';
 import 'plan_edit.dart';
+import 'weights.dart';
 import 'videos.dart';
 
 Future<void> main() async {
@@ -268,6 +269,7 @@ class Store {
   }
 
   FreeStore get free => FreeStore(p);
+  WeightLog get weights => WeightLog(p);
 
   /// Zuletzt gewählte Uhrzeit für den Kalender-Export.
   int get exportStart => p.getInt('export_start') ?? 18 * 60;
@@ -900,13 +902,35 @@ class _SessionScreenState extends State<SessionScreen> {
 
   Exercise? _next(int i) => i + 1 < s.exercises.length ? s.exercises[i + 1] : null;
 
+  Future<void> _weight(Exercise e) async {
+    final pd = widget.store.schedule()[widget.day];
+    if (await showWeightDialog(context, widget.store.weights, e.name, widget.day,
+            date: pd.date) &&
+        mounted) {
+      setState(() {});
+    }
+  }
+
   Future<void> _openTimer(int i) async {
+    final e = s.exercises[i];
+    final log = widget.store.weights;
+    final last = tracksWeight(widget.day, e) ? log.lastBefore(e.name, widget.day) : null;
     final result = await Navigator.push<TimerResult>(
         context,
         MaterialPageRoute(
-            builder: (_) => TimerScreen(exercise: s.exercises[i], next: _next(i))));
+            builder: (_) => TimerScreen(
+                exercise: e,
+                next: _next(i),
+                weightInfo: last == null ? null : 'Letztes Mal: ${weightSummary(last)}')));
     if (sw.isRunning) keepScreenOn(true);
     if (result != null) _setCheck(i, true);
+    // Nach dem letzten Satz gleich ans Gewicht erinnern.
+    if (result != null &&
+        mounted &&
+        tracksWeight(widget.day, e) &&
+        log.forDay(e.name, widget.day) == null) {
+      await _weight(e);
+    }
     if (result == TimerResult.rest) await _openRest(i);
   }
 
@@ -1099,7 +1123,21 @@ class _SessionScreenState extends State<SessionScreen> {
                         ? TextStyle(
                             decoration: TextDecoration.lineThrough, color: cs.outline)
                         : null),
-                subtitle: Text(s.exercises[i].detail),
+                subtitle: tracksWeight(widget.day, s.exercises[i])
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(s.exercises[i].detail),
+                          WeightInfo(
+                            last: widget.store.weights
+                                .lastBefore(s.exercises[i].name, widget.day),
+                            today:
+                                widget.store.weights.forDay(s.exercises[i].name, widget.day),
+                            onTap: () => _weight(s.exercises[i]),
+                          ),
+                        ],
+                      )
+                    : Text(s.exercises[i].detail),
                 onTap: !_hasInfo(s.exercises[i])
                     ? null
                     : () => _showAnim(s.exercises[i]),
@@ -1153,7 +1191,10 @@ enum TimerResult { done, rest }
 class TimerScreen extends StatefulWidget {
   final Exercise exercise;
   final Exercise? next;
-  const TimerScreen({super.key, required this.exercise, this.next});
+
+  /// Z. B. „Letztes Mal: 60 kg (Do, 8.10.)“.
+  final String? weightInfo;
+  const TimerScreen({super.key, required this.exercise, this.next, this.weightInfo});
   @override
   State<TimerScreen> createState() => _TimerScreenState();
 }
@@ -1359,6 +1400,13 @@ class _TimerScreenState extends State<TimerScreen> {
             children: [
               Text(widget.exercise.detail,
                   textAlign: TextAlign.center, style: tt.bodyLarge?.copyWith(color: fg)),
+              if (widget.weightInfo != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(widget.weightInfo!,
+                      textAlign: TextAlign.center,
+                      style: tt.titleSmall?.copyWith(color: fg, fontWeight: FontWeight.w600)),
+                ),
               if (anim != null) ...[
                 const SizedBox(height: 8),
                 Expanded(child: ExerciseAnimation(anim: anim)),

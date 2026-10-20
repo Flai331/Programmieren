@@ -12,6 +12,7 @@ import 'package:lauf_plan/free_sessions.dart';
 import 'package:lauf_plan/main.dart';
 import 'package:lauf_plan/plan_edit.dart';
 import 'package:lauf_plan/videos.dart';
+import 'package:lauf_plan/weights.dart';
 
 void main() {
   setUp(planOverrides.clear);
@@ -486,6 +487,67 @@ void main() {
       expect(sessionFor(3).exercises.last.name, 'Nordic Curl');
       expect(sessionFor(3).exercises.last.timer!.rounds, 3);
       expect(prefs.getString('tpl_legB'), contains('Nordic Curl'));
+    });
+  });
+
+  group('Gewichte', () {
+    test('Anzeige und Eingabe', () {
+      expect(kgLabel(60), '60 kg');
+      expect(kgLabel(62.5), '62,5 kg');
+      expect(kgLabel(61.25), '61,25 kg');
+      expect(kgLabel(100), '100 kg');
+      expect(kgLabel(0), '0 kg');
+      expect(parseKg('62,5'), 62.5);
+      expect(parseKg('62.5 kg'), 62.5);
+      expect(parseKg(' 70 '), 70);
+      expect(parseKg('abc'), isNull);
+      expect(parseKg(''), isNull);
+    });
+
+    test('Letztes Mal wird bei der nächsten Einheit angezeigt', () async {
+      SharedPreferences.setMockInitialValues({});
+      final log = WeightLog(await SharedPreferences.getInstance());
+      const squat = 'Kniebeuge (Langhantel)';
+      expect(log.lastBefore(squat, 7), isNull);
+      await log.set(squat, WeightEntry(0, dateOf(0), 60, '4×5'));
+      // Woche 2, Beine A (Tag 7): zeigt Woche 1.
+      expect(log.lastBefore(squat, 7)!.kg, 60);
+      expect(log.lastBefore(squat, 7)!.note, '4×5');
+      expect(log.forDay(squat, 7), isNull);
+      await log.set(squat, WeightEntry(7, dateOf(7), 62.5));
+      expect(log.forDay(squat, 7)!.kg, 62.5);
+      expect(log.lastBefore(squat, 14)!.kg, 62.5);
+      // Am selben Tag erneut eintragen ersetzt.
+      await log.set(squat, WeightEntry(7, dateOf(7), 65));
+      expect(log.history(squat).map((w) => w.kg), [65, 60]);
+      await log.remove(squat, 7);
+      expect(log.history(squat).map((w) => w.kg), [60]);
+    });
+
+    test('Nur bei Kraft-Einheiten, nicht beim Aufwärmen', () {
+      expect(tracksWeight(0, legA.exercises[1]), isTrue);
+      expect(tracksWeight(0, legA.exercises[0]), isFalse); // Aufwärmen
+      expect(tracksWeight(2, qualityRuns[0].exercises[0]), isFalse);
+      expect(tracksWeight(1, upperBody.exercises[1]), isTrue);
+    });
+
+    testWidgets('Einheit zeigt „Letztes Mal“ und Eingabe', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final store = Store(prefs);
+      await store.weights.set('Kniebeuge (Langhantel)', WeightEntry(0, dateOf(0), 60, '4×5'));
+      await tester.pumpWidget(MaterialApp(home: SessionScreen(day: 7, store: store)));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Letztes Mal: 60 kg · 4×5'), findsOneWidget);
+      await tester.tap(find.text('Gewicht eintragen').first);
+      await tester.pumpAndSettle();
+      // Vorbelegt mit dem letzten Gewicht, +2,5 kg.
+      await tester.tap(find.byTooltip('2,5 kg mehr'));
+      await tester.pump();
+      await tester.tap(find.text('Speichern'));
+      await tester.pumpAndSettle();
+      expect(store.weights.forDay('Kniebeuge (Langhantel)', 7)!.kg, 62.5);
+      expect(find.textContaining('Heute: 62,5 kg'), findsOneWidget);
     });
   });
 
