@@ -332,9 +332,8 @@ Future<bool> showRunDialog(BuildContext context, RunLog log, Exercise e, int day
   final entrySecs = parseDuration(timeCtl.text);
   final entrySplits = parseSplits(splitsCtl.text) ?? const <int>[];
   final note = noteCtl.text.trim();
-  for (final c in [kmCtl, timeCtl, splitsCtl, noteCtl]) {
-    c.dispose();
-  }
+  // Controller nicht sofort freigeben: Die Schließ-Animation des Dialogs
+  // baut die Felder noch einmal auf.
   if (result == 'delete') {
     await log.remove(e.name, day);
     return true;
