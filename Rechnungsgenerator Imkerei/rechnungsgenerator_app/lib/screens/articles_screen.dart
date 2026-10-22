@@ -3,7 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../models/invoice_item_model.dart';
 import '../services/database_service.dart';
 import '../utils/app_utils.dart';
-import '../utils/feedback_service.dart';
+import '../fehlerbericht.dart';
 
 class ArticlesScreen extends StatefulWidget {
   const ArticlesScreen({Key? key}) : super(key: key);
@@ -24,7 +24,7 @@ class _ArticlesScreenState extends State<ArticlesScreen> {
   @override
   void initState() {
     super.initState();
-    FeedbackService.logScreenLoad('Artikel');
+    Fehlerbericht.logSeite('Artikel');
     _searchCtrl.addListener(_filter);
     _load();
   }

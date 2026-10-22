@@ -9,7 +9,7 @@ import '../starter/starter_models.dart';
 import '../diary/diary_screen.dart';
 import '../settings/settings_screen.dart';
 import '../onboarding/tutorial_overlay.dart';
-import '../untils/feedback_service.dart';
+import '../fehlerbericht.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  DASHBOARD — AppBar + Home-Body + Custom Bottom-NavBar
@@ -136,7 +136,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           // Feedback-Button
           GestureDetector(
-            onTap: () => FeedbackService.showReportDialog(context),
+            onTap: () => Fehlerbericht.melden(context),
             child: SizedBox(
               key: _feedbackKey,
               width: 44,
@@ -210,9 +210,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return FutureBuilder<StarterJourney?>(
       future: StarterStorage.load(),
       builder: (context, snap) {
-        final starterActive = snap.hasData &&
-            snap.data != null &&
-            !snap.data!.isCompleted;
+        final starterActive =
+            snap.hasData && snap.data != null && !snap.data!.isCompleted;
         return Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
@@ -242,8 +241,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   color: AppColors.gold,
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(
-                        builder: (_) => const RecipeListScreen()),
+                    MaterialPageRoute(builder: (_) => const RecipeListScreen()),
                   ),
                 ),
                 _NavItem(
@@ -340,8 +338,8 @@ class _NavItem extends StatelessWidget {
                 top: 4,
                 right: 12,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 4, vertical: 1),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   decoration: BoxDecoration(
                     color: AppColors.green.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(8),

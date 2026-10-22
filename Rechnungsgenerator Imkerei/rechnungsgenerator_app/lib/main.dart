@@ -1,57 +1,22 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/services.dart';
 import 'screens/screens.dart';
-import 'utils/feedback_service.dart';
+import 'fehlerbericht.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // ── Fehler-Abfangen ──────────────────────────────────────────
-  bool isIgnorable(String msg) =>
-      msg.contains('NetworkManager') ||
-      msg.contains('connectivity_plus');
-
-  FlutterError.onError = (details) {
-    final msg = details.exception.toString();
-    if (isIgnorable(msg)) {
-      FeedbackService.log('Ignoriert: $msg');
-      return;
-    }
-    FeedbackService.logError(msg,
-        context: 'FlutterError', stackTrace: details.stack);
-    FeedbackService.showAutoErrorDialog();
-  };
-
-  PlatformDispatcher.instance.onError = (error, stack) {
-    final msg = error.toString();
-    if (isIgnorable(msg)) {
-      FeedbackService.log('Ignoriert: $msg');
-      return true;
-    }
-    FeedbackService.logError(msg,
-        context: 'AsyncError', stackTrace: stack);
-    FeedbackService.showAutoErrorDialog();
-    return true;
-  };
-
-  // ── Lokale SQLite-Datenbank initialisieren ───────────────────
-  final dbService = DatabaseService();
-  await dbService.database;
-  FeedbackService.log('✓ Lokale Datenbank initialisiert');
-
-  final connectivityService = ConnectivityService();
-  await connectivityService.initialize();
-  FeedbackService.log('✓ Connectivity-Service initialisiert');
-
-  runApp(const MyApp());
+void main() {
+  Fehlerbericht.runApp(
+    appKey: 'rechnungsgenerator',
+    appName: 'BeeBrain (Rechnungsgenerator)',
+    version: '1.0.0',
+    // Bekannte, harmlose Platform-Meldungen nicht nach Notion schicken
+    // (waren vorher direkt in FlutterError.onError herausgefiltert).
+    ignorieren: const ['NetworkManager', 'connectivity_plus'],
+    builder: () => const MyApp(),
+  );
 }
 
 class MyApp extends StatefulWidget {
-  static final _repaintKey = GlobalKey();
-  static final _navigatorKey = GlobalKey<NavigatorState>();
-
   const MyApp({super.key});
 
   @override
@@ -62,30 +27,38 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      FeedbackService.setRepaintKey(MyApp._repaintKey);
-      FeedbackService.setNavigatorKey(MyApp._navigatorKey);
-      FeedbackService.log('✓ FeedbackService konfiguriert');
-    });
+    _hintergrundInitialisierung();
+  }
+
+  // Läuft nach dem ersten Frame im Hintergrund — läuft dank
+  // Fehlerbericht.runApp() bereits in der richtigen (guarded) Zone.
+  Future<void> _hintergrundInitialisierung() async {
+    // ── Lokale SQLite-Datenbank initialisieren ───────────────────
+    final dbService = DatabaseService();
+    await dbService.database;
+    Fehlerbericht.log('✓ Lokale Datenbank initialisiert');
+
+    final connectivityService = ConnectivityService();
+    await connectivityService.initialize();
+    Fehlerbericht.log('✓ Connectivity-Service initialisiert');
   }
 
   @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-      key: MyApp._repaintKey,
-      child: MultiProvider(
-        providers: [
-          ChangeNotifierProvider<ConnectivityService>(
-            create: (_) => ConnectivityService(),
-          ),
-          ChangeNotifierProvider<SyncService>(
-            create: (_) => SyncService(),
-          ),
-        ],
-        child: MaterialApp(
-          navigatorKey: MyApp._navigatorKey,
-          navigatorObservers: [FeedbackService.screenObserver],
-          title: 'BeeBrain',
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ConnectivityService>(
+          create: (_) => ConnectivityService(),
+        ),
+        ChangeNotifierProvider<SyncService>(
+          create: (_) => SyncService(),
+        ),
+      ],
+      child: MaterialApp(
+        navigatorKey: Fehlerbericht.navigatorKey,
+        navigatorObservers: [Fehlerbericht.observer],
+        builder: Fehlerbericht.wrap,
+        title: 'BeeBrain',
           theme: ThemeData(
             useMaterial3: true,
             colorScheme: ColorScheme.fromSeed(
@@ -370,10 +343,9 @@ class _MyAppState extends State<MyApp> {
               }),
             ),
           ),
-          themeMode: ThemeMode.dark,
-          home: const MainNavigationScreen(),
-          debugShowCheckedModeBanner: false,
-        ),
+        themeMode: ThemeMode.dark,
+        home: const MainNavigationScreen(),
+        debugShowCheckedModeBanner: false,
       ),
     );
   }

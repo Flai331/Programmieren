@@ -1,0 +1,75 @@
+name: DokuBox APK bauen
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/document-digitalization-system-ezb1my
+    paths:
+      - 'dokumenten_system/dokubox/**'
+      - '.github/workflows/build-dokubox-apk.yml'
+
+concurrency:
+  group: dokubox-apk
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repo auschecken
+        uses: actions/checkout@v4
+
+      - name: Java einrichten
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter einrichten
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.6
+          cache: true
+
+      - name: Abhängigkeiten auflösen
+        working-directory: dokumenten_system/dokubox
+        run: flutter pub get
+
+      - name: Tests ausführen
+        working-directory: dokumenten_system/dokubox
+        run: flutter test
+
+      - name: Release-APK bauen (arm64)
+        working-directory: dokumenten_system/dokubox
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: APK umbenennen
+        run: |
+          cp dokumenten_system/dokubox/build/app/outputs/flutter-apk/app-release.apk DokuBox.apk
+          ls -lh DokuBox.apk
+
+      # Die APK ist wegen der lokalen KI-Engine ~150 MB groß und passt nicht
+      # ins Git-Repo (100-MB-Limit). Daher als GitHub-Release veröffentlichen
+      # (fester Download-Link, kein Flutter nötig).
+      - name: Als GitHub-Release veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: DokuBox (neueste APK)
+          body: |
+            Automatisch gebaute Android-App (arm64).
+            **Download unten: `DokuBox.apk`** — auf ein Android-Handy laden und antippen.
+            Enthält optionales lokales KI-Auslesen (Modell wird bei Bedarf in der App geladen).
+          files: DokuBox.apk
+          prerelease: true
+
+      - name: APK zusätzlich als Build-Artefakt anhängen
+        uses: actions/upload-artifact@v4
+        with:
+          name: DokuBox-APK
+          path: DokuBox.apk
