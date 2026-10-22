@@ -32,6 +32,8 @@ flutter build apk --release
 
 Mindestanforderung: Android mit Google Play Services (ML Kit Dokumentenscanner).
 
+**Signatur:** Release-APKs werden mit dem festen Schlüssel `android/app/dokubox-release.p12` signiert, damit sich jede neue Version als Update über die alte installieren lässt. Das Passwort liegt nur als GitHub-Secret `DOKUBOX_KEYSTORE_PASSWORD` vor (lokal ohne Passwort: Debug-Schlüssel). Fehlt das Secret, aktualisiert der Workflow das Release nicht.
+
 ## Tests & Analyse
 
 ```bash

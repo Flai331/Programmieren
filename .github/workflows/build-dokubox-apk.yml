@@ -47,7 +47,21 @@ jobs:
 
       - name: Release-APK bauen (arm64)
         working-directory: dokumenten_system/dokubox
-        run: flutter build apk --release --target-platform android-arm64
+        env:
+          DOKUBOX_KEYSTORE_PASSWORD: ${{ secrets.DOKUBOX_KEYSTORE_PASSWORD }}
+        # Fortlaufende Versionsnummer, damit Android jede neue APK als Update sieht.
+        run: flutter build apk --release --target-platform android-arm64 --build-number=${{ github.run_number }}
+
+      - name: Signatur prüfen
+        env:
+          DOKUBOX_KEYSTORE_PASSWORD: ${{ secrets.DOKUBOX_KEYSTORE_PASSWORD }}
+        run: |
+          # Ohne festen Schlüssel ließe sich die APK nicht als Update installieren –
+          # dann lieber kein Release als ein unbrauchbares.
+          if [ -z "$DOKUBOX_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Secret DOKUBOX_KEYSTORE_PASSWORD fehlt – Release wird nicht aktualisiert."
+            exit 1
+          fi
 
       - name: APK umbenennen
         run: |
