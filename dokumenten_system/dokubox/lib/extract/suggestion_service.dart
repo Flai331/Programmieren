@@ -1,7 +1,9 @@
 import '../data/database.dart';
 import '../data/doc_types.dart';
 import '../data/document_repository.dart';
+import '../data/finance.dart';
 import 'extractors.dart';
+import 'payment_extractors.dart';
 
 /// Baut aus dem OCR-Text den vorausgefüllten Entwurf für den
 /// Bestätigen-Screen: Regeln + lernende Absender-Zuordnungen.
@@ -26,7 +28,11 @@ class SuggestionService {
     return (await repository.getCorrespondent(id))?.name;
   }
 
-  Future<DocumentDraft> buildDraft(String ocrText, {DateTime? now}) async {
+  Future<DocumentDraft> buildDraft(
+    String ocrText, {
+    DateTime? now,
+    FinanceSettings finance = const FinanceSettings(),
+  }) async {
     final reference = now ?? DateTime.now();
 
     // Bekannte Absender über Namen + Aliasse wiedererkennen.
@@ -64,7 +70,7 @@ class SuggestionService {
 
     final docDate = guessDocDate(ocrText, now: reference);
 
-    return DocumentDraft(
+    final draft = DocumentDraft(
       title: suggestTitle(
         docType: docType,
         correspondentName: correspondentName,
@@ -78,5 +84,43 @@ class SuggestionService {
       retentionUntil:
           suggestedRetentionUntil(docType, docDate ?? reference),
     );
+    applyPaymentSuggestions(draft, ocrText, finance: finance, now: reference);
+    return draft;
+  }
+}
+
+/// Erkennt Rechnungsdaten (Betrag, Fälligkeit, Status, Einreichungen) und
+/// trägt sie in [draft] ein. Bei offenen Rechnungen mit Fälligkeit wird die
+/// Zahlungserinnerung gleich mit vorgeschlagen.
+void applyPaymentSuggestions(
+  DocumentDraft draft,
+  String ocrText, {
+  FinanceSettings finance = const FinanceSettings(),
+  DateTime? now,
+}) {
+  final reference = now ?? DateTime.now();
+  final status = guessPaymentStatus(ocrText, docType: draft.docType);
+  final targets = suggestClaimTargets(ocrText, finance);
+  if (status == null && targets.isEmpty) return;
+
+  draft.paymentStatus = status;
+  draft.amountCents = extractAmountCents(ocrText);
+  if (status == PaymentStatus.open || status == PaymentStatus.directDebit) {
+    draft.dueDate =
+        extractDueDate(ocrText, docDate: draft.docDate, now: reference);
+  }
+  if (status == PaymentStatus.paid) draft.paidAt = draft.docDate;
+  if (status == PaymentStatus.open && draft.dueDate != null) {
+    draft.paymentReminderAt =
+        paymentReminderFor(draft.dueDate!, finance.leadDays, now: reference);
+  }
+  draft.claims = [for (final t in targets) ClaimDraft(target: t)];
+  for (final tag in [
+    if (targets.any((t) => t != kTaxTarget)) 'Gesundheit',
+    if (targets.contains(kTaxTarget)) 'Steuer',
+  ]) {
+    if (!draft.tagNames.any((t) => t.toLowerCase() == tag.toLowerCase())) {
+      draft.tagNames.add(tag);
+    }
   }
 }

@@ -7,11 +7,16 @@ import '../app_services.dart';
 import '../data/database.dart';
 import '../data/doc_types.dart';
 import '../data/document_repository.dart';
+import '../data/finance.dart';
 import '../extract/extractors.dart';
+import '../extract/suggestion_service.dart';
 import '../lock/lock_gate.dart';
+import '../scan/scan_service.dart';
 import 'cleanup_screen.dart';
 import 'confirm_screen.dart';
 import 'document_detail_screen.dart';
+import 'finance_actions.dart';
+import 'finance_screen.dart';
 import 'settings_screen.dart';
 
 final _dateFormat = DateFormat('dd.MM.yyyy');
@@ -40,12 +45,16 @@ class _HomeScreenState extends State<HomeScreen> {
     bool clearDocType = false,
     int? year,
     bool clearYear = false,
+    String? financeStatus,
+    bool clearFinance = false,
   }) {
     setState(() {
       _filter = DocumentFilter(
         query: query ?? _filter.query,
         docType: clearDocType ? null : (docType ?? _filter.docType),
         year: clearYear ? null : (year ?? _filter.year),
+        financeStatus:
+            clearFinance ? null : (financeStatus ?? _filter.financeStatus),
       );
     });
   }
@@ -96,8 +105,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final docNumber = await services.repository.nextDocNumber();
     final pdfPath =
         await services.scanner.renamePdf(outcome.relativePdfPath, docNumber);
-    final draft = await services.suggestions.buildDraft(outcome.ocrText);
+    final finance = await FinanceSettings.load();
+    final draft = await services.suggestions
+        .buildDraft(outcome.ocrText, finance: finance);
     await _refineWithAi(draft, outcome.ocrText, outcome.firstPageOcr);
+    // Die KI kann Datum/Typ korrigiert haben → Fälligkeit neu berechnen.
+    applyPaymentSuggestions(draft, outcome.ocrText, finance: finance);
 
     if (!mounted) {
       // Sollte nach dem Overlay-Fix nicht mehr vorkommen; falls doch,
@@ -127,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ocrText: outcome.ocrText,
       refs: extractRefs(outcome.ocrText),
     );
-    await services.notifications.scheduleFor(doc);
+    await services.notifications.syncDocument(doc.id);
     _snack('$docNumber gespeichert – Original vorne in die Box legen');
     return true;
   }
@@ -182,6 +195,23 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('DokuBox'),
         actions: [
+          StreamBuilder<int>(
+            stream: services.repository.watchOpenFinanceCount(),
+            builder: (context, snapshot) {
+              final count = snapshot.data ?? 0;
+              return IconButton(
+                icon: Badge(
+                  isLabelVisible: count > 0,
+                  label: Text('$count'),
+                  child: const Icon(Icons.payments_outlined),
+                ),
+                tooltip: 'Offene Posten (Rechnungen & Erstattungen)',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const FinanceScreen()),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.delete_sweep_outlined),
             tooltip: 'Ausmistliste',
@@ -255,6 +285,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   onSelected: (v) => _updateFilter(year: v),
                   onCleared: () => _updateFilter(clearYear: true),
                 ),
+                const SizedBox(width: 8),
+                _FilterChip<String>(
+                  label: 'Zahlung',
+                  value: _filter.financeStatus,
+                  options: const [
+                    ...PaymentStatus.all,
+                    ClaimStatus.toSubmit,
+                    ClaimStatus.submitted,
+                  ],
+                  onSelected: (v) => _updateFilter(financeStatus: v),
+                  onCleared: () => _updateFilter(clearFinance: true),
+                ),
               ],
             ),
           ),
@@ -313,10 +355,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (doc.docType != null) doc.docType!,
                         doc.storageLocation,
                       ].join(' · ')),
-                      trailing: doc.reminderAt != null &&
-                              doc.reminderAt!.isAfter(DateTime.now())
-                          ? const Icon(Icons.alarm, size: 20)
-                          : null,
+                      trailing: doc.paymentStatus == PaymentStatus.open
+                          ? Icon(
+                              isOverdue(doc)
+                                  ? Icons.warning_amber
+                                  : Icons.payments_outlined,
+                              size: 20,
+                              color: isOverdue(doc)
+                                  ? theme.colorScheme.error
+                                  : null,
+                            )
+                          : doc.reminderAt != null &&
+                                  doc.reminderAt!.isAfter(DateTime.now())
+                              ? const Icon(Icons.alarm, size: 20)
+                              : null,
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) =>

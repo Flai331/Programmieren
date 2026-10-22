@@ -37,6 +37,46 @@ class Documents extends Table {
   /// Wiedervorlage/Kündigungsfrist mit Benachrichtigung.
   DateTimeColumn get reminderAt => dateTime().nullable()();
   TextColumn get reminderNote => text().nullable()();
+
+  // ---- Rechnungen (Schema v2) ----
+
+  /// Endbetrag in Cent.
+  IntColumn get amountCents => integer().nullable()();
+  DateTimeColumn get dueDate => dateTime().nullable()();
+
+  /// Siehe `PaymentStatus`: zu bezahlen, wird abgebucht, bezahlt,
+  /// Gutschrift. `null` = keine Zahlung betroffen.
+  TextColumn get paymentStatus => text().nullable()();
+  DateTimeColumn get paidAt => dateTime().nullable()();
+
+  /// Zahlungserinnerung (eigene Benachrichtigung, unabhängig von
+  /// [reminderAt]).
+  DateTimeColumn get paymentReminderAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Einreichung einer Rechnung bei einer Erstattungsstelle (Krankenkasse,
+/// Beihilfe, Heilfürsorge, Steuererklärung …). Mehrere pro Dokument
+/// möglich, z. B. Beihilfe + Private Krankenversicherung.
+class Claims extends Table {
+  TextColumn get id => text().clientDefault(_uuid.v4)();
+  TextColumn get documentId => text().references(Documents, #id)();
+  TextColumn get target => text()();
+
+  /// Siehe `ClaimStatus`.
+  TextColumn get status => text()();
+  DateTimeColumn get submittedAt => dateTime().nullable()();
+
+  /// Erstatteter Betrag in Cent.
+  IntColumn get reimbursedCents => integer().nullable()();
+  DateTimeColumn get settledAt => dateTime().nullable()();
+
+  /// Nachfassen, falls die Erstattung ausbleibt.
+  DateTimeColumn get followUpAt => dateTime().nullable()();
   DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
@@ -111,6 +151,7 @@ class Counters extends Table {
     DocumentTags,
     ExtractedRefs,
     Counters,
+    Claims,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -120,7 +161,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.open() : super(driftDatabase(name: 'dokubox'));
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -132,6 +173,16 @@ class AppDatabase extends _$AppDatabase {
             'CREATE VIRTUAL TABLE document_fts USING fts5('
             'document_id UNINDEXED, content, tokenize="unicode61")',
           );
+        },
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.addColumn(documents, documents.amountCents);
+            await m.addColumn(documents, documents.dueDate);
+            await m.addColumn(documents, documents.paymentStatus);
+            await m.addColumn(documents, documents.paidAt);
+            await m.addColumn(documents, documents.paymentReminderAt);
+            await m.createTable(claims);
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');

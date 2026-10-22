@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import 'database.dart';
+import 'finance.dart';
 
 /// Filter für die Dokumentenliste/-suche.
 class DocumentFilter {
@@ -11,6 +12,9 @@ class DocumentFilter {
   final String? correspondentId;
   final String? storageLocation;
 
+  /// Ein `PaymentStatus` oder ein `ClaimStatus` (offene Einreichungen).
+  final String? financeStatus;
+
   const DocumentFilter({
     this.query = '',
     this.docType,
@@ -18,6 +22,7 @@ class DocumentFilter {
     this.tagId,
     this.correspondentId,
     this.storageLocation,
+    this.financeStatus,
   });
 
   bool get isEmpty =>
@@ -26,7 +31,47 @@ class DocumentFilter {
       year == null &&
       tagId == null &&
       correspondentId == null &&
-      storageLocation == null;
+      storageLocation == null &&
+      financeStatus == null;
+}
+
+/// Eine Einreichung im Bearbeiten-Flow. [id] ist bei neuen `null`.
+class ClaimDraft {
+  String? id;
+  String target;
+  String status;
+  DateTime? submittedAt;
+  int? reimbursedCents;
+  DateTime? settledAt;
+  DateTime? followUpAt;
+
+  ClaimDraft({
+    this.id,
+    required this.target,
+    this.status = ClaimStatus.toSubmit,
+    this.submittedAt,
+    this.reimbursedCents,
+    this.settledAt,
+    this.followUpAt,
+  });
+
+  factory ClaimDraft.fromClaim(Claim c) => ClaimDraft(
+        id: c.id,
+        target: c.target,
+        status: c.status,
+        submittedAt: c.submittedAt,
+        reimbursedCents: c.reimbursedCents,
+        settledAt: c.settledAt,
+        followUpAt: c.followUpAt,
+      );
+}
+
+/// Dokument mit offener Einreichung (für „Offene Posten").
+class OpenClaim {
+  final Claim claim;
+  final Document document;
+
+  const OpenClaim(this.claim, this.document);
 }
 
 /// Alles, was beim Bestätigen eines Scans gespeichert wird.
@@ -40,6 +85,12 @@ class DocumentDraft {
   DateTime? retentionUntil;
   DateTime? reminderAt;
   String? reminderNote;
+  int? amountCents;
+  DateTime? dueDate;
+  String? paymentStatus;
+  DateTime? paidAt;
+  DateTime? paymentReminderAt;
+  List<ClaimDraft> claims;
 
   DocumentDraft({
     this.title = '',
@@ -51,7 +102,14 @@ class DocumentDraft {
     this.retentionUntil,
     this.reminderAt,
     this.reminderNote,
-  }) : tagNames = tagNames ?? [];
+    this.amountCents,
+    this.dueDate,
+    this.paymentStatus,
+    this.paidAt,
+    this.paymentReminderAt,
+    List<ClaimDraft>? claims,
+  })  : tagNames = tagNames ?? [],
+        claims = claims ?? [];
 }
 
 class DocumentRepository {
@@ -137,6 +195,11 @@ class DocumentRepository {
         retentionUntil: Value(draft.retentionUntil),
         reminderAt: Value(draft.reminderAt),
         reminderNote: Value(draft.reminderNote),
+        amountCents: Value(draft.amountCents),
+        dueDate: Value(draft.dueDate),
+        paymentStatus: Value(draft.paymentStatus),
+        paidAt: Value(draft.paidAt),
+        paymentReminderAt: Value(draft.paymentReminderAt),
       );
       final doc =
           await db.into(db.documents).insertReturning(companion);
@@ -160,6 +223,7 @@ class DocumentRepository {
         }
       }
       await _writeFtsEntry(doc.id, docNumber, draft, ocrText, refs);
+      await _writeClaims(doc.id, draft.claims);
       if (correspondentId != null) {
         await _learnDefaults(correspondentId, draft.docType, tagIds);
       }
@@ -186,9 +250,15 @@ class DocumentRepository {
           retentionUntil: Value(draft.retentionUntil),
           reminderAt: Value(draft.reminderAt),
           reminderNote: Value(draft.reminderNote),
+          amountCents: Value(draft.amountCents),
+          dueDate: Value(draft.dueDate),
+          paymentStatus: Value(draft.paymentStatus),
+          paidAt: Value(draft.paidAt),
+          paymentReminderAt: Value(draft.paymentReminderAt),
           updatedAt: Value(DateTime.now()),
         ),
       );
+      await _writeClaims(id, draft.claims);
       await (db.delete(db.documentTags)
             ..where((t) => t.documentId.equals(id)))
           .go();
@@ -279,12 +349,22 @@ class DocumentRepository {
           ' AND EXISTS (SELECT 1 FROM document_tags dt WHERE dt.document_id = d.id AND dt.tag_id = ?)');
       args.add(Variable.withString(filter.tagId!));
     }
+    final finance = filter.financeStatus;
+    if (finance != null) {
+      if (ClaimStatus.all.contains(finance)) {
+        where.write(' AND EXISTS (SELECT 1 FROM claims c WHERE '
+            'c.document_id = d.id AND c.deleted_at IS NULL AND c.status = ?)');
+      } else {
+        where.write(' AND d.payment_status = ?');
+      }
+      args.add(Variable.withString(finance));
+    }
 
     return db
         .customSelect(
           'SELECT d.* FROM $from WHERE $where ORDER BY d.doc_number DESC',
           variables: args,
-          readsFrom: {db.documents, db.documentTags},
+          readsFrom: {db.documents, db.documentTags, db.claims},
         )
         .watch()
         .map((rows) =>
@@ -312,6 +392,142 @@ class DocumentRepository {
               d.reminderAt.isNotNull() &
               d.reminderAt.isBiggerThanValue(DateTime.now())))
         .get();
+  }
+
+  /// Anstehende Zahlungserinnerungen offener Rechnungen.
+  Future<List<Document>> upcomingPaymentReminders() {
+    return (db.select(db.documents)
+          ..where((d) =>
+              d.deletedAt.isNull() &
+              d.paymentStatus.equals(PaymentStatus.open) &
+              d.paymentReminderAt.isNotNull() &
+              d.paymentReminderAt.isBiggerThanValue(DateTime.now())))
+        .get();
+  }
+
+  // ------------------------------------------------- Rechnungen/Erstattung
+
+  /// Offene Rechnungen, früheste Fälligkeit zuerst (ohne Datum ans Ende).
+  Stream<List<Document>> watchOpenPayments() {
+    return (db.select(db.documents)
+          ..where((d) =>
+              d.deletedAt.isNull() &
+              d.paymentStatus.equals(PaymentStatus.open))
+          ..orderBy([
+            (d) => OrderingTerm(
+                expression: d.dueDate.isNull(), mode: OrderingMode.asc),
+            (d) => OrderingTerm.asc(d.dueDate),
+            (d) => OrderingTerm.asc(d.docNumber),
+          ]))
+        .watch();
+  }
+
+  /// Einreichungen mit Status einzureichen/eingereicht, samt Dokument.
+  Stream<List<OpenClaim>> watchOpenClaims() {
+    final query = db.select(db.claims).join([
+      innerJoin(db.documents, db.documents.id.equalsExp(db.claims.documentId)),
+    ])
+      ..where(db.claims.deletedAt.isNull() &
+          db.documents.deletedAt.isNull() &
+          db.claims.status
+              .isIn([ClaimStatus.toSubmit, ClaimStatus.submitted]))
+      ..orderBy([
+        OrderingTerm.asc(db.claims.status),
+        OrderingTerm.asc(db.documents.docNumber),
+      ]);
+    return query.watch().map((rows) => [
+          for (final row in rows)
+            OpenClaim(row.readTable(db.claims), row.readTable(db.documents)),
+        ]);
+  }
+
+  /// Anzahl offener Posten (für das Abzeichen auf der Startseite).
+  Stream<int> watchOpenFinanceCount() {
+    return db
+        .customSelect(
+          'SELECT '
+          '(SELECT COUNT(*) FROM documents WHERE deleted_at IS NULL '
+          '  AND payment_status = ?) + '
+          '(SELECT COUNT(*) FROM claims c JOIN documents d ON d.id = c.document_id '
+          '  WHERE c.deleted_at IS NULL AND d.deleted_at IS NULL '
+          '  AND c.status = ?) AS n',
+          variables: [
+            Variable.withString(PaymentStatus.open),
+            Variable.withString(ClaimStatus.toSubmit),
+          ],
+          readsFrom: {db.documents, db.claims},
+        )
+        .watchSingle()
+        .map((row) => row.read<int>('n'));
+  }
+
+  Future<List<Claim>> claimsForDocument(String documentId,
+      {bool includeDeleted = false}) {
+    final query = db.select(db.claims)
+      ..where((c) => c.documentId.equals(documentId))
+      ..orderBy([(c) => OrderingTerm.asc(c.target)]);
+    if (!includeDeleted) query.where((c) => c.deletedAt.isNull());
+    return query.get();
+  }
+
+  /// Anstehende Nachfass-Erinnerungen eingereichter Erstattungen.
+  Future<List<Claim>> upcomingClaimFollowUps() {
+    return (db.select(db.claims)
+          ..where((c) =>
+              c.deletedAt.isNull() &
+              c.status.equals(ClaimStatus.submitted) &
+              c.followUpAt.isNotNull() &
+              c.followUpAt.isBiggerThanValue(DateTime.now())))
+        .get();
+  }
+
+  /// Rechnung als bezahlt markieren; die Zahlungserinnerung entfällt.
+  Future<void> markPaid(String documentId, {DateTime? at}) async {
+    await (db.update(db.documents)..where((d) => d.id.equals(documentId)))
+        .write(DocumentsCompanion(
+      paymentStatus: const Value(PaymentStatus.paid),
+      paidAt: Value(at ?? DateTime.now()),
+      paymentReminderAt: const Value(null),
+      updatedAt: Value(DateTime.now()),
+    ));
+  }
+
+  /// Status einer Einreichung setzen. Beim Einreichen wird das Datum
+  /// gesetzt und (bei [followUpWeeks]) eine Nachfass-Erinnerung geplant;
+  /// erledigte Einreichungen verlieren ihre Erinnerung.
+  Future<void> setClaimStatus(
+    String claimId,
+    String status, {
+    DateTime? at,
+    int? reimbursedCents,
+    int? followUpWeeks,
+  }) async {
+    final when = at ?? DateTime.now();
+    final companion = switch (status) {
+      ClaimStatus.submitted => ClaimsCompanion(
+          submittedAt: Value(when),
+          followUpAt: Value(followUpWeeks == null
+              ? null
+              : claimFollowUpFor(when, followUpWeeks)),
+        ),
+      ClaimStatus.reimbursed ||
+      ClaimStatus.partly ||
+      ClaimStatus.rejected =>
+        ClaimsCompanion(
+          settledAt: Value(when),
+          followUpAt: const Value(null),
+          reimbursedCents: reimbursedCents == null
+              ? const Value.absent()
+              : Value(reimbursedCents),
+        ),
+      _ => const ClaimsCompanion(followUpAt: Value(null)),
+    };
+    await (db.update(db.claims)..where((c) => c.id.equals(claimId))).write(
+      companion.copyWith(
+        status: Value(status),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   Future<List<String>> tagNamesForDocument(String documentId) async {
@@ -404,6 +620,42 @@ class DocumentRepository {
   }
 
   // ----------------------------------------------------------------- intern
+
+  /// Einreichungen speichern: vorhandene aktualisieren, neue anlegen,
+  /// entfernte per Soft-Delete ausblenden.
+  Future<void> _writeClaims(String documentId, List<ClaimDraft> drafts) async {
+    final existing = await claimsForDocument(documentId);
+    final keep = drafts.map((c) => c.id).whereType<String>().toSet();
+    for (final old in existing) {
+      if (!keep.contains(old.id)) {
+        await (db.update(db.claims)..where((c) => c.id.equals(old.id))).write(
+          ClaimsCompanion(
+            deletedAt: Value(DateTime.now()),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+      }
+    }
+    for (final c in drafts) {
+      final companion = ClaimsCompanion(
+        documentId: Value(documentId),
+        target: Value(c.target),
+        status: Value(c.status),
+        submittedAt: Value(c.submittedAt),
+        reimbursedCents: Value(c.reimbursedCents),
+        settledAt: Value(c.settledAt),
+        followUpAt: Value(c.followUpAt),
+        updatedAt: Value(DateTime.now()),
+      );
+      if (c.id == null) {
+        final row = await db.into(db.claims).insertReturning(companion);
+        c.id = row.id;
+      } else {
+        await (db.update(db.claims)..where((x) => x.id.equals(c.id!)))
+            .write(companion);
+      }
+    }
+  }
 
   Future<void> _writeFtsEntry(String documentId, String docNumber,
       DocumentDraft draft, String ocrText, Map<String, Set<String>> refs) async {

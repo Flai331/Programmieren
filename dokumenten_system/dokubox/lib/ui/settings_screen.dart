@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import '../ai/ai_extraction_service.dart';
 import '../app_services.dart';
 import '../backup/backup_service.dart';
+import '../data/finance.dart';
 import '../lock/lock_gate.dart';
 import '../scan/blank_pages.dart';
 import '../scan/scan_service.dart';
@@ -28,10 +29,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _aiInstalled = false;
   bool _aiEnabled = false;
   int? _aiDownloadProgress;
+  FinanceSettings _finance = const FinanceSettings();
 
   @override
   void initState() {
     super.initState();
+    FinanceSettings.load().then((value) {
+      if (mounted) setState(() => _finance = value);
+    });
     AppLockSettings.isEnabled().then((value) {
       if (mounted) setState(() => _lockEnabled = value);
     });
@@ -241,6 +246,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _updateFinance(FinanceSettings value) async {
+    setState(() => _finance = value);
+    await value.save();
+  }
+
+  List<Widget> _financeSettings() => [
+        const ListTile(
+          leading: Icon(Icons.payments_outlined),
+          title: Text('Rechnungen & Erstattung'),
+          subtitle: Text(
+              'Rechnungen werden beim Scannen erkannt: Betrag, Fälligkeit, '
+              'bezahlt/zu bezahlen/Lastschrift. Arzt- und Apothekenrechnungen '
+              'werden zum Einreichen vorgemerkt.'),
+        ),
+        ListTile(
+          leading: const SizedBox(width: 24),
+          title: const Text('Zahlungserinnerung'),
+          subtitle: const Text('Wie früh vor der Fälligkeit erinnern?'),
+          trailing: DropdownButton<int>(
+            value: _finance.leadDays,
+            onChanged: (v) {
+              if (v != null) _updateFinance(_finance.copyWith(leadDays: v));
+            },
+            items: [
+              for (final d in const [0, 1, 2, 3, 5, 7, 14])
+                DropdownMenuItem(
+                    value: d,
+                    child: Text(d == 0 ? 'am Fälligkeitstag' : '$d Tage vorher')),
+            ],
+          ),
+        ),
+        ListTile(
+          leading: const SizedBox(width: 24),
+          title: const Text('Erstattung nachfassen'),
+          subtitle: const Text('Erinnern, wenn nach dem Einreichen nichts kam'),
+          trailing: DropdownButton<int>(
+            value: _finance.followUpWeeks,
+            onChanged: (v) {
+              if (v != null) {
+                _updateFinance(_finance.copyWith(followUpWeeks: v));
+              }
+            },
+            items: [
+              for (final w in const [2, 4, 6, 8, 12])
+                DropdownMenuItem(value: w, child: Text('nach $w Wochen')),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(72, 4, 16, 0),
+          child: Text('Arztrechnungen einreichen bei:',
+              style: Theme.of(context).textTheme.bodyMedium),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(72, 4, 16, 8),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final target in kClaimTargets)
+                FilterChip(
+                  label: Text(target),
+                  selected: _finance.claimTargets.contains(target),
+                  onSelected: (selected) => _updateFinance(_finance.copyWith(
+                    claimTargets: selected
+                        ? [..._finance.claimTargets, target]
+                        : _finance.claimTargets
+                            .where((t) => t != target)
+                            .toList(),
+                  )),
+                ),
+            ],
+          ),
+        ),
+      ];
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -291,6 +372,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
+          const Divider(),
+          ..._financeSettings(),
           const Divider(),
           if (!_aiInstalled)
             ListTile(

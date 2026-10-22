@@ -12,7 +12,8 @@ class AppServices {
   late final DocumentRepository repository = DocumentRepository(db);
   late final SuggestionService suggestions = SuggestionService(repository);
   late final ScanService scanner = ScanService();
-  late final NotificationService notifications = NotificationService();
+  late final NotificationService notifications =
+      NotificationService(repository);
   late final BackupService backup = BackupService(db);
   late final AiExtractionService ai = AiExtractionService();
 

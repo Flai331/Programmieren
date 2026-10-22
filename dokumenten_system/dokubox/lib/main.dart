@@ -22,7 +22,7 @@ Future<void> main() async {
 
   services = AppServices(AppDatabase.open());
   // Anstehende Fristen neu planen (deckt Geräteneustarts ab).
-  services.notifications.rescheduleAll(services.repository);
+  services.notifications.rescheduleAll();
 
   runApp(const DokuBoxApp());
 }

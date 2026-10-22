@@ -166,6 +166,60 @@ class $DocumentsTable extends Documents
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _amountCentsMeta = const VerificationMeta(
+    'amountCents',
+  );
+  @override
+  late final GeneratedColumn<int> amountCents = GeneratedColumn<int>(
+    'amount_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _dueDateMeta = const VerificationMeta(
+    'dueDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> dueDate = GeneratedColumn<DateTime>(
+    'due_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _paymentStatusMeta = const VerificationMeta(
+    'paymentStatus',
+  );
+  @override
+  late final GeneratedColumn<String> paymentStatus = GeneratedColumn<String>(
+    'payment_status',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _paidAtMeta = const VerificationMeta('paidAt');
+  @override
+  late final GeneratedColumn<DateTime> paidAt = GeneratedColumn<DateTime>(
+    'paid_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _paymentReminderAtMeta = const VerificationMeta(
+    'paymentReminderAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> paymentReminderAt =
+      GeneratedColumn<DateTime>(
+        'payment_reminder_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -205,6 +259,11 @@ class $DocumentsTable extends Documents
     retentionUntil,
     reminderAt,
     reminderNote,
+    amountCents,
+    dueDate,
+    paymentStatus,
+    paidAt,
+    paymentReminderAt,
     updatedAt,
     deletedAt,
   ];
@@ -319,6 +378,45 @@ class $DocumentsTable extends Documents
         ),
       );
     }
+    if (data.containsKey('amount_cents')) {
+      context.handle(
+        _amountCentsMeta,
+        amountCents.isAcceptableOrUnknown(
+          data['amount_cents']!,
+          _amountCentsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('due_date')) {
+      context.handle(
+        _dueDateMeta,
+        dueDate.isAcceptableOrUnknown(data['due_date']!, _dueDateMeta),
+      );
+    }
+    if (data.containsKey('payment_status')) {
+      context.handle(
+        _paymentStatusMeta,
+        paymentStatus.isAcceptableOrUnknown(
+          data['payment_status']!,
+          _paymentStatusMeta,
+        ),
+      );
+    }
+    if (data.containsKey('paid_at')) {
+      context.handle(
+        _paidAtMeta,
+        paidAt.isAcceptableOrUnknown(data['paid_at']!, _paidAtMeta),
+      );
+    }
+    if (data.containsKey('payment_reminder_at')) {
+      context.handle(
+        _paymentReminderAtMeta,
+        paymentReminderAt.isAcceptableOrUnknown(
+          data['payment_reminder_at']!,
+          _paymentReminderAtMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -396,6 +494,26 @@ class $DocumentsTable extends Documents
         DriftSqlType.string,
         data['${effectivePrefix}reminder_note'],
       ),
+      amountCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount_cents'],
+      ),
+      dueDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}due_date'],
+      ),
+      paymentStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payment_status'],
+      ),
+      paidAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}paid_at'],
+      ),
+      paymentReminderAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}payment_reminder_at'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -440,6 +558,19 @@ class Document extends DataClass implements Insertable<Document> {
   /// Wiedervorlage/Kündigungsfrist mit Benachrichtigung.
   final DateTime? reminderAt;
   final String? reminderNote;
+
+  /// Endbetrag in Cent.
+  final int? amountCents;
+  final DateTime? dueDate;
+
+  /// Siehe `PaymentStatus`: zu bezahlen, wird abgebucht, bezahlt,
+  /// Gutschrift. `null` = keine Zahlung betroffen.
+  final String? paymentStatus;
+  final DateTime? paidAt;
+
+  /// Zahlungserinnerung (eigene Benachrichtigung, unabhängig von
+  /// [reminderAt]).
+  final DateTime? paymentReminderAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
   const Document({
@@ -457,6 +588,11 @@ class Document extends DataClass implements Insertable<Document> {
     this.retentionUntil,
     this.reminderAt,
     this.reminderNote,
+    this.amountCents,
+    this.dueDate,
+    this.paymentStatus,
+    this.paidAt,
+    this.paymentReminderAt,
     required this.updatedAt,
     this.deletedAt,
   });
@@ -488,6 +624,21 @@ class Document extends DataClass implements Insertable<Document> {
     }
     if (!nullToAbsent || reminderNote != null) {
       map['reminder_note'] = Variable<String>(reminderNote);
+    }
+    if (!nullToAbsent || amountCents != null) {
+      map['amount_cents'] = Variable<int>(amountCents);
+    }
+    if (!nullToAbsent || dueDate != null) {
+      map['due_date'] = Variable<DateTime>(dueDate);
+    }
+    if (!nullToAbsent || paymentStatus != null) {
+      map['payment_status'] = Variable<String>(paymentStatus);
+    }
+    if (!nullToAbsent || paidAt != null) {
+      map['paid_at'] = Variable<DateTime>(paidAt);
+    }
+    if (!nullToAbsent || paymentReminderAt != null) {
+      map['payment_reminder_at'] = Variable<DateTime>(paymentReminderAt);
     }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -524,6 +675,21 @@ class Document extends DataClass implements Insertable<Document> {
       reminderNote: reminderNote == null && nullToAbsent
           ? const Value.absent()
           : Value(reminderNote),
+      amountCents: amountCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(amountCents),
+      dueDate: dueDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dueDate),
+      paymentStatus: paymentStatus == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paymentStatus),
+      paidAt: paidAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paidAt),
+      paymentReminderAt: paymentReminderAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paymentReminderAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
@@ -551,6 +717,13 @@ class Document extends DataClass implements Insertable<Document> {
       retentionUntil: serializer.fromJson<DateTime?>(json['retentionUntil']),
       reminderAt: serializer.fromJson<DateTime?>(json['reminderAt']),
       reminderNote: serializer.fromJson<String?>(json['reminderNote']),
+      amountCents: serializer.fromJson<int?>(json['amountCents']),
+      dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
+      paymentStatus: serializer.fromJson<String?>(json['paymentStatus']),
+      paidAt: serializer.fromJson<DateTime?>(json['paidAt']),
+      paymentReminderAt: serializer.fromJson<DateTime?>(
+        json['paymentReminderAt'],
+      ),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
@@ -573,6 +746,11 @@ class Document extends DataClass implements Insertable<Document> {
       'retentionUntil': serializer.toJson<DateTime?>(retentionUntil),
       'reminderAt': serializer.toJson<DateTime?>(reminderAt),
       'reminderNote': serializer.toJson<String?>(reminderNote),
+      'amountCents': serializer.toJson<int?>(amountCents),
+      'dueDate': serializer.toJson<DateTime?>(dueDate),
+      'paymentStatus': serializer.toJson<String?>(paymentStatus),
+      'paidAt': serializer.toJson<DateTime?>(paidAt),
+      'paymentReminderAt': serializer.toJson<DateTime?>(paymentReminderAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
@@ -593,6 +771,11 @@ class Document extends DataClass implements Insertable<Document> {
     Value<DateTime?> retentionUntil = const Value.absent(),
     Value<DateTime?> reminderAt = const Value.absent(),
     Value<String?> reminderNote = const Value.absent(),
+    Value<int?> amountCents = const Value.absent(),
+    Value<DateTime?> dueDate = const Value.absent(),
+    Value<String?> paymentStatus = const Value.absent(),
+    Value<DateTime?> paidAt = const Value.absent(),
+    Value<DateTime?> paymentReminderAt = const Value.absent(),
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => Document(
@@ -614,6 +797,15 @@ class Document extends DataClass implements Insertable<Document> {
         : this.retentionUntil,
     reminderAt: reminderAt.present ? reminderAt.value : this.reminderAt,
     reminderNote: reminderNote.present ? reminderNote.value : this.reminderNote,
+    amountCents: amountCents.present ? amountCents.value : this.amountCents,
+    dueDate: dueDate.present ? dueDate.value : this.dueDate,
+    paymentStatus: paymentStatus.present
+        ? paymentStatus.value
+        : this.paymentStatus,
+    paidAt: paidAt.present ? paidAt.value : this.paidAt,
+    paymentReminderAt: paymentReminderAt.present
+        ? paymentReminderAt.value
+        : this.paymentReminderAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
@@ -643,6 +835,17 @@ class Document extends DataClass implements Insertable<Document> {
       reminderNote: data.reminderNote.present
           ? data.reminderNote.value
           : this.reminderNote,
+      amountCents: data.amountCents.present
+          ? data.amountCents.value
+          : this.amountCents,
+      dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
+      paymentStatus: data.paymentStatus.present
+          ? data.paymentStatus.value
+          : this.paymentStatus,
+      paidAt: data.paidAt.present ? data.paidAt.value : this.paidAt,
+      paymentReminderAt: data.paymentReminderAt.present
+          ? data.paymentReminderAt.value
+          : this.paymentReminderAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
@@ -665,6 +868,11 @@ class Document extends DataClass implements Insertable<Document> {
           ..write('retentionUntil: $retentionUntil, ')
           ..write('reminderAt: $reminderAt, ')
           ..write('reminderNote: $reminderNote, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('dueDate: $dueDate, ')
+          ..write('paymentStatus: $paymentStatus, ')
+          ..write('paidAt: $paidAt, ')
+          ..write('paymentReminderAt: $paymentReminderAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
           ..write(')'))
@@ -672,7 +880,7 @@ class Document extends DataClass implements Insertable<Document> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     docNumber,
     title,
@@ -687,9 +895,14 @@ class Document extends DataClass implements Insertable<Document> {
     retentionUntil,
     reminderAt,
     reminderNote,
+    amountCents,
+    dueDate,
+    paymentStatus,
+    paidAt,
+    paymentReminderAt,
     updatedAt,
     deletedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -708,6 +921,11 @@ class Document extends DataClass implements Insertable<Document> {
           other.retentionUntil == this.retentionUntil &&
           other.reminderAt == this.reminderAt &&
           other.reminderNote == this.reminderNote &&
+          other.amountCents == this.amountCents &&
+          other.dueDate == this.dueDate &&
+          other.paymentStatus == this.paymentStatus &&
+          other.paidAt == this.paidAt &&
+          other.paymentReminderAt == this.paymentReminderAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
 }
@@ -727,6 +945,11 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
   final Value<DateTime?> retentionUntil;
   final Value<DateTime?> reminderAt;
   final Value<String?> reminderNote;
+  final Value<int?> amountCents;
+  final Value<DateTime?> dueDate;
+  final Value<String?> paymentStatus;
+  final Value<DateTime?> paidAt;
+  final Value<DateTime?> paymentReminderAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
   final Value<int> rowid;
@@ -745,6 +968,11 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     this.retentionUntil = const Value.absent(),
     this.reminderAt = const Value.absent(),
     this.reminderNote = const Value.absent(),
+    this.amountCents = const Value.absent(),
+    this.dueDate = const Value.absent(),
+    this.paymentStatus = const Value.absent(),
+    this.paidAt = const Value.absent(),
+    this.paymentReminderAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -764,6 +992,11 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     this.retentionUntil = const Value.absent(),
     this.reminderAt = const Value.absent(),
     this.reminderNote = const Value.absent(),
+    this.amountCents = const Value.absent(),
+    this.dueDate = const Value.absent(),
+    this.paymentStatus = const Value.absent(),
+    this.paidAt = const Value.absent(),
+    this.paymentReminderAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -785,6 +1018,11 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     Expression<DateTime>? retentionUntil,
     Expression<DateTime>? reminderAt,
     Expression<String>? reminderNote,
+    Expression<int>? amountCents,
+    Expression<DateTime>? dueDate,
+    Expression<String>? paymentStatus,
+    Expression<DateTime>? paidAt,
+    Expression<DateTime>? paymentReminderAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
@@ -804,6 +1042,11 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
       if (retentionUntil != null) 'retention_until': retentionUntil,
       if (reminderAt != null) 'reminder_at': reminderAt,
       if (reminderNote != null) 'reminder_note': reminderNote,
+      if (amountCents != null) 'amount_cents': amountCents,
+      if (dueDate != null) 'due_date': dueDate,
+      if (paymentStatus != null) 'payment_status': paymentStatus,
+      if (paidAt != null) 'paid_at': paidAt,
+      if (paymentReminderAt != null) 'payment_reminder_at': paymentReminderAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
@@ -825,6 +1068,11 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     Value<DateTime?>? retentionUntil,
     Value<DateTime?>? reminderAt,
     Value<String?>? reminderNote,
+    Value<int?>? amountCents,
+    Value<DateTime?>? dueDate,
+    Value<String?>? paymentStatus,
+    Value<DateTime?>? paidAt,
+    Value<DateTime?>? paymentReminderAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
     Value<int>? rowid,
@@ -844,6 +1092,11 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
       retentionUntil: retentionUntil ?? this.retentionUntil,
       reminderAt: reminderAt ?? this.reminderAt,
       reminderNote: reminderNote ?? this.reminderNote,
+      amountCents: amountCents ?? this.amountCents,
+      dueDate: dueDate ?? this.dueDate,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      paidAt: paidAt ?? this.paidAt,
+      paymentReminderAt: paymentReminderAt ?? this.paymentReminderAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
@@ -895,6 +1148,21 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     if (reminderNote.present) {
       map['reminder_note'] = Variable<String>(reminderNote.value);
     }
+    if (amountCents.present) {
+      map['amount_cents'] = Variable<int>(amountCents.value);
+    }
+    if (dueDate.present) {
+      map['due_date'] = Variable<DateTime>(dueDate.value);
+    }
+    if (paymentStatus.present) {
+      map['payment_status'] = Variable<String>(paymentStatus.value);
+    }
+    if (paidAt.present) {
+      map['paid_at'] = Variable<DateTime>(paidAt.value);
+    }
+    if (paymentReminderAt.present) {
+      map['payment_reminder_at'] = Variable<DateTime>(paymentReminderAt.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -924,6 +1192,11 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
           ..write('retentionUntil: $retentionUntil, ')
           ..write('reminderAt: $reminderAt, ')
           ..write('reminderNote: $reminderNote, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('dueDate: $dueDate, ')
+          ..write('paymentStatus: $paymentStatus, ')
+          ..write('paidAt: $paidAt, ')
+          ..write('paymentReminderAt: $paymentReminderAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
@@ -2431,6 +2704,635 @@ class CountersCompanion extends UpdateCompanion<Counter> {
   }
 }
 
+class $ClaimsTable extends Claims with TableInfo<$ClaimsTable, Claim> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ClaimsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: _uuid.v4,
+  );
+  static const VerificationMeta _documentIdMeta = const VerificationMeta(
+    'documentId',
+  );
+  @override
+  late final GeneratedColumn<String> documentId = GeneratedColumn<String>(
+    'document_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _targetMeta = const VerificationMeta('target');
+  @override
+  late final GeneratedColumn<String> target = GeneratedColumn<String>(
+    'target',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _submittedAtMeta = const VerificationMeta(
+    'submittedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> submittedAt = GeneratedColumn<DateTime>(
+    'submitted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _reimbursedCentsMeta = const VerificationMeta(
+    'reimbursedCents',
+  );
+  @override
+  late final GeneratedColumn<int> reimbursedCents = GeneratedColumn<int>(
+    'reimbursed_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _settledAtMeta = const VerificationMeta(
+    'settledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> settledAt = GeneratedColumn<DateTime>(
+    'settled_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _followUpAtMeta = const VerificationMeta(
+    'followUpAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> followUpAt = GeneratedColumn<DateTime>(
+    'follow_up_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    documentId,
+    target,
+    status,
+    submittedAt,
+    reimbursedCents,
+    settledAt,
+    followUpAt,
+    updatedAt,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'claims';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Claim> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('document_id')) {
+      context.handle(
+        _documentIdMeta,
+        documentId.isAcceptableOrUnknown(data['document_id']!, _documentIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_documentIdMeta);
+    }
+    if (data.containsKey('target')) {
+      context.handle(
+        _targetMeta,
+        target.isAcceptableOrUnknown(data['target']!, _targetMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_targetMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('submitted_at')) {
+      context.handle(
+        _submittedAtMeta,
+        submittedAt.isAcceptableOrUnknown(
+          data['submitted_at']!,
+          _submittedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reimbursed_cents')) {
+      context.handle(
+        _reimbursedCentsMeta,
+        reimbursedCents.isAcceptableOrUnknown(
+          data['reimbursed_cents']!,
+          _reimbursedCentsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('settled_at')) {
+      context.handle(
+        _settledAtMeta,
+        settledAt.isAcceptableOrUnknown(data['settled_at']!, _settledAtMeta),
+      );
+    }
+    if (data.containsKey('follow_up_at')) {
+      context.handle(
+        _followUpAtMeta,
+        followUpAt.isAcceptableOrUnknown(
+          data['follow_up_at']!,
+          _followUpAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Claim map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Claim(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      documentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}document_id'],
+      )!,
+      target: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      submittedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}submitted_at'],
+      ),
+      reimbursedCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reimbursed_cents'],
+      ),
+      settledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}settled_at'],
+      ),
+      followUpAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}follow_up_at'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $ClaimsTable createAlias(String alias) {
+    return $ClaimsTable(attachedDatabase, alias);
+  }
+}
+
+class Claim extends DataClass implements Insertable<Claim> {
+  final String id;
+  final String documentId;
+  final String target;
+
+  /// Siehe `ClaimStatus`.
+  final String status;
+  final DateTime? submittedAt;
+
+  /// Erstatteter Betrag in Cent.
+  final int? reimbursedCents;
+  final DateTime? settledAt;
+
+  /// Nachfassen, falls die Erstattung ausbleibt.
+  final DateTime? followUpAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const Claim({
+    required this.id,
+    required this.documentId,
+    required this.target,
+    required this.status,
+    this.submittedAt,
+    this.reimbursedCents,
+    this.settledAt,
+    this.followUpAt,
+    required this.updatedAt,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['document_id'] = Variable<String>(documentId);
+    map['target'] = Variable<String>(target);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || submittedAt != null) {
+      map['submitted_at'] = Variable<DateTime>(submittedAt);
+    }
+    if (!nullToAbsent || reimbursedCents != null) {
+      map['reimbursed_cents'] = Variable<int>(reimbursedCents);
+    }
+    if (!nullToAbsent || settledAt != null) {
+      map['settled_at'] = Variable<DateTime>(settledAt);
+    }
+    if (!nullToAbsent || followUpAt != null) {
+      map['follow_up_at'] = Variable<DateTime>(followUpAt);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  ClaimsCompanion toCompanion(bool nullToAbsent) {
+    return ClaimsCompanion(
+      id: Value(id),
+      documentId: Value(documentId),
+      target: Value(target),
+      status: Value(status),
+      submittedAt: submittedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(submittedAt),
+      reimbursedCents: reimbursedCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reimbursedCents),
+      settledAt: settledAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(settledAt),
+      followUpAt: followUpAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(followUpAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory Claim.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Claim(
+      id: serializer.fromJson<String>(json['id']),
+      documentId: serializer.fromJson<String>(json['documentId']),
+      target: serializer.fromJson<String>(json['target']),
+      status: serializer.fromJson<String>(json['status']),
+      submittedAt: serializer.fromJson<DateTime?>(json['submittedAt']),
+      reimbursedCents: serializer.fromJson<int?>(json['reimbursedCents']),
+      settledAt: serializer.fromJson<DateTime?>(json['settledAt']),
+      followUpAt: serializer.fromJson<DateTime?>(json['followUpAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'documentId': serializer.toJson<String>(documentId),
+      'target': serializer.toJson<String>(target),
+      'status': serializer.toJson<String>(status),
+      'submittedAt': serializer.toJson<DateTime?>(submittedAt),
+      'reimbursedCents': serializer.toJson<int?>(reimbursedCents),
+      'settledAt': serializer.toJson<DateTime?>(settledAt),
+      'followUpAt': serializer.toJson<DateTime?>(followUpAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  Claim copyWith({
+    String? id,
+    String? documentId,
+    String? target,
+    String? status,
+    Value<DateTime?> submittedAt = const Value.absent(),
+    Value<int?> reimbursedCents = const Value.absent(),
+    Value<DateTime?> settledAt = const Value.absent(),
+    Value<DateTime?> followUpAt = const Value.absent(),
+    DateTime? updatedAt,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => Claim(
+    id: id ?? this.id,
+    documentId: documentId ?? this.documentId,
+    target: target ?? this.target,
+    status: status ?? this.status,
+    submittedAt: submittedAt.present ? submittedAt.value : this.submittedAt,
+    reimbursedCents: reimbursedCents.present
+        ? reimbursedCents.value
+        : this.reimbursedCents,
+    settledAt: settledAt.present ? settledAt.value : this.settledAt,
+    followUpAt: followUpAt.present ? followUpAt.value : this.followUpAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  Claim copyWithCompanion(ClaimsCompanion data) {
+    return Claim(
+      id: data.id.present ? data.id.value : this.id,
+      documentId: data.documentId.present
+          ? data.documentId.value
+          : this.documentId,
+      target: data.target.present ? data.target.value : this.target,
+      status: data.status.present ? data.status.value : this.status,
+      submittedAt: data.submittedAt.present
+          ? data.submittedAt.value
+          : this.submittedAt,
+      reimbursedCents: data.reimbursedCents.present
+          ? data.reimbursedCents.value
+          : this.reimbursedCents,
+      settledAt: data.settledAt.present ? data.settledAt.value : this.settledAt,
+      followUpAt: data.followUpAt.present
+          ? data.followUpAt.value
+          : this.followUpAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Claim(')
+          ..write('id: $id, ')
+          ..write('documentId: $documentId, ')
+          ..write('target: $target, ')
+          ..write('status: $status, ')
+          ..write('submittedAt: $submittedAt, ')
+          ..write('reimbursedCents: $reimbursedCents, ')
+          ..write('settledAt: $settledAt, ')
+          ..write('followUpAt: $followUpAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    documentId,
+    target,
+    status,
+    submittedAt,
+    reimbursedCents,
+    settledAt,
+    followUpAt,
+    updatedAt,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Claim &&
+          other.id == this.id &&
+          other.documentId == this.documentId &&
+          other.target == this.target &&
+          other.status == this.status &&
+          other.submittedAt == this.submittedAt &&
+          other.reimbursedCents == this.reimbursedCents &&
+          other.settledAt == this.settledAt &&
+          other.followUpAt == this.followUpAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class ClaimsCompanion extends UpdateCompanion<Claim> {
+  final Value<String> id;
+  final Value<String> documentId;
+  final Value<String> target;
+  final Value<String> status;
+  final Value<DateTime?> submittedAt;
+  final Value<int?> reimbursedCents;
+  final Value<DateTime?> settledAt;
+  final Value<DateTime?> followUpAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const ClaimsCompanion({
+    this.id = const Value.absent(),
+    this.documentId = const Value.absent(),
+    this.target = const Value.absent(),
+    this.status = const Value.absent(),
+    this.submittedAt = const Value.absent(),
+    this.reimbursedCents = const Value.absent(),
+    this.settledAt = const Value.absent(),
+    this.followUpAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ClaimsCompanion.insert({
+    this.id = const Value.absent(),
+    required String documentId,
+    required String target,
+    required String status,
+    this.submittedAt = const Value.absent(),
+    this.reimbursedCents = const Value.absent(),
+    this.settledAt = const Value.absent(),
+    this.followUpAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : documentId = Value(documentId),
+       target = Value(target),
+       status = Value(status);
+  static Insertable<Claim> custom({
+    Expression<String>? id,
+    Expression<String>? documentId,
+    Expression<String>? target,
+    Expression<String>? status,
+    Expression<DateTime>? submittedAt,
+    Expression<int>? reimbursedCents,
+    Expression<DateTime>? settledAt,
+    Expression<DateTime>? followUpAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (documentId != null) 'document_id': documentId,
+      if (target != null) 'target': target,
+      if (status != null) 'status': status,
+      if (submittedAt != null) 'submitted_at': submittedAt,
+      if (reimbursedCents != null) 'reimbursed_cents': reimbursedCents,
+      if (settledAt != null) 'settled_at': settledAt,
+      if (followUpAt != null) 'follow_up_at': followUpAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ClaimsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? documentId,
+    Value<String>? target,
+    Value<String>? status,
+    Value<DateTime?>? submittedAt,
+    Value<int?>? reimbursedCents,
+    Value<DateTime?>? settledAt,
+    Value<DateTime?>? followUpAt,
+    Value<DateTime>? updatedAt,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return ClaimsCompanion(
+      id: id ?? this.id,
+      documentId: documentId ?? this.documentId,
+      target: target ?? this.target,
+      status: status ?? this.status,
+      submittedAt: submittedAt ?? this.submittedAt,
+      reimbursedCents: reimbursedCents ?? this.reimbursedCents,
+      settledAt: settledAt ?? this.settledAt,
+      followUpAt: followUpAt ?? this.followUpAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (documentId.present) {
+      map['document_id'] = Variable<String>(documentId.value);
+    }
+    if (target.present) {
+      map['target'] = Variable<String>(target.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (submittedAt.present) {
+      map['submitted_at'] = Variable<DateTime>(submittedAt.value);
+    }
+    if (reimbursedCents.present) {
+      map['reimbursed_cents'] = Variable<int>(reimbursedCents.value);
+    }
+    if (settledAt.present) {
+      map['settled_at'] = Variable<DateTime>(settledAt.value);
+    }
+    if (followUpAt.present) {
+      map['follow_up_at'] = Variable<DateTime>(followUpAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ClaimsCompanion(')
+          ..write('id: $id, ')
+          ..write('documentId: $documentId, ')
+          ..write('target: $target, ')
+          ..write('status: $status, ')
+          ..write('submittedAt: $submittedAt, ')
+          ..write('reimbursedCents: $reimbursedCents, ')
+          ..write('settledAt: $settledAt, ')
+          ..write('followUpAt: $followUpAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2440,6 +3342,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $DocumentTagsTable documentTags = $DocumentTagsTable(this);
   late final $ExtractedRefsTable extractedRefs = $ExtractedRefsTable(this);
   late final $CountersTable counters = $CountersTable(this);
+  late final $ClaimsTable claims = $ClaimsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2451,6 +3354,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     documentTags,
     extractedRefs,
     counters,
+    claims,
   ];
 }
 
@@ -2470,6 +3374,11 @@ typedef $$DocumentsTableCreateCompanionBuilder =
       Value<DateTime?> retentionUntil,
       Value<DateTime?> reminderAt,
       Value<String?> reminderNote,
+      Value<int?> amountCents,
+      Value<DateTime?> dueDate,
+      Value<String?> paymentStatus,
+      Value<DateTime?> paidAt,
+      Value<DateTime?> paymentReminderAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -2490,6 +3399,11 @@ typedef $$DocumentsTableUpdateCompanionBuilder =
       Value<DateTime?> retentionUntil,
       Value<DateTime?> reminderAt,
       Value<String?> reminderNote,
+      Value<int?> amountCents,
+      Value<DateTime?> dueDate,
+      Value<String?> paymentStatus,
+      Value<DateTime?> paidAt,
+      Value<DateTime?> paymentReminderAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -2571,6 +3485,31 @@ class $$DocumentsTableFilterComposer
 
   ColumnFilters<String> get reminderNote => $composableBuilder(
     column: $table.reminderNote,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get dueDate => $composableBuilder(
+    column: $table.dueDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get paymentStatus => $composableBuilder(
+    column: $table.paymentStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get paidAt => $composableBuilder(
+    column: $table.paidAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get paymentReminderAt => $composableBuilder(
+    column: $table.paymentReminderAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2664,6 +3603,31 @@ class $$DocumentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get dueDate => $composableBuilder(
+    column: $table.dueDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get paymentStatus => $composableBuilder(
+    column: $table.paymentStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get paidAt => $composableBuilder(
+    column: $table.paidAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get paymentReminderAt => $composableBuilder(
+    column: $table.paymentReminderAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -2736,6 +3700,27 @@ class $$DocumentsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get dueDate =>
+      $composableBuilder(column: $table.dueDate, builder: (column) => column);
+
+  GeneratedColumn<String> get paymentStatus => $composableBuilder(
+    column: $table.paymentStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get paidAt =>
+      $composableBuilder(column: $table.paidAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get paymentReminderAt => $composableBuilder(
+    column: $table.paymentReminderAt,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
@@ -2785,6 +3770,11 @@ class $$DocumentsTableTableManager
                 Value<DateTime?> retentionUntil = const Value.absent(),
                 Value<DateTime?> reminderAt = const Value.absent(),
                 Value<String?> reminderNote = const Value.absent(),
+                Value<int?> amountCents = const Value.absent(),
+                Value<DateTime?> dueDate = const Value.absent(),
+                Value<String?> paymentStatus = const Value.absent(),
+                Value<DateTime?> paidAt = const Value.absent(),
+                Value<DateTime?> paymentReminderAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -2803,6 +3793,11 @@ class $$DocumentsTableTableManager
                 retentionUntil: retentionUntil,
                 reminderAt: reminderAt,
                 reminderNote: reminderNote,
+                amountCents: amountCents,
+                dueDate: dueDate,
+                paymentStatus: paymentStatus,
+                paidAt: paidAt,
+                paymentReminderAt: paymentReminderAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,
@@ -2823,6 +3818,11 @@ class $$DocumentsTableTableManager
                 Value<DateTime?> retentionUntil = const Value.absent(),
                 Value<DateTime?> reminderAt = const Value.absent(),
                 Value<String?> reminderNote = const Value.absent(),
+                Value<int?> amountCents = const Value.absent(),
+                Value<DateTime?> dueDate = const Value.absent(),
+                Value<String?> paymentStatus = const Value.absent(),
+                Value<DateTime?> paidAt = const Value.absent(),
+                Value<DateTime?> paymentReminderAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -2841,6 +3841,11 @@ class $$DocumentsTableTableManager
                 retentionUntil: retentionUntil,
                 reminderAt: reminderAt,
                 reminderNote: reminderNote,
+                amountCents: amountCents,
+                dueDate: dueDate,
+                paymentStatus: paymentStatus,
+                paidAt: paidAt,
+                paymentReminderAt: paymentReminderAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,
@@ -3734,6 +4739,303 @@ typedef $$CountersTableProcessedTableManager =
       Counter,
       PrefetchHooks Function()
     >;
+typedef $$ClaimsTableCreateCompanionBuilder =
+    ClaimsCompanion Function({
+      Value<String> id,
+      required String documentId,
+      required String target,
+      required String status,
+      Value<DateTime?> submittedAt,
+      Value<int?> reimbursedCents,
+      Value<DateTime?> settledAt,
+      Value<DateTime?> followUpAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$ClaimsTableUpdateCompanionBuilder =
+    ClaimsCompanion Function({
+      Value<String> id,
+      Value<String> documentId,
+      Value<String> target,
+      Value<String> status,
+      Value<DateTime?> submittedAt,
+      Value<int?> reimbursedCents,
+      Value<DateTime?> settledAt,
+      Value<DateTime?> followUpAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$ClaimsTableFilterComposer
+    extends Composer<_$AppDatabase, $ClaimsTable> {
+  $$ClaimsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get target => $composableBuilder(
+    column: $table.target,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get submittedAt => $composableBuilder(
+    column: $table.submittedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reimbursedCents => $composableBuilder(
+    column: $table.reimbursedCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get settledAt => $composableBuilder(
+    column: $table.settledAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get followUpAt => $composableBuilder(
+    column: $table.followUpAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ClaimsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ClaimsTable> {
+  $$ClaimsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get target => $composableBuilder(
+    column: $table.target,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get submittedAt => $composableBuilder(
+    column: $table.submittedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get reimbursedCents => $composableBuilder(
+    column: $table.reimbursedCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get settledAt => $composableBuilder(
+    column: $table.settledAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get followUpAt => $composableBuilder(
+    column: $table.followUpAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ClaimsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ClaimsTable> {
+  $$ClaimsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get target =>
+      $composableBuilder(column: $table.target, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get submittedAt => $composableBuilder(
+    column: $table.submittedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get reimbursedCents => $composableBuilder(
+    column: $table.reimbursedCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get settledAt =>
+      $composableBuilder(column: $table.settledAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get followUpAt => $composableBuilder(
+    column: $table.followUpAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$ClaimsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ClaimsTable,
+          Claim,
+          $$ClaimsTableFilterComposer,
+          $$ClaimsTableOrderingComposer,
+          $$ClaimsTableAnnotationComposer,
+          $$ClaimsTableCreateCompanionBuilder,
+          $$ClaimsTableUpdateCompanionBuilder,
+          (Claim, BaseReferences<_$AppDatabase, $ClaimsTable, Claim>),
+          Claim,
+          PrefetchHooks Function()
+        > {
+  $$ClaimsTableTableManager(_$AppDatabase db, $ClaimsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ClaimsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ClaimsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ClaimsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> documentId = const Value.absent(),
+                Value<String> target = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime?> submittedAt = const Value.absent(),
+                Value<int?> reimbursedCents = const Value.absent(),
+                Value<DateTime?> settledAt = const Value.absent(),
+                Value<DateTime?> followUpAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ClaimsCompanion(
+                id: id,
+                documentId: documentId,
+                target: target,
+                status: status,
+                submittedAt: submittedAt,
+                reimbursedCents: reimbursedCents,
+                settledAt: settledAt,
+                followUpAt: followUpAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String documentId,
+                required String target,
+                required String status,
+                Value<DateTime?> submittedAt = const Value.absent(),
+                Value<int?> reimbursedCents = const Value.absent(),
+                Value<DateTime?> settledAt = const Value.absent(),
+                Value<DateTime?> followUpAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ClaimsCompanion.insert(
+                id: id,
+                documentId: documentId,
+                target: target,
+                status: status,
+                submittedAt: submittedAt,
+                reimbursedCents: reimbursedCents,
+                settledAt: settledAt,
+                followUpAt: followUpAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ClaimsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ClaimsTable,
+      Claim,
+      $$ClaimsTableFilterComposer,
+      $$ClaimsTableOrderingComposer,
+      $$ClaimsTableAnnotationComposer,
+      $$ClaimsTableCreateCompanionBuilder,
+      $$ClaimsTableUpdateCompanionBuilder,
+      (Claim, BaseReferences<_$AppDatabase, $ClaimsTable, Claim>),
+      Claim,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3749,4 +5051,6 @@ class $AppDatabaseManager {
       $$ExtractedRefsTableTableManager(_db, _db.extractedRefs);
   $$CountersTableTableManager get counters =>
       $$CountersTableTableManager(_db, _db.counters);
+  $$ClaimsTableTableManager get claims =>
+      $$ClaimsTableTableManager(_db, _db.claims);
 }

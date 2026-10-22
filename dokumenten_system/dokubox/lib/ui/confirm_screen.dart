@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../data/doc_types.dart';
 import '../data/document_repository.dart';
+import '../data/finance.dart';
 
 final _dateFormat = DateFormat('dd.MM.yyyy');
 
@@ -33,12 +34,21 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
   late final TextEditingController _correspondent;
   late final TextEditingController _tagInput;
   late final TextEditingController _reminderNote;
+  late final TextEditingController _amount;
   late DocumentDraft _draft;
+  FinanceSettings _finance = const FinanceSettings();
 
   @override
   void initState() {
     super.initState();
+    FinanceSettings.load().then((value) {
+      if (mounted) setState(() => _finance = value);
+    });
     _draft = widget.draft;
+    _amount = TextEditingController(
+        text: _draft.amountCents == null
+            ? ''
+            : formatEuro(_draft.amountCents!).replaceAll(RegExp(r'\s?€'), ''));
     _title = TextEditingController(text: _draft.title);
     _correspondent =
         TextEditingController(text: _draft.correspondentName ?? '');
@@ -52,7 +62,184 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
     _correspondent.dispose();
     _tagInput.dispose();
     _reminderNote.dispose();
+    _amount.dispose();
     super.dispose();
+  }
+
+  void _setPaymentStatus(String? status) {
+    setState(() {
+      _draft.paymentStatus = status;
+      if (status == PaymentStatus.open) {
+        if (_draft.dueDate != null) {
+          _draft.paymentReminderAt ??=
+              paymentReminderFor(_draft.dueDate!, _finance.leadDays);
+        }
+      } else {
+        _draft.paymentReminderAt = null;
+      }
+      if (status == PaymentStatus.paid) _draft.paidAt ??= DateTime.now();
+    });
+  }
+
+  void _setDueDate(DateTime? due) {
+    setState(() {
+      _draft.dueDate = due;
+      _draft.paymentReminderAt =
+          due != null && _draft.paymentStatus == PaymentStatus.open
+              ? paymentReminderFor(due, _finance.leadDays)
+              : null;
+    });
+  }
+
+  void _setClaimStatus(ClaimDraft claim, String status) {
+    setState(() {
+      claim.status = status;
+      final now = DateTime.now();
+      switch (status) {
+        case ClaimStatus.submitted:
+          claim.submittedAt ??= now;
+          claim.followUpAt =
+              claimFollowUpFor(claim.submittedAt!, _finance.followUpWeeks);
+        case ClaimStatus.toSubmit:
+          claim.followUpAt = null;
+        default:
+          claim.settledAt ??= now;
+          claim.followUpAt = null;
+      }
+    });
+  }
+
+  List<Widget> _financeFields(ThemeData theme) {
+    final status = _draft.paymentStatus;
+    return [
+      Text('Rechnung & Erstattung', style: theme.textTheme.titleSmall),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<String?>(
+        initialValue: status,
+        decoration: const InputDecoration(
+          labelText: 'Zahlung',
+          border: OutlineInputBorder(),
+        ),
+        items: [
+          const DropdownMenuItem(value: null, child: Text('keine Rechnung')),
+          for (final s in PaymentStatus.all)
+            DropdownMenuItem(value: s, child: Text(s)),
+        ],
+        onChanged: _setPaymentStatus,
+      ),
+      if (status != null || _draft.claims.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        TextField(
+          controller: _amount,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Betrag',
+            suffixText: '€',
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ],
+      if (status == PaymentStatus.open ||
+          status == PaymentStatus.directDebit) ...[
+        const SizedBox(height: 12),
+        _DateRow(
+          label: status == PaymentStatus.open
+              ? 'Fällig am'
+              : 'Abbuchung am',
+          value: _draft.dueDate,
+          onTap: () async {
+            final picked = await _pickDate(_draft.dueDate);
+            if (picked != null) _setDueDate(picked);
+          },
+          onClear: () => _setDueDate(null),
+          emptyLabel: 'nicht erkannt',
+        ),
+      ],
+      if (status == PaymentStatus.open) ...[
+        const SizedBox(height: 12),
+        _DateRow(
+          label: 'Zahlungserinnerung',
+          value: _draft.paymentReminderAt,
+          onTap: () async {
+            final picked = await _pickDate(_draft.paymentReminderAt);
+            if (picked != null) {
+              setState(() => _draft.paymentReminderAt =
+                  DateTime(picked.year, picked.month, picked.day, 9));
+            }
+          },
+          onClear: () => setState(() => _draft.paymentReminderAt = null),
+          emptyLabel: 'keine',
+        ),
+      ],
+      if (status == PaymentStatus.paid) ...[
+        const SizedBox(height: 12),
+        _DateRow(
+          label: 'Bezahlt am',
+          value: _draft.paidAt,
+          onTap: () async {
+            final picked = await _pickDate(_draft.paidAt);
+            if (picked != null) setState(() => _draft.paidAt = picked);
+          },
+          onClear: () => setState(() => _draft.paidAt = null),
+        ),
+      ],
+      const SizedBox(height: 12),
+      for (final claim in _draft.claims)
+        Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+            child: Row(
+              children: [
+                Icon(Icons.local_hospital_outlined,
+                    size: 20, color: theme.colorScheme.primary),
+                const SizedBox(width: 12),
+                Expanded(child: Text(claim.target)),
+                DropdownButton<String>(
+                  value: claim.status,
+                  underline: const SizedBox.shrink(),
+                  items: [
+                    for (final s in ClaimStatus.all)
+                      DropdownMenuItem(value: s, child: Text(s)),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) _setClaimStatus(claim, value);
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: 'Entfernen',
+                  onPressed: () =>
+                      setState(() => _draft.claims.remove(claim)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: PopupMenuButton<String>(
+          onSelected: (target) => setState(
+              () => _draft.claims.add(ClaimDraft(target: target))),
+          itemBuilder: (context) => [
+            for (final t in kClaimTargets)
+              if (!_draft.claims.any((c) => c.target == t))
+                PopupMenuItem(value: t, child: Text(t)),
+          ],
+          child: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add, size: 18),
+                SizedBox(width: 8),
+                Text('Einreichen bei … (Krankenkasse, Beihilfe …)'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ];
   }
 
   Future<DateTime?> _pickDate(DateTime? initial) => showDatePicker(
@@ -77,7 +264,8 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
       ..correspondentName =
           _correspondent.text.trim().isEmpty ? null : _correspondent.text
       ..reminderNote =
-          _reminderNote.text.trim().isEmpty ? null : _reminderNote.text;
+          _reminderNote.text.trim().isEmpty ? null : _reminderNote.text
+      ..amountCents = parseEuro(_amount.text);
     Navigator.of(context).pop(_draft);
   }
 
@@ -211,6 +399,8 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
               ),
             ],
           ),
+          const Divider(height: 32),
+          ..._financeFields(theme),
           const Divider(height: 32),
           _DateRow(
             label: 'Aufbewahren bis (Ausmistliste)',

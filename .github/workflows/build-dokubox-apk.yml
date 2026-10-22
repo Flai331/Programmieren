@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - claude/document-digitalization-system-ezb1my
+      - ccr-f1c4c65b-jqkigw
     paths:
       - 'dokumenten_system/dokubox/**'
       - '.github/workflows/build-dokubox-apk.yml'

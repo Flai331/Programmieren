@@ -6,8 +6,10 @@ import 'package:share_plus/share_plus.dart';
 import '../app_services.dart';
 import '../data/database.dart';
 import '../data/document_repository.dart';
+import '../data/finance.dart';
 import '../scan/scan_service.dart';
 import 'confirm_screen.dart';
+import 'finance_actions.dart';
 
 final _dateFormat = DateFormat('dd.MM.yyyy');
 
@@ -23,6 +25,7 @@ class DocumentDetailScreen extends StatefulWidget {
 class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
   Document? _doc;
   List<String> _tags = [];
+  List<Claim> _claims = [];
   String? _correspondentName;
 
   @override
@@ -36,6 +39,8 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     if (doc == null) return;
     final tags =
         await services.repository.tagNamesForDocument(widget.documentId);
+    final claims =
+        await services.repository.claimsForDocument(widget.documentId);
     String? correspondentName;
     if (doc.correspondentId != null) {
       correspondentName = (await services.repository
@@ -46,6 +51,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       setState(() {
         _doc = doc;
         _tags = tags;
+        _claims = claims;
         _correspondentName = correspondentName;
       });
     }
@@ -76,17 +82,19 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       retentionUntil: doc.retentionUntil,
       reminderAt: doc.reminderAt,
       reminderNote: doc.reminderNote,
+      amountCents: doc.amountCents,
+      dueDate: doc.dueDate,
+      paymentStatus: doc.paymentStatus,
+      paidAt: doc.paidAt,
+      paymentReminderAt: doc.paymentReminderAt,
+      claims: [for (final c in _claims) ClaimDraft.fromClaim(c)],
     );
     final result = await Navigator.of(context).push<DocumentDraft>(
       MaterialPageRoute(builder: (_) => ConfirmScreen(draft: draft)),
     );
     if (result == null) return;
     await services.repository.updateDocument(doc.id, result);
-    final updated = await services.repository.getDocument(doc.id);
-    if (updated != null) {
-      await services.notifications.cancelFor(doc.id);
-      await services.notifications.scheduleFor(updated);
-    }
+    await services.notifications.syncDocument(doc.id);
     await _load();
   }
 
@@ -141,6 +149,109 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       await services.repository.softDeleteDocument(_doc!.id);
       if (mounted) Navigator.of(context).pop();
     }
+  }
+
+  Widget _financeCard(Document doc, ThemeData theme) {
+    final open = doc.paymentStatus == PaymentStatus.open ||
+        doc.paymentStatus == PaymentStatus.directDebit;
+    return Card(
+      margin: const EdgeInsets.only(top: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isOverdue(doc) ? Icons.warning_amber : Icons.receipt_long,
+                  color: isOverdue(doc)
+                      ? theme.colorScheme.error
+                      : theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    [
+                      doc.paymentStatus ?? 'Rechnung',
+                      if (doc.amountCents != null)
+                        formatEuro(doc.amountCents!),
+                    ].join(' · '),
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                if (open)
+                  FilledButton.tonal(
+                    onPressed: () async {
+                      await markPaid(context, doc);
+                      await _load();
+                    },
+                    child: const Text('Bezahlt'),
+                  ),
+              ],
+            ),
+            if (doc.dueDate != null && open)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 36),
+                child: Text(
+                  '${_dateFormat.format(doc.dueDate!)} · ${dueLabel(doc.dueDate!)}',
+                  style: isOverdue(doc)
+                      ? TextStyle(color: theme.colorScheme.error)
+                      : null,
+                ),
+              ),
+            if (doc.paymentReminderAt != null &&
+                doc.paymentStatus == PaymentStatus.open)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 36),
+                child: Text(
+                    'Erinnerung am ${_dateFormat.format(doc.paymentReminderAt!)}',
+                    style: theme.textTheme.bodySmall),
+              ),
+            if (doc.paidAt != null && doc.paymentStatus == PaymentStatus.paid)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 36),
+                child: Text('bezahlt am ${_dateFormat.format(doc.paidAt!)}'),
+              ),
+            for (final claim in _claims) ...[
+              const Divider(height: 20),
+              Row(
+                children: [
+                  const Icon(Icons.local_hospital_outlined, size: 20),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(claim.target),
+                        Text(
+                          [
+                            claim.status,
+                            if (claim.submittedAt != null)
+                              'eingereicht ${_dateFormat.format(claim.submittedAt!)}',
+                            if (claim.reimbursedCents != null)
+                              '${formatEuro(claim.reimbursedCents!)} erhalten',
+                          ].join(' · '),
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (nextClaimStatus(claim.status) case final next?)
+                    TextButton(
+                      onPressed: () async {
+                        await advanceClaim(context, claim, next);
+                        await _load();
+                      },
+                      child: Text(claimActionLabel(claim.status)),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -230,6 +341,8 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
           if (doc.reminderAt != null)
             _InfoRow('Erinnerung',
                 '${_dateFormat.format(doc.reminderAt!)} ${doc.reminderNote ?? ''}'),
+          if (doc.paymentStatus != null || _claims.isNotEmpty)
+            _financeCard(doc, theme),
           if (_tags.isNotEmpty) ...[
             const SizedBox(height: 12),
             Wrap(

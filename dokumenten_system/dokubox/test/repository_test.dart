@@ -1,5 +1,6 @@
 import 'package:dokubox/data/database.dart';
 import 'package:dokubox/data/document_repository.dart';
+import 'package:dokubox/data/finance.dart';
 import 'package:dokubox/extract/suggestion_service.dart';
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
@@ -176,6 +177,107 @@ void main() {
 
       await repo.markDestroyed(doc.id);
       expect(await repo.watchCleanupCandidates().first, isEmpty);
+    });
+  });
+
+  group('Rechnungen & Erstattung', () {
+    Future<Document> bill(String number,
+            {String status = PaymentStatus.open,
+            DateTime? due,
+            List<ClaimDraft>? claims}) =>
+        repo.createDocument(
+          docNumber: number,
+          draft: DocumentDraft(
+            title: 'Rechnung $number',
+            storageLocation: 'Box 2026',
+            amountCents: 5000,
+            paymentStatus: status,
+            dueDate: due,
+            paymentReminderAt: due,
+            claims: claims,
+          ),
+          pdfPath: 'pdfs/$number.pdf',
+          pageCount: 1,
+          ocrText: '',
+        );
+
+    test('offene Rechnungen nach Fälligkeit, bezahlt fällt raus', () async {
+      final late = await bill('2026-0001', due: DateTime(2026, 12, 1));
+      final soon = await bill('2026-0002', due: DateTime(2026, 11, 1));
+      await bill('2026-0003', status: PaymentStatus.paid);
+
+      final open = await repo.watchOpenPayments().first;
+      expect(open.map((d) => d.id), [soon.id, late.id]);
+
+      await repo.markPaid(soon.id, at: DateTime(2026, 10, 30));
+      final paid = await repo.getDocument(soon.id);
+      expect(paid!.paymentStatus, PaymentStatus.paid);
+      expect(paid.paidAt, DateTime(2026, 10, 30));
+      expect(paid.paymentReminderAt, isNull);
+      expect((await repo.watchOpenPayments().first).single.id, late.id);
+    });
+
+    test('Einreichungen: anlegen, Status setzen, Filter, Zähler', () async {
+      final doc = await bill('2026-0001', claims: [
+        ClaimDraft(target: 'Beihilfe'),
+        ClaimDraft(target: 'Private Krankenversicherung'),
+      ]);
+      expect(await repo.watchOpenFinanceCount().first, 3); // 1 Rechnung + 2
+
+      final claims = await repo.claimsForDocument(doc.id);
+      final beihilfe = claims.firstWhere((c) => c.target == 'Beihilfe');
+      await repo.setClaimStatus(beihilfe.id, ClaimStatus.submitted,
+          at: DateTime(2026, 10, 1), followUpWeeks: 6);
+      final submitted = (await repo.claimsForDocument(doc.id))
+          .firstWhere((c) => c.id == beihilfe.id);
+      expect(submitted.submittedAt, DateTime(2026, 10, 1));
+      expect(submitted.followUpAt, DateTime(2026, 11, 12, 9));
+
+      final byFilter = await repo
+          .watchDocuments(
+              const DocumentFilter(financeStatus: ClaimStatus.submitted))
+          .first;
+      expect(byFilter.single.id, doc.id);
+
+      await repo.setClaimStatus(beihilfe.id, ClaimStatus.partly,
+          reimbursedCents: 3500);
+      final settled = (await repo.claimsForDocument(doc.id))
+          .firstWhere((c) => c.id == beihilfe.id);
+      expect(settled.reimbursedCents, 3500);
+      expect(settled.followUpAt, isNull);
+      expect((await repo.watchOpenClaims().first).single.claim.target,
+          'Private Krankenversicherung');
+    });
+
+    test('Bearbeiten ersetzt Einreichungen (entfernte per Soft-Delete)',
+        () async {
+      final doc = await bill('2026-0001',
+          claims: [ClaimDraft(target: 'Krankenkasse')]);
+      final kept = ClaimDraft.fromClaim(
+          (await repo.claimsForDocument(doc.id)).single)
+        ..status = ClaimStatus.submitted;
+      await repo.updateDocument(
+        doc.id,
+        DocumentDraft(
+          title: 'Rechnung',
+          storageLocation: 'Box 2026',
+          paymentStatus: PaymentStatus.paid,
+          claims: [kept, ClaimDraft(target: 'Zusatzversicherung')],
+        ),
+      );
+      var claims = await repo.claimsForDocument(doc.id);
+      expect(claims.map((c) => '${c.target}:${c.status}'),
+          ['Krankenkasse:eingereicht', 'Zusatzversicherung:einzureichen']);
+
+      await repo.updateDocument(
+        doc.id,
+        DocumentDraft(title: 'Rechnung', storageLocation: 'Box 2026'),
+      );
+      claims = await repo.claimsForDocument(doc.id);
+      expect(claims, isEmpty);
+      expect(
+          await repo.claimsForDocument(doc.id, includeDeleted: true),
+          hasLength(2));
     });
   });
 }

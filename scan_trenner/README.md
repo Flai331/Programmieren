@@ -16,6 +16,33 @@ Mehrere Leerseiten hintereinander zählen als *ein* Trenner. Leerseiten am Anfan
 werden einfach entfernt. Scannerrand, Lochung und leichtes Rauschen werden ignoriert
 (6 % Rand wird bei der Prüfung ausgelassen).
 
+## Rechnungen im Blick (neu)
+
+Ist **„Rechnungen erkennen“** angehakt, wird jedes fertige Dokument gelesen und – wenn es eine
+Rechnung ist – im Reiter **Rechnungen** eingetragen (gespeichert als `rechnungen.json` im
+Ausgabeordner):
+
+- **Status:** zu bezahlen · wird abgebucht (Lastschrift) · bezahlt (Quittung, Kassenbon) · Gutschrift
+- **Betrag** (Endbetrag, nicht MwSt/Positionen) und **Fälligkeit**: „zahlbar bis …“, „bitte überweisen
+  Sie bis zum …“, „innerhalb von 14 Tagen“ (ab Rechnungsdatum), Skonto → Netto-Ziel, „sofort fällig“
+- **Erinnerung** X Tage vor Fälligkeit: als Hinweisfenster, solange das Programm läuft, und als
+  **Kalendereintrag** (`Ausgabe\Erinnerungen\*.ics`, Doppelklick → Outlook/Windows-Kalender) – der
+  erinnert auch, wenn das Programm zu ist.
+- **Arzt-/Zahnarzt-/Apothekenrechnungen** (GOÄ, GOZ, Liquidation …) werden zum **Einreichen** bei
+  den eingestellten Stellen vorgemerkt: Krankenkasse, Private KV, Beihilfe, Heilfürsorge,
+  Zusatzversicherung, Pflegekasse, BG, Arbeitgeber. Knöpfe *Eingereicht* → *Erstattet…* (mit Betrag,
+  weniger als die Rechnung = „teilweise“) / *Abgelehnt*. Nach X Wochen ohne Erstattung kommt eine
+  Nachfass-Erinnerung.
+- Handwerker-/haushaltsnahe Rechnungen (§ 35a, Arbeitskosten) und Spendenbescheinigungen →
+  „Steuererklärung“.
+
+Die Erkennung braucht Text in der PDF. Am einfachsten im Scanner-Programm **„durchsuchbare PDF“
+(OCR)** einstellen. Alternativ [Tesseract](https://github.com/UB-Mannheim/tesseract/wiki) mit
+deutschem Sprachpaket installieren – dann liest Scan-Trenner reine Bild-Scans selbst.
+Einzelne PDFs (z. B. E-Mail-Rechnungen) gehen über **„Datei als Rechnung aufnehmen…“**.
+
+Die Regeln sind dieselben wie in der DokuBox-App (`dokumenten_system/dokubox`).
+
 ## Starten
 
 - **Windows mit Python:** `starten.bat` doppelklicken (installiert Abhängigkeiten selbst).
@@ -47,6 +74,9 @@ python scan_trenner_cli.py C:\Scans\Eingang --ueberwachen
 ```
 
 Weitere Optionen: `--nicht-trennen`, `--leerseiten-behalten`, `--schwelle 0.5`, `-o Ausgabe`.
+
+Rechnungen: `--rechnungen` (erkennen + Kalendereintrag), `--stellen "Beihilfe,Heilfürsorge"`,
+`--vorlauf 3`. Offene Posten anzeigen: `python scan_trenner_cli.py C:\Scans\Eingang --offene`.
 
 ## Hinweise
 
