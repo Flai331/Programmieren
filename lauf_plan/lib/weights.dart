@@ -55,6 +55,9 @@ class WeightLog {
   Future<void> _save(Map<String, List<WeightEntry>> all) => p.setString(_key,
       jsonEncode({for (final e in all.entries) e.key: [for (final w in e.value) w.toJson()]}));
 
+  /// Alle Übungen mit Einträgen.
+  List<String> get names => _all().keys.toList()..sort();
+
   /// Neueste zuerst.
   List<WeightEntry> history(String name) => [...?_all()[name]]..sort((a, b) {
       final c = b.date.compareTo(a.date);

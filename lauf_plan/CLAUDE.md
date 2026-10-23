@@ -16,6 +16,7 @@ Persönlicher 4-Wochen-Trainingsplan (Laufen + Gym), Start Do 01.10.2026. Schwer
 - Plan bearbeiten (`lib/plan_edit.dart`): Plan = Bausteine (`templateKeyFor`: legA, upper, legB, base0-3, quality0-3, long0-3, rest); Änderungen je Baustein als JSON in `tpl_<key>`, geladen in `planOverrides` (Store-Konstruktor), gelten für alle Tage des Bausteins; Übungen hinzufügen/bearbeiten/löschen/sortieren, Timer-Art, Sätze, Pausen, Wechselpause, Strichfigur (`Exercise.anim`) und Video (`Exercise.video`) wählbar; „Auf Original zurücksetzen“. Einstieg: Stift-Symbol auf der Startseite und in jeder Einheit. Nächste Stufe geplant: KI-Suche für neue Übungen (braucht Server + API-Schlüssel)
 - Gewichte (`lib/weights.dart`): bei Kraft-Bausteinen (legA, legB, upper, außer Aufwärmen) pro Übung Gewicht + Notiz je Plan-Tag eintragen (JSON `weight_log`, Schlüssel = Übungsname); „Letztes Mal“ steht unter der Übung und im Timer, Eingabe vorbelegt, nach dem Übungs-Timer automatische Abfrage, Verlauf im Eingabefenster
 - Läufe (`lib/run_log.dart`): bei Lauf-Bausteinen (base*, quality*, long*) pro Abschnitt Strecke (km), Zeit, Zeiten pro Wiederholung (bei manuellen Runden: Intervalle, Tempo-km) und Notiz je Plan-Tag (JSON `run_log`); Tempo /km und Ø je Wiederholung berechnet; „Letztes Mal“ unter dem Abschnitt und im Timer, nach Intervall-/Tempo-Timer automatische Abfrage
+- Protokoll (`lib/diary.dart`): pro Einheit Befinden (1–5), Ø/Max-Puls, Beschwerden Achillessehne/Knie (0–10) und Notiz (JSON `diary`, Schlüssel = Plan-Tag); Abfrage direkt nach „Einheit abschließen“ (überspringbar) und als Karte in der Einheit. Startseite → Herz-Symbol: Bericht (`buildReport`: Überblick, Einheiten, Gewichte/Zusatzgewicht, Läufe, freie Einheiten) zum Kopieren oder Teilen als .txt – der Nutzer gibt ihn Claude, um den Plan anzupassen
 - UI-Sprache: Deutsch (auch Datums-/Uhrzeitauswahl via `flutter_localizations`)
 
 ## Struktur
@@ -23,6 +24,7 @@ Persönlicher 4-Wochen-Trainingsplan (Laufen + Gym), Start Do 01.10.2026. Schwer
 - `lib/animations.dart` – Posen und Painter; Zuordnung über den Übungsnamen (`exerciseAnims`)
 - `lib/device_calendar.dart` – Kanal `lauf_plan/calendar` zu `android/app/src/main/kotlin/de/klaas/lauf_plan/MainActivity.kt` (eingecheckt; Workflow ergänzt die Kalender-Berechtigungen im Manifest)
 - `lib/calendar.dart` – .ics erzeugen (RFC 5545, Ortszeit ohne Zeitzone) und über `share_plus` teilen
+- `lib/diary.dart` – Protokoll (Befinden, Puls, Beschwerden) und Bericht/Export
 - `lib/free_sessions.dart` – freie Einheiten: Modell, Speicher (JSON in `free_sessions`), Bearbeiten-Seite
 - `lib/videos.dart` – Erklärvideos als YouTube-Suche oder fester Link (Tibialis Raises: vom Nutzer gewähltes Short), nur Bein-Übungen (`exerciseVideos`, öffnet per `url_launcher`)
 - Liegt als Ordner `lauf_plan/` im Repo `Flai331/Programmieren` (wie der Parkplatz-Merker).

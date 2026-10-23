@@ -74,6 +74,9 @@ class RunLog {
   Future<void> _save(Map<String, List<RunEntry>> all) => p.setString(_key,
       jsonEncode({for (final e in all.entries) e.key: [for (final r in e.value) r.toJson()]}));
 
+  /// Alle Abschnitte mit Einträgen.
+  List<String> get names => _all().keys.toList()..sort();
+
   /// Neueste zuerst.
   List<RunEntry> history(String name) => [...?_all()[name]]..sort((a, b) {
       final c = b.date.compareTo(a.date);

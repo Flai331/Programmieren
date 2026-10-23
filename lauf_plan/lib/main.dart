@@ -15,6 +15,7 @@ import 'plan_edit.dart';
 import 'run_log.dart';
 import 'weights.dart';
 import 'videos.dart';
+import 'diary.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -313,6 +314,7 @@ class Store {
   FreeStore get free => FreeStore(p);
   WeightLog get weights => WeightLog(p);
   RunLog get runs => RunLog(p);
+  Diary get diary => Diary(p);
 
   /// Zuletzt gewählte Uhrzeit für den Kalender-Export.
   int get exportStart => p.getInt('export_start') ?? 18 * 60;
@@ -479,6 +481,11 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: const Icon(Icons.event_available),
               tooltip: 'Alle Einheiten in den Kalender',
               onPressed: _exportAll),
+          IconButton(
+              icon: const Icon(Icons.monitor_heart_outlined),
+              tooltip: 'Protokoll / Auswertung',
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => ReportScreen(store: widget.store)))),
           IconButton(
               icon: const Icon(Icons.edit_note),
               tooltip: 'Plan bearbeiten',
@@ -954,6 +961,14 @@ class _SessionScreenState extends State<SessionScreen> {
     }
   }
 
+  Future<void> _diary() async {
+    final pd = widget.store.schedule()[widget.day];
+    if (await showDiaryDialog(context, widget.store.diary, s.title, widget.day, pd.date) &&
+        mounted) {
+      setState(() {});
+    }
+  }
+
   Future<void> _run(Exercise e) async {
     final pd = widget.store.schedule()[widget.day];
     if (await showRunDialog(context, widget.store.runs, e, widget.day, date: pd.date) &&
@@ -1061,6 +1076,10 @@ class _SessionScreenState extends State<SessionScreen> {
     await widget.store.setDone(widget.day, v, on: on);
     if (v && sw.isRunning) _toggleStopwatch();
     setState(() => done = v);
+    // Gleich nach dem Training: Befinden und Puls festhalten (überspringbar).
+    if (v && mounted && !s.isRest && widget.store.diary.forDay(widget.day) == null) {
+      await _diary();
+    }
     if (v && mounted) Navigator.pop(context);
   }
 
@@ -1175,6 +1194,8 @@ class _SessionScreenState extends State<SessionScreen> {
                 title: Text(h, style: TextStyle(color: cs.onTertiaryContainer)),
               ),
             ),
+          if (!s.isRest)
+            DiaryInfo(entry: widget.store.diary.forDay(widget.day), onTap: _diary),
           const SizedBox(height: 8),
           for (var i = 0; i < s.exercises.length; i++) ...[
             Card(
