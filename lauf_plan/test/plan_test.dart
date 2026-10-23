@@ -67,7 +67,7 @@ void main() {
       }
       expect(ex.last.restAfter, 0, reason: ex.last.name);
     }
-    for (final run in [...qualityRuns, ...longRuns, restDay]) {
+    for (final run in [...baseRuns, ...qualityRuns, ...longRuns, restDay]) {
       for (final e in run.exercises) {
         expect(e.restAfter, 0);
       }
@@ -376,13 +376,25 @@ void main() {
     expect(picked, start);
   });
 
+  test('Plan-Schwerpunkt: Beine + Grundlagenausdauer, Oberkörper nur 1× pro Woche', () {
+    for (var w = 0; w < 4; w++) {
+      final keys = [for (var i = 0; i < 7; i++) templateKeyFor(w * 7 + i)];
+      expect(keys.where((k) => k == 'upper').length, 1);
+      expect(keys.where((k) => k == 'legA' || k == 'legB').length, 2);
+      expect(keys.where((k) => k.startsWith('base') || k.startsWith('long')).length, 2);
+      expect(keys.where((k) => k.startsWith('quality')).length, 1); // Intervalle/Berg nur 1×
+    }
+    final bergsprints = qualityRuns[1].exercises.firstWhere((e) => e.name == 'Bergsprints');
+    expect(bergsprints.timer!.rounds, 4);
+  });
+
   test('Oberkörper: gewichtete Dips und Klimmzüge statt EMOM', () {
     final names = upperBody.exercises.map((e) => e.name).toList();
     expect(names, containsAll(['Dips (gewichtet)', 'Klimmzüge (gewichtet)']));
     expect(names.where((n) => n.contains('EMOM')), isEmpty);
     for (final n in ['Dips (gewichtet)', 'Klimmzüge (gewichtet)']) {
       final e = upperBody.exercises.firstWhere((x) => x.name == n);
-      expect(e.timer!.rounds, 4);
+      expect(e.timer!.rounds, 3);
       expect(e.timer!.work, 0); // manuelle Sätze mit Pausen-Countdown
       expect(exerciseAnims, contains(n));
     }
@@ -391,12 +403,13 @@ void main() {
   group('Plan bearbeiten', () {
     test('Bausteine passen zur bisherigen Reihenfolge', () {
       expect(templateKeyFor(0), 'legA');
-      expect(templateKeyFor(1), 'upper');
-      expect(templateKeyFor(4), 'upper');
-      expect(templateKeyFor(9), 'quality1');
+      expect(templateKeyFor(1), 'base0');
+      expect(templateKeyFor(2), 'upper');
+      expect(templateKeyFor(3), 'legB');
+      expect(templateKeyFor(11), 'quality1');
       expect(templateKeyFor(26), 'long3');
       expect(templateKeyFor(6), 'rest');
-      expect(sessionFor(9).title, 'Lauf: Bergsprints');
+      expect(sessionFor(11).title, 'Lauf: Bergsprints');
     });
 
     test('JSON hin und zurück', () {
@@ -418,7 +431,7 @@ void main() {
     });
 
     test('Speichern gilt für alle Tage des Bausteins, Zurücksetzen stellt her', () async {
-      SharedPreferences.setMockInitialValues({'ex_1_0': true, 'ex_4_2': true, 'done_8': true, 'ex_8_0': true});
+      SharedPreferences.setMockInitialValues({'ex_2_0': true, 'ex_9_2': true, 'done_16': true, 'ex_16_0': true});
       final prefs = await SharedPreferences.getInstance();
       final store = Store(prefs);
       final changed = Session('Oberkörper neu', upperBody.icon, 50, [
@@ -426,22 +439,22 @@ void main() {
         ...upperBody.exercises,
       ]);
       await saveTemplate(store, 'upper', changed);
-      for (final d in [1, 4, 8, 11, 15, 18, 22, 25]) {
+      for (final d in [2, 9, 16, 23]) {
         expect(sessionFor(d).title, 'Oberkörper neu', reason: 'Tag $d');
         expect(sessionFor(d).exercises.first.name, 'Bankdrücken');
       }
       expect(sessionFor(0).title, legA.title);
       // Übungs-Haken offener Tage zurückgesetzt, erledigte bleiben.
-      expect(store.exDone(1, 0), isFalse);
-      expect(store.exDone(4, 2), isFalse);
-      expect(store.exDone(8, 0), isTrue);
+      expect(store.exDone(2, 0), isFalse);
+      expect(store.exDone(9, 2), isFalse);
+      expect(store.exDone(16, 0), isTrue);
       // Nach Neustart (neuer Store) weiterhin geändert.
       planOverrides.clear();
       Store(prefs);
-      expect(sessionFor(1).exercises.first.name, 'Bankdrücken');
-      expect(sessionFor(1).exercises.first.timer!.rounds, 4);
+      expect(sessionFor(2).exercises.first.name, 'Bankdrücken');
+      expect(sessionFor(2).exercises.first.timer!.rounds, 4);
       await saveTemplate(store, 'upper', null);
-      expect(sessionFor(1).title, upperBody.title);
+      expect(sessionFor(2).title, upperBody.title);
       expect(prefs.getString('tpl_upper'), isNull);
     });
 
@@ -528,8 +541,9 @@ void main() {
     test('Nur bei Kraft-Einheiten, nicht beim Aufwärmen', () {
       expect(tracksWeight(0, legA.exercises[1]), isTrue);
       expect(tracksWeight(0, legA.exercises[0]), isFalse); // Aufwärmen
-      expect(tracksWeight(2, qualityRuns[0].exercises[0]), isFalse);
-      expect(tracksWeight(1, upperBody.exercises[1]), isTrue);
+      expect(tracksWeight(4, qualityRuns[0].exercises[0]), isFalse);
+      expect(tracksWeight(1, baseRuns[0].exercises[0]), isFalse);
+      expect(tracksWeight(2, upperBody.exercises[1]), isTrue);
     });
 
     testWidgets('Einheit zeigt „Letztes Mal“ und Eingabe', (tester) async {
@@ -584,13 +598,12 @@ void main() {
     });
 
     test('Nur bei Lauf-Einheiten, Wiederholungszeiten bei Intervallen/Tempo', () {
-      expect(tracksRun(2, qualityRuns[0].exercises[0]), isTrue);
+      expect(tracksRun(1, baseRuns[0].exercises[0]), isTrue);
+      expect(tracksRun(4, qualityRuns[0].exercises[0]), isTrue);
       expect(tracksRun(5, longRuns[0].exercises[0]), isTrue);
       expect(tracksRun(0, legA.exercises[1]), isFalse);
-      final intervals = qualityRuns[2].exercises.firstWhere((e) => e.name == 'Intervalle');
-      final tempo = qualityRuns[3].exercises.firstWhere((e) => e.name == 'Tempo');
+      final intervals = qualityRuns[3].exercises.firstWhere((e) => e.name == 'Intervalle');
       expect(hasSplits(intervals), isTrue);
-      expect(hasSplits(tempo), isTrue);
       expect(hasSplits(qualityRuns[0].exercises[0]), isFalse); // Locker laufen
     });
 

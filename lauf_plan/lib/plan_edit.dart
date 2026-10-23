@@ -12,6 +12,7 @@ import 'main.dart';
 
 const templateKeys = [
   'legA', 'upper', 'legB',
+  'base0', 'base1', 'base2', 'base3',
   'quality0', 'quality1', 'quality2', 'quality3',
   'long0', 'long1', 'long2', 'long3',
   'rest',
@@ -24,12 +25,13 @@ String templateKeyFor(int day) {
     case 0:
       return 'legA';
     case 1:
-    case 4:
-      return 'upper';
+      return 'base$week';
     case 2:
-      return 'quality$week';
+      return 'upper';
     case 3:
       return 'legB';
+    case 4:
+      return 'quality$week';
     case 5:
       return 'long$week';
     default:
@@ -38,6 +40,7 @@ String templateKeyFor(int day) {
 }
 
 Session defaultTemplate(String key) {
+  if (key.startsWith('base')) return baseRuns[int.parse(key.substring(4))];
   if (key.startsWith('quality')) return qualityRuns[int.parse(key.substring(7))];
   if (key.startsWith('long')) return longRuns[int.parse(key.substring(4))];
   return switch (key) {
@@ -49,6 +52,7 @@ Session defaultTemplate(String key) {
 }
 
 String templateLabel(String key) {
+  if (key.startsWith('base')) return 'Grundlagenlauf Woche ${int.parse(key.substring(4)) + 1}';
   if (key.startsWith('quality')) return 'Lauf Woche ${int.parse(key.substring(7)) + 1}';
   if (key.startsWith('long')) return 'Langer Lauf Woche ${int.parse(key.substring(4)) + 1}';
   return switch (key) {
