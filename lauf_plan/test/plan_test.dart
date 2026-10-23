@@ -644,7 +644,8 @@ void main() {
     await tester.pumpWidget(TrainingApp(store: Store(prefs)));
     await tester.pumpAndSettle();
     expect(find.text('Laufplan'), findsOneWidget);
-    expect(find.textContaining('Woche 1'), findsOneWidget);
+    expect(find.text('Woche 1: Grundlagen aufbauen'), findsOneWidget);
+    expect(find.text('Nächste Einheit · 1 von 48'), findsOneWidget);
     expect(find.byType(Card), findsWidgets);
   });
 
