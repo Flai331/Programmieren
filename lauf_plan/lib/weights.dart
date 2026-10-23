@@ -55,6 +55,15 @@ class WeightLog {
   Future<void> _save(Map<String, List<WeightEntry>> all) => p.setString(_key,
       jsonEncode({for (final e in all.entries) e.key: [for (final w in e.value) w.toJson()]}));
 
+  /// Früheren Durchgang ablegen: Plan-Tage ≥ 0 rutschen um [shift] ins Negative.
+  Future<void> archive(int shift) async => _save({
+        for (final e in _all().entries)
+          e.key: [
+            for (final w in e.value)
+              w.day >= 0 ? WeightEntry(w.day - shift, w.date, w.kg, w.note) : w
+          ]
+      });
+
   /// Alle Übungen mit Einträgen.
   List<String> get names => _all().keys.toList()..sort();
 

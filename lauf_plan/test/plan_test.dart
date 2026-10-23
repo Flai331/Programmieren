@@ -17,7 +17,10 @@ import 'package:lauf_plan/weights.dart';
 import 'package:lauf_plan/run_log.dart';
 
 void main() {
-  setUp(planOverrides.clear);
+  setUp(() {
+    planOverrides.clear();
+    planStart = defaultPlanStart;
+  });
 
   test('Plan startet am Donnerstag, 1.10.2026', () {
     expect(planStart.weekday, DateTime.thursday);
@@ -643,6 +646,44 @@ void main() {
     expect(find.text('Laufplan'), findsOneWidget);
     expect(find.textContaining('Woche 1'), findsOneWidget);
     expect(find.byType(Card), findsWidgets);
+  });
+
+  group('Der Reihe nach', () {
+    testWidgets('Startseite zeigt die erste offene Einheit ohne Datum', (tester) async {
+      SharedPreferences.setMockInitialValues({'done_0': true, 'doneOn_0': '2026-10-01'});
+      final store = Store(await SharedPreferences.getInstance());
+      await tester.pumpWidget(MaterialApp(home: HomeScreen(store: store)));
+      await tester.pumpAndSettle();
+      // Tag 0 erledigt, auch wenn Wochen vergangen sind: Tag 1 ist die nächste.
+      expect(find.text('Nächste Einheit · 2 von 48'), findsOneWidget);
+      expect(find.textContaining('Verschoben'), findsNothing);
+    });
+
+    test('Neustart ab heute: Fortschritt zurück, Verlauf bleibt als früherer Durchgang', () async {
+      SharedPreferences.setMockInitialValues(
+          {'done_0': true, 'doneOn_0': '2026-10-01', 'ex_0_1': true});
+      final prefs = await SharedPreferences.getInstance();
+      final store = Store(prefs);
+      await store.weights.set('Kniebeuge (Langhantel)', WeightEntry(7, dateOf(7), 60));
+      await store.runs.set('Locker laufen', RunEntry(5, dateOf(5), km: 8, secs: 2880));
+      await store.diary.set(DayEntry(0, dateOf(0), feeling: 4));
+      final from = DateTime.utc(2026, 11, 2);
+      await store.restartPlan(from);
+      expect(planStart, from);
+      expect(Store(prefs).done(0), isFalse);
+      expect(store.exDone(0, 1), isFalse);
+      // Neuer Durchgang beginnt leer, der alte bleibt sichtbar (Letztes Mal).
+      expect(store.weights.forDay('Kniebeuge (Langhantel)', 7), isNull);
+      expect(store.weights.lastBefore('Kniebeuge (Langhantel)', 7)!.kg, 60);
+      expect(store.runs.forDay('Locker laufen', 5), isNull);
+      expect(store.runs.history('Locker laufen').single.km, 8);
+      expect(store.diary.forDay(0), isNull);
+      expect(buildReport(store, today: from), contains('Früherer Durchgang'));
+      // Zweiter Neustart kollidiert nicht mit dem ersten.
+      await store.weights.set('Kniebeuge (Langhantel)', WeightEntry(7, dateOf(7), 65));
+      await store.restartPlan(from);
+      expect(store.weights.history('Kniebeuge (Langhantel)').map((w) => w.kg), [65, 60]);
+    });
   });
 
   group('Protokoll', () {

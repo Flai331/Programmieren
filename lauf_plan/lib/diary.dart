@@ -81,6 +81,20 @@ class Diary {
   /// Älteste zuerst.
   List<DayEntry> all() => _all().values.toList()..sort((a, b) => a.day.compareTo(b.day));
 
+  /// Früheren Durchgang ablegen: Plan-Tage ≥ 0 rutschen um [shift] ins Negative.
+  Future<void> archive(int shift) async => _save({
+        for (final e in _all().values)
+          if (e.day >= 0)
+            e.day - shift: DayEntry(e.day - shift, e.date,
+                feeling: e.feeling,
+                pulseAvg: e.pulseAvg,
+                pulseMax: e.pulseMax,
+                pain: e.pain,
+                note: e.note)
+          else
+            e.day: e
+      });
+
   Future<void> set(DayEntry e) async {
     final all = _all()..[e.day] = e;
     await _save(all);
@@ -385,20 +399,12 @@ String buildReport(Store store, {DateTime? today}) {
   final training = [for (var d = 0; d < planDays; d++) if (!sessionFor(d).isRest) d];
   final doneDays = training.where(store.done).toList();
   b.writeln('# Laufplan – Trainingsprotokoll');
-  b.writeln('Stand: ${dateLabel(now)}${now.year} · Plan ab ${dateLabel(planStart)}${planStart.year}');
+  b.writeln('Stand: ${dateLabel(now)}${now.year} · Plan gestartet ${dateLabel(planStart)}${planStart.year} (der Reihe nach, ohne feste Termine)');
   b.writeln('Schwerpunkt: Grundlagenausdauer + Beine, Intervalle/Bergsprints 1×/Woche kurz, '
       'Oberkörper nur Erhalt 1×/Woche.');
   b.writeln();
   b.writeln('## Überblick');
   b.writeln('- Erledigt: ${doneDays.length} von ${training.length} Trainingseinheiten');
-  final missed = [
-    for (final d in training)
-      if (!store.done(d) && plan[d].shiftDays > 0) d
-  ];
-  if (missed.isNotEmpty) {
-    b.writeln('- Verschoben/offen nachgerückt: ${missed.length} '
-        '(${missed.map((d) => sessionFor(d).title).join(', ')})');
-  }
   final entries = diary.all();
   final feelings = [for (final e in entries) if (e.feeling != null) e.feeling!];
   if (feelings.isNotEmpty) {
@@ -426,6 +432,15 @@ String buildReport(Store store, {DateTime? today}) {
         '${e == null ? '' : ' · ${diarySummary(e)}'}');
   }
   b.writeln();
+
+  final earlier = entries.where((e) => e.day < 0).toList();
+  if (earlier.isNotEmpty) {
+    b.writeln('## Früherer Durchgang (vor dem Neustart)');
+    for (final e in earlier) {
+      b.writeln('- ${dateLabel(e.date)}: ${diarySummary(e)}');
+    }
+    b.writeln();
+  }
 
   final wlog = store.weights;
   if (wlog.names.isNotEmpty) {
