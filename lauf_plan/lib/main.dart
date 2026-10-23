@@ -58,7 +58,7 @@ const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 const weekdaysLong = [
   'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'
 ];
-const weekFocus = ['Gewöhnung', 'Bergsprints', 'Intervalle', 'Tempo'];
+const weekFocus = ['Grundlagen aufbauen', 'Bergsprints (kurz)', 'Grundlagen ausbauen', 'Intervalle (kurz)'];
 
 class TimerConfig {
   /// Sekunden aktiv. 0 = manuell (Satz/Lauf selbst beenden, dann Pause).
@@ -109,19 +109,20 @@ class Session {
       {this.hint, this.isRest = false});
 }
 
-const upperBody = Session('Oberkörper', Icons.fitness_center, 45, [
+const upperBody = Session('Oberkörper (Erhalt)', Icons.fitness_center, 35, [
   Exercise('Aufwärmen', '5 Min. Rudern locker, Schultern mobilisieren',
       TimerConfig(work: 300, workLabel: 'Aufwärmen'), 60),
   Exercise('Dips (gewichtet)',
-      '4 × 6–8 mit Zusatzgewicht (Gürtel oder KH zwischen den Füßen), 2 Wdh. im Tank',
-      TimerConfig(rest: 120, rounds: 4), 120),
+      '3 × 6–8 mit Zusatzgewicht (Gürtel oder KH zwischen den Füßen), 2–3 Wdh. im Tank',
+      TimerConfig(rest: 120, rounds: 3), 120),
   Exercise('Klimmzüge (gewichtet)',
-      '4 × 5–6 mit Zusatzgewicht (Gürtel oder KH zwischen den Füßen), 2 Wdh. im Tank',
-      TimerConfig(rest: 150, rounds: 4), 120),
-  Exercise('Toes to Bar', '3 × 10–12', TimerConfig(rest: 90, rounds: 3), 90),
-  Exercise('Liegestütze', '40 breit, 20 eng, 15 Diamond',
-      TimerConfig(rest: 60, rounds: 3, workLabel: 'Variante')),
-]);
+      '3 × 5–6 mit Zusatzgewicht (Gürtel oder KH zwischen den Füßen), 2–3 Wdh. im Tank',
+      TimerConfig(rest: 150, rounds: 3), 120),
+  Exercise('Toes to Bar', '2 × 10–12', TimerConfig(rest: 90, rounds: 2), 90),
+  Exercise('Liegestütze', '2 Sätze: 40 breit, 20 eng',
+      TimerConfig(rest: 60, rounds: 2, workLabel: 'Satz')),
+], hint: 'Nur Erhalt: Gewicht halten, nicht steigern. Das reicht, um den Oberkörper '
+    'zu behalten – die Kraft und Energie gehören den Beinen und dem Laufen.');
 
 const legA = Session('Beine A – Kraft', Icons.fitness_center, 60, [
   Exercise('Aufwärmen', '8 Min. Rudern + Glute Bridges, Ausfallschritte',
@@ -151,6 +152,20 @@ const legB = Session('Beine B – Stabilität', Icons.accessibility_new, 50, [
       TimerConfig(rest: 60, rounds: 3, workLabel: 'Runde')),
 ]);
 
+// Grundlagenausdauer: der Kern des Plans, locker im Plaudertempo.
+const _baseHint = 'Plaudertempo: du kannst in ganzen Sätzen sprechen. Lieber zu langsam als zu schnell.';
+const baseRuns = [
+  Session('Grundlagenlauf', Icons.directions_run, 40,
+      [Exercise('Locker laufen', '6 km im Plaudertempo')], hint: _baseHint),
+  Session('Grundlagenlauf', Icons.directions_run, 45,
+      [Exercise('Locker laufen', '7 km im Plaudertempo')], hint: _baseHint),
+  Session('Grundlagenlauf', Icons.directions_run, 45,
+      [Exercise('Locker laufen', '7 km im Plaudertempo')], hint: _baseHint),
+  Session('Grundlagenlauf', Icons.directions_run, 50,
+      [Exercise('Locker laufen', '8 km im Plaudertempo')], hint: _baseHint),
+];
+
+// Eine kurze, lockere Tempo-Einheit pro Woche: nur ein Reiz zur Abwechslung.
 const qualityRuns = [
   Session('Lauf: Steigerungen', Icons.directions_run, 45, [
     Exercise('Locker laufen', '6 km im Plaudertempo'),
@@ -159,36 +174,36 @@ const qualityRuns = [
         TimerConfig(work: 20, rest: 60, rounds: 6, workLabel: 'Steigerung')),
   ]),
   Session('Lauf: Bergsprints', Icons.terrain, 45, [
-    Exercise('Einlaufen', '2 km locker'),
-    Exercise('Bergsprints', '6 × 10 Sek. bergauf (80–90 %), zurückgehen als Pause',
-        TimerConfig(work: 10, rest: 80, rounds: 6, workLabel: 'Sprint')),
-    Exercise('Locker laufen', '3–4 km'),
+    Exercise('Einlaufen', '3 km locker'),
+    Exercise('Bergsprints', '4 × 10 Sek. bergauf (80–90 %), zurückgehen als Pause',
+        TimerConfig(work: 10, rest: 80, rounds: 4, workLabel: 'Sprint')),
+    Exercise('Locker laufen', '3 km'),
   ], hint: 'Achillessehne über 3/10? Dann flache Steigerungen statt Bergsprints.'),
-  Session('Lauf: Intervalle', Icons.speed, 40, [
-    Exercise('Einlaufen', '2 km locker'),
-    Exercise('Intervalle',
-        '6 × 400 m schnell, 90 Sek. traben. Die letzte so schnell wie die erste.',
-        TimerConfig(rest: 90, rounds: 6, workLabel: '400 m')),
-    Exercise('Auslaufen', '1–2 km locker'),
+  Session('Lauf: Steigerungen', Icons.directions_run, 50, [
+    Exercise('Locker laufen', '7 km im Plaudertempo'),
+    Exercise('Steigerungen',
+        '6 × 20 Sek.: langsam anlaufen, auf ca. 80 % steigern, 60 Sek. traben',
+        TimerConfig(work: 20, rest: 60, rounds: 6, workLabel: 'Steigerung')),
   ]),
-  Session('Lauf: Tempo', Icons.timer, 45, [
-    Exercise('Einlaufen', '2 km locker'),
-    Exercise('Tempo', '4 × 1 km zügig (nur einzelne Wörter möglich), 2 Min. traben',
-        TimerConfig(rest: 120, rounds: 4, workLabel: 'Kilometer')),
-    Exercise('Auslaufen', '1–2 km locker'),
+  Session('Lauf: Intervalle', Icons.speed, 45, [
+    Exercise('Einlaufen', '3 km locker'),
+    Exercise('Intervalle',
+        '4 × 400 m schnell, 90 Sek. traben. Die letzte so schnell wie die erste.',
+        TimerConfig(rest: 90, rounds: 4, workLabel: '400 m')),
+    Exercise('Auslaufen', '2 km locker'),
   ]),
 ];
 
 const _longHint = 'Nur steigern, wenn das Knie in der Woche davor ruhig war.';
 const longRuns = [
-  Session('Langer Lauf', Icons.route, 50,
-      [Exercise('Locker laufen', '8 km im Plaudertempo')], hint: _longHint),
-  Session('Langer Lauf', Icons.route, 55,
-      [Exercise('Locker laufen', '9 km im Plaudertempo')], hint: _longHint),
   Session('Langer Lauf', Icons.route, 55,
       [Exercise('Locker laufen', '9 km im Plaudertempo')], hint: _longHint),
   Session('Langer Lauf', Icons.route, 60,
       [Exercise('Locker laufen', '10 km im Plaudertempo')], hint: _longHint),
+  Session('Langer Lauf', Icons.route, 60,
+      [Exercise('Locker laufen', '10 km im Plaudertempo')], hint: _longHint),
+  Session('Langer Lauf', Icons.route, 65,
+      [Exercise('Locker laufen', '11 km im Plaudertempo')], hint: _longHint),
 ];
 
 const restDay = Session('Ruhetag', Icons.self_improvement, 15, [

@@ -107,7 +107,7 @@ class RunLog {
 /// Alle Abschnitte der Lauf-Bausteine (Läufe je Woche, lange Läufe).
 bool tracksRun(int day, Exercise e) {
   final k = templateKeyFor(day);
-  return k.startsWith('quality') || k.startsWith('long');
+  return k.startsWith('base') || k.startsWith('quality') || k.startsWith('long');
 }
 
 /// Wiederholungen mit eigener Zeit: manuell beendete Runden (400 m, Tempo-km).
