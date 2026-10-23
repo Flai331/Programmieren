@@ -74,6 +74,18 @@ class RunLog {
   Future<void> _save(Map<String, List<RunEntry>> all) => p.setString(_key,
       jsonEncode({for (final e in all.entries) e.key: [for (final r in e.value) r.toJson()]}));
 
+  /// Früheren Durchgang ablegen: Plan-Tage ≥ 0 rutschen um [shift] ins Negative.
+  Future<void> archive(int shift) async => _save({
+        for (final e in _all().entries)
+          e.key: [
+            for (final r in e.value)
+              r.day >= 0
+                  ? RunEntry(r.day - shift, r.date,
+                      km: r.km, secs: r.secs, splits: r.splits, note: r.note)
+                  : r
+          ]
+      });
+
   /// Alle Abschnitte mit Einträgen.
   List<String> get names => _all().keys.toList()..sort();
 

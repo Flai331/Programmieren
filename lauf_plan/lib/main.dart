@@ -53,7 +53,11 @@ class StartupErrorApp extends StatelessWidget {
 // Plan-Daten
 // ---------------------------------------------------------------------------
 
-final DateTime planStart = DateTime.utc(2026, 10, 1); // Donnerstag
+final DateTime defaultPlanStart = DateTime.utc(2026, 10, 1);
+
+/// Tag 1 des Plans. Der Plan läuft der Reihe nach; das Datum dient nur noch als
+/// Zähler für Kalender und Tagebuch. „Plan ab heute neu starten“ setzt es neu.
+DateTime planStart = defaultPlanStart;
 const int planDays = 56; // zwei Blöcke à 4 Wochen
 const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 const weekdaysLong = [
@@ -335,7 +339,7 @@ const rules = [
   'Achillessehne nicht stark dehnen.',
   'Woche 1: Gewichte bei den Beinen bewusst leicht wählen.',
   'Locker = du kannst dich unterhalten. Zügig = nur einzelne Wörter. Schnell = fast Vollgas, aber gleichmäßig.',
-  'Fällt ein Tag aus: Einheit einen Tag schieben, der Mittwoch ist Puffer.',
+  'Der Plan läuft der Reihe nach, ohne feste Termine: Verpasst du eine Einheit, machst du einfach die nächste offene – nichts wird nachgeholt oder gestapelt.',
 ];
 
 // ---------------------------------------------------------------------------
@@ -346,6 +350,27 @@ class Store {
   final SharedPreferences p;
   Store(this.p) {
     loadPlanOverrides(p);
+    planStart = parseIsoDate(p.getString('plan_start')) ?? defaultPlanStart;
+  }
+
+  /// Plan ab [from] neu beginnen. Erledigt-Haken und Übungs-Haken werden
+  /// zurückgesetzt; Gewichte, Läufe und Protokoll bleiben als früherer Durchgang
+  /// erhalten (Plan-Tag wird um 1000 je Durchgang nach unten verschoben).
+  Future<void> restartPlan(DateTime from) async {
+    final gen = (p.getInt('plan_gen') ?? 0) + 1;
+    await p.setInt('plan_gen', gen);
+    await weights.archive(1000 * gen);
+    await runs.archive(1000 * gen);
+    await diary.archive(1000 * gen);
+    for (var d = 0; d < planDays; d++) {
+      await p.remove('done_$d');
+      await p.remove('doneOn_$d');
+      for (var i = 0; i < 40; i++) {
+        await p.remove('ex_${d}_$i');
+      }
+    }
+    await p.setString('plan_start', isoDate(from));
+    planStart = from;
   }
   bool done(int d) => p.getBool('done_$d') ?? false;
   DateTime? doneOn(int d) => parseIsoDate(p.getString('doneOn_$d'));
@@ -424,17 +449,6 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {});
   }
 
-  Future<void> _backfill(int slot, DateTime due) async {
-    final on = await pickDoneDate(context, due: due);
-    if (on == null) return;
-    await widget.store.setDone(slot, true, on: on);
-    if (!mounted) return;
-    setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${sessionFor(slot).title} für ${dateLabel(on)} abgehakt – '
-            'der Plan ist angepasst.')));
-  }
-
   Future<void> _openFree([FreeSession? f]) async {
     await Navigator.push(
         context,
@@ -460,6 +474,25 @@ class _HomeScreenState extends State<HomeScreen> {
         fileName: 'laufplan-einheiten.ics',
         info: '${open.length} offene Einheiten ab heute. Verschiebt sich der Plan, '
             'einfach erneut eintragen – die Termine werden aktualisiert.');
+  }
+
+  Future<void> _restart() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Plan ab heute neu starten?'),
+        content: const Text('Alle Einheiten stehen wieder auf „offen“ und werden der Reihe '
+            'nach abgearbeitet – ohne feste Termine. Gewichte, Läufe und Protokoll '
+            'bleiben erhalten (als früherer Durchgang).'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Neu starten')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await widget.store.restartPlan(todayDate());
+    if (mounted) setState(() {});
   }
 
   void _showRules() {
@@ -497,6 +530,8 @@ class _HomeScreenState extends State<HomeScreen> {
         .toList();
     final trainingDays = [for (var d = 0; d < planDays; d++) if (!sessionFor(d).isRest) d];
     final doneCount = trainingDays.where(widget.store.done).length;
+    // Der Reihe nach: die erste noch offene Trainingseinheit.
+    final nextSlot = trainingDays.where((d) => !widget.store.done(d)).firstOrNull;
 
     // Freie Einheiten stehen im Plan beim jeweiligen Datum.
     final pending = [...free];
@@ -529,6 +564,10 @@ class _HomeScreenState extends State<HomeScreen> {
               tooltip: 'Alle Einheiten in den Kalender',
               onPressed: _exportAll),
           IconButton(
+              icon: const Icon(Icons.restart_alt),
+              tooltip: 'Plan ab heute neu starten',
+              onPressed: _restart),
+          IconButton(
               icon: const Icon(Icons.monitor_heart_outlined),
               tooltip: 'Protokoll / Auswertung',
               onPressed: () => Navigator.push(context,
@@ -550,12 +589,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
         children: [
-          _TodayCard(
-              plan: plan,
-              today: today,
-              store: widget.store,
-              onOpen: _open,
-              onBackfill: _backfill),
+          _TodayCard(plan: plan, store: widget.store, onOpen: _open),
           ...todayFree,
           const SizedBox(height: 12),
           Text('$doneCount von ${trainingDays.length} Einheiten erledigt',
@@ -595,7 +629,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ...takeFree((f) => f.date.isBefore(plan[d].date)),
               _DayTile(
                 day: plan[d],
-                isToday: plan[d].date == today,
+                isToday: plan[d].slot == nextSlot,
                 done: widget.store.done(d),
                 onTap: () => _open(plan[d].slot),
                 cs: cs,
@@ -617,16 +651,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _TodayCard extends StatelessWidget {
   final List<PlanDay> plan;
-  final DateTime today;
   final Store store;
   final void Function(int) onOpen;
-  final void Function(int slot, DateTime due) onBackfill;
-  const _TodayCard(
-      {required this.plan,
-      required this.today,
-      required this.store,
-      required this.onOpen,
-      required this.onBackfill});
+  const _TodayCard({required this.plan, required this.store, required this.onOpen});
 
   @override
   Widget build(BuildContext context) {
@@ -639,35 +666,16 @@ class _TodayCard extends StatelessWidget {
           ),
         );
 
-    if (today.isBefore(planStart)) {
-      return info('Der Plan startet am ${dateLabel(planStart)}');
-    }
-    final allDone = [
+    // Der Reihe nach: immer die erste noch offene Trainingseinheit,
+    // egal wie lange die letzte her ist.
+    final training = [
       for (final p in plan)
         if (!sessionFor(p.slot).isRest) p
-    ].every((p) => store.done(p.slot));
-    if (allDone) return info('Plan abgeschlossen. Zeit für die nächsten 4 Wochen!');
-
-    // Heute: zuerst eine offene Trainingseinheit, sonst was sonst heute liegt.
-    final todays = plan.where((p) => p.date == today).toList()
-      ..sort((a, b) {
-        int rank(PlanDay p) =>
-            (store.done(p.slot) ? 2 : 0) + (sessionFor(p.slot).isRest ? 1 : 0);
-        return rank(a).compareTo(rank(b));
-      });
-    final PlanDay p;
-    final bool isToday;
-    if (todays.isNotEmpty) {
-      p = todays.first;
-      isToday = true;
-    } else {
-      final upcoming = plan.where((x) => x.date.isAfter(today)).toList();
-      if (upcoming.isEmpty) return info('Plan abgeschlossen. Zeit für die nächsten 4 Wochen!');
-      p = upcoming.first;
-      isToday = false;
-    }
+    ];
+    final open = training.where((p) => !store.done(p.slot)).toList();
+    if (open.isEmpty) return info('Plan abgeschlossen. Zeit für die nächsten Wochen!');
+    final p = open.first;
     final s = sessionFor(p.slot);
-    final done = store.done(p.slot);
     final on = cs.onPrimaryContainer;
     return Card(
       color: cs.primaryContainer,
@@ -676,7 +684,8 @@ class _TodayCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(isToday ? 'Heute' : 'Als Nächstes: ${dateLabel(p.date)}',
+            Text(
+                'Nächste Einheit · ${training.length - open.length + 1} von ${training.length}',
                 style: tt.labelLarge?.copyWith(color: on)),
             const SizedBox(height: 4),
             Row(children: [
@@ -687,21 +696,10 @@ class _TodayCard extends StatelessWidget {
               ),
             ]),
             const SizedBox(height: 4),
-            Text(done ? 'Erledigt ✓' : 'ca. ${s.minutes} Min.',
+            Text('Woche ${p.slot ~/ 7 + 1}: ${weekFocus[p.slot ~/ 7]} · ca. ${s.minutes} Min.',
                 style: tt.bodyLarge?.copyWith(color: on)),
-            if (!done && p.shiftDays > 0)
-              Text(shiftText(p.shiftDays), style: tt.bodyMedium?.copyWith(color: on)),
             const SizedBox(height: 12),
             FilledButton(onPressed: () => onOpen(p.slot), child: const Text('Training öffnen')),
-            if (isToday && !done && !s.isRest && p.due.isBefore(today)) ...[
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(foregroundColor: on),
-                onPressed: () => onBackfill(p.slot, p.due),
-                icon: const Icon(Icons.history),
-                label: const Text('Vergessen abzuhaken? Nachträglich abhaken'),
-              ),
-            ],
           ],
         ),
       ),
@@ -918,7 +916,6 @@ class _DayTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = sessionFor(day.slot);
     final d = day.date;
-    final shifted = !s.isRest && day.shiftDays > 0;
     return Card(
       elevation: 0,
       color: isToday ? cs.secondaryContainer : cs.surfaceContainerHighest.withOpacity(0.5),
@@ -927,10 +924,11 @@ class _DayTile extends StatelessWidget {
         onTap: onTap,
         leading: Icon(s.icon, color: s.isRest ? cs.outline : cs.primary),
         title: Text(s.title),
-        subtitle: Text(s.isRest
-            ? dateLabel(d)
-            : '${dateLabel(d)}  ca. ${s.minutes} Min.'
-                '${shifted ? '  (+${day.shiftDays} ${day.shiftDays == 1 ? 'Tag' : 'Tage'})' : ''}'),
+        subtitle: Text(done && !s.isRest
+            ? 'erledigt ${dateLabel(d)}'
+            : s.isRest
+                ? 'optional – Pause nach Bedarf'
+                : 'ca. ${s.minutes} Min.'),
         trailing: done
             ? Icon(Icons.check_circle, color: cs.primary)
             : const Icon(Icons.chevron_right),
@@ -1109,18 +1107,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   Future<void> _toggleDone() async {
     final v = !done;
-    DateTime? on;
-    if (v) {
-      final today = todayDate();
-      final due = widget.store.schedule(today)[widget.day].due;
-      // Nachgerückte Einheit: vielleicht doch am geplanten Tag gemacht, nur
-      // vergessen abzuhaken – dann soll sich nichts verschieben.
-      if (!s.isRest && due.isBefore(today)) {
-        on = await pickDoneDate(context, due: due);
-        if (on == null) return;
-      }
-    }
-    await widget.store.setDone(widget.day, v, on: on);
+    await widget.store.setDone(widget.day, v);
     if (v && sw.isRunning) _toggleStopwatch();
     setState(() => done = v);
     // Gleich nach dem Training: Befinden und Puls festhalten (überspringbar).
