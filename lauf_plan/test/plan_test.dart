@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lauf_plan/animations.dart';
 import 'package:lauf_plan/calendar.dart';
 import 'package:lauf_plan/device_calendar.dart';
+import 'package:lauf_plan/diary.dart';
 import 'package:lauf_plan/free_sessions.dart';
 import 'package:lauf_plan/main.dart';
 import 'package:lauf_plan/plan_edit.dart';
@@ -642,6 +643,61 @@ void main() {
     expect(find.text('Laufplan'), findsOneWidget);
     expect(find.textContaining('Woche 1'), findsOneWidget);
     expect(find.byType(Card), findsWidgets);
+  });
+
+  group('Protokoll', () {
+    test('Eintrag speichern, lesen, löschen', () async {
+      SharedPreferences.setMockInitialValues({});
+      final diary = Diary(await SharedPreferences.getInstance());
+      expect(diary.forDay(7), isNull);
+      await diary.set(DayEntry(7, dateOf(7),
+          feeling: 4, pulseAvg: 142, pulseMax: 171, pain: 2, note: 'schwere Beine'));
+      final e = Diary(diary.p).forDay(7)!;
+      expect(e.feeling, 4);
+      expect(e.pulseMax, 171);
+      expect(diarySummary(e),
+          'Befinden 4/5 (gut) · Puls Ø 142 / max 171 · Beschwerden 2/10 · „schwere Beine“');
+      await diary.remove(7);
+      expect(diary.all(), isEmpty);
+    });
+
+    test('Bericht enthält Befinden, Puls, Gewichte und Läufe', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final store = Store(prefs);
+      await store.setDone(0, true, on: dateOf(0));
+      await store.diary.set(DayEntry(0, dateOf(0), feeling: 3, pulseAvg: 130, pain: 1));
+      await store.weights.set('Dips (gewichtet)', WeightEntry(2, dateOf(2), 10, '3×8'));
+      await store.weights.set('Dips (gewichtet)', WeightEntry(9, dateOf(9), 12.5));
+      await store.runs.set('Locker laufen', RunEntry(5, dateOf(5), km: 8, secs: 48 * 60));
+      final report = buildReport(store, today: dateOf(10));
+      expect(report, contains('Erledigt: 1 von 24'));
+      expect(report, contains('Beine A – Kraft'));
+      expect(report, contains('Befinden 3/5 (okay)'));
+      expect(report, contains('Puls Ø 130'));
+      expect(report, contains('Dips (gewichtet): '));
+      expect(report, contains('10 kg (3×8) → '));
+      expect(report, contains('12,5 kg'));
+      expect(report, contains('8 km in 48:00'));
+    });
+
+    testWidgets('Einheit: Befinden und Puls eintragen', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = Store(await SharedPreferences.getInstance());
+      await tester.pumpWidget(MaterialApp(home: SessionScreen(day: 0, store: store)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Befinden & Puls eintragen'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('4 · gut'));
+      await tester.enterText(find.widgetWithText(TextField, 'Ø Puls'), '140');
+      await tester.pump();
+      await tester.tap(find.text('Speichern'));
+      await tester.pumpAndSettle();
+      final e = store.diary.forDay(0)!;
+      expect(e.feeling, 4);
+      expect(e.pulseAvg, 140);
+      expect(find.textContaining('Puls Ø 140'), findsOneWidget);
+    });
   });
 
   testWidgets('Animation lässt sich zeichnen', (tester) async {
