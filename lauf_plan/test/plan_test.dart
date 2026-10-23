@@ -22,10 +22,10 @@ void main() {
   test('Plan startet am Donnerstag, 1.10.2026', () {
     expect(planStart.weekday, DateTime.thursday);
     expect(dateLabel(dateOf(0)), 'Do, 1.10.');
-    expect(dateLabel(dateOf(planDays - 1)), 'Mi, 28.10.');
+    expect(dateLabel(dateOf(planDays - 1)), 'Mi, 25.11.');
   });
 
-  test('Jeder der 28 Tage hat eine Einheit, Mittwoch ist Ruhetag', () {
+  test('Jeder der 56 Tage hat eine Einheit, Mittwoch ist Ruhetag', () {
     for (var d = 0; d < planDays; d++) {
       final s = sessionFor(d);
       expect(s.exercises, isNotEmpty);
@@ -378,7 +378,7 @@ void main() {
   });
 
   test('Plan-Schwerpunkt: Beine + Grundlagenausdauer, Oberkörper nur 1× pro Woche', () {
-    for (var w = 0; w < 4; w++) {
+    for (var w = 0; w < planDays ~/ 7; w++) {
       final keys = [for (var i = 0; i < 7; i++) templateKeyFor(w * 7 + i)];
       expect(keys.where((k) => k == 'upper').length, 1);
       expect(keys.where((k) => k == 'legA' || k == 'legB').length, 2);
@@ -671,7 +671,7 @@ void main() {
       await store.weights.set('Dips (gewichtet)', WeightEntry(9, dateOf(9), 12.5));
       await store.runs.set('Locker laufen', RunEntry(5, dateOf(5), km: 8, secs: 48 * 60));
       final report = buildReport(store, today: dateOf(10));
-      expect(report, contains('Erledigt: 1 von 24'));
+      expect(report, contains('Erledigt: 1 von 48'));
       expect(report, contains('Beine A – Kraft'));
       expect(report, contains('Befinden 3/5 (okay)'));
       expect(report, contains('Puls Ø 130'));
@@ -679,6 +679,20 @@ void main() {
       expect(report, contains('10 kg (3×8) → '));
       expect(report, contains('12,5 kg'));
       expect(report, contains('8 km in 48:00'));
+    });
+
+    test('Körperwerte im Bericht', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final v = Vitals(prefs);
+      await v.set(VitalEntry(dateOf(2), restingPulse: 52, bodyKg: 78.5));
+      await v.set(VitalEntry(dateOf(9), bodyKg: 78));
+      expect(v.forDate(dateOf(2))!.restingPulse, 52);
+      final report = buildReport(Store(prefs), today: dateOf(10));
+      expect(report, contains('Ruhepuls 52 · 78,5 kg'));
+      expect(report, contains('78 kg'));
+      await v.remove(dateOf(2));
+      expect(v.all().length, 1);
     });
 
     testWidgets('Einheit: Befinden und Puls eintragen', (tester) async {

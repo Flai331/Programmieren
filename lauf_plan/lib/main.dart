@@ -54,12 +54,15 @@ class StartupErrorApp extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 final DateTime planStart = DateTime.utc(2026, 10, 1); // Donnerstag
-const int planDays = 28;
+const int planDays = 56; // zwei Blöcke à 4 Wochen
 const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 const weekdaysLong = [
   'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'
 ];
-const weekFocus = ['Grundlagen aufbauen', 'Bergsprints (kurz)', 'Grundlagen ausbauen', 'Intervalle (kurz)'];
+const weekFocus = [
+  'Grundlagen aufbauen', 'Bergsprints (kurz)', 'Grundlagen ausbauen', 'Intervalle (kurz)',
+  'Umfang steigern', 'Bergsprints (5×)', 'Intervalle (5×400 m)', 'Entlastung',
+];
 
 class TimerConfig {
   /// Sekunden aktiv. 0 = manuell (Satz/Lauf selbst beenden, dann Pause).
@@ -164,6 +167,15 @@ const baseRuns = [
       [Exercise('Locker laufen', '7 km im Plaudertempo')], hint: _baseHint),
   Session('Grundlagenlauf', Icons.directions_run, 50,
       [Exercise('Locker laufen', '8 km im Plaudertempo')], hint: _baseHint),
+  // Block 2 (Woche 5–8)
+  Session('Grundlagenlauf', Icons.directions_run, 45,
+      [Exercise('Locker laufen', '7 km im Plaudertempo')], hint: _baseHint),
+  Session('Grundlagenlauf', Icons.directions_run, 50,
+      [Exercise('Locker laufen', '8 km im Plaudertempo')], hint: _baseHint),
+  Session('Grundlagenlauf', Icons.directions_run, 50,
+      [Exercise('Locker laufen', '8 km im Plaudertempo')], hint: _baseHint),
+  Session('Grundlagenlauf', Icons.directions_run, 40,
+      [Exercise('Locker laufen', '6 km im Plaudertempo')], hint: _baseHint),
 ];
 
 // Eine kurze, lockere Tempo-Einheit pro Woche: nur ein Reiz zur Abwechslung.
@@ -193,6 +205,32 @@ const qualityRuns = [
         TimerConfig(rest: 90, rounds: 4, workLabel: '400 m')),
     Exercise('Auslaufen', '2 km locker'),
   ]),
+  // Block 2 (Woche 5–8)
+  Session('Lauf: Steigerungen', Icons.directions_run, 50, [
+    Exercise('Locker laufen', '7 km im Plaudertempo'),
+    Exercise('Steigerungen',
+        '6 × 20 Sek.: langsam anlaufen, auf ca. 80 % steigern, 60 Sek. traben',
+        TimerConfig(work: 20, rest: 60, rounds: 6, workLabel: 'Steigerung')),
+  ]),
+  Session('Lauf: Bergsprints', Icons.terrain, 50, [
+    Exercise('Einlaufen', '3 km locker'),
+    Exercise('Bergsprints', '5 × 10 Sek. bergauf (80–90 %), zurückgehen als Pause',
+        TimerConfig(work: 10, rest: 80, rounds: 5, workLabel: 'Sprint')),
+    Exercise('Locker laufen', '3 km'),
+  ], hint: 'Achillessehne über 3/10? Dann flache Steigerungen statt Bergsprints.'),
+  Session('Lauf: Intervalle', Icons.speed, 45, [
+    Exercise('Einlaufen', '3 km locker'),
+    Exercise('Intervalle',
+        '5 × 400 m schnell, 90 Sek. traben. Die letzte so schnell wie die erste.',
+        TimerConfig(rest: 90, rounds: 5, workLabel: '400 m')),
+    Exercise('Auslaufen', '2 km locker'),
+  ]),
+  Session('Lauf: Steigerungen', Icons.directions_run, 40, [
+    Exercise('Locker laufen', '5 km im Plaudertempo'),
+    Exercise('Steigerungen',
+        '6 × 20 Sek.: langsam anlaufen, auf ca. 80 % steigern, 60 Sek. traben',
+        TimerConfig(work: 20, rest: 60, rounds: 6, workLabel: 'Steigerung')),
+  ], hint: 'Entlastungswoche: bewusst locker bleiben, der Körper nimmt die Reize jetzt auf.'),
 ];
 
 const _longHint = 'Nur steigern, wenn das Knie in der Woche davor ruhig war.';
@@ -205,6 +243,15 @@ const longRuns = [
       [Exercise('Locker laufen', '10 km im Plaudertempo')], hint: _longHint),
   Session('Langer Lauf', Icons.route, 65,
       [Exercise('Locker laufen', '11 km im Plaudertempo')], hint: _longHint),
+  // Block 2 (Woche 5–8)
+  Session('Langer Lauf', Icons.route, 65,
+      [Exercise('Locker laufen', '11 km im Plaudertempo')], hint: _longHint),
+  Session('Langer Lauf', Icons.route, 70,
+      [Exercise('Locker laufen', '12 km im Plaudertempo')], hint: _longHint),
+  Session('Langer Lauf', Icons.route, 70,
+      [Exercise('Locker laufen', '12 km im Plaudertempo')], hint: _longHint),
+  Session('Langer Lauf', Icons.route, 50,
+      [Exercise('Locker laufen', '8 km im Plaudertempo')], hint: 'Entlastungswoche: kürzer und locker.'),
 ];
 
 const restDay = Session('Ruhetag', Icons.self_improvement, 15, [
@@ -538,7 +585,7 @@ class _HomeScreenState extends State<HomeScreen> {
               'oder statt ihr. Sie steht dann im Plan beim jeweiligen Tag und lässt sich '
               'einzeln als Kalenderdatei exportieren.',
               style: Theme.of(context).textTheme.bodySmall),
-          for (var w = 0; w < 4; w++) ...[
+          for (var w = 0; w < planDays ~/ 7; w++) ...[
             Padding(
               padding: const EdgeInsets.only(top: 24, bottom: 4),
               child: Text('Woche ${w + 1}: ${weekFocus[w]}',
