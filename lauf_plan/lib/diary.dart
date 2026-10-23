@@ -92,6 +92,136 @@ class Diary {
       _key, jsonEncode({for (final e in all.entries) '${e.key}': e.value.toJson()}));
 }
 
+/// Körperwerte, unabhängig von den Einheiten: Ruhepuls und Körpergewicht
+/// (am besten morgens nach dem Aufstehen). Gespeichert in 'vitals': {Datum: Eintrag}.
+class VitalEntry {
+  final DateTime date;
+  final int? restingPulse;
+  final double? bodyKg;
+  const VitalEntry(this.date, {this.restingPulse, this.bodyKg});
+
+  Map<String, Object?> toJson() => {
+        'date': isoDate(date),
+        if (restingPulse != null) 'rhr': restingPulse,
+        if (bodyKg != null) 'bw': bodyKg,
+      };
+
+  static VitalEntry? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final date = parseIsoDate(j['date'] as String?);
+    if (date == null) return null;
+    return VitalEntry(date,
+        restingPulse: (j['rhr'] as num?)?.toInt(), bodyKg: (j['bw'] as num?)?.toDouble());
+  }
+}
+
+class Vitals {
+  static const _key = 'vitals';
+  final SharedPreferences p;
+  Vitals(this.p);
+
+  Map<String, VitalEntry> _all() {
+    final raw = p.getString(_key);
+    if (raw == null) return {};
+    try {
+      final m = jsonDecode(raw);
+      if (m is! Map) return {};
+      final out = <String, VitalEntry>{};
+      for (final e in m.values) {
+        final v = VitalEntry.fromJson(e);
+        if (v != null) out[isoDate(v.date)] = v;
+      }
+      return out;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  VitalEntry? forDate(DateTime d) => _all()[isoDate(d)];
+
+  /// Älteste zuerst.
+  List<VitalEntry> all() => _all().values.toList()..sort((a, b) => a.date.compareTo(b.date));
+
+  Future<void> set(VitalEntry v) async {
+    final all = _all()..[isoDate(v.date)] = v;
+    await _save(all);
+  }
+
+  Future<void> remove(DateTime d) async => _save(_all()..remove(isoDate(d)));
+
+  Future<void> _save(Map<String, VitalEntry> all) =>
+      p.setString(_key, jsonEncode({for (final e in all.entries) e.key: e.value.toJson()}));
+}
+
+String vitalSummary(VitalEntry v) => [
+      if (v.restingPulse != null) 'Ruhepuls ${v.restingPulse}',
+      if (v.bodyKg != null) kgLabel(v.bodyKg!),
+    ].join(' · ');
+
+/// Ruhepuls und Körpergewicht für [date] eintragen. Rückgabe: true = geändert.
+Future<bool> showVitalsDialog(BuildContext context, Vitals vitals, DateTime date) async {
+  final existing = vitals.forDate(date);
+  final last = vitals.all().where((v) => v.date != date).lastOrNull;
+  final rhrCtl = TextEditingController(text: existing?.restingPulse?.toString() ?? '');
+  final bwCtl = TextEditingController(
+      text: existing?.bodyKg == null ? '' : kgLabel(existing!.bodyKg!).replaceAll(' kg', ''));
+
+  final result = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text('Körperwerte – ${dateLabel(date)}'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Am besten morgens nach dem Aufstehen, vor dem Frühstück – '
+                'Körpergewicht reicht einmal pro Woche, immer unter gleichen Bedingungen. '
+                'Ein steigender Ruhepuls oder fallendes Gewicht zeigt Überlastung.'),
+            if (last != null) ...[
+              const SizedBox(height: 8),
+              Text('Zuletzt (${dateLabel(last.date)}): ${vitalSummary(last)}'),
+            ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: rhrCtl,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                  labelText: 'Ruhepuls', suffixText: 'bpm', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: bwCtl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+              decoration: const InputDecoration(
+                  labelText: 'Körpergewicht', suffixText: 'kg', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        if (existing != null)
+          TextButton(onPressed: () => Navigator.pop(ctx, 'delete'), child: const Text('Löschen')),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, 'save'), child: const Text('Speichern')),
+      ],
+    ),
+  );
+  // Controller nicht sofort freigeben (Schließ-Animation des Dialogs).
+  if (result == 'delete') {
+    await vitals.remove(date);
+    return true;
+  }
+  if (result != 'save') return false;
+  final rhr = _parseInt(rhrCtl.text, 25, 200);
+  final bw = parseKg(bwCtl.text);
+  if (rhr == null && bw == null) return false;
+  await vitals.set(VitalEntry(date, restingPulse: rhr, bodyKg: bw));
+  return true;
+}
+
 String diarySummary(DayEntry e) {
   final parts = [
     if (e.feeling != null) 'Befinden ${e.feeling}/5 (${feelingLabels[e.feeling! - 1]})',
@@ -320,6 +450,15 @@ String buildReport(Store store, {DateTime? today}) {
     b.writeln();
   }
 
+  final vitals = Vitals(store.p).all();
+  if (vitals.isNotEmpty) {
+    b.writeln('## Körperwerte (Ruhepuls, Körpergewicht), älteste zuerst');
+    for (final v in vitals) {
+      b.writeln('- ${dateLabel(v.date)}: ${vitalSummary(v)}');
+    }
+    b.writeln();
+  }
+
   final free = store.free.all();
   if (free.isNotEmpty) {
     b.writeln('## Freie Einheiten');
@@ -333,9 +472,16 @@ String buildReport(Store store, {DateTime? today}) {
   return b.toString().trimRight();
 }
 
-class ReportScreen extends StatelessWidget {
+class ReportScreen extends StatefulWidget {
   final Store store;
   const ReportScreen({super.key, required this.store});
+
+  @override
+  State<ReportScreen> createState() => _ReportScreenState();
+}
+
+class _ReportScreenState extends State<ReportScreen> {
+  Store get store => widget.store;
 
   @override
   Widget build(BuildContext context) {
@@ -369,6 +515,16 @@ class ReportScreen extends StatelessWidget {
           const Text('Alles auf einen Blick: Befinden, Puls, Beschwerden, Zusatzgewichte '
               'und Läufe. Teile den Bericht nach Ende des Plans oder zwischendurch, '
               'um den Plan anpassen zu lassen.'),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () async {
+              if (await showVitalsDialog(context, Vitals(store.p), todayDate()) && mounted) {
+                setState(() {});
+              }
+            },
+            icon: const Icon(Icons.monitor_weight_outlined),
+            label: const Text('Ruhepuls & Körpergewicht heute eintragen'),
+          ),
           const SizedBox(height: 12),
           SelectableText(report, style: const TextStyle(fontSize: 13, height: 1.35)),
         ],

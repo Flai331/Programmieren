@@ -10,11 +10,11 @@ import 'main.dart';
 // mehreren Tagen vorkommen. Änderungen an einem Baustein gelten für alle
 // Tage mit diesem Baustein und werden als JSON gespeichert ('tpl_<key>').
 
-const templateKeys = [
+final templateKeys = [
   'legA', 'upper', 'legB',
-  'base0', 'base1', 'base2', 'base3',
-  'quality0', 'quality1', 'quality2', 'quality3',
-  'long0', 'long1', 'long2', 'long3',
+  for (var w = 0; w < planDays ~/ 7; w++) 'base$w',
+  for (var w = 0; w < planDays ~/ 7; w++) 'quality$w',
+  for (var w = 0; w < planDays ~/ 7; w++) 'long$w',
   'rest',
 ];
 
