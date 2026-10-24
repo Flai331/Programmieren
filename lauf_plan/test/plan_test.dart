@@ -400,6 +400,13 @@ void main() {
         expect(training[i], isNot(anyOf('legA', 'legB')), reason: 'Tag $d, $i Einheiten davor');
       }
     }
+    // Grundlagenläufe nie unter 8 km, lange Läufe nie kürzer als die Grundlage.
+    for (var w = 0; w < baseRuns.length; w++) {
+      int km(Session s) =>
+          int.parse(RegExp(r'(\d+) km').firstMatch(s.exercises.first.detail)!.group(1)!);
+      expect(km(baseRuns[w]), greaterThanOrEqualTo(8), reason: 'Woche ${w + 1}');
+      expect(km(longRuns[w]), greaterThanOrEqualTo(km(baseRuns[w])), reason: 'Woche ${w + 1}');
+    }
     final bergsprints = qualityRuns[1].exercises.firstWhere((e) => e.name == 'Bergsprints');
     expect(bergsprints.timer!.rounds, 4);
   });
