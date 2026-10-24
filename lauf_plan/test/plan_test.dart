@@ -191,11 +191,11 @@ void main() {
     });
 
     test('Plan-Einheit als Termin', () {
-      final d = PlanDay(0, dateOf(0), dateOf(0));
+      final d = PlanDay(2, dateOf(2), dateOf(2));
       final e = planEvent(d, const ExportChoice(7 * 60, false));
       expect(e.title, legA.title);
       expect(e.minutes, legA.minutes);
-      expect(e.uid, 'laufplan-tag-0@klaas.de');
+      expect(e.uid, 'laufplan-tag-2@klaas.de');
       expect(e.description, contains('Kniebeuge (Langhantel): 4 × 5'));
     });
 
@@ -743,7 +743,7 @@ void main() {
       await store.runs.set('Locker laufen', RunEntry(5, dateOf(5), km: 8, secs: 48 * 60));
       final report = buildReport(store, today: dateOf(10));
       expect(report, contains('Erledigt: 1 von 48'));
-      expect(report, contains('Beine A – Kraft'));
+      expect(report, contains('Grundlagenlauf'));
       expect(report, contains('Befinden 3/5 (okay)'));
       expect(report, contains('Puls Ø 130'));
       expect(report, contains('Dips (gewichtet): '));
