@@ -28,11 +28,11 @@ void main() {
     expect(dateLabel(dateOf(planDays - 1)), 'Mi, 25.11.');
   });
 
-  test('Jeder der 56 Tage hat eine Einheit, Mittwoch ist Ruhetag', () {
+  test('Jeder der 56 Tage hat eine Einheit, nur Slot 3 jeder Woche ist Ruhetag', () {
     for (var d = 0; d < planDays; d++) {
       final s = sessionFor(d);
       expect(s.exercises, isNotEmpty);
-      expect(s.isRest, dateOf(d).weekday == DateTime.wednesday);
+      expect(s.isRest, d % 7 == 3);
     }
   });
 
@@ -134,11 +134,11 @@ void main() {
     });
 
     test('nicht abgehakter Ruhetag verschiebt nichts', () {
-      // Do–Di (Tag 0–5) erledigt, Mi = Ruhetag, heute ist Do (Tag 7).
-      final p = plan(day(7), {for (var d = 0; d < 6; d++) d: day(d)});
-      expect(p[6].date, day(6));
-      expect(p[7].date, day(7));
-      expect(p[7].shiftDays, 0);
+      // Tag 0–2 erledigt, Tag 3 = Ruhetag, heute ist Tag 4.
+      final p = plan(day(4), {for (var d = 0; d < 3; d++) d: day(d)});
+      expect(p[3].date, day(3));
+      expect(p[4].date, day(4));
+      expect(p[4].shiftDays, 0);
     });
 
     test('alte Haken ohne Datum zählen am ursprünglichen Tag', () {
@@ -388,6 +388,18 @@ void main() {
       expect(keys.where((k) => k.startsWith('base') || k.startsWith('long')).length, 2);
       expect(keys.where((k) => k.startsWith('quality')).length, 1); // Intervalle/Berg nur 1×
     }
+    // Bergsprints/Intervalle liegen nie 1–3 Einheiten nach Beine A/B (Ruhetag zählt nicht).
+    for (var d = 0; d < planDays; d++) {
+      final q = sessionFor(d).title;
+      if (q != 'Lauf: Bergsprints' && q != 'Lauf: Intervalle') continue;
+      final training = [
+        for (var x = d - 1; x > d - 7 && x >= 0; x--)
+          if (!sessionFor(x).isRest) templateKeyFor(x)
+      ];
+      for (var i = 0; i < 3 && i < training.length; i++) {
+        expect(training[i], isNot(anyOf('legA', 'legB')), reason: 'Tag $d, $i Einheiten davor');
+      }
+    }
     final bergsprints = qualityRuns[1].exercises.firstWhere((e) => e.name == 'Bergsprints');
     expect(bergsprints.timer!.rounds, 4);
   });
@@ -406,14 +418,15 @@ void main() {
 
   group('Plan bearbeiten', () {
     test('Bausteine passen zur bisherigen Reihenfolge', () {
-      expect(templateKeyFor(0), 'legA');
-      expect(templateKeyFor(1), 'base0');
-      expect(templateKeyFor(2), 'upper');
-      expect(templateKeyFor(3), 'legB');
-      expect(templateKeyFor(11), 'quality1');
-      expect(templateKeyFor(26), 'long3');
-      expect(templateKeyFor(6), 'rest');
-      expect(sessionFor(11).title, 'Lauf: Bergsprints');
+      expect(templateKeyFor(0), 'base0');
+      expect(templateKeyFor(1), 'quality0');
+      expect(templateKeyFor(2), 'legA');
+      expect(templateKeyFor(3), 'rest');
+      expect(templateKeyFor(4), 'legB');
+      expect(templateKeyFor(5), 'upper');
+      expect(templateKeyFor(13), 'long1');
+      expect(templateKeyFor(8), 'quality1');
+      expect(sessionFor(8).title, 'Lauf: Bergsprints');
     });
 
     test('JSON hin und zurück', () {
@@ -435,7 +448,7 @@ void main() {
     });
 
     test('Speichern gilt für alle Tage des Bausteins, Zurücksetzen stellt her', () async {
-      SharedPreferences.setMockInitialValues({'ex_2_0': true, 'ex_9_2': true, 'done_16': true, 'ex_16_0': true});
+      SharedPreferences.setMockInitialValues({'ex_5_0': true, 'ex_12_2': true, 'done_19': true, 'ex_19_0': true});
       final prefs = await SharedPreferences.getInstance();
       final store = Store(prefs);
       final changed = Session('Oberkörper neu', upperBody.icon, 50, [
@@ -443,22 +456,22 @@ void main() {
         ...upperBody.exercises,
       ]);
       await saveTemplate(store, 'upper', changed);
-      for (final d in [2, 9, 16, 23]) {
+      for (final d in [5, 12, 19, 26, 33, 40, 47, 54]) {
         expect(sessionFor(d).title, 'Oberkörper neu', reason: 'Tag $d');
         expect(sessionFor(d).exercises.first.name, 'Bankdrücken');
       }
-      expect(sessionFor(0).title, legA.title);
+      expect(sessionFor(2).title, legA.title);
       // Übungs-Haken offener Tage zurückgesetzt, erledigte bleiben.
-      expect(store.exDone(2, 0), isFalse);
-      expect(store.exDone(9, 2), isFalse);
-      expect(store.exDone(16, 0), isTrue);
+      expect(store.exDone(5, 0), isFalse);
+      expect(store.exDone(12, 2), isFalse);
+      expect(store.exDone(19, 0), isTrue);
       // Nach Neustart (neuer Store) weiterhin geändert.
       planOverrides.clear();
       Store(prefs);
-      expect(sessionFor(2).exercises.first.name, 'Bankdrücken');
-      expect(sessionFor(2).exercises.first.timer!.rounds, 4);
+      expect(sessionFor(5).exercises.first.name, 'Bankdrücken');
+      expect(sessionFor(5).exercises.first.timer!.rounds, 4);
       await saveTemplate(store, 'upper', null);
-      expect(sessionFor(2).title, upperBody.title);
+      expect(sessionFor(5).title, upperBody.title);
       expect(prefs.getString('tpl_upper'), isNull);
     });
 
@@ -502,8 +515,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Speichern'));
       await tester.pumpAndSettle();
-      expect(sessionFor(3).exercises.last.name, 'Nordic Curl');
-      expect(sessionFor(3).exercises.last.timer!.rounds, 3);
+      expect(sessionFor(4).exercises.last.name, 'Nordic Curl');
+      expect(sessionFor(4).exercises.last.timer!.rounds, 3);
       expect(prefs.getString('tpl_legB'), contains('Nordic Curl'));
     });
   });
@@ -543,11 +556,11 @@ void main() {
     });
 
     test('Nur bei Kraft-Einheiten, nicht beim Aufwärmen', () {
-      expect(tracksWeight(0, legA.exercises[1]), isTrue);
-      expect(tracksWeight(0, legA.exercises[0]), isFalse); // Aufwärmen
-      expect(tracksWeight(4, qualityRuns[0].exercises[0]), isFalse);
-      expect(tracksWeight(1, baseRuns[0].exercises[0]), isFalse);
-      expect(tracksWeight(2, upperBody.exercises[1]), isTrue);
+      expect(tracksWeight(2, legA.exercises[1]), isTrue);
+      expect(tracksWeight(2, legA.exercises[0]), isFalse); // Aufwärmen
+      expect(tracksWeight(1, qualityRuns[0].exercises[0]), isFalse);
+      expect(tracksWeight(0, baseRuns[0].exercises[0]), isFalse);
+      expect(tracksWeight(5, upperBody.exercises[1]), isTrue);
     });
 
     testWidgets('Einheit zeigt „Letztes Mal“ und Eingabe', (tester) async {
@@ -555,7 +568,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final store = Store(prefs);
       await store.weights.set('Kniebeuge (Langhantel)', WeightEntry(0, dateOf(0), 60, '4×5'));
-      await tester.pumpWidget(MaterialApp(home: SessionScreen(day: 7, store: store)));
+      await tester.pumpWidget(MaterialApp(home: SessionScreen(day: 9, store: store)));
       await tester.pumpAndSettle();
       expect(find.textContaining('Letztes Mal: 60 kg · 4×5'), findsOneWidget);
       await tester.tap(find.text('Gewicht eintragen').first);
@@ -565,7 +578,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.text('Speichern'));
       await tester.pumpAndSettle();
-      expect(store.weights.forDay('Kniebeuge (Langhantel)', 7)!.kg, 62.5);
+      expect(store.weights.forDay('Kniebeuge (Langhantel)', 9)!.kg, 62.5);
       expect(find.textContaining('Heute: 62,5 kg'), findsOneWidget);
     });
   });
@@ -602,10 +615,10 @@ void main() {
     });
 
     test('Nur bei Lauf-Einheiten, Wiederholungszeiten bei Intervallen/Tempo', () {
-      expect(tracksRun(1, baseRuns[0].exercises[0]), isTrue);
-      expect(tracksRun(4, qualityRuns[0].exercises[0]), isTrue);
-      expect(tracksRun(5, longRuns[0].exercises[0]), isTrue);
-      expect(tracksRun(0, legA.exercises[1]), isFalse);
+      expect(tracksRun(0, baseRuns[0].exercises[0]), isTrue);
+      expect(tracksRun(1, qualityRuns[0].exercises[0]), isTrue);
+      expect(tracksRun(6, longRuns[0].exercises[0]), isTrue);
+      expect(tracksRun(2, legA.exercises[1]), isFalse);
       final intervals = qualityRuns[3].exercises.firstWhere((e) => e.name == 'Intervalle');
       expect(hasSplits(intervals), isTrue);
       expect(hasSplits(qualityRuns[0].exercises[0]), isFalse); // Locker laufen
@@ -616,7 +629,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final store = Store(prefs);
       await store.runs.set('Locker laufen', RunEntry(5, dateOf(5), km: 8, secs: 48 * 60));
-      await tester.pumpWidget(MaterialApp(home: SessionScreen(day: 12, store: store)));
+      await tester.pumpWidget(MaterialApp(home: SessionScreen(day: 13, store: store)));
       await tester.pumpAndSettle();
       expect(find.textContaining('Letztes Mal: 8 km in 48:00 · 6:00 /km'), findsOneWidget);
       await tester.tap(find.text('Strecke / Zeit eintragen'));
@@ -627,7 +640,7 @@ void main() {
       expect(find.text('Tempo: 5:45 /km'), findsOneWidget);
       await tester.tap(find.text('Speichern'));
       await tester.pumpAndSettle();
-      expect(store.runs.forDay('Locker laufen', 12)!.secs, 51 * 60 + 45);
+      expect(store.runs.forDay('Locker laufen', 13)!.secs, 51 * 60 + 45);
       expect(find.textContaining('Heute: 9 km in 51:45'), findsOneWidget);
     });
   });
@@ -658,6 +671,22 @@ void main() {
       // Tag 0 erledigt, auch wenn Wochen vergangen sind: Tag 1 ist die nächste.
       expect(find.text('Nächste Einheit · 2 von 48'), findsOneWidget);
       expect(find.textContaining('Verschoben'), findsNothing);
+    });
+
+    test('Reihenfolge ändert sich: einmal automatisch ab heute neu, Verlauf bleibt', () async {
+      SharedPreferences.setMockInitialValues({'done_0': true, 'plan_start': '2026-10-01'});
+      final prefs = await SharedPreferences.getInstance();
+      final store = Store(prefs);
+      await store.weights.set('Kniebeuge (Langhantel)', WeightEntry(2, dateOf(2), 60));
+      await store.migrateLayout();
+      expect(store.done(0), isFalse);
+      expect(planStart, todayDate());
+      expect(store.weights.forDay('Kniebeuge (Langhantel)', 2), isNull);
+      expect(store.weights.history('Kniebeuge (Langhantel)').single.kg, 60);
+      // Nur einmal.
+      await store.setDone(0, true);
+      await store.migrateLayout();
+      expect(store.done(0), isTrue);
     });
 
     test('Neustart ab heute: Fortschritt zurück, Verlauf bleibt als früherer Durchgang', () async {

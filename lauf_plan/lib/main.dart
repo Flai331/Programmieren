@@ -21,7 +21,9 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     final prefs = await SharedPreferences.getInstance();
-    runApp(TrainingApp(store: Store(prefs)));
+    final store = Store(prefs);
+    await store.migrateLayout();
+    runApp(TrainingApp(store: store));
   } catch (e, st) {
     // Lieber den Fehler zeigen als einen schwarzen Bildschirm.
     debugPrint('LAUFPLAN STARTFEHLER: $e');
@@ -195,7 +197,8 @@ const qualityRuns = [
     Exercise('Bergsprints', '4 × 10 Sek. bergauf (80–90 %), zurückgehen als Pause',
         TimerConfig(work: 10, rest: 80, rounds: 4, workLabel: 'Sprint')),
     Exercise('Locker laufen', '3 km'),
-  ], hint: 'Achillessehne über 3/10? Dann flache Steigerungen statt Bergsprints.'),
+  ], hint: 'Achillessehne über 3/10? Dann flache Steigerungen statt Bergsprints. '
+      'Mindestens 4 Tage nach schwerem Beintraining – der Plan hält den Abstand ein.'),
   Session('Lauf: Steigerungen', Icons.directions_run, 50, [
     Exercise('Locker laufen', '7 km im Plaudertempo'),
     Exercise('Steigerungen',
@@ -208,7 +211,7 @@ const qualityRuns = [
         '4 × 400 m schnell, 90 Sek. traben. Die letzte so schnell wie die erste.',
         TimerConfig(rest: 90, rounds: 4, workLabel: '400 m')),
     Exercise('Auslaufen', '2 km locker'),
-  ]),
+  ], hint: 'Mindestens 4 Tage nach schwerem Beintraining – der Plan hält den Abstand ein.'),
   // Block 2 (Woche 5–8)
   Session('Lauf: Steigerungen', Icons.directions_run, 50, [
     Exercise('Locker laufen', '7 km im Plaudertempo'),
@@ -221,14 +224,15 @@ const qualityRuns = [
     Exercise('Bergsprints', '5 × 10 Sek. bergauf (80–90 %), zurückgehen als Pause',
         TimerConfig(work: 10, rest: 80, rounds: 5, workLabel: 'Sprint')),
     Exercise('Locker laufen', '3 km'),
-  ], hint: 'Achillessehne über 3/10? Dann flache Steigerungen statt Bergsprints.'),
+  ], hint: 'Achillessehne über 3/10? Dann flache Steigerungen statt Bergsprints. '
+      'Mindestens 4 Tage nach schwerem Beintraining – der Plan hält den Abstand ein.'),
   Session('Lauf: Intervalle', Icons.speed, 45, [
     Exercise('Einlaufen', '3 km locker'),
     Exercise('Intervalle',
         '5 × 400 m schnell, 90 Sek. traben. Die letzte so schnell wie die erste.',
         TimerConfig(rest: 90, rounds: 5, workLabel: '400 m')),
     Exercise('Auslaufen', '2 km locker'),
-  ]),
+  ], hint: 'Mindestens 4 Tage nach schwerem Beintraining – der Plan hält den Abstand ein.'),
   Session('Lauf: Steigerungen', Icons.directions_run, 40, [
     Exercise('Locker laufen', '5 km im Plaudertempo'),
     Exercise('Steigerungen',
@@ -351,6 +355,17 @@ class Store {
   Store(this.p) {
     loadPlanOverrides(p);
     planStart = parseIsoDate(p.getString('plan_start')) ?? defaultPlanStart;
+  }
+
+  /// Version der Wochenreihenfolge. Ändert sich die Reihenfolge, passen die
+  /// gespeicherten Haken nicht mehr zu den Einheiten: Dann startet der Plan
+  /// einmalig ab heute neu (Verlauf bleibt als früherer Durchgang).
+  static const planLayout = 2;
+
+  Future<void> migrateLayout() async {
+    if ((p.getInt('plan_layout') ?? 1) >= planLayout) return;
+    await restartPlan(todayDate());
+    await p.setInt('plan_layout', planLayout);
   }
 
   /// Plan ab [from] neu beginnen. Erledigt-Haken und Übungs-Haken werden
@@ -1126,7 +1141,7 @@ class _SessionScreenState extends State<SessionScreen> {
     final slot = widget.day % 7;
     final hints = [
       if (s.hint != null) s.hint!,
-      if (week == 0 && (slot == 0 || slot == 3)) 'Woche 1: Gewichte bewusst leicht wählen.',
+      if (week == 0 && (slot == 2 || slot == 4)) 'Woche 1: Gewichte bewusst leicht wählen.',
     ];
 
     return Scaffold(
