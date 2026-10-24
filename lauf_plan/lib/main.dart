@@ -163,25 +163,26 @@ const legB = Session('Beine B – Stabilität', Icons.accessibility_new, 50, [
 ]);
 
 // Grundlagenausdauer: der Kern des Plans, locker im Plaudertempo.
-const _baseHint = 'Plaudertempo: du kannst in ganzen Sätzen sprechen. Lieber zu langsam als zu schnell.';
+const _baseHint = 'Plaudertempo: du kannst in ganzen Sätzen sprechen. Lieber zu langsam als zu schnell. '
+    'Mindestens 8 km – das ist die Grundlage.';
 const baseRuns = [
-  Session('Grundlagenlauf', Icons.directions_run, 40,
-      [Exercise('Locker laufen', '6 km im Plaudertempo')], hint: _baseHint),
-  Session('Grundlagenlauf', Icons.directions_run, 45,
-      [Exercise('Locker laufen', '7 km im Plaudertempo')], hint: _baseHint),
-  Session('Grundlagenlauf', Icons.directions_run, 45,
-      [Exercise('Locker laufen', '7 km im Plaudertempo')], hint: _baseHint),
-  Session('Grundlagenlauf', Icons.directions_run, 50,
+  Session('Grundlagenlauf', Icons.directions_run, 55,
       [Exercise('Locker laufen', '8 km im Plaudertempo')], hint: _baseHint),
+  Session('Grundlagenlauf', Icons.directions_run, 55,
+      [Exercise('Locker laufen', '8 km im Plaudertempo')], hint: _baseHint),
+  Session('Grundlagenlauf', Icons.directions_run, 60,
+      [Exercise('Locker laufen', '9 km im Plaudertempo')], hint: _baseHint),
+  Session('Grundlagenlauf', Icons.directions_run, 60,
+      [Exercise('Locker laufen', '9 km im Plaudertempo')], hint: _baseHint),
   // Block 2 (Woche 5–8)
-  Session('Grundlagenlauf', Icons.directions_run, 45,
-      [Exercise('Locker laufen', '7 km im Plaudertempo')], hint: _baseHint),
-  Session('Grundlagenlauf', Icons.directions_run, 50,
+  Session('Grundlagenlauf', Icons.directions_run, 60,
+      [Exercise('Locker laufen', '9 km im Plaudertempo')], hint: _baseHint),
+  Session('Grundlagenlauf', Icons.directions_run, 65,
+      [Exercise('Locker laufen', '10 km im Plaudertempo')], hint: _baseHint),
+  Session('Grundlagenlauf', Icons.directions_run, 65,
+      [Exercise('Locker laufen', '10 km im Plaudertempo')], hint: _baseHint),
+  Session('Grundlagenlauf', Icons.directions_run, 55,
       [Exercise('Locker laufen', '8 km im Plaudertempo')], hint: _baseHint),
-  Session('Grundlagenlauf', Icons.directions_run, 50,
-      [Exercise('Locker laufen', '8 km im Plaudertempo')], hint: _baseHint),
-  Session('Grundlagenlauf', Icons.directions_run, 40,
-      [Exercise('Locker laufen', '6 km im Plaudertempo')], hint: _baseHint),
 ];
 
 // Eine kurze, lockere Tempo-Einheit pro Woche: nur ein Reiz zur Abwechslung.
@@ -258,8 +259,9 @@ const longRuns = [
       [Exercise('Locker laufen', '12 km im Plaudertempo')], hint: _longHint),
   Session('Langer Lauf', Icons.route, 70,
       [Exercise('Locker laufen', '12 km im Plaudertempo')], hint: _longHint),
-  Session('Langer Lauf', Icons.route, 50,
-      [Exercise('Locker laufen', '8 km im Plaudertempo')], hint: 'Entlastungswoche: kürzer und locker.'),
+  Session('Langer Lauf', Icons.route, 65,
+      [Exercise('Locker laufen', '10 km im Plaudertempo')],
+      hint: 'Entlastungswoche: bewusst locker, kein Tempo.'),
 ];
 
 const restDay = Session('Ruhetag', Icons.self_improvement, 15, [
