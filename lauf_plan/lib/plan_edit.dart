@@ -18,24 +18,27 @@ final templateKeys = [
   'rest',
 ];
 
-/// Welcher Baustein liegt an Plan-Tag [day]? (Reihenfolge ab Donnerstag)
+/// Welcher Baustein liegt an Plan-Tag [day]? Reihenfolge je Woche:
+/// Grundlagenlauf, Qualität (Steigerungen/Bergsprints/Intervalle), Beine A,
+/// Ruhetag, Beine B, Oberkörper, Langer Lauf. Die Qualitätseinheit liegt damit
+/// immer 4 Einheiten nach Beine B (und 6 nach Beine A) – auch ohne Ruhetag.
 String templateKeyFor(int day) {
   final week = day ~/ 7;
   switch (day % 7) {
     case 0:
-      return 'legA';
-    case 1:
       return 'base$week';
-    case 2:
-      return 'upper';
-    case 3:
-      return 'legB';
-    case 4:
+    case 1:
       return 'quality$week';
-    case 5:
-      return 'long$week';
-    default:
+    case 2:
+      return 'legA';
+    case 3:
       return 'rest';
+    case 4:
+      return 'legB';
+    case 5:
+      return 'upper';
+    default:
+      return 'long$week';
   }
 }
 
