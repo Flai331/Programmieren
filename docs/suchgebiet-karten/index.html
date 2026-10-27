@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#c62828">
+  <title>Suchgebiet-Karten</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="lib/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <input id="title" class="title" type="text" placeholder="Einsatz / Suchgebiet" aria-label="Titel">
+    <div id="status" class="status"></div>
+  </header>
+
+  <div id="map"></div>
+  <canvas id="overlay"></canvas>
+
+  <div id="hint" class="hint" hidden></div>
+
+  <nav class="toolbar" aria-label="Werkzeuge">
+    <button data-tool="pan" class="active" title="Karte bewegen"><span>✋</span>Bewegen</button>
+    <button data-tool="pen" title="Freihand zeichnen"><span>✏️</span>Stift</button>
+    <button data-tool="text" title="Text / Punkt setzen"><span>📍</span>Text</button>
+    <button data-tool="fill" title="Feld einfärben"><span>▦</span>Feld</button>
+    <button data-tool="erase" title="Zeichnung löschen"><span>🧽</span>Radierer</button>
+    <button id="undo" title="Rückgängig"><span>↶</span>Zurück</button>
+  </nav>
+
+  <div class="sidebuttons">
+    <button id="btn-grid" title="Raster"><span>#</span>Raster</button>
+    <button id="btn-layers" title="Kartenart"><span>🗺️</span>Karte</button>
+    <button id="btn-gps" title="Mein Standort"><span>◎</span>GPS</button>
+    <button id="btn-pdf" class="primary" title="PDF erstellen &amp; senden"><span>📄</span>PDF</button>
+  </div>
+
+  <div id="palette" class="palette" hidden>
+    <div class="colors"></div>
+    <div class="widths">
+      <button data-w="3">dünn</button>
+      <button data-w="5" class="active">mittel</button>
+      <button data-w="9">dick</button>
+    </div>
+  </div>
+
+  <!-- Raster -->
+  <section id="panel-grid" class="panel" hidden>
+    <h2>Raster</h2>
+    <p class="small">Das Raster hängt an festen Koordinaten. Feld A1 liegt dadurch auf jeder Karte und in jedem PDF-Blatt an derselben Stelle.</p>
+    <label>Feldgröße
+      <select id="cell-size">
+        <option value="25">25 m</option>
+        <option value="50">50 m</option>
+        <option value="100" selected>100 m</option>
+        <option value="150">150 m</option>
+        <option value="200">200 m</option>
+        <option value="250">250 m</option>
+        <option value="500">500 m</option>
+        <option value="1000">1 km</option>
+      </select>
+    </label>
+    <div class="row">
+      <button id="grid-draw">Suchgebiet aufziehen</button>
+      <button id="grid-view">Aktuellen Ausschnitt nehmen</button>
+    </div>
+    <p id="grid-info" class="info"></p>
+    <label>Feld suchen
+      <span class="row"><input id="cell-search" type="text" placeholder="z. B. C4"><button id="cell-go">Zeigen</button></span>
+    </label>
+    <div class="row">
+      <button id="clear-fills">Feldfarben löschen</button>
+      <button id="clear-drawings">Zeichnungen löschen</button>
+      <button id="grid-remove" class="danger">Raster entfernen</button>
+    </div>
+    <button class="close">Schließen</button>
+  </section>
+
+  <!-- Kartenart -->
+  <section id="panel-layers" class="panel" hidden>
+    <h2>Kartenart</h2>
+    <div id="layer-list" class="list"></div>
+    <button class="close">Schließen</button>
+  </section>
+
+  <!-- PDF -->
+  <section id="panel-pdf" class="panel" hidden>
+    <h2>PDF erstellen</h2>
+    <div class="row">
+      <label>Format
+        <select id="pdf-format"><option>A4</option><option>A3</option></select>
+      </label>
+      <label>Ausrichtung
+        <select id="pdf-orient"><option value="landscape">Quer</option><option value="portrait">Hoch</option></select>
+      </label>
+    </div>
+    <label class="check"><input type="checkbox" id="pdf-overview" checked> Übersicht (ganzes Raster)</label>
+    <label class="check"><input type="checkbox" id="pdf-details" checked> Detailblätter mit
+      <select id="pdf-k">
+        <option value="2">2×2</option>
+        <option value="3" selected>3×3</option>
+        <option value="4">4×4</option>
+        <option value="5">5×5</option>
+      </select> Feldern
+    </label>
+    <label class="check"><input type="checkbox" id="pdf-view"> Aktueller Kartenausschnitt</label>
+    <p id="pdf-plan" class="info"></p>
+    <div class="row">
+      <button id="pdf-make" class="primary">PDF erstellen</button>
+    </div>
+    <div id="pdf-result" hidden>
+      <p id="pdf-msg" class="info"></p>
+      <div class="row">
+        <button id="pdf-share" class="primary">Senden / Teilen (E-Mail …)</button>
+        <button id="pdf-download">Herunterladen</button>
+        <button id="pdf-mail">E-Mail-Programm öffnen</button>
+      </div>
+    </div>
+    <button class="close">Schließen</button>
+  </section>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="lib/leaflet.js"></script>
+  <script src="lib/jspdf.umd.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
