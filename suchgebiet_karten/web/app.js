@@ -1,5 +1,5 @@
 import {
-  makeGrid, cellCount, cellAt, cellBounds, cellLabel, parseCell, formatMeters, MAX_CELLS,
+  makeGrid, cellCount, cellAt, cellBounds, cellLabel, parseCell, formatMeters, MAX_CELLS, remapCells,
 } from './grid.js';
 import { drawOverlay, hitItem } from './render.js';
 import {
@@ -673,11 +673,14 @@ function setArea(area, cellM = P.cellM) {
     return false;
   }
   snapshot();
-  const sizeChanged = grid && (grid.cellM !== cellM);
+  // Teams und Status wandern auf die neuen Felder mit (neue Feldgröße oder neues Gebiet)
+  if (grid) {
+    P.fills = remapCells(grid, g, P.fills);
+    P.status = remapCells(grid, g, P.status);
+  }
   P.area = area;
   P.cellM = cellM;
   grid = g;
-  if (sizeChanged) { P.fills = {}; P.status = {}; }
   changed();
   return true;
 }
@@ -697,10 +700,6 @@ function updateGridInfo() {
 $('cell-size').addEventListener('change', () => {
   const m = Number($('cell-size').value);
   if (!P.area) { P.cellM = m; save(); return; }
-  if ((Object.keys(P.fills).length || Object.keys(P.status).length) && !confirm('Bei neuer Feldgröße ändern sich die Felder – die Feldzuteilungen werden gelöscht. Fortfahren?')) {
-    $('cell-size').value = String(P.cellM);
-    return;
-  }
   if (!setArea(P.area, m)) $('cell-size').value = String(P.cellM);
 });
 $('show-utm').addEventListener('change', () => { P.showUtm = $('show-utm').checked; changed(); });
