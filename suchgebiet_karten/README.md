@@ -9,7 +9,7 @@ als PDF ausgeben und direkt per E-Mail/Messenger verschicken.
 ## Auf Android installieren
 
 **Variante A – APK (eigene App):**
-[Suchgebiet-Karten.apk](https://github.com/Flai331/Programmieren/releases/download/suchgebiet-karten/Suchgebiet-Karten.apk)
+[Suchgebiet-Karten.apk](https://github.com/Flai331/Programmieren/releases/download/suchgebiet-karten/Suchgebiet-Karten.apk) (oder als [ZIP](https://github.com/Flai331/Programmieren/releases/download/suchgebiet-karten/Suchgebiet-Karten-APK.zip))
 herunterladen, Installation aus unbekannten Quellen erlauben, installieren.
 Neue Versionen lassen sich einfach drüber installieren.
 
@@ -31,6 +31,7 @@ von der einen in die andere übernehmen.
 | **GPS** | Eigener Standort, oben steht das aktuelle Feld (mit UTM-Schalter auch UTMREF) |
 | **Export** | PDF, GPX für Garmin/BaseCamp, Garmin-Karte (KMZ) – jeweils **📤 Teilen** (WhatsApp, Mail, Signal …) oder **💾 Speichern** |
 | Stift / Text / Feld / Track / Radierer | Freihand zeichnen, Punkt mit Text, Felder einem Team zuteilen (antippen oder drüberwischen), Track Punkt für Punkt setzen, löschen |
+| **Einsatz** (📋) | Einsatzprotokoll mit Eckdaten, kein ETB. Reiter **Lage**: vermisste Person, Kräfte je Organisation (Führung, Helfer, Hunde, Fahrzeuge, Summe), Notizen getippt, **Notizblock** für Handschrift mit Stift oder Finger (Seiten, 3 Farben, Rückgängig), **Fotos** vom Papier. Reiter **Einsatzende**: Notizen und Fotos links ansehen, rechts zusammenfassen; Legende für die Stiftfarben auf der Karte; Verfasser; E-Mail-Empfänger. **Abschluss-PDF** mit Bericht, Notizseiten, Fotos und Karte. „Per Mail“: In der Android-App kommen PDF und Empfänger direkt ins Mailprogramm. Im Browser hängt das Teilen-Menü das PDF an, die Empfänger werden in die Zwischenablage kopiert |
 | Zeichnung benennen | Im Stift-Werkzeug „🏷️ Letzte Zeichnung benennen“ oder eine Zeichnung (auch einen Track) antippen. Der Name steht auf der Karte, im PDF und als Trackname im GPX |
 
 Antippen der Karte im Modus „Bewegen“ zeigt Feld, zugeteiltes Team und ggf. UTMREF.
@@ -75,9 +76,9 @@ mit dem PDF als Anhang. Am PC wird es heruntergeladen und das E-Mail-Programm ge
 
 **GPX (Export → Garmin: GPX):** zwei Dateien, BaseCamp macht aus jeder eine eigene Liste:
 1. **…_Raster.gpx** – alle Rasterlinien (als eine durchgehende Linie, ohne Schrägen) und die
-   Feldnamen: als **Linienschrift** unten links in jedem Feld (Voreinstellung – alle Namen
-   zusammen sind nur *ein* Eintrag „Feldnamen …“ in der Liste), als Wegpunkte (ein Eintrag pro
-   Feld) oder keine
+   Feldnamen: als **Linienschrift** unten links in jedem Feld (Voreinstellung – Rasterlinien und
+   Feldnamen sind zusammen *ein einziger* Track „Raster …“ in der Liste), als Wegpunkte (ein
+   Eintrag pro Feld) oder keine
 2. **…_Markierungen.gpx** – eigene Tracks, Stift-Markierungen (mit ihrem Namen, sonst „Stift 1 (rot)“), Team-/Status-Umrisse,
    Treffpunkt und Textpunkte
 

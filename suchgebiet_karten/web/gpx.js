@@ -190,6 +190,25 @@ export function labelTracks(grid, maxPts = 9000) {
   return tracks;
 }
 
+// Raster UND Feldnamen als EIN Linienzug: oberer Rand, dann die Feldnamen Zeile für Zeile
+// (zeichnen dabei alle waagerechten Linien), dann die senkrechten Linien im Zickzack.
+// Alle Verbindungen liegen auf Rasterlinien. null, wenn es mehr als maxPts Punkte würden.
+export function gridWithLabels(grid, maxPts = 9000) {
+  const labels = labelTracks(grid, Infinity)[0].pts;
+  const lat = (r) => grid.originLat - r * grid.dLat;
+  const lon = (c) => grid.originLon + c * grid.dLon;
+  const pts = [[lat(0), lon(grid.cols)], [lat(0), lon(0)], ...labels];
+  // letzte Zeile endet links (rückwärts gezeichnet) oder rechts
+  const endLeft = (grid.rows - 1) % 2 === 1;
+  const cols = [...Array(grid.cols + 1).keys()];
+  if (!endLeft) cols.reverse();
+  cols.forEach((c, i) => {
+    const [a, b] = i % 2 ? [0, grid.rows] : [grid.rows, 0];
+    pts.push([lat(a), lon(c)], [lat(b), lon(c)]);
+  });
+  return pts.length <= maxPts ? pts : null;
+}
+
 function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -264,8 +283,14 @@ export function buildGpx(project, grid, opts, part = '') {
       }
     }
   }
+  // Rasterlinien + Linienschrift: wenn möglich ein einziger Track (ein Eintrag in BaseCamp)
+  const both = grid && opts.cells === 'lines' && opts.grid && opts.grid !== 'none' && opts.grid !== 'outline'
+    ? gridWithLabels(grid) : null;
+  if (both) {
+    trks += trk(`Raster ${title}`, '#d50000', [both], `${grid.cellM} m Felder mit Feldnamen, A1 = Nordwest-Ecke`);
+  }
   // opts.grid: 'outline' = nur Umrandung, 'all' (oder true) = mit allen Rasterlinien
-  if (opts.grid && opts.grid !== 'none' && grid) {
+  if (!both && opts.grid && opts.grid !== 'none' && grid) {
     const gb = gridBounds(grid);
     const desc = `${grid.cellM} m Felder, A1 = Nordwest-Ecke`;
     if (opts.grid === 'outline') {
@@ -275,7 +300,7 @@ export function buildGpx(project, grid, opts, part = '') {
       trks += trk(`Raster ${title}`, '#d50000', [gridPath(grid)], desc);
     }
   }
-  if (opts.cells === 'lines' && grid) {
+  if (!both && opts.cells === 'lines' && grid) {
     const parts = labelTracks(grid);
     for (const t of parts) {
       const rows = parts.length > 1 ? ` (Zeilen ${t.rows[0] + 1}–${t.rows[1] + 1})` : '';
