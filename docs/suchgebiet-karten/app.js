@@ -10,7 +10,7 @@ import { formatMgrs } from './utm.js';
 import { buildGpx, trackLength, formatLength } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import {
-  FORCE_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
+  FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
   MAIL_PARTS, REPORT_SECTIONS, EXTRA_PARTS, hasReportText, newMailTo, mailAddresses,
 } from './mission.js';
 import { buildCustomMap, planCustomMap } from './kmz.js';
@@ -21,7 +21,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v27';
+const APP_VERSION = 'v28';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -1343,6 +1343,47 @@ function renderForces() {
   });
   renderTotal();
 }
+// Eckzeiten: „Jetzt“ trägt die aktuelle Uhrzeit ein, sonst von Hand
+function renderTimes() {
+  const box = $('ms-times');
+  box.innerHTML = '';
+  const t = M().times;
+  const pad = (v) => String(v).padStart(2, '0');
+  for (const [k, label] of TIME_KEYS) {
+    const row = document.createElement('div');
+    row.className = 'trow';
+    row.innerHTML = '<span></span><input type="time"><button class="now">Jetzt</button><button class="clr" title="Löschen">✕</button>';
+    row.querySelector('span').textContent = label;
+    const inp = row.querySelector('input');
+    inp.value = t[k] || '';
+    inp.addEventListener('input', () => { t[k] = inp.value; touch(); });
+    row.querySelector('.now').addEventListener('click', () => {
+      const d = new Date();
+      t[k] = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      if (k === 'alarm') t.alarmDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      touch();
+      renderTimes();
+    });
+    row.querySelector('.clr').addEventListener('click', () => {
+      delete t[k];
+      if (k === 'alarm') delete t.alarmDate;
+      touch();
+      renderTimes();
+    });
+    box.appendChild(row);
+    if (k === 'alarm') {
+      // Datum der Alarmierung (für das JUH-Formular)
+      const dr = document.createElement('div');
+      dr.className = 'trow';
+      dr.innerHTML = '<span>Datum der Alarmierung</span><input type="date">';
+      const di = dr.querySelector('input');
+      di.value = t.alarmDate || '';
+      di.addEventListener('input', () => { t.alarmDate = di.value; touch(); });
+      box.appendChild(dr);
+    }
+  }
+}
+
 function renderTotal() {
   $('ms-total').textContent = M().forces.length ? totalLine(M().forces) : '';
 }
@@ -1549,6 +1590,7 @@ function renderMission() {
   $('ms-author').value = M().author;
   renderMailTo();
   $('ms-msg').textContent = '';
+  renderTimes();
   renderForces();
   renderThumbs();
   showTab(db.missionTab || 'lage');
@@ -1668,14 +1710,28 @@ padCanvas.addEventListener('pointercancel', padEnd);
 window.addEventListener('resize', () => { if (!$('notepad').hidden) { padSize(); padDraw(); } });
 
 // Abschlussbericht der App (ohne Karte) mit den angekreuzten Inhalten
+// Karte nur, wenn angekreuzt: ohne Raster, Flächen nummeriert mit Liste am Rand
 async function reportPdf(sec, progress) {
-  const parts = { ...sec, legend: false };
-  const hasPad = parts.pad && M().pages.some((pg) => pg.strokes.length);
-  const hasPhotos = parts.photos && M().photos.length;
-  if (!hasReportText(parts) && !hasPad && !hasPhotos) return null;
+  const withMap = !!sec.map;
+  const parts = { ...sec, legend: withMap };
+  const hasPad = parts.pad !== false && M().pages.some((pg) => pg.strokes.length);
+  const hasPhotos = parts.photos !== false && M().photos.length;
+  if (!hasReportText(parts) && !hasPad && !hasPhotos && !withMap) return null;
   progress('Bericht wird erstellt …');
-  const opts = { ...pdfOpts(), orient: 'portrait', noMap: true, report: parts, title: `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}` };
-  const res = await buildPdf(P, grid, opts, layerStack(P.layerId, activeOverlays()), viewBounds(), () => {});
+  const opts = {
+    ...pdfOpts(),
+    orient: withMap ? pdfOpts().orient : 'portrait',
+    overview: !!grid,
+    details: false,
+    info: false,
+    view: !grid,
+    noMap: !withMap,
+    noGrid: true,
+    areaLabels: 'edge',
+    report: parts,
+    title: `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}`,
+  };
+  const res = await buildPdf(P, grid, opts, layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => progress(`Karte ${i} von ${n} …`));
   return { blob: res.blob, name: safeName(hasReportText(parts) ? '_Abschlussbericht.pdf' : '_Notizen.pdf'), title: opts.title, pages: res.pages };
 }
 

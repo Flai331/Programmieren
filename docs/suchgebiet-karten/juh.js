@@ -2,7 +2,7 @@
 // werden eingetragen, alle Felder bleiben beschreibbar (nichts wird „flachgeklopft“).
 // Feldnamen der Vorlage sind nur nummeriert – Zuordnung nach ihrer Lage im Formular.
 
-import { forceTotals, forceLine } from './mission.js';
+import { forceTotals, forceLine, missionHours } from './mission.js';
 
 export const JUH_TEMPLATE = 'vorlagen/juh-einsatzbericht-rhs.pdf';
 
@@ -32,6 +32,8 @@ export function juhValues(project, now = new Date()) {
   const ownT = forceTotals(own);
   const otherT = forceTotals(other);
   const n = (v) => (v ? String(v) : '');
+  const t = m.times || {};
+  const hours = missionHours(m);
   const ownNames = own.map((f) => f.org).filter(Boolean).join(', ');
   const fields = {
     'Textfeld 77': String(now.getFullYear() % 100).padStart(2, '0'),
@@ -47,6 +49,16 @@ export function juhValues(project, now = new Date()) {
     // RH-Teams Fläche (Hunde)
     'Textfeld 47': n(ownT.dogs),
     'Textfeld 50': n(forceTotals(other.filter((f) => isRhs(f.org || ''))).dogs),
+    // Zeiten: Alarmierung am/um, Wache abgerückt, Einsatzstelle an, Einsatzende, Unterkunft
+    'Textfeld 29': t.alarmDate ? t.alarmDate.split('-').reverse().join('.') : '',
+    'Textfeld 30': t.alarm || '',
+    'Textfeld 36': t.depart || '',
+    'Textfeld 37': t.arrive || '',
+    'Textfeld 52': t.end || '',
+    'Textfeld 54': t.back || '',
+    // Einsatzstunden = Helfer × Dauer, gerundet
+    'Textfeld 55': hours ? String(Math.round(ownT.people * hours)) : '',
+    'Textfeld 56': hours ? String(Math.round((ownT.people + otherT.people) * hours)) : '',
     'Textfeld 57': now.toLocaleDateString('de-DE'),
     'Textfeld 58': m.author || project.leader || '',
   };

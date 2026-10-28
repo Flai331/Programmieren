@@ -9,8 +9,8 @@ test('Kräfte: Summen und Zeilen', () => {
     { org: 'Feuerwehr', lead: 2, helpers: 'x', dogs: '', vehicles: -1 },
   ];
   assert.deepEqual(forceTotals(f), { lead: 3, helpers: 6, dogs: 4, vehicles: 2, people: 9 });
-  assert.equal(forceLine(f[0]), 'DRK RHS Celle: 1 Führung, 6 Helfer, 4 Hunde, 2 Fahrz.');
-  assert.equal(totalLine(f), 'Gesamt: 9 Einsatzkräfte (3 Führung, 6 Helfer), 4 Hunde, 2 Fahrzeuge');
+  assert.equal(forceLine(f[0]), 'DRK RHS Celle: 1/6//7 + 4 Hunde + 2 Fz.');
+  assert.equal(totalLine(f), 'Gesamt: 3/6//9 + 4 Hunde + 2 Fz.');
 });
 
 test('Alte Suchgebiete bekommen ein leeres Protokoll', () => {
@@ -34,7 +34,7 @@ test('Mailtext und Kartenlegende', () => {
   });
   assert.deepEqual(lineLegend(p), [{ color: '#d50000', label: 'Spur Mantrailer', line: true }]);
   const t = missionText(p, null);
-  for (const part of ['Einsatz: Suche Wald', 'Verfasser: Anna', 'Herr M., 82 J.', 'RHS: 1 Führung', 'Gesamt: 5 Einsatzkräfte', 'Person in C4 gefunden']) {
+  for (const part of ['Einsatz: Suche Wald', 'Verfasser: Anna', 'Herr M., 82 J.', 'RHS: 1/4//5 + 3 Hunde + 1 Fz.', 'Gesamt: 1/4//5', 'Person in C4 gefunden']) {
     assert.ok(t.includes(part), part);
   }
 });
@@ -43,7 +43,7 @@ test('Empfänger: alte Liste wird zu einer Zeile, Adressen werden getrennt', asy
   const { mailAddresses } = await import('../web/mission.js');
   const m = normalizeMission({ recipients: 'a@b.de; c@d.de' });
   assert.equal(m.mailTo.length, 1);
-  assert.deepEqual({ ...m.mailTo[0], to: undefined }, { to: undefined, person: true, forces: true, summary: true, notes: true, pad: true, photos: true, juh: true, gpx: false });
+  assert.deepEqual({ ...m.mailTo[0], to: undefined }, { to: undefined, times: true, person: true, forces: true, summary: true, notes: true, pad: true, photos: true, map: false, juh: true, gpx: false });
   assert.deepEqual(mailAddresses(m.mailTo[0]), ['a@b.de', 'c@d.de']);
   assert.equal(m.recipients, '');
   assert.deepEqual(normalizeMission({}).mailTo, []);
@@ -51,7 +51,7 @@ test('Empfänger: alte Liste wird zu einer Zeile, Adressen werden getrennt', asy
 
 test('Empfänger-Zeilen älterer Versionen bekommen die heutigen Häkchen', () => {
   const m = normalizeMission({ mailTo: [{ to: 'a@b.de', report: true, map: true, notes: false, juh: false, gpx: true }, { to: 'c@d.de', juh: false, summary: false }] });
-  assert.deepEqual(m.mailTo[0], { to: 'a@b.de', person: true, forces: true, summary: true, notes: true, pad: false, photos: false, juh: false, gpx: true });
+  assert.deepEqual(m.mailTo[0], { to: 'a@b.de', times: true, person: true, forces: true, summary: true, notes: true, pad: false, photos: false, map: false, juh: false, gpx: true });
   assert.equal(m.mailTo[1].summary, false);
   assert.equal(m.mailTo[1].juh, false);
   assert.equal(m.mailTo[1].person, true);
@@ -61,5 +61,13 @@ test('Mailtext nur mit angekreuzten Inhalten', () => {
   const p = newProject('X');
   Object.assign(p.mission, { person: 'Herr M.', summary: 'gefunden', forces: [{ org: 'RHS', helpers: 3 }] });
   const t = missionText(p, null, 'Anhang', { person: false, forces: true, summary: false });
-  assert.ok(!t.includes('Herr M.') && !t.includes('gefunden') && t.includes('RHS: 3 Helfer'));
+  assert.ok(!t.includes('Herr M.') && !t.includes('gefunden') && t.includes('RHS: 0/3//3'));
+});
+
+test('Zeiten: Zeilen und Dauer über Mitternacht', async () => {
+  const { timeLines, missionHours } = await import('../web/mission.js');
+  const m = normalizeMission({ times: { alarm: '22:30', alarmDate: '2026-10-28', depart: '22:45', back: '02:00' } });
+  assert.deepEqual(timeLines(m), ['Alarmierung: 28.10.2026 22:30 Uhr', 'Abfahrt Wache: 22:45 Uhr', 'Rückkehr Unterkunft: 02:00 Uhr']);
+  assert.equal(missionHours(m), 3.5);
+  assert.equal(missionHours(normalizeMission({})), 0);
 });
