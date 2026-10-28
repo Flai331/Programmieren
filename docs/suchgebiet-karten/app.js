@@ -22,7 +22,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v41';
+const APP_VERSION = 'v42';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -552,18 +552,22 @@ function updatePenbar() {
 function finishPen() {
   const d = draftPen;
   if (!d || !d.strokes.length) return;
-  const t = prompt('Name der Zeichnung (steht so auf der Karte und im GPX; leer lassen = ohne Namen):', '');
+  // wie beim Umriss: Name mit Vorschlag „Zeichnung 3“
+  const groups = new Set(P.items.filter((it) => it.kind === 'stroke').map((it) => it.group || it));
+  const def = `Zeichnung ${groups.size + 1}`;
+  const t = prompt('Name der Zeichnung (erscheint so auf der Karte und auf dem Garmin):', def);
   if (t === null) return;
+  const name = t.trim() || def;
   snapshot();
   const group = uid();
   for (const st of d.strokes) {
     st.group = group;
-    st.name = t.trim();
+    st.name = name;
     P.items.push(st);
   }
   draftPen = null;
   changed();
-  toast(t.trim() ? `„${t.trim()}“ gespeichert` : 'Zeichnung gespeichert');
+  toast(`„${name}“ gespeichert`);
 }
 $('pen-back').addEventListener('click', () => {
   if (!draftPen) return;
