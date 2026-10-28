@@ -37,6 +37,12 @@ test('JUH: eigene und fremde Kräfte, Gruppen, Texte', () => {
   assert.match(fields['Textfeld 78.0.1'], /Feuerwehr Laer/);
   assert.match(fields['Textfeld 78.1.0'], /BRH RHS Münster/);
   assert.equal(fields['Textfeld 58'], 'Anna');
+  const p2 = project();
+  p2.mission.times = { alarm: '13:20', alarmDate: '2026-10-28', depart: '13:35', arrive: '14:05', end: '15:40', back: '16:20' };
+  const v2 = juhValues(p2).fields;
+  assert.deepEqual(['29', '30', '36', '37', '52', '54'].map((n) => v2[`Textfeld ${n}`]), ['28.10.2026', '13:20', '13:35', '14:05', '15:40', '16:20']);
+  assert.equal(v2['Textfeld 55'], '24'); // 8 eigene Helfer × 3 h
+  assert.equal(v2['Textfeld 56'], '99'); // 33 × 3 h
   assert.equal(blocks.lage, 'Vermisste Person: Herr M., 82 J.');
   assert.match(blocks.staffeln, /BRH RHS Münster/);
 });

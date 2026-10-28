@@ -12,7 +12,8 @@ export const FORCE_KEYS = [
 export function newMission() {
   return {
     person: '', // vermisste Person
-    forces: [], // [{org, lead, helpers, dogs, vehicles}]
+    forces: [], // [{org, lead, helpers, dogs, vehicles, own}]
+    times: {}, // Eckzeiten, siehe TIME_KEYS
     pages: [], // Notizblock: [{t, strokes: [{color, w, pts: [[x, y]]}]}], x/y in Seitenbreiten
     photos: [], // [{t, src (JPEG data URL)}]
     summary: '',
@@ -28,6 +29,7 @@ export function normalizeMission(m) {
   const out = { ...base, ...(m && typeof m === 'object' ? m : {}) };
   for (const k of ['forces', 'pages', 'photos']) if (!Array.isArray(out[k])) out[k] = [];
   if (!out.legend || typeof out.legend !== 'object') out.legend = {};
+  if (!out.times || typeof out.times !== 'object') out.times = {};
   if (!Array.isArray(out.mailTo)) out.mailTo = [];
   // Zeilen älterer Versionen (Bericht/Karte/„Notizblock + Fotos“) auf die heutigen Häkchen bringen
   out.mailTo = out.mailTo.map((r) => {
@@ -46,21 +48,23 @@ export function normalizeMission(m) {
 // Je Empfänger ankreuzbar: Inhalte des Abschlussberichts der App (ohne Karte)
 // und zusätzliche Anhänge
 export const REPORT_SECTIONS = [
+  ['times', 'Zeiten'],
   ['person', 'Vermisste Person'],
   ['forces', 'Kräfte'],
   ['summary', 'Zusammenfassung'],
   ['notes', 'Notizen'],
   ['pad', 'Notizblock'],
   ['photos', 'Fotos'],
+  ['map', 'Karte'],
 ];
 export const EXTRA_PARTS = [
   ['juh', 'JUH-Formular'],
   ['gpx', 'GPX für BaseCamp'],
 ];
 export const MAIL_PARTS = [...REPORT_SECTIONS, ...EXTRA_PARTS];
-const TEXT_KEYS = ['person', 'forces', 'summary', 'notes'];
+const TEXT_KEYS = ['times', 'person', 'forces', 'summary', 'notes'];
 export function newMailTo() {
-  return { to: '', person: true, forces: true, summary: true, notes: true, pad: true, photos: true, juh: true, gpx: false };
+  return { to: '', times: true, person: true, forces: true, summary: true, notes: true, pad: true, photos: true, map: false, juh: true, gpx: false };
 }
 // sec: Häkchen einer Zeile (ohne Angabe: alles)
 const want = (sec, k) => !sec || sec[k] !== false;
@@ -79,14 +83,48 @@ export function forceTotals(forces) {
 }
 
 // „DRK RHS Celle: 1 Führung, 6 Helfer, 4 Hunde, 2 Fahrz.“
+// Stärke nur als Zahlen: Führung/Helfer//Gesamt + Hunde (+ Fahrzeuge)
+export const STRENGTH_HINT = 'Führung/Helfer//Gesamt';
+function strength(t) {
+  let s = `${t.lead}/${t.helpers}//${t.lead + t.helpers}`;
+  if (t.dogs) s += ` + ${t.dogs} Hunde`;
+  if (t.vehicles) s += ` + ${t.vehicles} Fz.`;
+  return s;
+}
+// „DRK RHS Celle: 1/6//7 + 4 Hunde“
 export function forceLine(f) {
-  const parts = FORCE_KEYS.filter(([k]) => num(f[k])).map(([k, l]) => `${num(f[k])} ${l}`);
-  return `${f.org || 'Organisation'}: ${parts.join(', ') || '–'}`;
+  return `${f.org || 'Organisation'}: ${strength(Object.fromEntries(FORCE_KEYS.map(([k]) => [k, num(f[k])])))}`;
 }
 
 export function totalLine(forces) {
-  const t = forceTotals(forces);
-  return `Gesamt: ${t.people} Einsatzkräfte (${t.lead} Führung, ${t.helpers} Helfer), ${t.dogs} Hunde, ${t.vehicles} Fahrzeuge`;
+  return `Gesamt: ${strength(forceTotals(forces))}`;
+}
+
+// Eckzeiten: Uhrzeit „HH:MM“ (Alarmierung zusätzlich mit Datum „JJJJ-MM-TT“)
+export const TIME_KEYS = [
+  ['alarm', 'Alarmierung'],
+  ['depart', 'Abfahrt Wache'],
+  ['arrive', 'Eintreffen Einsatzstelle'],
+  ['start', 'Einsatzbeginn'],
+  ['end', 'Einsatzende'],
+  ['back', 'Rückkehr Unterkunft'],
+];
+export function timeLines(m) {
+  const t = m.times || {};
+  return TIME_KEYS.filter(([k]) => t[k]).map(([k, l]) => {
+    const d = k === 'alarm' && t.alarmDate ? `${t.alarmDate.split('-').reverse().join('.')} ` : '';
+    return `${l}: ${d}${t[k]} Uhr`;
+  });
+}
+// Dauer in Stunden (Alarmierung bis Rückkehr, sonst bis Einsatzende); über Mitternacht +24 h
+export function missionHours(m) {
+  const t = m.times || {};
+  const to = t.back || t.end;
+  if (!t.alarm || !to) return 0;
+  const min = (x) => { const [h, mm] = x.split(':').map(Number); return h * 60 + mm; };
+  let d = min(to) - min(t.alarm);
+  if (d < 0) d += 24 * 60;
+  return d / 60;
 }
 
 // Farben der Zeichnungen und Tracks, die auf der Karte vorkommen (für die Legende)
@@ -113,8 +151,9 @@ export function missionText(project, grid, attach = 'Abschlussbericht im Anhang 
   if (project.leader) out.push(`Einsatzleitung: ${project.leader}`);
   if (m.author) out.push(`Verfasser: ${m.author}`);
   out.push(`Stand: ${fmtDate(Date.now())}`);
+  if (want(sec, 'times') && timeLines(m).length) out.push('', 'Zeiten:', ...timeLines(m));
   if (want(sec, 'person') && m.person.trim()) out.push('', 'Vermisste Person:', m.person.trim());
-  if (want(sec, 'forces') && m.forces.length) out.push('', 'Kräfte:', ...m.forces.map(forceLine), totalLine(m.forces));
+  if (want(sec, 'forces') && m.forces.length) out.push('', `Kräfte (${STRENGTH_HINT}):`, ...m.forces.map(forceLine), totalLine(m.forces));
   if (want(sec, 'summary') && m.summary.trim()) out.push('', 'Zusammenfassung:', m.summary.trim());
   if (grid) out.push('', `Raster: ${grid.cellM} m Felder, A1 = Nordwest-Ecke.`);
   if (attach) out.push('', attach);
@@ -204,6 +243,7 @@ export async function addReportPages(doc, project, grid, W, H, margin, parts = {
     if (m.author) meta.push(`Verfasser: ${m.author}`);
     text(meta.join('   ·   '), 9.5);
 
+    if (want(parts, 'times') && timeLines(m).length) { heading('Zeiten'); for (const l of timeLines(m)) text(l); }
     if (want(parts, 'person') && m.person.trim()) { heading('Vermisste Person'); text(m.person.trim()); }
 
     if (want(parts, 'forces') && m.forces.length) {
