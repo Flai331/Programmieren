@@ -291,14 +291,25 @@ export function buildGpx(project, grid, opts, part = '') {
     }
   }
   if (opts.drawings) {
-    // Name der Zeichnung, sonst „Stift 3 (rot)“ – Nummer nach Reihenfolge aller Zeichnungen
+    // Name der Zeichnung, sonst „Stift 3 (rot)“ – Nummer nach Reihenfolge aller Zeichnungen.
+    // Zeichnung aus mehreren Strichen (gleiche group): je Strich ein Track, ab dem zweiten „(Teil 2)“ …
+    // (Striche in einem Track würden BaseCamp/Garmin miteinander verbinden)
     let n = 0;
+    const groups = {};
     for (const it of project.items) {
       if (it.kind !== 'stroke') continue;
-      n++;
+      let part = 1;
+      if (it.group && groups[it.group]) {
+        part = ++groups[it.group].parts;
+      } else {
+        n++;
+        if (it.group) groups[it.group] = { n, parts: 1 };
+      }
       if (it.pts.length < 2) continue;
+      const num = it.group ? groups[it.group].n : n;
       const color = String(it.color).toLowerCase() === '#f06292' ? 'rosa' : COLOR_DE[garminColor(it.color)] || '';
-      trks += trk(it.name || `Stift ${n}${color ? ` (${color})` : ''}`, it.color, [it.pts], formatLength(trackLength(it.pts)));
+      const name = it.name || `Stift ${num}${color ? ` (${color})` : ''}`;
+      trks += trk(part > 1 ? `${name} (Teil ${part})` : name, it.color, [it.pts], formatLength(trackLength(it.pts)));
     }
   }
   if (opts.teams && grid) {

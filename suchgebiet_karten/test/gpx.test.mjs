@@ -279,3 +279,11 @@ test('mergeGpx: zwei Rastergebiete in einer Datei', () => {
   assert.ok(m.indexOf('<wpt') < m.indexOf('<trk>'));
   assert.ok(m.trim().endsWith('</gpx>'));
 });
+
+test('buildGpx: Zeichnung aus mehreren Strichen – je Strich ein Track, Teil 2 …', () => {
+  const p = newProject('T');
+  const st = (lat, extra) => ({ kind: 'stroke', color: '#d50000', w: 4, pts: [[lat, 7], [lat, 7.01]], ...extra });
+  p.items.push(st(51, { group: 'g1', name: 'Bach' }), st(51.01, { group: 'g1', name: 'Bach' }), st(51.02, {}), st(51.03, { group: 'g2', name: '' }), st(51.04, { group: 'g2', name: '' }));
+  const names = (buildGpx(p, null, { drawings: true }).match(/<trk>\s*<name>[^<]*/g) || []).map((x) => x.replace(/<trk>\s*<name>/, ''));
+  assert.deepEqual(names, ['Bach', 'Bach (Teil 2)', 'Stift 2 (rot)', 'Stift 3 (rot)', 'Stift 3 (rot) (Teil 2)']);
+});
