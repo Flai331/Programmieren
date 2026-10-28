@@ -22,7 +22,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v40';
+const APP_VERSION = 'v41';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -41,6 +41,8 @@ let db = { projects: {}, currentId: null, color: COLORS[0], w: 5, activeMark: nu
 let P = null;
 let grid = null;
 let tool = 'pan';
+let draftTrack = null; // Umriss, der gerade Punkt für Punkt gesetzt wird
+let draftPen = null; // Stift-Zeichnung in Arbeit: { strokes: [...] } – bis „Fertig“ oder „Abbrechen“
 let undoStack = [];
 
 function load() {
@@ -62,6 +64,12 @@ function load() {
   if (!db.projects[db.currentId]) db.currentId = Object.keys(db.projects)[0];
   P = db.projects[db.currentId];
   syncGrid();
+  restoreDrafts();
+}
+function restoreDrafts() {
+  const d = P.drafts || {};
+  draftTrack = d.track && Array.isArray(d.track.pts) ? d.track : null;
+  draftPen = d.pen && Array.isArray(d.pen.strokes) && d.pen.strokes.length ? d.pen : null;
 }
 
 // grid neu aus dem bearbeiteten Rastergebiet berechnen
@@ -102,6 +110,8 @@ function saveNow() {
     const c = map.getCenter();
     P.view = { lat: c.lat, lon: c.lng, z: map.getZoom() };
   }
+  // offene Zeichnung/Umriss überstehen Neustart und Projektwechsel
+  P.drafts = { track: draftTrack, pen: draftPen };
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(db));
   } catch { toast('Speichern nicht möglich (Speicher voll?)'); }
@@ -215,7 +225,6 @@ function makeTiles(l, cors, zIndex = 1) {
 const canvas = $('overlay');
 const ctx = canvas.getContext('2d');
 let current = null; // Strich, der gerade gezeichnet wird
-let draftTrack = null; // Track, der gerade Punkt für Punkt gesetzt wird
 let dragRect = null; // Vorschau beim Aufziehen des Suchgebiets
 
 function toPx(lat, lon) {
@@ -245,6 +254,8 @@ function redraw() {
   const items = [...P.items];
   if (current) items.push(current);
   if (draftTrack && draftTrack.pts.length) items.push(draftTrack);
+  const drafts = draftPen ? draftPen.strokes : [];
+  items.push(...drafts);
   // Ausgeblendetes (Raster-Fenster → „Auf der Karte zeigen“); gilt nur für die Arbeitskarte.
   // Was gerade gezeichnet wird, bleibt sichtbar.
   const hide = P.hide || {};
@@ -257,7 +268,7 @@ function redraw() {
       status: visible(P.status),
       otherGrids: P.otherGrids.map((g) => ({ ...g, fills: visible(g.fills), status: visible(g.status) })),
     }, grid),
-    items: items.filter((it) => !it.hidden || it === current || it === draftTrack),
+    items: items.filter((it) => !it.hidden || it === current || it === draftTrack || drafts.includes(it)),
   };
   if (hide.meet) st.meet = null;
   // Raster aus: Markierungen als Flächen mit Namen darauf
@@ -285,7 +296,7 @@ window.addEventListener('resize', () => { map.invalidateSize(); resizeCanvas(); 
 
 // ---------- Werkzeuge ----------
 const HINTS = {
-  pen: 'Mit dem Finger auf die Karte zeichnen. Zeichnung antippen: Namen geben (steht dann auch im GPX). Verschieben: „Bewegen“.',
+  pen: 'Mit dem Finger zeichnen – mehrere Striche gehören zu einer Zeichnung, bis „Fertig“. Zwischendurch „Bewegen“ und zurück geht. Vorhandene Zeichnung antippen: umbenennen.',
   text: 'Auf die Karte tippen, um einen Punkt mit Text zu setzen.',
   fill: 'Team/Markierung wählen, dann Felder antippen oder darüberwischen. Nochmal tippen entfernt.',
   erase: 'Antippen oder darüberwischen löscht Zeichnungen, Umrisse, Texte, Treffpunkt und Feldfarben.',
@@ -295,7 +306,12 @@ const HINTS = {
 };
 
 function setTool(t) {
-  if (tool === 'track' && t !== 'track') finishTrack(true);
+  // Offene Zeichnung/Umriss bleibt beim Werkzeugwechsel erhalten (bis „Fertig“ oder „Abbrechen“)
+  if (tool === 'track' && t !== 'track') {
+    if (draftTrack && !draftTrack.pts.length) draftTrack = null;
+    else if (draftTrack) toast('Umriss bleibt offen – „Umriss“ antippen zum Weiterzeichnen');
+  }
+  if (tool === 'pen' && t !== 'pen' && draftPen) toast('Zeichnung bleibt offen – „Stift“ antippen zum Weiterzeichnen');
   if ((t === 'fill') && !allGrids(P).length) {
     toast('Bitte zuerst ein Raster anlegen');
     t = 'pan';
@@ -305,6 +321,8 @@ function setTool(t) {
   canvas.classList.toggle('active', t !== 'pan');
   $('palette').hidden = !['pen', 'text', 'fill', 'track'].includes(t);
   $('trackbar').hidden = t !== 'track';
+  $('penbar').hidden = t !== 'pen';
+  updatePenbar();
   if (t === 'track' && !draftTrack) draftTrack = { kind: 'track', name: '', color: db.color, w: 4, pts: [] };
   updateTrackbar();
   $('palette').querySelector('.widths').hidden = t !== 'pen';
@@ -412,8 +430,11 @@ function finishPointer(e, cancelled) {
     const tap = !cancelled && current.pts.length === 1 && Math.hypot(x - downPt.x, y - downPt.y) < 8;
     const hit = tap ? hitItem(P.items, toPx, downPt.x, downPt.y, 12) : -1;
     if (!cancelled && hit < 0) {
-      snapshot();
-      P.items.push(current);
+      // Strich gehört zur offenen Zeichnung; gespeichert wird bei „Fertig“
+      if (!draftPen) draftPen = { strokes: [] };
+      draftPen.strokes.push(current);
+      updatePenbar();
+      save();
     }
     current = null;
     changed();
@@ -507,7 +528,8 @@ function renameItem(i) {
   const t = prompt(`Name ${what} (steht so auf der Karte und im GPX für Garmin):`, it.name || '');
   if (t === null || t.trim() === (it.name || '')) return;
   snapshot();
-  it.name = t.trim();
+  // alle Striche einer Zeichnung heißen gleich
+  for (const x of it.group ? P.items.filter((y) => y.group === it.group) : [it]) x.name = t.trim();
   changed();
   toast(it.name ? `Name „${it.name}“ gespeichert` : 'Name entfernt');
 }
@@ -515,6 +537,52 @@ function renameItem(i) {
 $('pen-name').addEventListener('click', () => {
   const i = P.items.map((it) => it.kind).lastIndexOf('stroke');
   if (i >= 0) renameItem(i);
+});
+
+// ---------- Stift-Zeichnung ----------
+function updatePenbar() {
+  const n = draftPen ? draftPen.strokes.length : 0;
+  $('pen-info').textContent = n
+    ? `Zeichnung: ${n} Strich${n > 1 ? 'e' : ''} – weiterzeichnen, dann „Fertig“`
+    : 'Zeichnung: mit dem Finger auf die Karte zeichnen';
+  $('pen-back').disabled = !n;
+  $('pen-done').disabled = !n;
+  $('pen-cancel').disabled = !n;
+}
+function finishPen() {
+  const d = draftPen;
+  if (!d || !d.strokes.length) return;
+  const t = prompt('Name der Zeichnung (steht so auf der Karte und im GPX; leer lassen = ohne Namen):', '');
+  if (t === null) return;
+  snapshot();
+  const group = uid();
+  for (const st of d.strokes) {
+    st.group = group;
+    st.name = t.trim();
+    P.items.push(st);
+  }
+  draftPen = null;
+  changed();
+  toast(t.trim() ? `„${t.trim()}“ gespeichert` : 'Zeichnung gespeichert');
+}
+$('pen-back').addEventListener('click', () => {
+  if (!draftPen) return;
+  draftPen.strokes.pop();
+  if (!draftPen.strokes.length) draftPen = null;
+  updatePenbar();
+  redraw();
+  save();
+});
+$('pen-done').addEventListener('click', () => {
+  finishPen();
+  if (!draftPen) setTool('pan');
+});
+$('pen-cancel').addEventListener('click', () => {
+  if (draftPen && !confirm('Zeichnung verwerfen?')) return;
+  draftPen = null;
+  setTool('pan');
+  redraw();
+  save();
 });
 
 // ---------- Track ----------
@@ -562,6 +630,7 @@ $('track-cancel').addEventListener('click', () => {
   draftTrack = null;
   setTool('pan');
   redraw();
+  save();
 });
 
 // Palette
@@ -829,9 +898,14 @@ function renderViewToggles() {
   for (const m of marks) row(markLabel(m), !m.hidden, (on) => { m.hidden = !on; }, m.color);
   if (P.items.length) head('Zeichnungen, Umrisse, Texte');
   let n = 0;
+  const seen = new Set();
   for (const it of P.items) {
+    // eine Zeile je Zeichnung (alle Striche zusammen)
+    if (it.group && seen.has(it.group)) continue;
+    if (it.group) seen.add(it.group);
     if (it.kind === 'stroke') n++;
-    row(itemName(it, n), !it.hidden, (on) => { it.hidden = !on; }, it.color);
+    const members = it.group ? P.items.filter((x) => x.group === it.group) : [it];
+    row(itemName(it, n), !it.hidden, (on) => { for (const x of members) x.hidden = !on; }, it.color);
   }
 }
 // Schnellschalter links (gleiche Einstellungen wie in „Auf der Karte zeigen“)
@@ -1038,6 +1112,8 @@ function switchProject(id) {
   db.currentId = id;
   P = db.projects[id];
   syncGrid();
+  restoreDrafts();
+  setTool('pan');
   undoStack = [];
   if (P.view) map.setView([P.view.lat, P.view.lon], P.view.z);
   else if (grid) map.fitBounds([[P.area.south, P.area.west], [P.area.north, P.area.east]]);
