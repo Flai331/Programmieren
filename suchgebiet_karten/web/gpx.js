@@ -2,7 +2,7 @@
 // Farben über die Garmin-Erweiterung (gpxx:DisplayColor), die BaseCamp und die Geräte anzeigen.
 
 import { cellLabel, gridBounds } from './grid.js';
-import { markLabel, mapFor } from './store.js';
+import { markLabel, mapFor, cellsText } from './store.js';
 
 const GARMIN_COLORS = {
   Black: [0, 0, 0], DarkRed: [139, 0, 0], DarkGreen: [0, 100, 0], DarkYellow: [139, 139, 0],
@@ -52,6 +52,33 @@ export function trackLength(pts) {
 
 export function formatLength(m) {
   return m >= 1000 ? `${(m / 1000).toLocaleString('de-DE', { maximumFractionDigits: 2 })} km` : `${Math.round(m)} m`;
+}
+
+// Zusammenhängende Feldgruppen (Nachbarn über Kanten), sortiert von oben links
+export function cellComponents(keys) {
+  const rest = new Set(keys);
+  const parts = [];
+  const sorted = [...rest].sort((a, b) => {
+    const [ac, ar] = a.split(',').map(Number);
+    const [bc, br] = b.split(',').map(Number);
+    return ar - br || ac - bc;
+  });
+  for (const start of sorted) {
+    if (!rest.has(start)) continue;
+    const part = [];
+    const stack = [start];
+    rest.delete(start);
+    while (stack.length) {
+      const k = stack.pop();
+      part.push(k);
+      const [c, r] = k.split(',').map(Number);
+      for (const n of [`${c + 1},${r}`, `${c - 1},${r}`, `${c},${r + 1}`, `${c},${r - 1}`]) {
+        if (rest.has(n)) { rest.delete(n); stack.push(n); }
+      }
+    }
+    parts.push(part);
+  }
+  return parts;
 }
 
 // Umriss einer Feldmenge ("c,r") als geschlossene Linienzüge in Rasterecken [c, r]
@@ -182,10 +209,14 @@ export function buildGpx(project, grid, opts, part = '') {
       const map = mapFor(project, m);
       const keys = Object.keys(map).filter((k) => map[k] === m.id);
       if (!keys.length) continue;
-      // Jeder getrennte Bereich als eigener Track (Teilstücke zeigen manche Geräte nicht an)
-      cellOutlines(keys).forEach((loop, i) => {
-        trks += trk(i ? `${markLabel(m)} ${i + 1}` : markLabel(m), m.color, [loop.map(corner)]);
-      });
+      // Ein Track pro zusammenhängendem Bereich: Teilstücke in EINEM Track verbinden
+      // BaseCamp und Garmin-Geräte mit (schrägen) Linien. Name mit Feldern, z. B. „abgesucht: D3–E4“.
+      for (const part of cellComponents(keys)) {
+        const name = `${markLabel(m)}: ${cellsText(part)}`;
+        cellOutlines(part).forEach((loop, i) => {
+          trks += trk(i ? `${name} (Innenrand)` : name, m.color, [loop.map(corner)]);
+        });
+      }
     }
   }
   // opts.grid: 'outline' = nur Umrandung, 'all' (oder true) = mit allen Rasterlinien

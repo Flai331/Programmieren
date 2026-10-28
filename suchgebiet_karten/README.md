@@ -78,7 +78,12 @@ mit dem PDF als Anhang. Am PC wird es heruntergeladen und das E-Mail-Programm ge
 2. **…_Markierungen.gpx** – eigene Tracks, Stift-Markierungen, Team-/Status-Umrisse,
    Treffpunkt und Textpunkte
 
-In BaseCamp über *Datei → In „Meine Sammlung“ importieren* öffnen und an das Gerät senden.
+In BaseCamp: im Einsatz-Ordner zwei Listen anlegen (Rechtsklick → *Neue Liste*, z. B. „Raster“ und
+„Markierungen“), Liste anklicken, dann *Datei → Importieren in „…“* – BaseCamp importiert immer in
+die links ausgewählte Liste. Danach an das Gerät senden.
+
+Getrennte Bereiche (z. B. zweimal „abgesucht“) sind je ein eigener Track mit den Feldern im Namen
+(„abgesucht: D3–E4“). In einem einzigen Track würden BaseCamp und Garmin die Teile mit Linien verbinden.
 GPX-Linien liegen **über deiner Karte auf dem Gerät** (z. B. der Wanderkarte).
 
 **Garmin-Karte (Export → Garmin: Karte):** Das Kartenbild mit Raster, Teams und Tracks als

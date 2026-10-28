@@ -42,7 +42,7 @@ test('GPX enthält Track, Team-Umriss, Raster und Wegpunkte', () => {
   p.items.push({ kind: 'track', name: 'Suchweg', color: '#1565c0', w: 4, pts: [[50.115, 8.605], [50.116, 8.61]] });
   const gpx = buildGpx(p, g, { tracks: true, teams: true, grid: true, points: true, cells: true });
   assert.match(gpx, /<name>Suchweg<\/name>/);
-  assert.match(gpx, /<name>Team 1 \(Bello\)<\/name>/);
+  assert.match(gpx, /<name>Team 1 \(Bello\): A1–B1<\/name>/);
   assert.match(gpx, /<gpxx:DisplayColor>Red<\/gpxx:DisplayColor>/);
   assert.match(gpx, /<name>Raster Übung &lt;Wald&gt; &amp; Feld<\/name>/);
   assert.match(gpx, /<sym>Flag, Blue<\/sym>/);
@@ -115,5 +115,6 @@ test('Team-Bereich aus zwei Stücken -> zwei Tracks, keine Teilstücke', () => {
   const gpx = buildGpx(p, g, { teams: true });
   assert.equal((gpx.match(/<trk>/g) || []).length, 2);
   assert.equal((gpx.match(/<trkseg>/g) || []).length, 2);
-  assert.match(gpx, /<name>Team 1 2<\/name>/);
+  assert.match(gpx, /<name>Team 1: A1<\/name>/);
+  assert.match(gpx, /<name>Team 1: D4<\/name>/);
 });
