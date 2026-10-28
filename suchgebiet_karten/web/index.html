@@ -53,6 +53,17 @@
     <button id="btn-pdf" class="primary" title="PDF, GPX und Garmin-Karte"><span>📤</span>Export</button>
   </div>
 
+  <!-- links: Raster/Markierungen schnell aus- und einblenden, Zoomleiste -->
+  <div class="leftbar">
+    <button id="quick-grid" class="on" title="Raster ein-/ausblenden"><span>#</span>Raster</button>
+    <button id="quick-marks" class="on" title="Teams und Markierungen ein-/ausblenden"><span>▦</span>Felder</button>
+    <div class="zoomslider">
+      <button id="zs-in" title="Hineinzoomen">+</button>
+      <div id="zs-track" class="zs-track" title="Zoom: ziehen oder tippen"><div id="zs-fill" class="zs-fill"></div><div id="zs-thumb" class="zs-thumb"></div></div>
+      <button id="zs-out" title="Herauszoomen">−</button>
+    </div>
+  </div>
+
   <div id="trackbar" class="trackbar" hidden>
     <span id="track-info">Umriss: auf die Karte tippen</span>
     <button id="track-back">↶ Punkt</button>

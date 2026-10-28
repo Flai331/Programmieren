@@ -61,6 +61,32 @@ button, input, select { font: inherit; }
 .sidebuttons button.primary { background: var(--red); color: #fff; }
 .sidebuttons button.on { color: #1565c0; font-weight: 700; }
 
+.leftbar {
+  position: fixed; left: 10px; top: 50%; transform: translateY(-50%); z-index: 999;
+  display: flex; flex-direction: column; gap: 6px; align-items: center;
+}
+.leftbar > button {
+  width: 52px; height: 44px; border: 0; border-radius: 12px; background: #fff; box-shadow: 0 1px 5px rgba(0,0,0,0.3);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; color: #999; cursor: pointer;
+}
+.leftbar > button span { font-size: 17px; line-height: 1.1; text-decoration: line-through; }
+.leftbar > button.on { color: #1565c0; font-weight: 700; }
+.leftbar > button.on span { text-decoration: none; }
+.zoomslider {
+  display: flex; flex-direction: column; align-items: center; background: #fff; border-radius: 12px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.3); padding: 2px 0; width: 44px;
+}
+.zoomslider button { width: 40px; height: 34px; border: 0; background: transparent; font-size: 22px; line-height: 1; cursor: pointer; color: var(--fg); }
+.zs-track { position: relative; width: 36px; height: 170px; cursor: pointer; touch-action: none; }
+.zs-track::before { content: ''; position: absolute; left: 16px; top: 6px; bottom: 6px; width: 4px; border-radius: 2px; background: #ddd; }
+.zs-fill { position: absolute; left: 16px; bottom: 6px; width: 4px; border-radius: 2px; background: #1565c0; }
+.zs-thumb {
+  position: absolute; left: 7px; width: 22px; height: 14px; margin-top: -7px; border-radius: 7px;
+  background: #fff; border: 2px solid #1565c0; box-sizing: border-box; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+@media (max-height: 560px) { .zs-track { height: 90px; } }
+@media (max-height: 430px) { .zoomslider { display: none; } }
+
 .palette {
   position: fixed; left: 10px; right: 80px; bottom: 74px; z-index: 1000;
   background: #fff; border-radius: 12px; padding: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.3);
