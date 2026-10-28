@@ -181,7 +181,8 @@ class MainActivity : ComponentActivity() {
             override fun handleOnBackPressed() {
                 // Offenes Fenster schließen statt die App zu beenden
                 webView.evaluateJavascript(
-                    "(function(){var p=[...document.querySelectorAll('.panel')].find(function(x){return !x.hidden});" +
+                    "(function(){var n=document.getElementById('notepad');if(n&&!n.hidden){document.getElementById('pad-done').click();return true}" +
+                        "var p=[...document.querySelectorAll('.panel')].find(function(x){return !x.hidden});" +
                         "if(p){p.hidden=true;return true}return false})()"
                 ) { closed ->
                     if (closed != "true") {
@@ -271,7 +272,17 @@ class MainActivity : ComponentActivity() {
             send(base64, name, mime, subject, text, emailOnly = true)
         }
 
-        private fun send(base64: String, name: String, mime: String, title: String, text: String, emailOnly: Boolean) {
+        // Mail mit Empfängern (durch Komma getrennt) und Anhang, z. B. Einsatzbericht
+        @JavascriptInterface
+        fun emailFileTo(base64: String, name: String, mime: String, subject: String, text: String, to: String) {
+            val list = to.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toTypedArray()
+            send(base64, name, mime, subject, text, emailOnly = true, to = list)
+        }
+
+        private fun send(
+            base64: String, name: String, mime: String, title: String, text: String, emailOnly: Boolean,
+            to: Array<String> = emptyArray(),
+        ) {
             try {
                 val dir = File(cacheDir, "shared").apply { mkdirs() }
                 dir.listFiles()?.forEach { it.delete() }
@@ -284,6 +295,7 @@ class MainActivity : ComponentActivity() {
                     putExtra(Intent.EXTRA_STREAM, uri)
                     putExtra(Intent.EXTRA_SUBJECT, title)
                     putExtra(Intent.EXTRA_TEXT, text)
+                    if (to.isNotEmpty()) putExtra(Intent.EXTRA_EMAIL, to)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     // Selektor mailto: -> Android bietet nur E-Mail-Apps an
                     if (emailOnly) selector = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"))

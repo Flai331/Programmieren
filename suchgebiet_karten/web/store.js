@@ -1,6 +1,7 @@
 // Suchgebiete (Projekte), Teams/Markierungen und Datei-Austausch.
 // Reine Logik ohne DOM, damit sie testbar ist.
 
+import { newMission, normalizeMission } from './mission.js';
 import { rangeLabel } from './grid.js';
 
 export const TEAM_COLORS = ['#d50000', '#1565c0', '#ef6c00', '#6a1b9a', '#00838f', '#ad1457', '#4e342e', '#558b2f'];
@@ -37,6 +38,7 @@ export function newProject(title = '') {
     meet: null, // {lat, lon, text}
     showUtm: false,
     view: null,
+    mission: newMission(), // Einsatzprotokoll
   };
 }
 
@@ -46,6 +48,7 @@ export function normalizeProject(p) {
   const out = { ...base, ...p };
   if (!Array.isArray(out.marks)) out.marks = base.marks;
   if (!Array.isArray(out.items)) out.items = [];
+  out.mission = normalizeMission(out.mission);
   if (!out.fills || typeof out.fills !== 'object') out.fills = {};
   if (!out.status || typeof out.status !== 'object') out.status = {};
   out.fills = { ...out.fills };

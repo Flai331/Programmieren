@@ -8,6 +8,9 @@ import {
 import { buildPdf, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
 import { buildGpx, trackLength, formatLength } from './gpx.js';
+import {
+  FORCE_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
+} from './mission.js';
 import { buildCustomMap, planCustomMap } from './kmz.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
@@ -16,7 +19,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v20';
+const APP_VERSION = 'v21';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -1003,6 +1006,7 @@ async function runExport(kind, btn, key, build, action) {
     }
     if (action === 'save') await saveFile(f.blob, f.name);
     else if (action === 'mail') await mailFile(f);
+    else if (action === 'report-mail') await mailReport(f);
     else await shareFile(f.blob, f.name, f.title, f.text, f);
   } catch (err) {
     console.error(err);
@@ -1282,6 +1286,330 @@ async function buildKmzFile(progress) {
 const kmzKey = () => exportKey([$('kmz-area').value, $('kmz-res').value]);
 $('kmz-share').addEventListener('click', () => runExport('kmz', $('kmz-share'), kmzKey(), buildKmzFile, 'share'));
 $('kmz-save').addEventListener('click', () => runExport('kmz', $('kmz-save'), kmzKey(), buildKmzFile, 'save'));
+
+// ---------- Einsatzprotokoll ----------
+const M = () => P.mission;
+function touch() { P.updated = Date.now(); save(); }
+
+function renderForces() {
+  const box = $('ms-forces');
+  box.innerHTML = '';
+  M().forces.forEach((f, i) => {
+    const row = document.createElement('div');
+    row.className = 'force';
+    const field = (key, label, cls, type = 'number') => {
+      const l = document.createElement('label');
+      if (cls) l.className = cls;
+      l.innerHTML = `<small>${label}</small><input type="${type}" ${type === 'number' ? 'min="0" inputmode="numeric"' : ''}>`;
+      const inp = l.querySelector('input');
+      inp.value = f[key] ?? '';
+      if (key === 'org') inp.placeholder = 'z. B. DRK RHS Celle, Feuerwehr, Polizei';
+      inp.addEventListener('input', () => { f[key] = type === 'number' ? inp.value : inp.value; touch(); renderTotal(); });
+      row.appendChild(l);
+    };
+    field('org', 'Organisation', 'org', 'text');
+    FORCE_KEYS.forEach(([k, l]) => field(k, l));
+    const del = document.createElement('button');
+    del.textContent = '✕';
+    del.title = 'Zeile löschen';
+    del.addEventListener('click', () => { M().forces.splice(i, 1); touch(); renderForces(); });
+    row.appendChild(del);
+    box.appendChild(row);
+  });
+  renderTotal();
+}
+function renderTotal() {
+  $('ms-total').textContent = M().forces.length ? totalLine(M().forces) : '';
+}
+$('ms-force-add').addEventListener('click', () => {
+  M().forces.push({ org: '', lead: '', helpers: '', dogs: '', vehicles: '' });
+  touch();
+  renderForces();
+  const inputs = $('ms-forces').querySelectorAll('.org input');
+  inputs[inputs.length - 1].focus();
+});
+
+// Quellen für die Zusammenfassung: getippte Notizen, Notizblock-Seiten, Fotos
+function sources() {
+  const out = [];
+  if ((P.notes || '').trim()) out.push({ title: 'Getippte Notizen', text: P.notes.trim() });
+  M().pages.forEach((p, i) => { if (p.strokes.length) out.push({ title: `Notizblock Seite ${i + 1}`, page: p, idx: i }); });
+  M().photos.forEach((p, i) => out.push({ title: `Foto ${i + 1}`, src: p.src, photo: i }));
+  return out;
+}
+
+function renderThumbs() {
+  const box = $('ms-thumbs');
+  box.innerHTML = '';
+  const add = (src, label, open, remove) => {
+    const d = document.createElement('div');
+    d.className = 'thumb';
+    d.innerHTML = '<img alt=""><small></small><button title="Löschen">✕</button>';
+    d.querySelector('img').src = src;
+    d.querySelector('small').textContent = label;
+    d.querySelector('img').addEventListener('click', open);
+    d.querySelector('button').addEventListener('click', remove);
+    box.appendChild(d);
+  };
+  M().pages.forEach((p, i) => {
+    if (!p.strokes.length) return;
+    add(notePageImage(p, 160), `Seite ${i + 1}`, () => openPad(i), () => {
+      if (!confirm(`Notizblock-Seite ${i + 1} löschen?`)) return;
+      M().pages.splice(i, 1);
+      touch();
+      renderThumbs();
+    });
+  });
+  M().photos.forEach((p, i) => add(p.src, `Foto ${i + 1}`, () => { showTab('ende'); viewIdx = sources().findIndex((s) => s.photo === i); renderViewer(); }, () => {
+    if (!confirm(`Foto ${i + 1} löschen?`)) return;
+    M().photos.splice(i, 1);
+    touch();
+    renderThumbs();
+  }));
+}
+
+$('ms-photo').addEventListener('click', () => $('ms-photo-file').click());
+$('ms-photo-file').addEventListener('change', async () => {
+  const f = $('ms-photo-file').files[0];
+  $('ms-photo-file').value = '';
+  if (!f) return;
+  try {
+    M().photos.push({ t: Date.now(), src: await shrinkPhoto(f) });
+    touch();
+    saveNow();
+    renderThumbs();
+    toast('Foto gespeichert');
+  } catch (err) {
+    toast('Foto: ' + err.message);
+  }
+});
+
+let viewIdx = 0;
+function renderViewer() {
+  const list = sources();
+  viewIdx = Math.max(0, Math.min(viewIdx, list.length - 1));
+  const s = list[viewIdx];
+  const box = $('ms-view');
+  box.innerHTML = '';
+  $('ms-prev').disabled = viewIdx <= 0;
+  $('ms-next').disabled = viewIdx >= list.length - 1;
+  if (!s) {
+    $('ms-view-title').textContent = 'Keine Notizen';
+    box.innerHTML = '<pre>Noch keine Notizen, Notizblock-Seiten oder Fotos.</pre>';
+    return;
+  }
+  $('ms-view-title').textContent = `${s.title} (${viewIdx + 1}/${list.length})`;
+  if (s.text) {
+    const pre = document.createElement('pre');
+    pre.textContent = s.text;
+    box.appendChild(pre);
+  } else {
+    const img = document.createElement('img');
+    img.src = s.page ? notePageImage(s.page) : s.src;
+    box.appendChild(img);
+  }
+}
+$('ms-prev').addEventListener('click', () => { viewIdx--; renderViewer(); });
+$('ms-next').addEventListener('click', () => { viewIdx++; renderViewer(); });
+
+function renderLegend() {
+  const box = $('ms-legend');
+  box.innerHTML = '';
+  const colors = usedColors(P);
+  if (!colors.length) {
+    box.innerHTML = '<p class="small">Noch keine Stift-Zeichnungen oder Tracks auf der Karte. Teams und Status stehen ohnehin in der Legende.</p>';
+    return;
+  }
+  for (const c of colors) {
+    const row = document.createElement('div');
+    row.className = 'legrow';
+    row.innerHTML = '<i></i><input type="text">';
+    row.querySelector('i').style.background = c;
+    const inp = row.querySelector('input');
+    inp.placeholder = `Bedeutung von ${colorName(c)}, z. B. Spur, Bachlauf, Absperrung`;
+    inp.value = M().legend[c] || '';
+    inp.addEventListener('input', () => { M().legend[c] = inp.value; touch(); });
+    box.appendChild(row);
+  }
+}
+
+function showTab(t) {
+  document.querySelectorAll('#panel-mission .tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
+  $('tab-lage').hidden = t !== 'lage';
+  $('tab-ende').hidden = t !== 'ende';
+  db.missionTab = t;
+  if (t === 'ende') { renderViewer(); renderLegend(); }
+}
+document.querySelectorAll('#panel-mission .tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+function renderMission() {
+  $('ms-person').value = M().person;
+  $('notes').value = P.notes || '';
+  $('ms-summary').value = M().summary;
+  if (!M().author && P.leader) M().author = P.leader;
+  $('ms-author').value = M().author;
+  $('ms-to').value = M().recipients;
+  $('ms-msg').textContent = '';
+  renderForces();
+  renderThumbs();
+  showTab(db.missionTab || 'lage');
+}
+$('btn-mission').addEventListener('click', () => { renderMission(); openPanel('panel-mission'); });
+[['ms-person', 'person'], ['ms-summary', 'summary'], ['ms-author', 'author'], ['ms-to', 'recipients']].forEach(([id, key]) => {
+  $(id).addEventListener('input', () => { M()[key] = $(id).value; touch(); });
+});
+
+// Notizblock: Seiten mit Stift/Finger beschreiben, Punkte in Seitenbreiten gespeichert
+let padIdx = 0;
+let padColor = '#000000';
+let padStroke = null;
+const padCanvas = $('pad-canvas');
+
+function padSize() {
+  const wrap = padCanvas.parentElement;
+  const w = Math.max(200, Math.min(wrap.clientWidth - 20, (wrap.clientHeight - 20) / PAGE_RATIO));
+  const dpr = window.devicePixelRatio || 1;
+  padCanvas.style.width = `${w}px`;
+  padCanvas.style.height = `${w * PAGE_RATIO}px`;
+  padCanvas.width = Math.round(w * dpr);
+  padCanvas.height = Math.round(w * PAGE_RATIO * dpr);
+  return w;
+}
+function padDraw() {
+  const page = M().pages[padIdx];
+  const c = padCanvas.getContext('2d');
+  drawNotePage(c, padStroke ? { strokes: [...page.strokes, padStroke] } : page, padCanvas.width);
+  $('pad-title').textContent = `Seite ${padIdx + 1} von ${M().pages.length}`;
+  $('pad-prev').disabled = padIdx === 0;
+  $('pad-next').disabled = padIdx >= M().pages.length - 1;
+  $('pad-undo').disabled = !page.strokes.length;
+}
+function openPad(i) {
+  if (!M().pages.length) M().pages.push({ t: Date.now(), strokes: [] });
+  padIdx = Math.max(0, Math.min(i ?? M().pages.length - 1, M().pages.length - 1));
+  $('notepad').hidden = false;
+  padSize();
+  padDraw();
+}
+function closePad() {
+  // leere Seiten nicht aufheben
+  M().pages = M().pages.filter((p) => p.strokes.length);
+  $('notepad').hidden = true;
+  touch();
+  saveNow();
+  renderThumbs();
+}
+$('ms-pad').addEventListener('click', () => openPad());
+$('pad-done').addEventListener('click', closePad);
+$('pad-prev').addEventListener('click', () => { padIdx--; padDraw(); });
+$('pad-next').addEventListener('click', () => { padIdx++; padDraw(); });
+$('pad-new').addEventListener('click', () => {
+  const pages = M().pages;
+  if (!pages[pages.length - 1].strokes.length) { padIdx = pages.length - 1; padDraw(); return; }
+  pages.push({ t: Date.now(), strokes: [] });
+  padIdx = pages.length - 1;
+  touch();
+  padDraw();
+});
+$('pad-undo').addEventListener('click', () => { M().pages[padIdx].strokes.pop(); touch(); padDraw(); });
+$('pad-del').addEventListener('click', () => {
+  if (!M().pages[padIdx].strokes.length || !confirm('Diese Seite leeren?')) return;
+  M().pages[padIdx].strokes = [];
+  touch();
+  padDraw();
+});
+document.querySelectorAll('.padcolors button').forEach((b) => b.addEventListener('click', () => {
+  padColor = b.dataset.c;
+  document.querySelectorAll('.padcolors button').forEach((x) => x.classList.toggle('active', x === b));
+}));
+const padPt = (e) => {
+  const r = padCanvas.getBoundingClientRect();
+  return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.width];
+};
+padCanvas.addEventListener('pointerdown', (e) => {
+  if (padStroke) return;
+  padCanvas.setPointerCapture(e.pointerId);
+  padStroke = { color: padColor, w: e.pointerType === 'pen' ? 0.0025 : 0.003, pts: [padPt(e)], id: e.pointerId };
+  padDraw();
+});
+padCanvas.addEventListener('pointermove', (e) => {
+  if (!padStroke || e.pointerId !== padStroke.id) return;
+  const p = padPt(e);
+  const last = padStroke.pts[padStroke.pts.length - 1];
+  if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 0.002) return;
+  padStroke.pts.push([+p[0].toFixed(4), +p[1].toFixed(4)]);
+  padDraw();
+});
+const padEnd = (e) => {
+  if (!padStroke || e.pointerId !== padStroke.id) return;
+  const { id, ...s } = padStroke;
+  void id;
+  padStroke = null;
+  M().pages[padIdx].strokes.push(s);
+  touch();
+  padDraw();
+};
+padCanvas.addEventListener('pointerup', padEnd);
+padCanvas.addEventListener('pointercancel', padEnd);
+window.addEventListener('resize', () => { if (!$('notepad').hidden) { padSize(); padDraw(); } });
+
+// Abschluss-PDF: Bericht + Notizblock + Fotos + Karte
+async function buildReportFile(progress) {
+  const opts = {
+    ...pdfOpts(),
+    overview: !!grid,
+    details: false,
+    info: false,
+    view: !grid,
+    report: true,
+    title: `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}`,
+  };
+  progress('Bericht wird erstellt …');
+  const res = await buildPdf(P, grid, opts, layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => progress(`Karte ${i} von ${n} …`));
+  $('ms-msg').textContent = `✔ Abschluss-PDF mit ${res.pages} Seite${res.pages > 1 ? 'n' : ''} (${Math.round(res.blob.size / 1024)} KB)`;
+  const to = recipients();
+  return {
+    blob: res.blob,
+    name: safeName('_Einsatzbericht.pdf'),
+    title: opts.title,
+    text: missionText(P, grid),
+    to,
+    fallback(f) {
+      const body = `${f.text}\n\n(Bitte die heruntergeladene Datei ${f.name} anhängen.)`;
+      location.href = `mailto:${to.map(encodeURIComponent).join(',')}?subject=${encodeURIComponent(f.title)}&body=${encodeURIComponent(body)}`;
+    },
+  };
+}
+function recipients() {
+  return M().recipients.split(/[,;\s]+/).map((s) => s.trim()).filter((s) => s.includes('@'));
+}
+
+// Mail mit Empfängern UND Anhang: Android-App kann beides. Im Browser hängt das Teilen-Menü
+// das PDF an, Empfänger lassen sich dort nicht vorgeben -> in die Zwischenablage kopieren.
+async function mailReport(f) {
+  if (bridge && bridge.emailFileTo) {
+    bridge.emailFileTo(await blobToBase64(f.blob), f.name, f.blob.type, f.title, f.text, f.to.join(','));
+    return;
+  }
+  if (bridge) {
+    bridge.emailFile(await blobToBase64(f.blob), f.name, f.blob.type, f.title, f.text);
+    return;
+  }
+  if (f.to.length && navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(f.to.join(', '));
+      toast('Empfänger kopiert – im Mailprogramm ins „An“-Feld einfügen.');
+    } catch { /* Zwischenablage nicht erlaubt */ }
+  }
+  await shareFile(f.blob, f.name, f.title, f.text, f);
+}
+const reportKey = () => exportKey(['report', $('pdf-format').value]);
+$('ms-mail').addEventListener('click', () => {
+  if (!recipients().length && !confirm('Keine E-Mail-Empfänger eingetragen. Trotzdem senden?')) return;
+  runExport('report', $('ms-mail'), reportKey(), buildReportFile, 'report-mail');
+});
+$('ms-share').addEventListener('click', () => runExport('report', $('ms-share'), reportKey(), buildReportFile, 'share'));
+$('ms-save').addEventListener('click', () => runExport('report', $('ms-save'), reportKey(), buildReportFile, 'save'));
 
 // ---------- Suche (Adresse, Feld, Koordinaten) ----------
 let searchPin = null;

@@ -2,6 +2,7 @@
 // Canvas gerendert und als Bild ins PDF gesetzt. Übersicht und Detailblätter
 // nutzen dasselbe Raster, daher stimmt "A1" überall überein.
 
+import { addReportPages, forceLine, lineLegend, totalLine } from './mission.js';
 import {
   blocks, gridBounds, rangeBounds, rangeLabel, fitBox,
   mercLat, mercLon, mercX, mercY, metersPerUnit, niceScale, niceLength, formatMeters,
@@ -246,6 +247,18 @@ function drawLegend(ctx, entries, s, W, H, utm) {
   ctx.textBaseline = 'middle';
   entries.forEach((e, i) => {
     const cy = y + 5 * s + lineH * (i + 0.5);
+    if (e.line) {
+      // Zeichnungsfarbe: Linie statt Kästchen
+      ctx.strokeStyle = e.color;
+      ctx.lineWidth = 4 * s;
+      ctx.beginPath();
+      ctx.moveTo(x + 7 * s, cy);
+      ctx.lineTo(x + 23 * s, cy);
+      ctx.stroke();
+      ctx.fillStyle = '#111';
+      ctx.fillText(e.label, x + 28 * s, cy);
+      return;
+    }
     if (e.hatch) {
       hatchRect(ctx, x + 7 * s, cy - 6 * s, 16 * s, 12 * s, e.color, s * 0.5, true, 0.8);
     } else {
@@ -312,6 +325,10 @@ function infoPage(doc, project, grid, W, H, top) {
     row('Raster:', `${grid.cols} × ${grid.rows} Felder à ${formatMeters(grid.cellM)}, A1 bis ${rangeLabel(grid.cols - 1, grid.rows - 1, grid.cols - 1, grid.rows - 1)}`);
     row('A1 (NW-Ecke):', coordText(grid.originLat, grid.originLon, project.showUtm));
   }
+
+  const ms = project.mission;
+  if (ms && ms.person.trim()) row('Vermisste Person:', ms.person.trim());
+  if (ms && ms.forces.length) row('Kräfte:', [...ms.forces.map(forceLine), totalLine(ms.forces)].join('\n'));
 
   const as = assignments(project);
   const table = (title, list, team) => {
@@ -392,8 +409,12 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
   const Hpx = Math.round((area.h / 25.4) * dpi);
 
   const rstate = renderState(project, grid);
-  const legend = assignments(project).filter((a) => a.count)
-    .map((a) => ({ color: a.mark.color, label: markLabel(a.mark), hatch: a.mark.kind !== 'team' }));
+  const legend = [...assignments(project).filter((a) => a.count)
+    .map((a) => ({ color: a.mark.color, label: markLabel(a.mark), hatch: a.mark.kind !== 'team' })), ...lineLegend(project)];
+
+  // Abschlussbericht: Berichtsseiten vor der Karte
+  const reportPages = opts.report ? await addReportPages(doc, project, grid, W, H, MARGIN) : 0;
+  const total = reportPages + sheets.length;
 
   const date = new Date().toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
   const right1 = project.leader ? `${project.leader} · ${date}` : date;
@@ -402,7 +423,7 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
   for (let i = 0; i < sheets.length; i++) {
     onProgress && onProgress(i + 1, sheets.length);
     const sh = sheets[i];
-    if (i) doc.addPage();
+    if (i || reportPages) doc.addPage();
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
@@ -412,7 +433,7 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.text(right1, W - MARGIN, MARGIN + 6, { align: 'right' });
-    doc.text(`Seite ${i + 1} von ${sheets.length}`, W - MARGIN, MARGIN + 12, { align: 'right' });
+    doc.text(`Seite ${reportPages + i + 1} von ${total}`, W - MARGIN, MARGIN + 12, { align: 'right' });
 
     if (sh.info) {
       infoPage(doc, project, grid, W, H, MARGIN + HEADER + 4);
