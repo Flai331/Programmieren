@@ -22,7 +22,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v42';
+const APP_VERSION = 'v43';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -305,6 +305,7 @@ const HINTS = {
   track: 'Umriss: Punkte antippen. Karte mit dem Finger verschieben, Zoom mit +/−.',
 };
 
+let hintTimer = null;
 function setTool(t) {
   // Offene Zeichnung/Umriss bleibt beim Werkzeugwechsel erhalten (bis „Fertig“ oder „Abbrechen“)
   if (tool === 'track' && t !== 'track') {
@@ -326,12 +327,15 @@ function setTool(t) {
   if (t === 'track' && !draftTrack) draftTrack = { kind: 'track', name: '', color: db.color, w: 4, pts: [] };
   updateTrackbar();
   $('palette').querySelector('.widths').hidden = t !== 'pen';
-  $('palette').querySelector('.penname').hidden = t !== 'pen';
   $('palette').querySelector('.colors').hidden = t === 'fill';
   $('palette').querySelector('.marks').hidden = t !== 'fill';
   const hint = HINTS[t];
   $('hint').hidden = !hint;
   $('hint').textContent = hint || '';
+  // Hinweis nach ein paar Sekunden ausblenden – mehr Karte sichtbar
+  $('hint').classList.remove('fade');
+  clearTimeout(hintTimer);
+  if (hint) hintTimer = setTimeout(() => $('hint').classList.add('fade'), 5000);
 }
 
 function eventLatLng(e) {
@@ -534,11 +538,6 @@ function renameItem(i) {
   toast(it.name ? `Name „${it.name}“ gespeichert` : 'Name entfernt');
 }
 
-$('pen-name').addEventListener('click', () => {
-  const i = P.items.map((it) => it.kind).lastIndexOf('stroke');
-  if (i >= 0) renameItem(i);
-});
-
 // ---------- Stift-Zeichnung ----------
 function updatePenbar() {
   const n = draftPen ? draftPen.strokes.length : 0;
@@ -658,7 +657,6 @@ $('palette').querySelectorAll('.widths button').forEach((b) => b.addEventListene
 }));
 function renderPalette() {
   colorBox.querySelectorAll('button').forEach((b, i) => b.classList.toggle('active', COLORS[i] === db.color));
-  $('pen-name').disabled = !P.items.some((it) => it.kind === 'stroke');
   $('palette').querySelectorAll('.widths button').forEach((b) => b.classList.toggle('active', Number(b.dataset.w) === db.w));
   const box = $('palette').querySelector('.marks');
   box.innerHTML = '';

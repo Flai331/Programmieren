@@ -37,7 +37,7 @@ von der einen in die andere übernehmen.
 | **Einsatzende – Versand** | Je Empfänger-Zeile ankreuzen, was mitgeht. **Abschlussbericht**: Zeiten, Vermisste Person, Kräfte, Zusammenfassung, Notizen, Notizblock, Fotos, Karte (ohne Raster, Flächen beschriftet, automatisch so gezoomt, dass alle Markierungen, Zeichnungen, Umrisse, Texte und der Treffpunkt samt Beschriftung drauf sind; voreingestellt aus) – dazu je Empfänger, ob die Karte Teams und/oder Status (abgesucht, teilweise, nicht begehbar) zeigt. **Zusätzlich:** JUH-Formular, GPX. „Senden“ öffnet das Mailprogramm mit genau diesen Anhängen, auch der Mailtext enthält nur die angekreuzten Inhalte (Android-App: inkl. Empfänger) |
 | **JUH-Formular** | Vorlage „Einsatzbericht Rettungshundestaffel“ wird mit den vorhandenen Daten vorausgefüllt (Kräfte eigene/fremde, Lage, Verlauf, Besonderheiten, Einsatzleitung …); alle Felder bleiben im PDF ausfüllbar. Bei den Kräften „eigene“ anhaken |
 | Stift und Umriss offen lassen | Eine Stift-Zeichnung besteht aus allen Strichen bis „Fertig“ (Leiste: „↶ Strich“, „Fertig“ mit Name, „Abbrechen“). Zwischendurch auf „Bewegen“ und zurück – Zeichnung bzw. Umriss bleiben offen, auch nach Neustart der App. Im GPX ist jeder Strich ein Track („Name“, „Name (Teil 2)“ …) |
-| Zeichnung benennen | Im Stift-Werkzeug „🏷️ Letzte Zeichnung benennen“ oder eine Zeichnung (auch einen Umriss) antippen. Der Name steht auf der Karte, im PDF und als Trackname im GPX |
+| Zeichnung benennen | Beim Stift „Fertig“ (fragt den Namen) oder später eine Zeichnung (auch einen Umriss) im Stift-Werkzeug antippen. Der Name steht auf der Karte, im PDF und als Trackname im GPX |
 
 Antippen der Karte im Modus „Bewegen“ zeigt Feld, zugeteiltes Team und ggf. UTMREF.
 
