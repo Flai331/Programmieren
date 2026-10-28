@@ -33,6 +33,11 @@ export function newProject(title = '') {
     area: null,
     fills: {}, // "c,r" -> Team-ID (bleibt, auch wenn das Feld abgesucht ist)
     status: {}, // "c,r" -> Status-ID (abgesucht, teilweise …), zusätzlich zum Team
+    // Mehrere Rastergebiete: area/cellM/fills/status oben gehören zum gerade bearbeiteten,
+    // die übrigen liegen in otherGrids [{ id, name, area, cellM, fills, status }]
+    gridId: '',
+    gridName: '',
+    otherGrids: [],
     marks: defaultMarks(),
     items: [],
     meet: null, // {lat, lon, text}
@@ -65,7 +70,73 @@ export function normalizeProject(p) {
     if (kind[out.fills[k]] !== 'team') delete out.fills[k];
   }
   for (const k of Object.keys(out.status)) if (kind[out.status[k]] !== 'status') delete out.status[k];
+  if (!out.gridId) out.gridId = uid();
+  out.otherGrids = (Array.isArray(out.otherGrids) ? out.otherGrids : [])
+    .filter((g) => g && g.area)
+    .map((g) => ({
+      id: g.id || uid(),
+      name: String(g.name || ''),
+      area: g.area,
+      cellM: Number(g.cellM) || 100,
+      fills: Object.fromEntries(Object.entries(g.fills || {}).filter(([, id]) => kind[id] === 'team')),
+      status: Object.fromEntries(Object.entries(g.status || {}).filter(([, id]) => kind[id] === 'status')),
+    }));
   return out;
+}
+
+// ---------- Mehrere Rastergebiete ----------
+// Alle Rastergebiete, nach Namen sortiert („Gebiet 2“ vor „Gebiet 10“); active = gerade bearbeitet
+export function allGrids(p) {
+  const own = p.area ? [{ id: p.gridId, name: p.gridName || '', area: p.area, cellM: p.cellM, fills: p.fills, status: p.status, active: true }] : [];
+  return [...own, ...(p.otherGrids || []).map((g) => ({ ...g, active: false }))]
+    .sort((a, b) => gridLabel(p, a).localeCompare(gridLabel(p, b), 'de', { numeric: true }));
+}
+
+// Anzeigename; das erste (ältere Stände: einzige) Gebiet heißt ohne Namen „Gebiet 1“
+export function gridLabel(p, g) {
+  return g.name || 'Gebiet 1';
+}
+function nextGridName(p) {
+  const used = allGrids(p).map((g) => gridLabel(p, g));
+  let n = 1;
+  while (used.includes(`Gebiet ${n}`)) n++;
+  return `Gebiet ${n}`;
+}
+
+function parkActive(p) {
+  if (p.area) {
+    p.otherGrids = [...(p.otherGrids || []), { id: p.gridId, name: p.gridName || '', area: p.area, cellM: p.cellM, fills: p.fills, status: p.status }];
+  }
+}
+
+// Ein anderes Rastergebiet zum Bearbeiten holen
+export function activateGrid(p, id) {
+  if (id === p.gridId && p.area) return;
+  const g = (p.otherGrids || []).find((x) => x.id === id);
+  if (!g) return;
+  parkActive(p);
+  p.otherGrids = p.otherGrids.filter((x) => x.id !== id);
+  Object.assign(p, { gridId: g.id, gridName: g.name, area: g.area, cellM: g.cellM, fills: g.fills, status: g.status });
+}
+
+// Neues, noch leeres Rastergebiet (Fläche wird danach aufgezogen)
+export function startNewGrid(p) {
+  const name = nextGridName(p);
+  parkActive(p);
+  Object.assign(p, { gridId: uid(), gridName: name, area: null, fills: {}, status: {} });
+}
+
+// Bearbeitetes Rastergebiet löschen; das nächste wird aktiv
+export function removeActiveGrid(p) {
+  Object.assign(p, { area: null, fills: {}, status: {}, gridName: '' });
+  p.gridId = uid();
+  const next = (p.otherGrids || [])[0];
+  if (next) activateGrid(p, next.id);
+}
+
+// Projekt-Ansicht mit nur einem Rastergebiet (für PDF/GPX je Gebiet)
+export function gridView(p, g) {
+  return { ...p, gridId: g.id, gridName: g.name, area: g.area, cellM: g.cellM, fills: g.fills, status: g.status, otherGrids: [] };
 }
 
 // Version 1 speicherte nur ein Gebiet mit Farben statt Markierungen
@@ -134,22 +205,34 @@ export function cellsText(keys) {
   return cellRects(keys).map((q) => rangeLabel(q.c0, q.r0, q.c1, q.r1)).join(', ');
 }
 
+// Mehrere Rastergebiete: Feldtexte je Gebiet mit Namen davor („Nord: A1–B2; Süd: C3“)
+function perGrid(p, fn) {
+  const grids = allGrids(p);
+  if (grids.length < 2) return fn(p.fills, p.status, '');
+  const parts = grids.map((g) => fn(g.fills, g.status, `${gridLabel(p, g)}: `));
+  return parts;
+}
+function joinParts(parts) {
+  if (!Array.isArray(parts)) return parts;
+  const used = parts.filter((x) => x.count);
+  return { count: used.reduce((a, x) => a + x.count, 0), text: used.map((x) => x.text).join('; ') };
+}
+
 // Pro Markierung: zugeteilte Felder
 export function assignments(p) {
-  return p.marks.map((m) => {
-    const map = mapFor(p, m);
+  return p.marks.map((m) => joinParts(perGrid(p, (fills, status, pre) => {
+    const map = m.kind === 'team' ? fills : status;
     const keys = Object.keys(map).filter((k) => map[k] === m.id);
-    return { mark: m, count: keys.length, text: cellsText(keys) };
-  });
+    return { count: keys.length, text: keys.length ? pre + cellsText(keys) : '' };
+  }))).map((a, i) => ({ mark: p.marks[i], ...a }));
 }
 
 // Status innerhalb der Felder eines Teams, z. B. [{mark: abgesucht, count: 2, text: 'A3–B3'}]
 export function teamStatus(p, team) {
-  const own = Object.keys(p.fills).filter((k) => p.fills[k] === team.id);
-  return p.marks.filter((m) => m.kind !== 'team').map((m) => {
-    const keys = own.filter((k) => p.status[k] === m.id);
-    return { mark: m, count: keys.length, text: cellsText(keys) };
-  }).filter((x) => x.count);
+  return p.marks.filter((m) => m.kind !== 'team').map((m) => ({ mark: m, ...joinParts(perGrid(p, (fills, status, pre) => {
+    const keys = Object.keys(fills).filter((k) => fills[k] === team.id && status[k] === m.id);
+    return { count: keys.length, text: keys.length ? pre + cellsText(keys) : '' };
+  })) })).filter((x) => x.count);
 }
 
 // Team eines Feldes

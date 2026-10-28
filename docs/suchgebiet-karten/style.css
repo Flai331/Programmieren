@@ -61,6 +61,12 @@ button, input, select { font: inherit; }
 .sidebuttons button.primary { background: var(--red); color: #fff; }
 .sidebuttons button.on { color: #1565c0; font-weight: 700; }
 
+.gridlist { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
+.gridlist .grow { display: flex; gap: 4px; align-items: center; }
+.gridlist .grow .gname { flex: 1; text-align: left; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; background: #fff; cursor: pointer; }
+.gridlist .grow .gname.active { border-color: var(--red); background: #fdecea; font-weight: 700; }
+.gridlist .grow .gname small { font-weight: 400; color: #666; margin-left: 6px; }
+.gridlist .grow button:not(.gname) { min-width: 40px; }
 .leftbar {
   position: fixed; left: 10px; top: 50%; transform: translateY(-50%); z-index: 999;
   display: flex; flex-direction: column; gap: 6px; align-items: center;

@@ -37,19 +37,48 @@ function pill(ctx, text, cx, cy, s) {
 //        focus: Bereich des Detailblatts (Rest wird aufgehellt), utm: UTM-Gitter zeigen }
 // state: { grid, fills: "c,r" -> Teamfarbe, status: "c,r" -> Statusfarbe (schraffiert),
 //          fillLabels: "c,r" -> Text, items, meet }
+// state.others: weitere Rastergebiete [{ grid, name, fills, status, fillLabels, statusLabels }],
+// state.gridName: Name des Hauptrasters (steht nur da, wenn es mehrere Gebiete gibt)
 export function drawOverlay(ctx, toPx, state, opt) {
   const s = opt.s || 1;
   const grid = state.grid;
   if (opt.focus) dimOutside(ctx, toPx, opt.focus, opt.width, opt.height);
   if (opt.utm && opt.view) drawUtm(ctx, toPx, opt, s);
-  let areas = null;
-  if (grid && opt.noGrid) areas = drawAreas(ctx, toPx, state, grid, opt, s);
-  else if (grid) drawGrid(ctx, toPx, state, grid, opt, s);
+  const layers = [...(state.others || []), { ...state, name: state.gridName }].filter((g) => g.grid);
+  let areas = [];
+  for (const g of layers) {
+    const st = { ...state, ...g };
+    if (opt.noGrid) {
+      const a = drawAreas(ctx, toPx, st, g.grid, { ...opt, areaPrefix: layers.length > 1 && g.name ? `${g.name}: ` : '' }, s);
+      if (a) areas.push(...a);
+    } else drawGrid(ctx, toPx, st, g.grid, opt, s);
+  }
   drawItems(ctx, toPx, state.items || [], s);
   if (state.meet) drawMeet(ctx, toPx, state.meet, s);
-  if (grid && !opt.noGrid && !opt.noEdge) drawEdgeLabels(ctx, toPx, grid, opt, s);
+  for (const g of layers) {
+    if (!opt.noGrid && !opt.noEdge) drawEdgeLabels(ctx, toPx, g.grid, opt, s);
+    if (layers.length > 1 && g.name && !(opt.noGrid && opt.noEdge)) drawGridName(ctx, toPx, g.grid, g.name, s);
+  }
+  if (!layers.length) areas = null;
+  else areas.forEach((a, i) => { a.n = i + 1; });
   if (areas && opt.areaLabels === 'edge' && areas.length) drawAreaList(ctx, areas, opt, s);
   return areas;
+}
+
+// Name eines Rastergebiets als Schild über der linken oberen Ecke
+function drawGridName(ctx, toPx, grid, name, s) {
+  const [x, y] = toPx(grid.originLat, grid.originLon);
+  ctx.font = `bold ${13 * s}px sans-serif`;
+  const w = ctx.measureText(name).width + 12 * s;
+  const h = 19 * s;
+  ctx.fillStyle = GRID_COLOR;
+  // über der Spaltenbeschriftung (A, B …), damit beide lesbar bleiben
+  const top = y - h - 26 * s;
+  ctx.fillRect(x, top, w, h);
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(name, x + 6 * s, top + h / 2);
 }
 
 // Zusammenhängende Felder gleicher Markierung (gleiche Farbe und Name) -> Flächen
@@ -166,7 +195,7 @@ function drawAreas(ctx, toPx, state, grid, opt, s) {
     const x = (x0 + x1) / 2;
     const y = (y0 + y1) / 2 + dy * (y1 - y0);
     n++;
-    areas.push({ n, label: g.label, color: g.color, cells: cellsText(g.keys) });
+    areas.push({ n, label: g.label, color: g.color, cells: (opt.areaPrefix || '') + cellsText(g.keys) });
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     if (opt.areaLabels === 'edge') {

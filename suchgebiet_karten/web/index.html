@@ -86,6 +86,9 @@
   <section id="panel-grid" class="panel" hidden>
     <h2>Raster</h2>
     <p class="small">Das Raster hängt an festen Koordinaten. Feld A1 liegt dadurch auf jeder Karte und in jedem PDF-Blatt an derselben Stelle.</p>
+    <label>Rastergebiete</label>
+    <div id="grid-list" class="gridlist"></div>
+    <button id="grid-add">+ Weiteres Rastergebiet</button>
     <label>Feldgröße
       <select id="cell-size">
         <option value="25">25 m</option>
@@ -178,6 +181,10 @@
   <section id="panel-pdf" class="panel" hidden>
     <h2>Exportieren <span id="app-version" class="version"></span></h2>
     <p class="small">„Teilen“ öffnet das Teilen-Menü des Handys (WhatsApp, Mail, Signal …). „Speichern“ legt die Datei ab – im Browser im Download-Ordner, in der App an einem Ort deiner Wahl.</p>
+    <div id="export-grids-box" hidden>
+      <label>Rastergebiete im Export (PDF, GPX, Garmin-Karte)</label>
+      <div id="export-grids" class="viewlist"></div>
+    </div>
     <h2 class="sub first">📄 PDF</h2>
     <div class="row">
       <label>Format

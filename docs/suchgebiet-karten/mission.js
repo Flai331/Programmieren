@@ -160,13 +160,18 @@ export function missionText(project, grid, attach = 'Abschlussbericht im Anhang 
   if (want(sec, 'person') && m.person.trim()) out.push('', 'Vermisste Person:', m.person.trim());
   if (want(sec, 'forces') && m.forces.length) out.push('', `Kräfte (${STRENGTH_HINT}):`, ...m.forces.map(forceLine), totalLine(m.forces));
   if (want(sec, 'summary') && m.summary.trim()) out.push('', 'Zusammenfassung:', m.summary.trim());
-  if (grid) out.push('', `Raster: ${grid.cellM} m Felder, A1 = Nordwest-Ecke.`);
+  const others = project.otherGrids || [];
+  if (grid && others.length) {
+    const list = [{ name: project.gridName, cellM: grid.cellM }, ...others].map((g) => `${g.name || 'Gebiet 1'} (${g.cellM} m)`);
+    out.push('', `Rastergebiete: ${list.join(', ')}; Felder je Gebiet ab A1 = Nordwest-Ecke.`);
+  } else if (grid) out.push('', `Raster: ${grid.cellM} m Felder, A1 = Nordwest-Ecke.`);
   if (attach) out.push('', attach);
   return out.join('\n');
 }
 
 const NAMES = {
   '#d50000': 'rot', '#1565c0': 'blau', '#2e7d32': 'grün', '#ef6c00': 'orange', '#6a1b9a': 'lila', '#000000': 'schwarz', '#fdd835': 'gelb',
+  '#f06292': 'rosa',
 };
 export const colorName = (c) => NAMES[String(c).toLowerCase()] || c;
 

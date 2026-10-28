@@ -78,3 +78,35 @@ test('Alter Stand: Status in den Teamfeldern wird umgezogen', () => {
   assert.deepEqual(n.fills, {});
   assert.equal(n.status['2,2'], done.id);
 });
+
+test('mehrere Rastergebiete: anlegen, wechseln, löschen, Zuteilungen je Gebiet', async () => {
+  const { newProject, normalizeProject, allGrids, activateGrid, startNewGrid, removeActiveGrid, assignments, gridView, gridLabel } = await import('../web/store.js');
+  const p = normalizeProject(newProject('T'));
+  const team = { id: 'tm', kind: 'team', label: 'Team 1', color: '#6a1b9a' };
+  p.marks.push(team);
+  p.area = { north: 51.01, south: 51, west: 7, east: 7.02 };
+  p.fills = { '0,0': 'tm' };
+  const first = p.gridId;
+  startNewGrid(p);
+  assert.equal(p.area, null);
+  assert.equal(p.gridName, 'Gebiet 2');
+  p.area = { north: 51.1, south: 51.09, west: 7.1, east: 7.12 };
+  p.cellM = 50;
+  p.fills = { '2,3': 'tm', '3,3': 'tm' };
+  assert.equal(allGrids(p).length, 2);
+  const a = assignments(p).find((x) => x.mark.id === 'tm');
+  assert.equal(a.count, 3);
+  assert.equal(a.text, 'Gebiet 1: A1; Gebiet 2: C4–D4');
+  activateGrid(p, first);
+  assert.deepEqual(p.fills, { '0,0': 'tm' });
+  assert.equal(p.cellM, 100); // jede Feldgröße gehört zu ihrem Gebiet
+  const second = allGrids(p).find((g) => !g.active);
+  assert.equal(gridLabel(p, second), 'Gebiet 2');
+  assert.equal(assignments(gridView(p, second)).find((x) => x.mark.id === 'tm').text, 'C4–D4');
+  const q = normalizeProject(JSON.parse(JSON.stringify(p)));
+  assert.equal(allGrids(q).length, 2);
+  removeActiveGrid(p);
+  assert.equal(allGrids(p).length, 1);
+  assert.equal(p.gridName, 'Gebiet 2');
+  assert.deepEqual(p.fills, { '2,3': 'tm', '3,3': 'tm' });
+});

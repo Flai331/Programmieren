@@ -5,9 +5,9 @@ import { drawOverlay, hitItem } from './render.js';
 import {
   LAYERS, OVERLAYS, DEFAULT_OVERLAYS, layerById, layerStack, tileUrl,
 } from './layers.js';
-import { buildPdf, planSheets, renderState } from './pdf.js';
+import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { buildGpx, parseGpx, trackDesc, trackLength } from './gpx.js';
+import { buildGpx, mergeGpx, parseGpx, trackDesc, trackLength } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -18,16 +18,17 @@ import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } fro
 import {
   newProject, normalizeProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
   exportProject, importProject, uid, TEAM_COLORS,
+  allGrids, activateGrid, startNewGrid, removeActiveGrid, gridView, gridLabel,
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v37';
+const APP_VERSION = 'v38';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
-const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
-const MARK_COLORS = [...new Set([...TEAM_COLORS, '#00c853', '#2e7d32', '#fdd835', '#616161', '#000000'])];
+const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
+const MARK_COLORS = [...new Set([...TEAM_COLORS, '#f06292', '#00c853', '#2e7d32', '#fdd835', '#616161', '#000000'])];
 const COLOR_NAMES = {
-  '#d50000': 'Rot', '#1565c0': 'Blau', '#ef6c00': 'Orange', '#6a1b9a': 'Lila', '#00838f': 'Türkis', '#ad1457': 'Pink',
+  '#d50000': 'Rot', '#1565c0': 'Blau', '#ef6c00': 'Orange', '#6a1b9a': 'Lila', '#00838f': 'Türkis', '#ad1457': 'Pink', '#f06292': 'Rosa',
   '#4e342e': 'Braun', '#558b2f': 'Olivgrün', '#2e7d32': 'Dunkelgrün', '#00c853': 'Hellgrün', '#fdd835': 'Gelb', '#616161': 'Grau', '#000000': 'Schwarz',
 };
 
@@ -60,7 +61,34 @@ function load() {
   for (const id of Object.keys(db.projects)) db.projects[id] = normalizeProject(db.projects[id]);
   if (!db.projects[db.currentId]) db.currentId = Object.keys(db.projects)[0];
   P = db.projects[db.currentId];
+  syncGrid();
+}
+
+// grid neu aus dem bearbeiteten Rastergebiet berechnen
+function syncGrid() {
   grid = P.area ? makeGrid(P.area, P.cellM) : null;
+}
+
+// Rastergebiet und Feld an einer Stelle (alle Gebiete, das bearbeitete zuerst)
+function hitGrid(lat, lon) {
+  const list = allGrids(P).sort((a, b) => b.active - a.active);
+  for (const g of list) {
+    const gg = g.active ? grid : makeGrid(g.area, g.cellM);
+    const c = gg && cellAt(gg, lat, lon);
+    if (c) return { ...c, g, grid: gg, label: allGrids(P).length > 1 ? `${gridLabel(P, g)} ` : '' };
+  }
+  return null;
+}
+
+// Liegt die Stelle in einem anderen Rastergebiet, wird dieses zum Bearbeiten geholt
+function useGridAt(lat, lon) {
+  const h = hitGrid(lat, lon);
+  if (h && !h.g.active) {
+    activateGrid(P, h.g.id);
+    syncGrid();
+    updateGridInfo();
+  }
+  return h;
 }
 
 let saveTimer = null;
@@ -84,6 +112,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveN
 function snapshot() {
   undoStack.push(JSON.stringify({
     area: P.area, cellM: P.cellM, fills: P.fills, status: P.status, items: P.items, marks: P.marks, meet: P.meet,
+    gridId: P.gridId, gridName: P.gridName, otherGrids: P.otherGrids,
   }));
   if (undoStack.length > 60) undoStack.shift();
 }
@@ -92,7 +121,7 @@ function undo() {
   const s = undoStack.pop();
   if (!s) return toast('Nichts zum Rückgängigmachen');
   Object.assign(P, JSON.parse(s));
-  grid = P.area ? makeGrid(P.area, P.cellM) : null;
+  syncGrid();
   changed();
 }
 
@@ -222,7 +251,12 @@ function redraw() {
   const hiddenMarks = new Set(P.marks.filter((m) => m.hidden).map((m) => m.id));
   const visible = (map) => Object.fromEntries(Object.entries(map).filter(([, id]) => !hiddenMarks.has(id)));
   const st = {
-    ...renderState({ ...P, fills: visible(P.fills), status: visible(P.status) }, grid),
+    ...renderState({
+      ...P,
+      fills: visible(P.fills),
+      status: visible(P.status),
+      otherGrids: P.otherGrids.map((g) => ({ ...g, fills: visible(g.fills), status: visible(g.status) })),
+    }, grid),
     items: items.filter((it) => !it.hidden || it === current || it === draftTrack),
   };
   if (hide.meet) st.meet = null;
@@ -262,7 +296,7 @@ const HINTS = {
 
 function setTool(t) {
   if (tool === 'track' && t !== 'track') finishTrack(true);
-  if ((t === 'fill') && !grid) {
+  if ((t === 'fill') && !allGrids(P).length) {
     toast('Bitte zuerst ein Raster anlegen');
     t = 'pan';
   }
@@ -301,6 +335,8 @@ function activeMark() {
 }
 
 function fillAt(ll, first) {
+  // erster Tipp in einem anderen Rastergebiet: dieses bearbeiten
+  if (first) useGridAt(ll.lat, ll.lng);
   const cell = grid && cellAt(grid, ll.lat, ll.lng);
   if (!cell) {
     if (first) toast('Außerhalb des Rasters');
@@ -438,12 +474,13 @@ function eraseAt(x, y) {
     P.meet = null;
   } else {
     const ll = map.containerPointToLatLng([x, y]);
-    const cell = grid && cellAt(grid, ll.lat, ll.lng);
-    const key = cell && `${cell.c},${cell.r}`;
-    if (!key || (!P.fills[key] && !P.status[key])) return;
+    const h = hitGrid(ll.lat, ll.lng);
+    const key = h && `${h.c},${h.r}`;
+    const target = h && (h.g.active ? P : P.otherGrids.find((g) => g.id === h.g.id));
+    if (!key || (!target.fills[key] && !target.status[key])) return;
     before();
-    delete P.fills[key];
-    delete P.status[key];
+    delete target.fills[key];
+    delete target.status[key];
   }
   redraw();
 }
@@ -685,7 +722,63 @@ function setArea(area, cellM = P.cellM) {
   return true;
 }
 
+// Liste der Rastergebiete im Raster-Fenster: antippen = bearbeiten und hinzoomen
+function renderGridList() {
+  const box = $('grid-list');
+  box.innerHTML = '';
+  const list = allGrids(P);
+  if (!P.area && list.length) {
+    const p = document.createElement('p');
+    p.className = 'small';
+    p.textContent = `„${P.gridName || 'Neues Gebiet'}“ ist noch nicht aufgezogen – „Suchgebiet aufziehen“ oder „Aktuellen Ausschnitt nehmen“.`;
+    box.appendChild(p);
+  }
+  for (const g of list) {
+    const gg = g.active ? grid : makeGrid(g.area, g.cellM);
+    const row = document.createElement('div');
+    row.className = 'grow';
+    const b = document.createElement('button');
+    b.className = `gname${g.active ? ' active' : ''}`;
+    b.innerHTML = '<span></span><small></small>';
+    b.firstChild.textContent = gridLabel(P, g);
+    b.lastChild.textContent = `${formatMeters(g.cellM)} · ${gg.cols}×${gg.rows}${g.active ? ' · wird bearbeitet' : ''}`;
+    b.addEventListener('click', () => {
+      if (!g.active) {
+        snapshot();
+        activateGrid(P, g.id);
+        syncGrid();
+        changed();
+      }
+      map.fitBounds([[g.area.south, g.area.west], [g.area.north, g.area.east]], { padding: [40, 40] });
+    });
+    const ren = document.createElement('button');
+    ren.textContent = '✏️';
+    ren.title = 'Umbenennen';
+    ren.addEventListener('click', () => {
+      const name = prompt('Name des Rastergebiets (z. B. Nord, Waldstück):', gridLabel(P, g));
+      if (name === null || !name.trim()) return;
+      snapshot();
+      if (g.active) P.gridName = name.trim();
+      else P.otherGrids.find((x) => x.id === g.id).name = name.trim();
+      changed();
+    });
+    row.append(b, ren);
+    box.appendChild(row);
+  }
+  $('grid-remove').textContent = list.length > 1 ? 'Dieses Rastergebiet entfernen' : 'Raster entfernen';
+}
+$('grid-add').addEventListener('click', () => {
+  snapshot();
+  startNewGrid(P);
+  syncGrid();
+  changed();
+  closePanels();
+  setTool('grid');
+  toast(`${P.gridName}: Fläche auf der Karte aufziehen`);
+});
+
 function updateGridInfo() {
+  renderGridList();
   $('cell-size').value = String(P.cellM);
   $('show-utm').checked = !!P.showUtm;
   renderViewToggles();
@@ -730,7 +823,7 @@ function renderViewToggles() {
   row('Rasterlinien und Feldnamen', !hide.grid, setHide('grid'));
   row('Randbeschriftung (A, B … / 1, 2 …)', !hide.edge, setHide('edge'));
   if (P.meet) row(`Treffpunkt${P.meet.text ? `: ${P.meet.text}` : ''}`, !hide.meet, setHide('meet'), '#0d47a1');
-  const used = new Set([...Object.values(P.fills), ...Object.values(P.status)]);
+  const used = new Set(allGrids(P).flatMap((g) => [...Object.values(g.fills), ...Object.values(g.status)]));
   const marks = P.marks.filter((m) => used.has(m.id));
   if (marks.length) head('Teams und Markierungen');
   for (const m of marks) row(markLabel(m), !m.hidden, (on) => { m.hidden = !on; }, m.color);
@@ -809,19 +902,21 @@ $('grid-view').addEventListener('click', () => {
   if (setArea({ north: b.getNorth(), south: b.getSouth(), west: b.getWest(), east: b.getEast() })) closePanels();
 });
 $('grid-remove').addEventListener('click', () => {
-  if (!grid || !confirm('Raster und Feldzuteilungen entfernen?')) return;
+  const multi = allGrids(P).length > 1;
+  if (!grid && !multi) return;
+  if (!confirm(multi ? `Rastergebiet „${gridLabel(P, { name: P.gridName })}“ mit seinen Feldzuteilungen entfernen?` : 'Raster und Feldzuteilungen entfernen?')) return;
   snapshot();
-  P.area = null;
-  grid = null;
-  P.fills = {};
-  P.status = {};
+  removeActiveGrid(P);
+  syncGrid();
   changed();
 });
 $('clear-fills').addEventListener('click', () => {
-  if ((!Object.keys(P.fills).length && !Object.keys(P.status).length) || !confirm('Alle Feldfarben und Zuteilungen löschen?')) return;
+  const any = allGrids(P).some((g) => Object.keys(g.fills).length || Object.keys(g.status).length);
+  if (!any || !confirm('Alle Feldfarben und Zuteilungen löschen (in allen Rastergebieten)?')) return;
   snapshot();
   P.fills = {};
   P.status = {};
+  P.otherGrids = P.otherGrids.map((g) => ({ ...g, fills: {}, status: {} }));
   changed();
 });
 $('clear-drawings').addEventListener('click', () => {
@@ -844,12 +939,13 @@ $('cell-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') goT
 // Antippen im Bewegen-Modus zeigt Feld, Zuteilung und ggf. UTMREF
 map.on('click', (e) => {
   const parts = [];
-  if (grid) {
-    const c = cellAt(grid, e.latlng.lat, e.latlng.lng);
+  if (allGrids(P).length) {
+    const c = hitGrid(e.latlng.lat, e.latlng.lng);
     if (c) {
-      const m = cellOwner(P, c.c, c.r);
-      const st = cellStatus(P, c.c, c.r);
-      parts.push(`Feld ${cellLabel(c.c, c.r)}${m ? ` – ${markLabel(m)}` : ''}${st ? ` (${st.label})` : ''}`);
+      const v = gridView(P, c.g);
+      const m = cellOwner(v, c.c, c.r);
+      const st = cellStatus(v, c.c, c.r);
+      parts.push(`Feld ${c.label}${cellLabel(c.c, c.r)}${m ? ` – ${markLabel(m)}` : ''}${st ? ` (${st.label})` : ''}`);
     } else parts.push('Außerhalb des Rasters');
   }
   if (P.showUtm) parts.push(formatMgrs(e.latlng.lat, e.latlng.lng));
@@ -898,9 +994,9 @@ function updateStatus() {
   if (!lastPos) { $('status').textContent = ''; return; }
   const [lat, lon] = lastPos;
   const parts = [];
-  if (grid) {
-    const c = cellAt(grid, lat, lon);
-    parts.push(c ? `📍 ${cellLabel(c.c, c.r)}` : '📍 außerhalb');
+  if (allGrids(P).length) {
+    const c = hitGrid(lat, lon);
+    parts.push(c ? `📍 ${c.label}${cellLabel(c.c, c.r)}` : '📍 außerhalb');
   }
   if (P.showUtm) parts.push(formatMgrs(lat, lon));
   $('status').textContent = parts.join(' · ') || '📍';
@@ -941,7 +1037,7 @@ function switchProject(id) {
   saveNow();
   db.currentId = id;
   P = db.projects[id];
-  grid = P.area ? makeGrid(P.area, P.cellM) : null;
+  syncGrid();
   undoStack = [];
   if (P.view) map.setView([P.view.lat, P.view.lon], P.view.z);
   else if (grid) map.fitBounds([[P.area.south, P.area.west], [P.area.north, P.area.east]]);
@@ -1136,6 +1232,7 @@ $('btn-layers').addEventListener('click', () => openPanel('panel-layers'));
 $('app-version').textContent = `Version ${APP_VERSION}`;
 $('btn-pdf').addEventListener('click', () => {
   $('pdf-caption').value = P.caption || '';
+  renderExportGrids();
   updatePdfPlan();
   updateKmzPlan();
   $('pdf-msg').textContent = '';
@@ -1177,13 +1274,60 @@ async function runExport(kind, btn, key, build, action) {
   }
 }
 
+// ---------- Rastergebiete im Export ----------
+// Abgewählte Gebiete (Export-Fenster); alle anderen gehen mit
+const exportSkip = new Set();
+function exportGrids() {
+  return allGrids(P).filter((g) => !exportSkip.has(g.id));
+}
+function renderExportGrids() {
+  const list = allGrids(P);
+  $('export-grids-box').hidden = list.length < 2;
+  const box = $('export-grids');
+  box.innerHTML = '';
+  for (const g of list) {
+    const l = document.createElement('label');
+    l.className = 'check';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !exportSkip.has(g.id);
+    cb.addEventListener('change', () => {
+      if (cb.checked) exportSkip.delete(g.id); else exportSkip.add(g.id);
+      updatePdfPlan();
+      updateKmzPlan();
+    });
+    l.append(cb, ` ${gridLabel(P, g)} (${formatMeters(g.cellM)})`);
+    box.appendChild(l);
+  }
+}
+// Mehrere Gebiete: je Gebiet eine Projekt-Ansicht; die übrigen gewählten werden mitgezeichnet
+function exportViews() {
+  if (allGrids(P).length < 2) return null;
+  const sel = exportGrids();
+  return sel.map((g) => ({
+    project: { ...gridView(P, g), otherGrids: sel.filter((o) => o.id !== g.id) },
+    grid: makeGrid(g.area, g.cellM),
+    label: gridLabel(P, g),
+  }));
+}
+// Projekt + Raster für Ausgaben mit einem Bild (Garmin-Karte): erstes gewähltes Gebiet, Rest dazu
+function exportBase() {
+  const v = exportViews();
+  if (!v) return { project: P, grid };
+  if (!v.length) return { project: { ...P, area: null, fills: {}, status: {}, otherGrids: [] }, grid: null };
+  return v[0];
+}
+
 // ---------- PDF ----------
 function pdfOpts() {
+  const views = exportViews();
+  const hasGrid = views ? views.length > 0 : !!grid;
   return {
     format: $('pdf-format').value,
     orient: $('pdf-orient').value,
-    overview: $('pdf-overview').checked && !!grid,
-    details: $('pdf-details').checked && !!grid,
+    overview: $('pdf-overview').checked && hasGrid,
+    details: $('pdf-details').checked && hasGrid,
+    gridIds: views ? views.map((v) => v.project.gridId) : null,
     k: Number($('pdf-k').value),
     info: $('pdf-info').checked,
     view: $('pdf-view').checked,
@@ -1199,11 +1343,12 @@ function viewBounds() {
 }
 
 function updatePdfPlan() {
-  const noGrid = !grid;
+  const views = exportViews();
+  const noGrid = views ? !views.length : !grid;
   $('pdf-overview').disabled = noGrid;
   $('pdf-details').disabled = noGrid;
   if (noGrid) $('pdf-view').checked = true;
-  const sheets = planSheets(grid, pdfOpts(), viewBounds());
+  const sheets = views ? planMultiSheets(views, pdfOpts(), viewBounds()) : planSheets(grid, pdfOpts(), viewBounds());
   $('pdf-plan').textContent = sheets.length
     ? `${sheets.length} Seite${sheets.length > 1 ? 'n' : ''}: ${sheets.map((s) => s.title.replace(/^Blatt \d+ – /, '')).join(' · ')}`
     : 'Bitte mindestens eine Karte wählen.';
@@ -1220,7 +1365,7 @@ function mailText(title) {
 }
 
 async function buildPdfFile(progress) {
-  const opts = pdfOpts();
+  const opts = { ...pdfOpts(), views: exportViews() };
   const res = await buildPdf(P, grid, opts, layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => progress(`Seite ${i} von ${n} …`));
   $('pdf-msg').textContent = `✔ ${res.pages} Seite${res.pages > 1 ? 'n' : ''} (${Math.round(res.blob.size / 1024)} KB)`
     + (res.missing ? ` – ${res.missing} Kartenkacheln fehlen (keine Verbindung oder Karte nicht exportierbar)` : '');
@@ -1349,7 +1494,7 @@ async function shareFile(blob, name, title, text, f = null, allowTxt = false) {
 // ---------- Garmin: GPX ----------
 // Zwei GPX-Dateien = zwei Listen in BaseCamp: Raster und Markierungen
 function gpxGridOpts() {
-  return { grid: $('gpx-grid').value, cells: $('gpx-cells').value };
+  return { grid: $('gpx-grid').value, cells: $('gpx-cells').value, gridIds: exportGrids().map((g) => g.id) };
 }
 
 function gpxMarkOpts() {
@@ -1358,12 +1503,28 @@ function gpxMarkOpts() {
     drawings: $('gpx-drawings').checked,
     teams: $('gpx-teams').checked,
     points: $('gpx-points').checked,
+    gridIds: exportGrids().map((g) => g.id),
   };
+}
+
+// Mehrere Rastergebiete: je Gebiet ein Teil (Raster „Raster Titel Nord“, Team-Tracks mit Gebiet),
+// Zeichnungen und Punkte nur einmal
+function gpxMulti(opts, part) {
+  const views = exportViews();
+  if (!views) return buildGpx(P, grid, opts, part);
+  if (!views.length) return buildGpx({ ...P, otherGrids: [] }, null, opts, part);
+  const title = P.title || 'Suchgebiet';
+  return mergeGpx(views.map((v, i) => buildGpx(
+    { ...v.project, title: `${title} ${v.label}` },
+    v.grid,
+    { ...opts, prefix: `${v.label} `, ...(i ? { tracks: false, drawings: false, points: false } : {}) },
+    part,
+  )), `${title} – ${part}`);
 }
 
 function gpxBuilder(opts, part, empty) {
   return async () => {
-    const gpx = buildGpx(P, grid, opts, part);
+    const gpx = gpxMulti(opts, part);
     if (!/<(trk|wpt)[ >]/.test(gpx)) {
       toast(empty);
       return null;
@@ -1410,21 +1571,27 @@ $('gpx-save').addEventListener('click', () => runExport('gpx', $('gpx-save'), ex
 
 // ---------- Garmin: Custom Map (KMZ) ----------
 function kmzBounds() {
-  if ($('kmz-area').value === 'grid' && grid) {
+  const sel = allGrids(P).length > 1 ? exportGrids() : (grid ? [{ area: P.area, cellM: P.cellM }] : []);
+  if ($('kmz-area').value === 'grid' && sel.length) {
+    // alle gewählten Rastergebiete, mit einem halben Feld Rand
     const pad = 0.5;
-    return {
-      north: grid.originLat + grid.dLat * pad,
-      south: grid.originLat - grid.rows * grid.dLat - grid.dLat * pad,
-      west: grid.originLon - grid.dLon * pad,
-      east: grid.originLon + grid.cols * grid.dLon + grid.dLon * pad,
-    };
+    const b = { north: -90, south: 90, west: 180, east: -180 };
+    for (const g of sel) {
+      const gg = makeGrid(g.area, g.cellM);
+      b.north = Math.max(b.north, gg.originLat + gg.dLat * pad);
+      b.south = Math.min(b.south, gg.originLat - gg.rows * gg.dLat - gg.dLat * pad);
+      b.west = Math.min(b.west, gg.originLon - gg.dLon * pad);
+      b.east = Math.max(b.east, gg.originLon + gg.cols * gg.dLon + gg.dLon * pad);
+    }
+    return b;
   }
   return viewBounds();
 }
 
 function updateKmzPlan() {
-  if (!grid) $('kmz-area').value = 'view';
-  $('kmz-area').querySelector('[value=grid]').disabled = !grid;
+  const any = allGrids(P).length > 1 ? exportGrids().length > 0 : !!grid;
+  if (!any) $('kmz-area').value = 'view';
+  $('kmz-area').querySelector('[value=grid]').disabled = !any;
   const plan = planCustomMap(kmzBounds(), Number($('kmz-res').value));
   $('kmz-plan').textContent = `${plan.tiles} Kachel${plan.tiles > 1 ? 'n' : ''} · ${plan.W} × ${plan.H} Bildpunkte · `
     + `${plan.mPerPx.toLocaleString('de-DE', { maximumFractionDigits: 1 })} m pro Bildpunkt`
@@ -1433,7 +1600,8 @@ function updateKmzPlan() {
 ['kmz-area', 'kmz-res'].forEach((id) => $(id).addEventListener('change', updateKmzPlan));
 
 async function buildKmzFile(progress) {
-  const res = await buildCustomMap(P, grid, layerStack(P.layerId, activeOverlays()), kmzBounds(), Number($('kmz-res').value),
+  const base = exportBase();
+  const res = await buildCustomMap(base.project, base.grid, layerStack(P.layerId, activeOverlays()), kmzBounds(), Number($('kmz-res').value),
     (i, n) => progress(`Kachel ${i} von ${n} …`));
   $('kmz-msg').textContent = `✔ ${res.tiles} Kachel${res.tiles > 1 ? 'n' : ''} (${Math.round(res.blob.size / 1024)} KB)`
     + (res.missing ? ` – ${res.missing} Kartenkacheln fehlen (keine Verbindung oder Karte nicht exportierbar)` : '');
@@ -1444,7 +1612,7 @@ async function buildKmzFile(progress) {
     text: 'Garmin-Karte: per USB in den Ordner Garmin/CustomMaps auf dem GPS-Gerät kopieren.',
   };
 }
-const kmzKey = () => exportKey([$('kmz-area').value, $('kmz-res').value]);
+const kmzKey = () => exportKey([$('kmz-area').value, $('kmz-res').value, exportGrids().map((g) => g.id)]);
 $('kmz-share').addEventListener('click', () => runExport('kmz', $('kmz-share'), kmzKey(), buildKmzFile, 'share'));
 $('kmz-save').addEventListener('click', () => runExport('kmz', $('kmz-save'), kmzKey(), buildKmzFile, 'save'));
 
