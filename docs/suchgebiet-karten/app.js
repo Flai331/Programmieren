@@ -11,7 +11,7 @@ import { buildGpx, trackLength, formatLength } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import {
   FORCE_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
-  MAIL_PARTS, newMailTo, mailAddresses,
+  MAIL_PARTS, REPORT_SECTIONS, EXTRA_PARTS, hasReportText, newMailTo, mailAddresses,
 } from './mission.js';
 import { buildCustomMap, planCustomMap } from './kmz.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
@@ -21,7 +21,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v26';
+const APP_VERSION = 'v27';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -1039,6 +1039,8 @@ function pdfOpts() {
     k: Number($('pdf-k').value),
     info: $('pdf-info').checked,
     view: $('pdf-view').checked,
+    noGrid: $('pdf-nogrid').checked,
+    areaLabels: 'edge',
     title: P.title.trim() || 'Suchgebiet',
   };
 }
@@ -1061,7 +1063,7 @@ function updatePdfPlan() {
   $('pdf-mail').disabled = !sheets.length;
   $('pdf-save').disabled = !sheets.length;
 }
-['pdf-format', 'pdf-orient', 'pdf-overview', 'pdf-details', 'pdf-k', 'pdf-info', 'pdf-view'].forEach((id) => $(id).addEventListener('change', updatePdfPlan));
+['pdf-format', 'pdf-orient', 'pdf-overview', 'pdf-details', 'pdf-k', 'pdf-info', 'pdf-view', 'pdf-nogrid'].forEach((id) => $(id).addEventListener('change', updatePdfPlan));
 
 function mailText(title) {
   return `Anbei die Karte zum Suchgebiet „${title}“.`
@@ -1665,33 +1667,22 @@ padCanvas.addEventListener('pointerup', padEnd);
 padCanvas.addEventListener('pointercancel', padEnd);
 window.addEventListener('resize', () => { if (!$('notepad').hidden) { padSize(); padDraw(); } });
 
-// Abschluss-PDF: Bericht, Notizblock + Fotos, Karte – je nach Auswahl (parts)
-// Karte im Bericht ohne Raster: Flächen nummeriert, Liste am Rand
-async function reportPdf(parts, progress) {
-  const opts = {
-    ...pdfOpts(),
-    overview: !!grid,
-    details: false,
-    info: false,
-    view: !grid,
-    noMap: !parts.map,
-    report: parts.report || parts.notes ? { text: !!parts.report, images: !!parts.notes } : false,
-    noGrid: true,
-    areaLabels: 'edge',
-    title: `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}`,
-  };
-  if (!opts.report && opts.noMap) return null;
-  if (!parts.report && parts.notes && !parts.map && !M().pages.some((pg) => pg.strokes.length) && !M().photos.length) return null;
+// Abschlussbericht der App (ohne Karte) mit den angekreuzten Inhalten
+async function reportPdf(sec, progress) {
+  const parts = { ...sec, legend: false };
+  const hasPad = parts.pad && M().pages.some((pg) => pg.strokes.length);
+  const hasPhotos = parts.photos && M().photos.length;
+  if (!hasReportText(parts) && !hasPad && !hasPhotos) return null;
   progress('Bericht wird erstellt …');
-  const res = await buildPdf(P, grid, opts, layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => progress(`Karte ${i} von ${n} …`));
-  const kind = parts.report ? 'Einsatzbericht' : parts.map && !parts.notes ? 'Karte' : 'Einsatzunterlagen';
-  return { blob: res.blob, name: safeName(`_${kind}.pdf`), title: opts.title, pages: res.pages };
+  const opts = { ...pdfOpts(), orient: 'portrait', noMap: true, report: parts, title: `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}` };
+  const res = await buildPdf(P, grid, opts, layerStack(P.layerId, activeOverlays()), viewBounds(), () => {});
+  return { blob: res.blob, name: safeName(hasReportText(parts) ? '_Abschlussbericht.pdf' : '_Notizen.pdf'), title: opts.title, pages: res.pages };
 }
 
 async function buildReportFile(progress) {
-  const f = await reportPdf({ report: true, map: true, notes: true }, progress);
-  $('ms-msg').textContent = `✔ Abschluss-PDF mit ${f.pages} Seite${f.pages > 1 ? 'n' : ''} (${Math.round(f.blob.size / 1024)} KB)`;
-  return { ...f, text: missionText(P, grid) };
+  const f = await reportPdf({}, progress);
+  $('ms-msg').textContent = `✔ Abschlussbericht mit ${f.pages} Seite${f.pages > 1 ? 'n' : ''} (${Math.round(f.blob.size / 1024)} KB)`;
+  return { ...f, text: missionText(P, grid, 'Abschlussbericht im Anhang (PDF).') };
 }
 const reportKey = () => exportKey(['report', $('pdf-format').value]);
 $('ms-share').addEventListener('click', () => runExport('report', $('ms-share'), reportKey(), buildReportFile, 'share'));
@@ -1722,19 +1713,28 @@ function renderMailTo() {
   M().mailTo.forEach((row, i) => {
     const el = document.createElement('div');
     el.className = 'mrow';
-    el.innerHTML = '<div class="top"><input type="text" inputmode="email"><button class="del" title="Zeile löschen">✕</button></div><div class="parts"></div><button class="send primary"></button>';
+    el.innerHTML = '<div class="top"><input type="text" inputmode="email"><button class="del" title="Zeile löschen">✕</button></div><div class="groups"></div><button class="send primary"></button>';
     const inp = el.querySelector('input');
     inp.value = row.to;
     inp.placeholder = 'z. B. staffel@example.org, leitung@example.org';
     inp.addEventListener('input', () => { row.to = inp.value; touch(); });
-    for (const [k, label] of MAIL_PARTS) {
-      const l = document.createElement('label');
-      l.innerHTML = '<input type="checkbox"><span></span>';
-      l.querySelector('input').checked = !!row[k];
-      l.querySelector('span').textContent = label;
-      l.querySelector('input').addEventListener('change', (e) => { row[k] = e.target.checked; touch(); });
-      el.querySelector('.parts').appendChild(l);
-    }
+    const group = (title, list) => {
+      const g = document.createElement('div');
+      g.className = 'parts';
+      g.innerHTML = '<b></b>';
+      g.querySelector('b').textContent = title;
+      for (const [k, label] of list) {
+        const l = document.createElement('label');
+        l.innerHTML = '<input type="checkbox"><span></span>';
+        l.querySelector('input').checked = !!row[k];
+        l.querySelector('span').textContent = label;
+        l.querySelector('input').addEventListener('change', (e) => { row[k] = e.target.checked; touch(); });
+        g.appendChild(l);
+      }
+      el.querySelector('.groups').appendChild(g);
+    };
+    group('Abschlussbericht:', REPORT_SECTIONS);
+    group('Zusätzlich:', EXTRA_PARTS);
     el.querySelector('.del').addEventListener('click', () => {
       if (row.to.trim() && !confirm(`Empfänger „${row.to}“ entfernen?`)) return;
       M().mailTo.splice(i, 1);
@@ -1782,9 +1782,9 @@ async function sendMailRow(row, btn) {
   btn.disabled = true;
   try {
     const files = await mailFiles(row, (t) => { btn.textContent = t; });
-    if (!files.length) { toast('Nichts zum Senden – keine Notizen/Fotos bzw. kein Raster vorhanden.'); return; }
-    const names = MAIL_PARTS.filter(([k]) => row[k]).map(([, l]) => l).join(', ');
-    const text = missionText(P, grid, `Im Anhang: ${names}.`);
+    if (!files.length) { toast('Nichts zum Senden – keine Notizblock-Seiten/Fotos bzw. kein Raster vorhanden.'); return; }
+    const names = files.map((f) => f.name).join(', ');
+    const text = missionText(P, grid, `Im Anhang: ${names}`, row);
     const title = `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}`;
     if (bridge && bridge.emailFilesTo) {
       bridge.emailFilesTo(await filesPayload(files), title, text, to.join(','));
