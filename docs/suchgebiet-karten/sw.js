@@ -1,6 +1,6 @@
 // Service Worker: App offline verfügbar machen und angesehene Kartenkacheln
 // zwischenspeichern (hilft bei schlechtem Empfang im Gelände).
-const VERSION = 'v22';
+const VERSION = 'v23';
 const APP_CACHE = `suchgebiet-app-${VERSION}`;
 const TILE_CACHE = 'suchgebiet-tiles';
 const MAX_TILES = 4000;
@@ -12,7 +12,8 @@ const APP_FILES = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(APP_CACHE).then((c) => c.addAll(APP_FILES)));
+  // cache: 'reload' – frisch vom Server, nicht aus dem (evtl. alten) Browser-Zwischenspeicher
+  e.waitUntil(caches.open(APP_CACHE).then((c) => c.addAll(APP_FILES.map((u) => new Request(u, { cache: 'reload' })))));
   self.skipWaiting();
 });
 
@@ -56,8 +57,9 @@ self.addEventListener('fetch', (e) => {
   }
 
   if (url.origin === location.origin) {
-    // App-Dateien: Netz zuerst (Updates), offline aus dem Cache
-    e.respondWith(fetch(e.request).then((res) => {
+    // App-Dateien: Netz zuerst (Updates), offline aus dem Cache. cache: 'no-cache' fragt
+    // beim Server nach, sonst liefert der Browser bis zu 10 Minuten alte Dateien (GitHub Pages)
+    e.respondWith(fetch(e.request, { cache: 'no-cache' }).then((res) => {
       if (res.ok) caches.open(APP_CACHE).then((c) => c.put(e.request, res.clone()));
       return res;
     }).catch(() => caches.match(e.request, { ignoreSearch: true })));

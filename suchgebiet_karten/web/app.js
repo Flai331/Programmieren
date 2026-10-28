@@ -19,7 +19,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v22';
+const APP_VERSION = 'v23';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -1839,7 +1839,13 @@ updateGridInfo();
 resizeCanvas();
 
 if ('serviceWorker' in navigator && location.protocol === 'https:' && !bridge) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
+  // Neue Version installiert -> Hinweis (Daten sind gespeichert, Neuladen ist gefahrlos)
+  let hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController) toast('Neue Version da – bitte die Seite einmal neu laden.');
+    hadController = true;
+  });
 }
 
 // Startmeldung (der Emulator-Test der Android-App wartet darauf)
