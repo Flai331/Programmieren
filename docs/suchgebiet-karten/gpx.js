@@ -239,11 +239,14 @@ export function buildGpx(project, grid, opts, part = '') {
     }
   }
   if (opts.drawings) {
-    let n = 1;
+    // Name der Zeichnung, sonst „Stift 3 (rot)“ – Nummer nach Reihenfolge aller Zeichnungen
+    let n = 0;
     for (const it of project.items) {
-      if (it.kind !== 'stroke' || it.pts.length < 2) continue;
+      if (it.kind !== 'stroke') continue;
+      n++;
+      if (it.pts.length < 2) continue;
       const color = COLOR_DE[garminColor(it.color)] || '';
-      trks += trk(`Stift ${n++}${color ? ` (${color})` : ''}`, it.color, [it.pts], formatLength(trackLength(it.pts)));
+      trks += trk(it.name || `Stift ${n}${color ? ` (${color})` : ''}`, it.color, [it.pts], formatLength(trackLength(it.pts)));
     }
   }
   if (opts.teams && grid) {

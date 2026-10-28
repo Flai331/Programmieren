@@ -31,6 +31,7 @@ von der einen in die andere übernehmen.
 | **GPS** | Eigener Standort, oben steht das aktuelle Feld (mit UTM-Schalter auch UTMREF) |
 | **Export** | PDF, GPX für Garmin/BaseCamp, Garmin-Karte (KMZ) – jeweils **📤 Teilen** (WhatsApp, Mail, Signal …) oder **💾 Speichern** |
 | Stift / Text / Feld / Track / Radierer | Freihand zeichnen, Punkt mit Text, Felder einem Team zuteilen (antippen oder drüberwischen), Track Punkt für Punkt setzen, löschen |
+| Zeichnung benennen | Im Stift-Werkzeug „🏷️ Letzte Zeichnung benennen“ oder eine Zeichnung (auch einen Track) antippen. Der Name steht auf der Karte, im PDF und als Trackname im GPX |
 
 Antippen der Karte im Modus „Bewegen“ zeigt Feld, zugeteiltes Team und ggf. UTMREF.
 
@@ -77,7 +78,7 @@ mit dem PDF als Anhang. Am PC wird es heruntergeladen und das E-Mail-Programm ge
    Feldnamen: als **Linienschrift** unten links in jedem Feld (Voreinstellung – alle Namen
    zusammen sind nur *ein* Eintrag „Feldnamen …“ in der Liste), als Wegpunkte (ein Eintrag pro
    Feld) oder keine
-2. **…_Markierungen.gpx** – eigene Tracks, Stift-Markierungen, Team-/Status-Umrisse,
+2. **…_Markierungen.gpx** – eigene Tracks, Stift-Markierungen (mit ihrem Namen, sonst „Stift 1 (rot)“), Team-/Status-Umrisse,
    Treffpunkt und Textpunkte
 
 In BaseCamp: im Einsatz-Ordner zwei Listen anlegen (Rechtsklick → *Neue Liste*, z. B. „Raster“ und

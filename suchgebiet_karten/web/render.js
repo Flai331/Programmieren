@@ -309,6 +309,14 @@ function drawItems(ctx, toPx, items, s) {
         ctx.lineTo(x + 0.1, y);
       }
       ctx.stroke();
+      if (it.name) {
+        // Name am Anfang der Zeichnung, wie bei Tracks
+        const [x, y] = toPx(it.pts[0][0], it.pts[0][1]);
+        ctx.font = `bold ${13 * s}px sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        halo(ctx, it.name, x + (it.w / 2 + 5) * s, y - (it.w / 2 + 3) * s, it.color, s);
+      }
     } else if (it.kind === 'track' && it.pts.length) {
       drawTrack(ctx, toPx, it, s);
     } else if (it.kind === 'text') {

@@ -16,7 +16,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v19';
+const APP_VERSION = 'v20';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -233,7 +233,7 @@ window.addEventListener('resize', () => { map.invalidateSize(); resizeCanvas(); 
 
 // ---------- Werkzeuge ----------
 const HINTS = {
-  pen: 'Mit dem Finger auf die Karte zeichnen. Zum Verschieben „Bewegen“ wählen.',
+  pen: 'Mit dem Finger auf die Karte zeichnen. Zeichnung antippen: Namen geben (steht dann auch im GPX). Verschieben: „Bewegen“.',
   text: 'Auf die Karte tippen, um einen Punkt mit Text zu setzen.',
   fill: 'Team/Markierung wählen, dann Felder antippen oder darüberwischen. Nochmal tippen entfernt.',
   erase: 'Antippen oder darüberwischen löscht Zeichnungen, Tracks, Texte, Treffpunkt und Feldfarben.',
@@ -256,6 +256,7 @@ function setTool(t) {
   if (t === 'track' && !draftTrack) draftTrack = { kind: 'track', name: '', color: db.color, w: 4, pts: [] };
   updateTrackbar();
   $('palette').querySelector('.widths').hidden = t !== 'pen';
+  $('palette').querySelector('.penname').hidden = t !== 'pen';
   $('palette').querySelector('.colors').hidden = t === 'fill';
   $('palette').querySelector('.marks').hidden = t !== 'fill';
   const hint = HINTS[t];
@@ -272,6 +273,7 @@ function eventLatLng(e) {
 
 let activePointer = null;
 let lastPt = null;
+let downPt = null; // Startpunkt der Berührung (Antippen erkennen)
 let erased = false;
 let fillStroke = null; // beim Wischen über Felder: {mode: 'set'|'clear', seen}
 let panning = false;
@@ -307,6 +309,7 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   const { x, y, ll } = eventLatLng(e);
   lastPt = { x, y };
+  downPt = { x, y };
   erased = false;
   if (tool === 'pen') {
     current = { kind: 'stroke', color: db.color, w: db.w, pts: [[ll.lat, ll.lng]] };
@@ -351,12 +354,16 @@ function finishPointer(e, cancelled) {
   activePointer = null;
   const { x, y, ll } = eventLatLng(e);
   if (tool === 'pen' && current) {
-    if (!cancelled) {
+    // Antippen einer vorhandenen Zeichnung: benennen statt einen Punkt zu malen
+    const tap = !cancelled && current.pts.length === 1 && Math.hypot(x - downPt.x, y - downPt.y) < 8;
+    const hit = tap ? hitItem(P.items, toPx, downPt.x, downPt.y, 12) : -1;
+    if (!cancelled && hit < 0) {
       snapshot();
       P.items.push(current);
     }
     current = null;
     changed();
+    if (hit >= 0) renameItem(hit);
   } else if (tool === 'grid' && dragRect) {
     const a = dragRect.a;
     dragRect = null;
@@ -426,6 +433,32 @@ function eraseAt(x, y) {
 document.querySelectorAll('.toolbar [data-tool]').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.tool)));
 $('undo').addEventListener('click', undo);
 
+// Zeichnung, Track oder Textpunkt benennen (Name steht auf der Karte, im PDF und im GPX)
+function renameItem(i) {
+  const it = P.items[i];
+  if (!it) return;
+  if (it.kind === 'text') {
+    const t = prompt('Text für diesen Punkt:', it.text);
+    if (t === null || !t.trim() || t.trim() === it.text) return;
+    snapshot();
+    it.text = t.trim();
+    changed();
+    return;
+  }
+  const what = it.kind === 'track' ? 'des Tracks' : 'der Zeichnung';
+  const t = prompt(`Name ${what} (steht so auf der Karte und im GPX für Garmin):`, it.name || '');
+  if (t === null || t.trim() === (it.name || '')) return;
+  snapshot();
+  it.name = t.trim();
+  changed();
+  toast(it.name ? `Name „${it.name}“ gespeichert` : 'Name entfernt');
+}
+
+$('pen-name').addEventListener('click', () => {
+  const i = P.items.map((it) => it.kind).lastIndexOf('stroke');
+  if (i >= 0) renameItem(i);
+});
+
 // ---------- Track ----------
 function updateTrackbar() {
   if (!draftTrack) return;
@@ -494,6 +527,7 @@ $('palette').querySelectorAll('.widths button').forEach((b) => b.addEventListene
 }));
 function renderPalette() {
   colorBox.querySelectorAll('button').forEach((b, i) => b.classList.toggle('active', COLORS[i] === db.color));
+  $('pen-name').disabled = !P.items.some((it) => it.kind === 'stroke');
   $('palette').querySelectorAll('.widths button').forEach((b) => b.classList.toggle('active', Number(b.dataset.w) === db.w));
   const box = $('palette').querySelector('.marks');
   box.innerHTML = '';
