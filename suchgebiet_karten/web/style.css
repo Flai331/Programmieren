@@ -272,3 +272,6 @@ button, input, select { font: inherit; }
 .times .trow .now { padding: 6px 10px; }
 .times .trow .clr { padding: 6px 8px; color: var(--red); }
 .times .trow input[type=date] { grid-column: 2 / 3; }
+.viewlist h4 { margin: 10px 0 2px; font-size: 13px; color: var(--muted); }
+.viewlist label.check { margin: 4px 0; }
+.viewlist i { width: 16px; height: 16px; border-radius: 4px; display: inline-block; flex: none; }

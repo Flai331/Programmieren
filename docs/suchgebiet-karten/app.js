@@ -21,7 +21,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v32';
+const APP_VERSION = 'v33';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -219,8 +219,12 @@ function redraw() {
   // Ausgeblendetes (Raster-Fenster → „Auf der Karte zeigen“); gilt nur für die Arbeitskarte.
   // Was gerade gezeichnet wird, bleibt sichtbar.
   const hide = P.hide || {};
-  const st = { ...renderState(P, grid), items: hide.items ? items.filter((it) => it === current || it === draftTrack) : items };
-  if (hide.marks) Object.assign(st, { fills: {}, status: {}, fillLabels: {}, statusLabels: {} });
+  const hiddenMarks = new Set(P.marks.filter((m) => m.hidden).map((m) => m.id));
+  const visible = (map) => Object.fromEntries(Object.entries(map).filter(([, id]) => !hiddenMarks.has(id)));
+  const st = {
+    ...renderState({ ...P, fills: visible(P.fills), status: visible(P.status) }, grid),
+    items: items.filter((it) => !it.hidden || it === current || it === draftTrack),
+  };
   if (hide.meet) st.meet = null;
   // Raster aus: Markierungen als Flächen mit Namen darauf
   drawOverlay(ctx, toPx, st, {
@@ -697,25 +701,52 @@ $('cell-size').addEventListener('change', () => {
   if (!setArea(P.area, m)) $('cell-size').value = String(P.cellM);
 });
 $('show-utm').addEventListener('change', () => { P.showUtm = $('show-utm').checked; changed(); });
-// Was auf der Arbeitskarte zu sehen ist
-const VIEW_KEYS = ['grid', 'edge', 'marks', 'items', 'meet'];
-function renderViewToggles() {
-  const hide = P.hide || {};
-  document.querySelectorAll('#view-toggles input').forEach((inp) => { inp.checked = !hide[inp.dataset.show]; });
-  const bare = VIEW_KEYS.every((k) => hide[k]);
-  $('view-bare').textContent = bare ? 'Alles wieder einblenden' : 'Karte nackt (alles ausblenden)';
+// Was auf der Arbeitskarte zu sehen ist – alles einzeln (nur Anzeige, PDF/Export unverändert)
+function itemName(it, n) {
+  if (it.kind === 'text') return `Text: ${it.text}`;
+  if (it.kind === 'track') return `Track: ${it.name || 'ohne Namen'}`;
+  return it.name ? `Zeichnung: ${it.name}` : `Stift ${n} (${COLOR_NAMES[it.color] || it.color})`;
 }
-document.querySelectorAll('#view-toggles input').forEach((inp) => inp.addEventListener('change', () => {
-  P.hide = { ...(P.hide || {}), [inp.dataset.show]: !inp.checked };
+function renderViewToggles() {
+  const box = $('view-toggles');
+  box.innerHTML = '';
+  const hide = P.hide || {};
+  const row = (label, checked, onChange, color) => {
+    const l = document.createElement('label');
+    l.className = 'check';
+    l.innerHTML = '<input type="checkbox"><i></i><span></span>';
+    l.querySelector('input').checked = checked;
+    if (color) l.querySelector('i').style.background = color; else l.querySelector('i').remove();
+    l.querySelector('span').textContent = label;
+    l.querySelector('input').addEventListener('change', (e) => { onChange(e.target.checked); changed(); });
+    box.appendChild(l);
+  };
+  const head = (t) => { const h = document.createElement('h4'); h.textContent = t; box.appendChild(h); };
+  const setHide = (k) => (on) => { P.hide = { ...(P.hide || {}), [k]: !on }; };
+  head('Raster');
+  row('Rasterlinien und Feldnamen', !hide.grid, setHide('grid'));
+  row('Randbeschriftung (A, B … / 1, 2 …)', !hide.edge, setHide('edge'));
+  if (P.meet) row(`Treffpunkt${P.meet.text ? `: ${P.meet.text}` : ''}`, !hide.meet, setHide('meet'), '#0d47a1');
+  const used = new Set([...Object.values(P.fills), ...Object.values(P.status)]);
+  const marks = P.marks.filter((m) => used.has(m.id));
+  if (marks.length) head('Teams und Markierungen');
+  for (const m of marks) row(markLabel(m), !m.hidden, (on) => { m.hidden = !on; }, m.color);
+  if (P.items.length) head('Zeichnungen, Tracks, Texte');
+  let n = 0;
+  for (const it of P.items) {
+    if (it.kind === 'stroke') n++;
+    row(itemName(it, n), !it.hidden, (on) => { it.hidden = !on; }, it.color);
+  }
+}
+function setAllVisible(on) {
+  P.hide = { grid: !on, edge: !on, meet: !on };
+  for (const m of P.marks) m.hidden = !on;
+  for (const it of P.items) it.hidden = !on;
   renderViewToggles();
   changed();
-}));
-$('view-bare').addEventListener('click', () => {
-  const bare = VIEW_KEYS.every((k) => (P.hide || {})[k]);
-  P.hide = Object.fromEntries(VIEW_KEYS.map((k) => [k, !bare]));
-  renderViewToggles();
-  changed();
-});
+}
+$('view-none').addEventListener('click', () => setAllVisible(false));
+$('view-all').addEventListener('click', () => setAllVisible(true));
 $('grid-draw').addEventListener('click', () => { closePanels(); setTool('grid'); });
 $('grid-view').addEventListener('click', () => {
   const b = map.getBounds().pad(-0.08);
