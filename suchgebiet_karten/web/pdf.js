@@ -4,7 +4,7 @@
 
 import { addReportPages, forceLine, lineLegend, totalLine } from './mission.js';
 import {
-  blocks, gridBounds, rangeBounds, rangeLabel, fitBox,
+  blocks, cellBounds, gridBounds, rangeBounds, rangeLabel, fitBox,
   mercLat, mercLon, mercX, mercY, metersPerUnit, niceScale, niceLength, formatMeters,
 } from './grid.js';
 import { drawOverlay, hatchRect } from './render.js';
@@ -387,10 +387,69 @@ export function renderState(project, grid) {
   };
 }
 
+// Ausschnitt, auf dem alle markierten Felder, Zeichnungen, Tracks, Texte und der Treffpunkt
+// samt Beschriftung zu sehen sind (null, wenn nichts eingezeichnet ist).
+// aspect/mmW: Seitenverhältnis und Breite der Karte auf Papier, um Beschriftungen
+// (Schrift ca. 4,5 mm, wie in drawOverlay) mit einzurechnen.
+export function contentBounds(state, aspect, mmW, pad = 0.06) {
+  const pts = [];
+  const labels = [];
+  const g = state.grid;
+  if (g) {
+    for (const k of new Set([...Object.keys(state.fills || {}), ...Object.keys(state.status || {})])) {
+      const [c, r] = k.split(',').map(Number);
+      const b = cellBounds(g, c, r);
+      pts.push([b.north, b.west], [b.south, b.east]);
+    }
+  }
+  for (const it of state.items || []) {
+    if (it.kind === 'text') {
+      pts.push([it.lat, it.lon]);
+      if (it.text) labels.push([it.lat, it.lon, it.text]);
+    } else if (it.pts && it.pts.length) {
+      pts.push(...it.pts);
+      if (it.name) labels.push([it.pts[0][0], it.pts[0][1], it.name]);
+    }
+  }
+  const m = state.meet;
+  if (m) {
+    pts.push([m.lat, m.lon]);
+    labels.push([m.lat, m.lon, m.text || 'TP']);
+  }
+  if (!pts.length) return null;
+  let x0 = Infinity; let x1 = -Infinity; let y0 = Infinity; let y1 = -Infinity;
+  const add = (x, y) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); };
+  for (const [lat, lon] of pts) add(mercX(lon), mercY(lat));
+  // mindestens ca. 300 m Ausschnitt (z. B. nur ein Treffpunkt)
+  const minW = 300 / metersPerUnit(mercLat((y0 + y1) / 2));
+  if (x1 - x0 < minW) { const c = (x0 + x1) / 2; x0 = c - minW / 2; x1 = c + minW / 2; }
+  if (y1 - y0 < minW) { const c = (y0 + y1) / 2; y0 = c - minW / 2; y1 = c + minW / 2; }
+  if (aspect && mmW) {
+    const box = fitBox({ west: mercLon(x0), east: mercLon(x1), north: mercLat(y0), south: mercLat(y1) }, aspect, pad);
+    const u = (box.x1 - box.x0) / mmW;
+    // unten liegen Flächenliste, Maßstab und Legende über der Karte
+    add(x0, y1 + 18 * u);
+    // Beschriftung steht rechts neben dem Punkt: Breite grob 2,8 mm pro Zeichen
+    for (const [lat, lon, text] of labels) {
+      const x = mercX(lon);
+      const y = mercY(lat);
+      add(x + (String(text).length * 2.8 + 6) * u, y - 5 * u);
+      add(x, y + 3 * u);
+    }
+  }
+  return { west: mercLon(x0), east: mercLon(x1), north: mercLat(y0), south: mercLat(y1) };
+}
+
 // opts: { format, orient, overview, view, details, k, info, title, dpi }
 export async function buildPdf(project, grid, opts, layer, viewBounds, onProgress) {
   const { jsPDF } = window.jspdf;
-  const sheets = opts.noMap ? [] : planSheets(grid, opts, viewBounds);
+  const rstate = renderState(project, grid);
+  // opts.mapTeams / opts.mapStatus === false: Teams bzw. Status (abgesucht …) auf der Karte weglassen
+  if (opts.mapTeams === false) Object.assign(rstate, { fills: {}, fillLabels: {} });
+  if (opts.mapStatus === false) Object.assign(rstate, { status: {}, statusLabels: {} });
+  // opts.fitContent: eine Karte, gezoomt auf alles Eingezeichnete
+  const fit = !opts.noMap && opts.fitContent ? contentBounds(rstate) : null;
+  const sheets = opts.noMap ? [] : fit ? [{ title: 'Einsatzkarte', bounds: fit, pad: 0.06 }] : planSheets(grid, opts, viewBounds);
   if (!sheets.length && !opts.report) throw new Error('Keine Blätter ausgewählt.');
   // nur Bericht ohne Karte: Hochformat
   const orient = sheets.length ? resolveOrient(opts.orient, sheets) : (opts.orient === 'auto' ? 'portrait' : opts.orient);
@@ -410,10 +469,7 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
   const Wpx = Math.round((area.w / 25.4) * dpi);
   const Hpx = Math.round((area.h / 25.4) * dpi);
 
-  // opts.mapTeams / opts.mapStatus === false: Teams bzw. Status (abgesucht …) auf der Karte weglassen
-  const rstate = renderState(project, grid);
-  if (opts.mapTeams === false) Object.assign(rstate, { fills: {}, fillLabels: {} });
-  if (opts.mapStatus === false) Object.assign(rstate, { status: {}, statusLabels: {} });
+  if (fit) sheets[0].bounds = contentBounds(rstate, area.w / area.h, area.w);
   const legend = [...assignments(project).filter((a) => a.count)
     .filter((a) => (a.mark.kind === 'team' ? opts.mapTeams !== false : opts.mapStatus !== false))
     .map((a) => ({ color: a.mark.color, label: markLabel(a.mark), hatch: a.mark.kind !== 'team' })), ...lineLegend(project)];

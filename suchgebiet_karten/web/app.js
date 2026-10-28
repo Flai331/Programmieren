@@ -21,7 +21,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v33';
+const APP_VERSION = 'v34';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -1540,7 +1540,8 @@ function renderViewer() {
 $('ms-prev').addEventListener('click', () => { viewIdx--; renderViewer(); });
 $('ms-next').addEventListener('click', () => { viewIdx++; renderViewer(); });
 
-// Zoomen: Knöpfe, Zwei-Finger-Geste, Doppeltippen, Strg+Mausrad. Verschieben = Scrollen.
+// Zoomen: Knöpfe, Zwei-Finger-Geste, Doppeltippen/-klick, Strg+Mausrad.
+// Verschieben: Finger oder mit der Maus ziehen.
 let zoom = 1;
 function setZoom(z, cx, cy) {
   const box = $('ms-view');
@@ -1556,6 +1557,7 @@ function setZoom(z, cx, cy) {
   const ix = (box.scrollLeft + px) / old;
   const iy = (box.scrollTop + py) / old;
   img.style.width = `${zoom * 100}%`;
+  box.classList.toggle('zoomed', zoom > 1);
   box.scrollLeft = ix * zoom - px;
   box.scrollTop = iy * zoom - py;
 }
@@ -1574,8 +1576,19 @@ $('ms-zoom-full').addEventListener('click', () => {
   let pinch = null;
   let lastTap = 0;
   const local = (e) => { const r = box.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // Maus: gezoomtes Bild mit gedrückter Taste frei in alle Richtungen ziehen
+  let drag = null;
+  let mouse = false;
   box.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse') return;
+    mouse = e.pointerType === 'mouse';
+    if (e.pointerType === 'mouse') {
+      if (e.button !== 0 || zoom <= 1 || !box.querySelector('img')) return;
+      e.preventDefault();
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, sl: box.scrollLeft, st: box.scrollTop };
+      box.setPointerCapture(e.pointerId);
+      box.classList.add('dragging');
+      return;
+    }
     pts.set(e.pointerId, local(e));
     if (pts.size === 2) {
       const [a, b] = [...pts.values()];
@@ -1587,6 +1600,11 @@ $('ms-zoom-full').addEventListener('click', () => {
     }
   });
   box.addEventListener('pointermove', (e) => {
+    if (drag && e.pointerId === drag.id) {
+      box.scrollLeft = drag.sl - (e.clientX - drag.x);
+      box.scrollTop = drag.st - (e.clientY - drag.y);
+      return;
+    }
     if (!pts.has(e.pointerId)) return;
     pts.set(e.pointerId, local(e));
     if (pinch && pts.size === 2) {
@@ -1596,7 +1614,12 @@ $('ms-zoom-full').addEventListener('click', () => {
       setZoom(pinch.z * (d / pinch.d), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
     }
   });
-  const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+  const up = (e) => {
+    if (drag && e.pointerId === drag.id) { drag = null; box.classList.remove('dragging'); }
+    pts.delete(e.pointerId);
+    if (pts.size < 2) pinch = null;
+  };
+  box.addEventListener('dblclick', (e) => { if (!mouse) return; const [x, y] = local(e); setZoom(zoom > 1.2 ? 1 : 2.5, x, y); });
   box.addEventListener('pointerup', up);
   box.addEventListener('pointercancel', up);
   box.addEventListener('wheel', (e) => {
@@ -1789,6 +1812,7 @@ async function reportPdf(sec, progress) {
     mapTeams: sec.mapTeams !== false,
     mapStatus: sec.mapStatus !== false,
     noGrid: true,
+    fitContent: true,
     areaLabels: 'edge',
     report: parts,
     title: `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}`,
