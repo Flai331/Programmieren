@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cellOutlines, buildGpx, garminColor, trackLength } from '../web/gpx.js';
+import { cellOutlines, buildGpx, garminColor, trackLength, labelTracks } from '../web/gpx.js';
+import { CAP, FONT_CHARS, textPath } from '../web/font.js';
 import { makeZip, crc32 } from '../web/zip.js';
 import { planCustomMap, TILE, MAX_TILES } from '../web/kmz.js';
 import { makeGrid } from '../web/grid.js';
@@ -119,13 +120,65 @@ test('Team-Bereich aus zwei Stücken -> zwei Tracks, keine Teilstücke', () => {
   assert.match(gpx, /<name>Team 1: D4<\/name>/);
 });
 
-test('Rasterbeschriftung am Rand: nur Spalten + Zeilen als Wegpunkte', () => {
+test('Schrift: jedes Zeichen ein Linienzug von der Grundlinie zur Grundlinie', () => {
+  assert.equal(FONT_CHARS.split('').sort().join(''), '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+  for (const ch of FONT_CHARS) {
+    const { pts, width } = textPath(ch);
+    assert.ok(pts.length >= 3, ch);
+    assert.equal(pts[0][1], 0, `${ch} beginnt nicht auf der Grundlinie`);
+    assert.equal(pts[pts.length - 1][1], 0, `${ch} endet nicht auf der Grundlinie`);
+    for (const [x, y] of pts) {
+      assert.ok(x >= 0 && x <= width && y >= 0 && y <= CAP, `${ch}: Punkt ${x},${y} außerhalb`);
+    }
+  }
+  assert.ok(textPath('AB12').width > textPath('A1').width);
+});
+
+test('Feldnamen als Linienschrift: ein Track, keine Wegpunkte, keine Linien quer durchs Feld', () => {
   const p = newProject('R');
-  const g = makeGrid({ north: 50.12, south: 50.11, west: 8.6, east: 8.62 }, 200);
-  const edge = buildGpx(p, g, { cells: 'edge' });
-  assert.equal((edge.match(/<wpt /g) || []).length, g.cols + g.rows);
-  assert.match(edge, /<name>A<\/name>/);
-  assert.match(edge, /<name>1<\/name>/);
+  const g = makeGrid({ north: 50.12, south: 50.1, west: 8.6, east: 8.63 }, 200);
+  const gpx = buildGpx(p, g, { grid: 'all', cells: 'lines' });
+  assert.equal(gpx.includes('<wpt '), false);
+  assert.equal((gpx.match(/<trk>/g) || []).length, 2); // Raster + Feldnamen
+  assert.match(gpx, /<name>Feldnamen R<\/name>/);
+  const tracks = labelTracks(g);
+  assert.equal(tracks.length, 1);
+  const pts = tracks[0].pts.map(([lat, lon]) => [(lon - g.originLon) / g.dLon, (g.originLat - lat) / g.dLat]);
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+  const onRow = (y) => near(y, Math.round(y)) && Math.round(y) >= 1 && Math.round(y) <= g.rows;
+  const cellOf = ([x, y]) => [Math.floor(x + 1e-9), Math.round(y)];
+  for (let i = 1; i < pts.length; i++) {
+    const [a, b] = [pts[i - 1], pts[i]];
+    for (const [x, y] of [a, b]) assert.ok(x > -1e-9 && x < g.cols + 1e-9 && y > -1e-9 && y < g.rows + 1e-9);
+    if (near(a[1], b[1]) && onRow(a[1])) continue; // auf einer waagerechten Rasterlinie
+    if (near(a[0], b[0]) && (near(a[0], 0) || near(a[0], g.cols)) && onRow(a[1]) && onRow(b[1])) continue; // Rand
+    // sonst: Strich eines Feldnamens – beide Enden im Schriftfeld unten links desselben Feldes
+    const [ca, ra] = cellOf(a);
+    const [cb, rb] = cellOf(b);
+    assert.ok(ca === cb && ra === rb, `Linie zwischen zwei Feldern bei Punkt ${i}`);
+    for (const [x, y] of [a, b]) {
+      assert.ok(x - ca <= 0.93 && ra - y <= 0.26 && ra - y >= -1e-9, `Strich außerhalb der Beschriftung bei Punkt ${i}`);
+    }
+  }
+  // jede Zeile kommt vor: Anfang und Ende jeder unteren Rasterlinie
+  for (let r = 1; r <= g.rows; r++) {
+    assert.ok(pts.some(([x, y]) => near(x, 0) && near(y, r)) && pts.some(([x, y]) => near(x, g.cols) && near(y, r)), `Zeile ${r}`);
+  }
   assert.equal((buildGpx(p, g, { cells: 'all' }).match(/<wpt /g) || []).length, g.cols * g.rows);
-  assert.equal(buildGpx(p, g, { cells: 'none', grid: 'all' }).includes('<wpt '), false);
+  assert.equal(buildGpx(p, g, { cells: 'none', grid: 'all' }).includes('Feldnamen'), false);
+});
+
+test('Sehr großes Raster: Feldnamen auf mehrere Tracks verteilt, je unter 9000 Punkten', () => {
+  const g = makeGrid({ north: 50.2, south: 50.0, west: 8.6, east: 8.9 }, 400);
+  const tracks = labelTracks(g);
+  assert.ok(tracks.length > 1);
+  let next = 0;
+  for (const t of tracks) {
+    assert.ok(t.pts.length <= 9000);
+    assert.equal(t.rows[0], next);
+    next = t.rows[1] + 1;
+  }
+  assert.equal(next, g.rows);
+  const gpx = buildGpx(newProject('G'), g, { cells: 'lines' });
+  assert.match(gpx, /<name>Feldnamen G \(Zeilen 1–\d+\)<\/name>/);
 });

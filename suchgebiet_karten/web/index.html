@@ -13,7 +13,7 @@
 <body>
   <header class="topbar">
     <form id="search-form" class="topsearch" role="search">
-      <input id="search-input" class="title" type="search" placeholder="🔍 Adresse, Ort, Feld (C4) suchen …"
+      <input id="search-input" class="title" type="search" placeholder="🔍 Adresse, Kreuzung, Feld (C4) …"
         autocomplete="off" enterkeyhint="search" aria-label="Suchen">
       <button type="submit" class="searchbtn" aria-label="Suchen">🔍</button>
     </form>
@@ -215,11 +215,12 @@
     </label>
     <label>Beschriftung
       <select id="gpx-cells">
-        <option value="edge" selected>Am Rand: A, B, C … oben, 1, 2, 3 … links (wenige Punkte)</option>
-        <option value="all">In jedem Feld: A1, B1 … (viele Punkte)</option>
+        <option value="lines" selected>In jedem Feld als Linienschrift (1 Eintrag in der Liste)</option>
+        <option value="all">In jedem Feld als Wegpunkte (1 Eintrag pro Feld)</option>
         <option value="none">Keine</option>
       </select>
     </label>
+    <p class="small">Linienschrift: Die Feldnamen A1, B1 … werden wie die Rasterlinien gezeichnet, unten links in jedem Feld. In BaseCamp und auf dem Gerät ist das nur <b>ein</b> Eintrag „Feldnamen …“. Zum Lesen etwas hineinzoomen. Die Schrift steht auf den Rasterlinien – passt zu „Umrandung und alle Rasterlinien“.</p>
     <div class="row">
       <button id="gpx-grid-share" class="primary">📤 Teilen</button>
       <button id="gpx-grid-save">💾 Speichern</button>
