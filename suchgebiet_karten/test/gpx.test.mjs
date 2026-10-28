@@ -48,6 +48,11 @@ test('GPX enthält Track, Team-Umriss, Raster und Wegpunkte', () => {
   assert.match(gpx, /<sym>Flag, Blue<\/sym>/);
   assert.equal((gpx.match(/<wpt /g) || []).length, 1 + g.cols * g.rows);
   assert.ok(gpx.startsWith('<?xml'));
+  // Nur Umrandung: ein Ring mit 5 Punkten, keine Rasterlinien
+  const outline = buildGpx(p, g, { grid: 'outline' });
+  assert.match(outline, /<name>Suchgebiet Übung/);
+  assert.equal((outline.match(/<trkpt /g) || []).length, 5);
+  assert.equal(buildGpx(p, g, { grid: 'none' }).includes('<trk>'), false);
 });
 
 test('ZIP: Kopf, CRC und Verzeichnis', () => {

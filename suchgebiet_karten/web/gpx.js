@@ -117,7 +117,7 @@ function wpt(lat, lon, name, sym, desc = '') {
     + `${desc ? `  <desc>${esc(desc)}</desc>\n` : ''}  <sym>${sym}</sym>\n </wpt>\n`;
 }
 
-// opts: { tracks, drawings, teams, grid, cells, points }
+// opts: { tracks, drawings, teams, grid: 'outline'|'all'|'none', cells, points }
 export function buildGpx(project, grid, opts) {
   const title = project.title || 'Suchgebiet';
   let wpts = '';
@@ -155,18 +155,25 @@ export function buildGpx(project, grid, opts) {
       trks += trk(markLabel(m), m.color, cellOutlines(keys).map((loop) => loop.map(corner)));
     }
   }
-  if (opts.grid && grid) {
+  // opts.grid: 'outline' = nur Umrandung, 'all' (oder true) = mit allen Rasterlinien
+  if (opts.grid && opts.grid !== 'none' && grid) {
     const gb = gridBounds(grid);
-    const segs = [];
-    for (let c = 0; c <= grid.cols; c++) {
-      const lon = grid.originLon + c * grid.dLon;
-      segs.push([[gb.north, lon], [gb.south, lon]]);
+    const desc = `${grid.cellM} m Felder, A1 = Nordwest-Ecke`;
+    if (opts.grid === 'outline') {
+      const ring = [[gb.north, gb.west], [gb.north, gb.east], [gb.south, gb.east], [gb.south, gb.west], [gb.north, gb.west]];
+      trks += trk(`Suchgebiet ${title}`, '#d50000', [ring], desc);
+    } else {
+      const segs = [];
+      for (let c = 0; c <= grid.cols; c++) {
+        const lon = grid.originLon + c * grid.dLon;
+        segs.push([[gb.north, lon], [gb.south, lon]]);
+      }
+      for (let r = 0; r <= grid.rows; r++) {
+        const lat = grid.originLat - r * grid.dLat;
+        segs.push([[lat, gb.west], [lat, gb.east]]);
+      }
+      trks += trk(`Raster ${title}`, '#d50000', segs, desc);
     }
-    for (let r = 0; r <= grid.rows; r++) {
-      const lat = grid.originLat - r * grid.dLat;
-      segs.push([[lat, gb.west], [lat, gb.east]]);
-    }
-    trks += trk(`Raster ${title}`, '#d50000', segs, `${grid.cellM} m Felder, A1 = Nordwest-Ecke`);
   }
 
   return '<?xml version="1.0" encoding="UTF-8"?>\n'

@@ -175,7 +175,13 @@
     <p class="small">Tracks und Wegpunkte, die du in BaseCamp öffnest und von dort an das GPS-Gerät sendest. Sie liegen über jeder Karte auf dem Gerät.</p>
     <label class="check"><input type="checkbox" id="gpx-tracks" checked> Eigene Tracks</label>
     <label class="check"><input type="checkbox" id="gpx-teams" checked> Team-Bereiche und Markierungen (Umrisse)</label>
-    <label class="check"><input type="checkbox" id="gpx-grid" checked> Raster (Außenrahmen und Linien)</label>
+    <label>Suchgebiet / Raster
+      <select id="gpx-grid">
+        <option value="outline" selected>Nur Umrandung des Suchgebiets</option>
+        <option value="all">Umrandung und alle Rasterlinien</option>
+        <option value="none">Nichts</option>
+      </select>
+    </label>
     <label class="check"><input type="checkbox" id="gpx-points" checked> Treffpunkt und Textpunkte als Wegpunkte</label>
     <label class="check"><input type="checkbox" id="gpx-cells"> Feldnamen als Wegpunkte (A1, B1 …)</label>
     <label class="check"><input type="checkbox" id="gpx-drawings"> Freihand-Zeichnungen</label>

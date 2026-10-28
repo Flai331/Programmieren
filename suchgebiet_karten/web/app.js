@@ -1029,7 +1029,7 @@ function gpxOpts() {
   return {
     tracks: $('gpx-tracks').checked,
     teams: $('gpx-teams').checked,
-    grid: $('gpx-grid').checked,
+    grid: $('gpx-grid').value,
     points: $('gpx-points').checked,
     cells: $('gpx-cells').checked,
     drawings: $('gpx-drawings').checked,
