@@ -9,7 +9,7 @@ als PDF ausgeben und direkt per E-Mail/Messenger verschicken.
 ## Auf Android installieren
 
 **Variante A – APK (eigene App):**
-[Suchgebiet-Karten.apk](https://github.com/Flai331/Programmieren/releases/download/suchgebiet-karten/Suchgebiet-Karten.apk)
+[Suchgebiet-Karten.apk](https://github.com/Flai331/Programmieren/releases/download/suchgebiet-karten/Suchgebiet-Karten.apk) (oder als [ZIP](https://github.com/Flai331/Programmieren/releases/download/suchgebiet-karten/Suchgebiet-Karten-APK.zip))
 herunterladen, Installation aus unbekannten Quellen erlauben, installieren.
 Neue Versionen lassen sich einfach drüber installieren.
 
@@ -75,9 +75,9 @@ mit dem PDF als Anhang. Am PC wird es heruntergeladen und das E-Mail-Programm ge
 
 **GPX (Export → Garmin: GPX):** zwei Dateien, BaseCamp macht aus jeder eine eigene Liste:
 1. **…_Raster.gpx** – alle Rasterlinien (als eine durchgehende Linie, ohne Schrägen) und die
-   Feldnamen: als **Linienschrift** unten links in jedem Feld (Voreinstellung – alle Namen
-   zusammen sind nur *ein* Eintrag „Feldnamen …“ in der Liste), als Wegpunkte (ein Eintrag pro
-   Feld) oder keine
+   Feldnamen: als **Linienschrift** unten links in jedem Feld (Voreinstellung – Rasterlinien und
+   Feldnamen sind zusammen *ein einziger* Track „Raster …“ in der Liste), als Wegpunkte (ein
+   Eintrag pro Feld) oder keine
 2. **…_Markierungen.gpx** – eigene Tracks, Stift-Markierungen (mit ihrem Namen, sonst „Stift 1 (rot)“), Team-/Status-Umrisse,
    Treffpunkt und Textpunkte
 

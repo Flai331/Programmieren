@@ -150,8 +150,11 @@ test('Feldnamen als Linienschrift: ein Track, keine Wegpunkte, keine Linien quer
   const g = makeGrid({ north: 50.12, south: 50.1, west: 8.6, east: 8.63 }, 200);
   const gpx = buildGpx(p, g, { grid: 'all', cells: 'lines' });
   assert.equal(gpx.includes('<wpt '), false);
-  assert.equal((gpx.match(/<trk>/g) || []).length, 2); // Raster + Feldnamen
-  assert.match(gpx, /<name>Feldnamen R<\/name>/);
+  assert.equal((gpx.match(/<trk>/g) || []).length, 1); // Raster mit Feldnamen in einem Track
+  assert.equal((gpx.match(/<trkseg>/g) || []).length, 1);
+  assert.match(gpx, /<name>Raster R<\/name>/);
+  // nur Feldnamen (ohne Rasterlinien) bleibt ein eigener Track
+  assert.match(buildGpx(p, g, { grid: 'outline', cells: 'lines' }), /<name>Feldnamen R<\/name>/);
   const tracks = labelTracks(g);
   assert.equal(tracks.length, 1);
   const pts = tracks[0].pts.map(([lat, lon]) => [(lon - g.originLon) / g.dLon, (g.originLat - lat) / g.dLat]);
@@ -177,6 +180,28 @@ test('Feldnamen als Linienschrift: ein Track, keine Wegpunkte, keine Linien quer
   }
   assert.equal((buildGpx(p, g, { cells: 'all' }).match(/<wpt /g) || []).length, g.cols * g.rows);
   assert.equal(buildGpx(p, g, { cells: 'none', grid: 'all' }).includes('Feldnamen'), false);
+});
+
+test('Raster mit Feldnamen in einem Linienzug: alle Linien da, keine Schrägen außerhalb der Schrift', async () => {
+  const { gridWithLabels } = await import('../web/gpx.js');
+  for (const [n, s, w, e] of [[50.12, 50.1, 8.6, 8.63], [50.12, 50.105, 8.6, 8.62], [50.12, 50.112, 8.6, 8.605]]) {
+    const g = makeGrid({ north: n, south: s, west: w, east: e }, 200);
+    const pts = gridWithLabels(g).map(([lat, lon]) => [(lon - g.originLon) / g.dLon, (g.originLat - lat) / g.dLat]);
+    const near = (a, b) => Math.abs(a - b) < 1e-6;
+    const isInt = (v) => near(v, Math.round(v));
+    const h = new Set();
+    const v = new Set();
+    for (let i = 1; i < pts.length; i++) {
+      const [a, b] = [pts[i - 1], pts[i]];
+      if (near(a[1], b[1]) && isInt(a[1])) { if (!near(a[0], b[0])) h.add(Math.round(a[1])); continue; }
+      if (near(a[0], b[0]) && isInt(a[0])) { if (Math.abs(a[1] - b[1]) > 0.9) v.add(Math.round(a[0])); continue; }
+      const c = Math.floor(Math.min(a[0], b[0]) + 1e-9);
+      const r = Math.round(Math.max(a[1], b[1]));
+      for (const [x, y] of [a, b]) assert.ok(x - c <= 0.93 && r - y <= 0.26 && r - y >= -1e-9, `Schräge außerhalb der Schrift ${g.cols}x${g.rows} bei ${i}`);
+    }
+    for (let r = 0; r <= g.rows; r++) assert.ok(h.has(r), `Zeile ${r}`);
+    for (let c = 0; c <= g.cols; c++) assert.ok(v.has(c), `Spalte ${c}`);
+  }
 });
 
 test('Sehr großes Raster: Feldnamen auf mehrere Tracks verteilt, je unter 9000 Punkten', () => {
