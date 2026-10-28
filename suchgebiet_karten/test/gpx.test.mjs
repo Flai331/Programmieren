@@ -91,6 +91,17 @@ test('Stift-Markierungen werden als Tracks mit Farbe exportiert', () => {
   assert.equal((gpx.match(/<trkpt /g) || []).length, 3);
 });
 
+test('Benannte Stift-Zeichnung heißt im GPX so, die anderen behalten ihre Nummer', () => {
+  const p = newProject('S');
+  const line = [[50.1, 8.6], [50.101, 8.601]];
+  p.items.push({ kind: 'stroke', color: '#d50000', w: 5, pts: line, name: 'Bachlauf <Nord> & Brücke' });
+  p.items.push({ kind: 'stroke', color: '#1565c0', w: 5, pts: line });
+  p.items.push({ kind: 'stroke', color: '#1565c0', w: 5, pts: line, name: '' });
+  const gpx = buildGpx(p, null, { drawings: true });
+  const names = [...gpx.matchAll(/<trk>\s*<name>([^<]*)/g)].map((m) => m[1]);
+  assert.deepEqual(names, ['Bachlauf &lt;Nord&gt; &amp; Brücke', 'Stift 2 (blau)', 'Stift 3 (blau)']);
+});
+
 test('Raster als eine Linie ohne Schrägen, alle Linien enthalten', async () => {
   const { gridPath } = await import('../web/gpx.js');
   for (const [cols, rows] of [[2, 3], [3, 2], [6, 10], [1, 1], [7, 7]]) {
