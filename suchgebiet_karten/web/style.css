@@ -194,3 +194,5 @@ button, input, select { font: inherit; }
 
 /* Wege-Ebene über Luftbildern: Weiß wird durchsichtig */
 .blend-multiply { mix-blend-mode: multiply; }
+
+.panel h3.gpxhead { margin: 14px 0 2px; font-size: 15px; }

@@ -102,6 +102,27 @@ function simplify(pts) {
   return out;
 }
 
+// Alle Rasterlinien als EINE durchgehende Linie (Zickzack): erst die waagerechten
+// Linien hin und her, dann die senkrechten. Verbindungsstücke liegen auf dem Rand.
+export function gridPath(grid) {
+  const lat = (r) => grid.originLat - r * grid.dLat;
+  const lon = (c) => grid.originLon + c * grid.dLon;
+  const pts = [];
+  for (let r = 0; r <= grid.rows; r++) {
+    const [a, b] = r % 2 ? [grid.cols, 0] : [0, grid.cols];
+    pts.push([lat(r), lon(a)], [lat(r), lon(b)]);
+  }
+  // Ende unten links (gerade Zeilenzahl) oder unten rechts
+  const fromWest = grid.rows % 2 === 1;
+  const cols = [...Array(grid.cols + 1).keys()];
+  if (!fromWest) cols.reverse();
+  cols.forEach((c, i) => {
+    const [a, b] = i % 2 ? [0, grid.rows] : [grid.rows, 0];
+    pts.push([lat(a), lon(c)], [lat(b), lon(c)]);
+  });
+  return pts;
+}
+
 function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -123,8 +144,9 @@ function wpt(lat, lon, name, sym, desc = '') {
 }
 
 // opts: { tracks, drawings, teams, grid: 'outline'|'all'|'none', cells, points }
-export function buildGpx(project, grid, opts) {
+export function buildGpx(project, grid, opts, part = '') {
   const title = project.title || 'Suchgebiet';
+  const docName = part ? `${title} – ${part}` : title;
   let wpts = '';
   let trks = '';
   const corner = ([c, r]) => [grid.originLat - r * grid.dLat, grid.originLon + c * grid.dLon];
@@ -160,7 +182,10 @@ export function buildGpx(project, grid, opts) {
       const map = mapFor(project, m);
       const keys = Object.keys(map).filter((k) => map[k] === m.id);
       if (!keys.length) continue;
-      trks += trk(markLabel(m), m.color, cellOutlines(keys).map((loop) => loop.map(corner)));
+      // Jeder getrennte Bereich als eigener Track (Teilstücke zeigen manche Geräte nicht an)
+      cellOutlines(keys).forEach((loop, i) => {
+        trks += trk(i ? `${markLabel(m)} ${i + 1}` : markLabel(m), m.color, [loop.map(corner)]);
+      });
     }
   }
   // opts.grid: 'outline' = nur Umrandung, 'all' (oder true) = mit allen Rasterlinien
@@ -171,16 +196,7 @@ export function buildGpx(project, grid, opts) {
       const ring = [[gb.north, gb.west], [gb.north, gb.east], [gb.south, gb.east], [gb.south, gb.west], [gb.north, gb.west]];
       trks += trk(`Suchgebiet ${title}`, '#d50000', [ring], desc);
     } else {
-      const segs = [];
-      for (let c = 0; c <= grid.cols; c++) {
-        const lon = grid.originLon + c * grid.dLon;
-        segs.push([[gb.north, lon], [gb.south, lon]]);
-      }
-      for (let r = 0; r <= grid.rows; r++) {
-        const lat = grid.originLat - r * grid.dLat;
-        segs.push([[lat, gb.west], [lat, gb.east]]);
-      }
-      trks += trk(`Raster ${title}`, '#d50000', segs, desc);
+      trks += trk(`Raster ${title}`, '#d50000', [gridPath(grid)], desc);
     }
   }
 
@@ -190,6 +206,6 @@ export function buildGpx(project, grid, opts) {
     + ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
     + ' xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd'
     + ' http://www.garmin.com/xmlschemas/GpxExtensions/v3 http://www8.garmin.com/xmlschemas/GpxExtensionsv3.xsd">\n'
-    + ` <metadata>\n  <name>${esc(title)}</name>\n  <time>${new Date().toISOString()}</time>\n </metadata>\n`
+    + ` <metadata>\n  <name>${esc(docName)}</name>\n  <time>${new Date().toISOString()}</time>\n </metadata>\n`
     + wpts + trks + '</gpx>\n';
 }

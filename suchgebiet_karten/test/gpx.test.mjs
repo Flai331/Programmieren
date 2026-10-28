@@ -89,3 +89,31 @@ test('Stift-Markierungen werden als Tracks mit Farbe exportiert', () => {
   assert.equal((gpx.match(/<trk>/g) || []).length, 1);
   assert.equal((gpx.match(/<trkpt /g) || []).length, 3);
 });
+
+test('Raster als eine Linie ohne Schrägen, alle Linien enthalten', async () => {
+  const { gridPath } = await import('../web/gpx.js');
+  for (const [cols, rows] of [[2, 3], [3, 2], [6, 10], [1, 1], [7, 7]]) {
+    const g = { originLat: 50, originLon: 8, dLat: 0.001, dLon: 0.0015, cols, rows };
+    const pts = gridPath(g);
+    const segs = new Set();
+    for (let i = 1; i < pts.length; i++) {
+      const [a, b] = [pts[i - 1], pts[i]];
+      assert.ok(a[0] === b[0] || a[1] === b[1], `Schräge bei ${cols}x${rows}`);
+      if (a[0] === b[0] && a[1] !== b[1]) segs.add(`h${a[0]}`);
+      if (a[1] === b[1] && a[0] !== b[0]) segs.add(`v${a[1]}`);
+    }
+    for (let r = 0; r <= rows; r++) assert.ok(segs.has(`h${g.originLat - r * g.dLat}`), `Zeile ${r} fehlt`);
+    for (let c = 0; c <= cols; c++) assert.ok(segs.has(`v${g.originLon + c * g.dLon}`), `Spalte ${c} fehlt`);
+  }
+});
+
+test('Team-Bereich aus zwei Stücken -> zwei Tracks, keine Teilstücke', () => {
+  const p = newProject('T');
+  const g = makeGrid({ north: 50.12, south: 50.11, west: 8.6, east: 8.62 }, 200);
+  p.marks.push({ id: 't', kind: 'team', label: 'Team 1', color: '#d50000' });
+  p.fills = { '0,0': 't', '3,3': 't' };
+  const gpx = buildGpx(p, g, { teams: true });
+  assert.equal((gpx.match(/<trk>/g) || []).length, 2);
+  assert.equal((gpx.match(/<trkseg>/g) || []).length, 2);
+  assert.match(gpx, /<name>Team 1 2<\/name>/);
+});
