@@ -16,7 +16,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v16';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -1080,6 +1080,43 @@ async function mailFile(f) {
   await shareFile(f.blob, f.name, `Karte: ${f.title}`, f.text, f);
 }
 
+// Mehrere Dateien: App -> Ordner wählen bzw. ein Teilen-Dialog; Browser -> Web Share oder Downloads
+async function filesPayload(files) {
+  return JSON.stringify(await Promise.all(files.map(async (f) => ({
+    b64: await blobToBase64(f.blob), name: f.name, mime: f.blob.type,
+  }))));
+}
+
+async function saveFiles(files) {
+  if (bridge && bridge.saveFiles) {
+    bridge.saveFiles(await filesPayload(files));
+    return;
+  }
+  for (const f of files) {
+    download(f.blob, f.name);
+    await new Promise((r) => setTimeout(r, 400)); // Browser blockieren sonst den zweiten Download
+  }
+  toast(`${files.length} Dateien werden im Download-Ordner gespeichert.`);
+}
+
+async function shareFiles(files, title, text) {
+  if (bridge && bridge.shareFiles) {
+    bridge.shareFiles(await filesPayload(files), title, text);
+    return;
+  }
+  const list = files.map((f) => new File([f.blob], f.name, { type: f.blob.type }));
+  if (navigator.canShare && navigator.canShare({ files: list })) {
+    try {
+      await navigator.share({ files: list, title, text });
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+    }
+  }
+  toast('Teilen geht hier nicht – die Dateien werden heruntergeladen.');
+  await saveFiles(files);
+}
+
 // Teilen: Android-App -> Teilen-Dialog; Browser -> Web Share; sonst Download (+ f.fallback)
 async function shareFile(blob, name, title, text, f = null, allowTxt = false) {
   if (bridge) {
@@ -1143,6 +1180,29 @@ function gpxBuilder(opts, part, empty) {
 
 const gridGpx = () => gpxBuilder(gpxGridOpts(), 'Raster', 'Kein Raster vorhanden – erst ein Raster anlegen.');
 const markGpx = () => gpxBuilder(gpxMarkOpts(), 'Markierungen', 'Keine Markierungen vorhanden.');
+// „Alles für BaseCamp“: beide GPX-Dateien auf einmal (in BaseCamp je eine Liste)
+async function runExportAll(btn, action) {
+  const btns = [...btn.parentElement.querySelectorAll('button')];
+  btns.forEach((b) => { b.disabled = true; });
+  try {
+    const files = [];
+    for (const build of [gridGpx(), markGpx()]) {
+      const f = await build();
+      if (f) files.push(f);
+    }
+    if (!files.length) return;
+    if (action === 'save') await saveFiles(files);
+    else await shareFiles(files, `${P.title || 'Suchgebiet'} – GPX`, files[0].text);
+  } catch (err) {
+    console.error(err);
+    toast('Fehler: ' + err.message);
+  } finally {
+    btns.forEach((b) => { b.disabled = false; });
+  }
+}
+$('gpx-all-share').addEventListener('click', () => runExportAll($('gpx-all-share'), 'share'));
+$('gpx-all-save').addEventListener('click', () => runExportAll($('gpx-all-save'), 'save'));
+
 $('gpx-grid-share').addEventListener('click', () => runExport('gpx-grid', $('gpx-grid-share'), exportKey(gpxGridOpts()), gridGpx(), 'share'));
 $('gpx-grid-save').addEventListener('click', () => runExport('gpx-grid', $('gpx-grid-save'), exportKey(gpxGridOpts()), gridGpx(), 'save'));
 $('gpx-share').addEventListener('click', () => runExport('gpx', $('gpx-share'), exportKey(gpxMarkOpts()), markGpx(), 'share'));
