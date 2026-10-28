@@ -72,7 +72,7 @@ mit dem PDF als Anhang. Am PC wird es heruntergeladen und das E-Mail-Programm ge
 **Track zeichnen:** Werkzeug „Track“ → Punkte auf die Karte tippen (Ziehen verschiebt die Karte) →
 „Fertig“ → Namen eingeben. Länge wird angezeigt; Tracks erscheinen auch im PDF.
 
-**GPX (Export → Garmin: GPX):** Tracks, Team-Bereiche als farbige Umrisse, Raster-Linien,
+**GPX (Export → Garmin: GPX):** Tracks, Stift-Markierungen, Team-Bereiche als farbige Umrisse, Raster-Linien,
 Treffpunkt/Textpunkte und optional Feldnamen als Wegpunkte. In BaseCamp über *Datei → Importieren*
 öffnen und an das Gerät senden. GPX-Linien liegen **über deiner Karte auf dem Gerät** (z. B. der Wanderkarte).
 

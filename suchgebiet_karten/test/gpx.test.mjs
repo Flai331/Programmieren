@@ -79,3 +79,13 @@ test('WMS-Kacheln mit 512 px decken dieselbe Fläche ab', async () => {
   assert.match(u, /WIDTH=512&HEIGHT=512/);
   assert.match(u, /BBOX=-20037508\.34,0\.00,0\.00,20037508\.34/);
 });
+
+test('Stift-Markierungen werden als Tracks mit Farbe exportiert', () => {
+  const p = newProject('S');
+  p.items.push({ kind: 'stroke', color: '#d50000', w: 5, pts: [[50.1, 8.6], [50.101, 8.601], [50.102, 8.6]] });
+  p.items.push({ kind: 'stroke', color: '#1565c0', w: 5, pts: [[50.1, 8.6]] }); // nur ein Punkt -> kein Track
+  const gpx = buildGpx(p, null, { drawings: true });
+  assert.match(gpx, /<name>Stift 1 \(rot\)<\/name>/);
+  assert.equal((gpx.match(/<trk>/g) || []).length, 1);
+  assert.equal((gpx.match(/<trkpt /g) || []).length, 3);
+});
