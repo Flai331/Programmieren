@@ -1,5 +1,5 @@
 import {
-  makeGrid, cellCount, cellAt, cellBounds, cellLabel, parseCell, formatMeters, MAX_CELLS,
+  makeGrid, cellCount, cellAt, cellBounds, cellLabel, parseCell, formatMeters, MAX_CELLS, remapCells,
 } from './grid.js';
 import { drawOverlay, hitItem } from './render.js';
 import {
@@ -7,7 +7,7 @@ import {
 } from './layers.js';
 import { buildPdf, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { buildGpx, trackDesc } from './gpx.js';
+import { buildGpx, parseGpx, trackDesc, trackLength } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -21,7 +21,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v36';
+const APP_VERSION = 'v37';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -448,7 +448,10 @@ function eraseAt(x, y) {
   redraw();
 }
 
-document.querySelectorAll('.toolbar [data-tool]').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.tool)));
+// Nochmal auf das aktive Werkzeug tippen: zurück zu „Bewegen“
+document.querySelectorAll('.toolbar [data-tool]').forEach((b) => b.addEventListener('click', () => {
+  setTool(b.dataset.tool === tool ? 'pan' : b.dataset.tool);
+}));
 $('undo').addEventListener('click', undo);
 
 // Zeichnung, Track oder Textpunkt benennen (Name steht auf der Karte, im PDF und im GPX)
@@ -670,11 +673,14 @@ function setArea(area, cellM = P.cellM) {
     return false;
   }
   snapshot();
-  const sizeChanged = grid && (grid.cellM !== cellM);
+  // Teams und Status wandern auf die neuen Felder mit (neue Feldgröße oder neues Gebiet)
+  if (grid) {
+    P.fills = remapCells(grid, g, P.fills);
+    P.status = remapCells(grid, g, P.status);
+  }
   P.area = area;
   P.cellM = cellM;
   grid = g;
-  if (sizeChanged) { P.fills = {}; P.status = {}; }
   changed();
   return true;
 }
@@ -694,20 +700,17 @@ function updateGridInfo() {
 $('cell-size').addEventListener('change', () => {
   const m = Number($('cell-size').value);
   if (!P.area) { P.cellM = m; save(); return; }
-  if ((Object.keys(P.fills).length || Object.keys(P.status).length) && !confirm('Bei neuer Feldgröße ändern sich die Felder – die Feldzuteilungen werden gelöscht. Fortfahren?')) {
-    $('cell-size').value = String(P.cellM);
-    return;
-  }
   if (!setArea(P.area, m)) $('cell-size').value = String(P.cellM);
 });
 $('show-utm').addEventListener('change', () => { P.showUtm = $('show-utm').checked; changed(); });
 // Was auf der Arbeitskarte zu sehen ist – alles einzeln (nur Anzeige, PDF/Export unverändert)
 function itemName(it, n) {
   if (it.kind === 'text') return `Text: ${it.text}`;
-  if (it.kind === 'track') return `Umriss: ${it.name || 'ohne Namen'} (${trackDesc(it.pts)})`;
+  if (it.kind === 'track') return `${it.open ? 'Track' : 'Umriss'}: ${it.name || 'ohne Namen'} (${trackDesc(it.pts, it.open)})`;
   return it.name ? `Zeichnung: ${it.name}` : `Stift ${n} (${COLOR_NAMES[it.color] || it.color})`;
 }
 function renderViewToggles() {
+  updateQuick();
   const box = $('view-toggles');
   box.innerHTML = '';
   const hide = P.hide || {};
@@ -738,6 +741,59 @@ function renderViewToggles() {
     row(itemName(it, n), !it.hidden, (on) => { it.hidden = !on; }, it.color);
   }
 }
+// Schnellschalter links (gleiche Einstellungen wie in „Auf der Karte zeigen“)
+function updateQuick() {
+  const hide = P.hide || {};
+  $('quick-grid').classList.toggle('on', !hide.grid || !hide.edge);
+  $('quick-marks').classList.toggle('on', P.marks.some((m) => !m.hidden));
+}
+$('quick-grid').addEventListener('click', () => {
+  const on = !$('quick-grid').classList.contains('on');
+  P.hide = { ...(P.hide || {}), grid: !on, edge: !on };
+  renderViewToggles();
+  changed();
+  toast(on ? 'Raster eingeblendet' : 'Raster ausgeblendet');
+});
+$('quick-marks').addEventListener('click', () => {
+  const on = !$('quick-marks').classList.contains('on');
+  for (const m of P.marks) m.hidden = !on;
+  renderViewToggles();
+  changed();
+  toast(on ? 'Teams und Markierungen eingeblendet' : 'Teams und Markierungen ausgeblendet');
+});
+
+// Zoomleiste links: ziehen, tippen oder +/−
+{
+  const track = $('zs-track');
+  const pos = () => {
+    const min = map.getMinZoom();
+    const max = map.getMaxZoom();
+    const z = map.getZoom();
+    if (!Number.isFinite(z)) return;
+    const f = (z - min) / (max - min);
+    const h = track.clientHeight - 12;
+    $('zs-thumb').style.top = `${6 + (1 - f) * h}px`;
+    $('zs-fill').style.height = `${f * h}px`;
+  };
+  const zoomAt = (e) => {
+    const r = track.getBoundingClientRect();
+    const f = 1 - Math.max(0, Math.min(1, (e.clientY - r.top - 6) / (r.height - 12)));
+    const z = Math.round(map.getMinZoom() + f * (map.getMaxZoom() - map.getMinZoom()));
+    if (z !== map.getZoom()) map.setZoom(z, { animate: !dragging });
+  };
+  let dragging = false;
+  track.addEventListener('pointerdown', (e) => { dragging = true; track.setPointerCapture(e.pointerId); zoomAt(e); });
+  track.addEventListener('pointermove', (e) => { if (dragging) zoomAt(e); });
+  const stop = () => { dragging = false; };
+  track.addEventListener('pointerup', stop);
+  track.addEventListener('pointercancel', stop);
+  $('zs-in').addEventListener('click', () => map.zoomIn());
+  $('zs-out').addEventListener('click', () => map.zoomOut());
+  map.on('zoomend', pos);
+  window.addEventListener('resize', pos);
+  pos();
+}
+
 function setAllVisible(on) {
   P.hide = { grid: !on, edge: !on, meet: !on };
   for (const m of P.marks) m.hidden = !on;
@@ -1009,6 +1065,10 @@ $('import-file').addEventListener('change', async () => {
   try {
     const buf = await f.arrayBuffer();
     const text = new TextDecoder('latin1').decode(buf);
+    if (/\.gpx$/i.test(f.name) || /^\s*(<\?xml[^>]*>\s*)?<gpx\b/i.test(text)) {
+      importGpx(new TextDecoder().decode(buf), f.name);
+      return;
+    }
     // JSON-Dateien sind UTF-8, PDFs werden nur nach dem eingebetteten Block durchsucht
     const p = importProject(text.trimStart().startsWith('{') ? new TextDecoder().decode(buf) : text);
     p.updated = Date.now();
@@ -1020,6 +1080,34 @@ $('import-file').addEventListener('change', async () => {
     toast('Datei konnte nicht geladen werden: ' + err.message);
   }
 });
+
+// GPX (z. B. aus BaseCamp) ins aktuelle Suchgebiet: Tracks/Routen als Umrisse, Wegpunkte als Text
+function importGpx(xml, fileName) {
+  const g = parseGpx(xml);
+  const base = fileName.replace(/\.gpx$/i, '');
+  const added = [];
+  for (const t of g.tracks) {
+    const [a, z] = [t.pts[0], t.pts[t.pts.length - 1]];
+    // geschlossen (Ende am Anfang, < 30 m): Fläche anzeigen, sonst offener Weg
+    const open = trackLength([a, z]) > 30;
+    added.push({ kind: 'track', name: t.name || base, color: t.color || db.color, w: 4, pts: t.pts, ...(open ? { open: true } : {}) });
+  }
+  for (const w of g.waypoints) added.push({ kind: 'text', color: db.color, lat: w.lat, lon: w.lon, text: w.name });
+  if (!added.length) {
+    toast(g.skipped ? 'Nur Raster/Feldnamen in der Datei – nichts übernommen' : 'Keine Tracks oder Wegpunkte in der Datei');
+    return;
+  }
+  P.items.push(...added);
+  save();
+  redraw();
+  closePanels();
+  const pts = added.flatMap((it) => (it.pts ? it.pts : [[it.lat, it.lon]]));
+  map.fitBounds(pts, { padding: [40, 40], maxZoom: 17 });
+  const parts = [];
+  if (g.tracks.length) parts.push(`${g.tracks.length} Track${g.tracks.length > 1 ? 's' : ''}`);
+  if (g.waypoints.length) parts.push(`${g.waypoints.length} Wegpunkt${g.waypoints.length > 1 ? 'e' : ''}`);
+  toast(`${parts.join(' und ')} übernommen${g.skipped ? ` (${g.skipped} Raster-Einträge übersprungen)` : ''}`);
+}
 
 // ---------- Panels ----------
 // Zurück-Taste/-Geste im Browser: schließt Notizblock bzw. Fenster statt die Seite zu verlassen.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  colName, colIndex, cellLabel, parseCell, makeGrid, cellAt, cellBounds, gridBounds,
+  colName, colIndex, cellLabel, parseCell, makeGrid, remapCells, cellAt, cellBounds, gridBounds,
   blocks, rangeBounds, fitBox, mercX, mercY, mercLat, mercLon, niceScale, niceLength,
 } from '../web/grid.js';
 import { planSheets, pageSize, mapArea, resolveOrient } from '../web/pdf.js';
@@ -121,4 +121,29 @@ test('Standard-PDF: ganzes Suchgebiet auf genau einer Seite, passende Ausrichtun
   const tall = makeGrid({ north: 50.2, south: 50.1, west: 8.6, east: 8.65 }, 250);
   assert.equal(resolveOrient('auto', planSheets(tall, { overview: true }, AREA)), 'portrait');
   assert.equal(resolveOrient('portrait', sheets), 'portrait');
+});
+
+const area = { north: 51.01, south: 51.0, west: 7.0, east: 7.02 };
+
+test('remapCells: 200 m -> 100 m, jedes große Feld wird zu 2×2 kleinen', () => {
+  const big = makeGrid(area, 200);
+  const small = makeGrid(area, 100);
+  const out = remapCells(big, small, { '0,0': 't1', '2,1': 's' });
+  assert.deepEqual(Object.keys(out).filter((k) => out[k] === 't1').sort(), ['0,0', '0,1', '1,0', '1,1']);
+  assert.deepEqual(Object.keys(out).filter((k) => out[k] === 's').sort(), ['4,2', '4,3', '5,2', '5,3']);
+});
+
+test('remapCells: 100 m -> 200 m, Mehrheit entscheidet', () => {
+  const small = makeGrid(area, 100);
+  const big = makeGrid(area, 200);
+  const out = remapCells(small, big, { '0,0': 'a', '1,0': 'a', '0,1': 'a', '2,0': 'b' });
+  assert.equal(out['0,0'], 'a');
+  assert.equal(out['1,0'], undefined); // nur ein Viertel markiert
+});
+
+test('remapCells: verschobenes Gebiet behält die Lage', () => {
+  const g1 = makeGrid(area, 100);
+  const g2 = makeGrid({ ...area, west: 7.0 - g1.dLon * 3 }, 100);
+  const out = remapCells(g1, g2, { '0,0': 'x' });
+  assert.deepEqual(out, { '3,0': 'x' });
 });

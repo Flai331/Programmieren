@@ -180,3 +180,33 @@ export function niceLength(maxM) {
 export function formatMeters(m) {
   return m >= 1000 ? `${(m / 1000).toLocaleString('de-DE')} km` : `${m} m`;
 }
+
+// Feldzuteilungen {"c,r": id} von einem Raster auf ein anderes übertragen (neue Feldgröße
+// oder neues Gebiet). Jedes neue Feld wird an mehreren Punkten abgetastet und bekommt die
+// Markierung, die mindestens die Hälfte davon abdeckt. Kleinere Felder erben so die
+// Markierung des großen Feldes, in dem sie liegen.
+export function remapCells(oldGrid, newGrid, cells) {
+  const out = {};
+  if (!oldGrid || !newGrid || !Object.keys(cells).length) return out;
+  const ratio = newGrid.dLat / oldGrid.dLat;
+  const n = 2 * Math.min(4, Math.ceil(ratio / 2)) + 1; // ungerade: Mitte wird immer getroffen
+  for (let r = 0; r < newGrid.rows; r++) {
+    for (let c = 0; c < newGrid.cols; c++) {
+      const b = cellBounds(newGrid, c, r);
+      const count = {};
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+          const lat = b.north - ((i + 0.5) / n) * (b.north - b.south);
+          const lon = b.west + ((j + 0.5) / n) * (b.east - b.west);
+          const o = cellAt(oldGrid, lat, lon);
+          const id = o && cells[`${o.c},${o.r}`];
+          if (id) count[id] = (count[id] || 0) + 1;
+        }
+      }
+      let best = null;
+      for (const [id, k] of Object.entries(count)) if (k * 2 >= n * n && (!best || k > count[best])) best = id;
+      if (best) out[`${c},${r}`] = best;
+    }
+  }
+  return out;
+}

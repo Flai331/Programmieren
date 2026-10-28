@@ -409,7 +409,7 @@ export function contentBounds(state, aspect, mmW, pad = 0.06) {
     } else if (it.pts && it.pts.length) {
       pts.push(...it.pts);
       // Umriss ab 3 Punkten: „· 12,34 ha“ hinter dem Namen
-      const text = (it.name || '') + (it.kind === 'track' && it.pts.length > 2 ? ' · 12,34 ha' : '');
+      const text = (it.name || '') + (it.kind === 'track' && it.pts.length > 2 && !it.open ? ' · 12,34 ha' : '');
       if (text) labels.push([it.pts[0][0], it.pts[0][1], text]);
     }
   }

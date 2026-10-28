@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cellOutlines, buildGpx, garminColor, trackLength, labelTracks, polygonArea, formatArea, trackDesc } from '../web/gpx.js';
+import { cellOutlines, buildGpx, garminColor, trackLength, labelTracks, polygonArea, formatArea, trackDesc, parseGpx } from '../web/gpx.js';
 import { CAP, FONT_CHARS, textPath } from '../web/font.js';
 import { makeZip, crc32 } from '../web/zip.js';
 import { planCustomMap, TILE, MAX_TILES } from '../web/kmz.js';
@@ -230,4 +230,35 @@ test('polygonArea: 100 m × 100 m = 1 ha, offen wie geschlossen', () => {
   assert.equal(formatArea(123456), '12,3 ha');
   assert.match(trackDesc(sq), /^300 m · 1 ha$/);
   assert.doesNotMatch(trackDesc(sq.slice(0, 2)), /ha/);
+});
+
+test('parseGpx: BaseCamp-Datei mit Track, Route, Wegpunkten', () => {
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3" version="1.1" creator="BaseCamp">
+  <wpt lat="51.1" lon="7.1"><ele>200</ele><name>Hochsitz &amp; Bank</name><sym>Flag, Blue</sym></wpt>
+  <wpt lat="51.2" lon="7.2"><name>C4</name></wpt>
+  <rte><name>Route 1</name><rtept lat="51.0" lon="7.0"/><rtept lat="51.01" lon="7.01"/></rte>
+  <trk><name><![CDATA[Weg <Nord>]]></name>
+    <extensions><gpxx:TrackExtension><gpxx:DisplayColor>DarkMagenta</gpxx:DisplayColor></gpxx:TrackExtension></extensions>
+    <trkseg><trkpt lat="51.0" lon="7.0"><ele>1</ele></trkpt><trkpt lat="51.001" lon="7.002"></trkpt></trkseg>
+    <trkseg><trkpt lon="7.1" lat="51.1"/><trkpt lon="7.11" lat="51.11"/></trkseg>
+  </trk>
+  <trk><name>Raster Test</name><trkseg><trkpt lat="1" lon="1"/><trkpt lat="2" lon="2"/></trkseg></trk>
+</gpx>`;
+  const g = parseGpx(xml);
+  assert.deepEqual(g.waypoints, [{ name: 'Hochsitz & Bank', lat: 51.1, lon: 7.1 }]);
+  assert.equal(g.skipped, 2);
+  assert.deepEqual(g.tracks.map((t) => t.name), ['Weg <Nord>', 'Weg <Nord> (2)', 'Route 1']);
+  assert.equal(g.tracks[0].color, '#6a1b9a');
+  assert.deepEqual(g.tracks[1].pts, [[51.1, 7.1], [51.11, 7.11]]);
+  assert.equal(g.tracks[2].color, null);
+  assert.throws(() => parseGpx('{"a":1}'));
+});
+
+test('parseGpx: eigener Export wird wieder eingelesen', () => {
+  const p = newProject('T');
+  p.items.push({ kind: 'track', name: 'Waldstück', color: '#d50000', w: 4, pts: [[51, 7], [51, 7.01], [50.99, 7.01]] });
+  const g = parseGpx(buildGpx(p, null, { tracks: true, drawings: true }));
+  const t = g.tracks.find((x) => x.name === 'Waldstück');
+  assert.ok(t && t.pts.length === 3 && t.color === '#d50000');
 });
