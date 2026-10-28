@@ -882,6 +882,7 @@ async function runExport(kind, btn, key, build, action) {
       exportCache[kind] = f;
     }
     if (action === 'save') await saveFile(f.blob, f.name);
+    else if (action === 'mail') await mailFile(f);
     else await shareFile(f.blob, f.name, f.title, f.text, f);
   } catch (err) {
     console.error(err);
@@ -922,6 +923,7 @@ function updatePdfPlan() {
     ? `${sheets.length} Seite${sheets.length > 1 ? 'n' : ''}: ${sheets.map((s) => s.title.replace(/^Blatt \d+ – /, '')).join(' · ')}`
     : 'Bitte mindestens eine Karte wählen.';
   $('pdf-share').disabled = !sheets.length;
+  $('pdf-mail').disabled = !sheets.length;
   $('pdf-save').disabled = !sheets.length;
 }
 ['pdf-format', 'pdf-orient', 'pdf-overview', 'pdf-details', 'pdf-k', 'pdf-info', 'pdf-view'].forEach((id) => $(id).addEventListener('change', updatePdfPlan));
@@ -949,6 +951,7 @@ async function buildPdfFile(progress) {
     },
   };
 }
+$('pdf-mail').addEventListener('click', () => runExport('pdf', $('pdf-mail'), exportKey(pdfOpts()), buildPdfFile, 'mail'));
 $('pdf-share').addEventListener('click', () => runExport('pdf', $('pdf-share'), exportKey(pdfOpts()), buildPdfFile, 'share'));
 $('pdf-save').addEventListener('click', () => runExport('pdf', $('pdf-save'), exportKey(pdfOpts()), buildPdfFile, 'save'));
 
@@ -980,6 +983,16 @@ async function saveFile(blob, name) {
   }
   download(blob, name);
   toast(`${name} wird im Download-Ordner gespeichert.`);
+}
+
+// E-Mail mit Anhang: Android-App -> nur Mail-Apps, PDF hängt an. Browser können keine
+// Anhänge an mailto: geben -> Teilen-Menü (Handy, Windows: Outlook/Mail), sonst Download + mailto
+async function mailFile(f) {
+  if (bridge && bridge.emailFile) {
+    bridge.emailFile(await blobToBase64(f.blob), f.name, f.blob.type, `Karte: ${f.title}`, f.text);
+    return;
+  }
+  await shareFile(f.blob, f.name, `Karte: ${f.title}`, f.text, f);
 }
 
 // Teilen: Android-App -> Teilen-Dialog; Browser -> Web Share; sonst Download (+ f.fallback)

@@ -196,6 +196,16 @@ class MainActivity : ComponentActivity() {
         // Wird aus app.js aufgerufen: Datei (Base64) über den Android-Teilen-Dialog senden
         @JavascriptInterface
         fun shareFile(base64: String, name: String, mime: String, title: String, text: String) {
+            send(base64, name, mime, title, text, emailOnly = false)
+        }
+
+        // Wie shareFile, aber nur Mail-Apps (Gmail, Outlook …) – die Datei ist bereits angehängt
+        @JavascriptInterface
+        fun emailFile(base64: String, name: String, mime: String, subject: String, text: String) {
+            send(base64, name, mime, subject, text, emailOnly = true)
+        }
+
+        private fun send(base64: String, name: String, mime: String, title: String, text: String, emailOnly: Boolean) {
             try {
                 val dir = File(cacheDir, "shared").apply { mkdirs() }
                 dir.listFiles()?.forEach { it.delete() }
@@ -209,9 +219,15 @@ class MainActivity : ComponentActivity() {
                     putExtra(Intent.EXTRA_SUBJECT, title)
                     putExtra(Intent.EXTRA_TEXT, text)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    // Selektor mailto: -> Android bietet nur E-Mail-Apps an
+                    if (emailOnly) selector = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"))
                 }
                 runOnUiThread {
-                    startActivity(Intent.createChooser(send, "Senden an …"))
+                    try {
+                        startActivity(Intent.createChooser(send, if (emailOnly) "E-Mail senden mit …" else "Senden an …"))
+                    } catch (e: ActivityNotFoundException) {
+                        toast(if (emailOnly) "Keine E-Mail-App gefunden" else "Keine App zum Teilen gefunden")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("Suchgebiet", "Teilen fehlgeschlagen", e)
