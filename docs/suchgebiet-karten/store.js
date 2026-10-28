@@ -49,6 +49,9 @@ export function normalizeProject(p) {
   if (!Array.isArray(out.marks)) out.marks = base.marks;
   if (!Array.isArray(out.items)) out.items = [];
   out.mission = normalizeMission(out.mission);
+  // v31: nur „Raster ausblenden“ -> allgemeine Anzeige-Schalter
+  if (!out.hide || typeof out.hide !== 'object') out.hide = out.hideGrid ? { grid: true } : {};
+  delete out.hideGrid;
   if (!out.fills || typeof out.fills !== 'object') out.fills = {};
   if (!out.status || typeof out.status !== 'object') out.status = {};
   out.fills = { ...out.fills };

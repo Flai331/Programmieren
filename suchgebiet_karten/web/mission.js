@@ -57,14 +57,19 @@ export const REPORT_SECTIONS = [
   ['photos', 'Fotos'],
   ['map', 'Karte'],
 ];
+// Was die Karte zeigt (nur wenn „Karte“ angekreuzt ist)
+export const MAP_PARTS = [
+  ['mapTeams', 'Teams'],
+  ['mapStatus', 'abgesucht / teilweise / nicht begehbar'],
+];
 export const EXTRA_PARTS = [
   ['juh', 'JUH-Formular'],
   ['gpx', 'GPX für BaseCamp'],
 ];
-export const MAIL_PARTS = [...REPORT_SECTIONS, ...EXTRA_PARTS];
+export const MAIL_PARTS = [...REPORT_SECTIONS, ...MAP_PARTS, ...EXTRA_PARTS];
 const TEXT_KEYS = ['times', 'person', 'forces', 'summary', 'notes'];
 export function newMailTo() {
-  return { to: '', times: true, person: true, forces: true, summary: true, notes: true, pad: true, photos: true, map: false, juh: true, gpx: false };
+  return { to: '', times: true, person: true, forces: true, summary: true, notes: true, pad: true, photos: true, map: false, mapTeams: true, mapStatus: true, juh: true, gpx: false };
 }
 // sec: Häkchen einer Zeile (ohne Angabe: alles)
 const want = (sec, k) => !sec || sec[k] !== false;
