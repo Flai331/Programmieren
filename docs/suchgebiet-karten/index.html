@@ -64,29 +64,29 @@
     </div>
   </div>
 
-  <div id="penbar" class="trackbar" hidden>
-    <span id="pen-info">Zeichnung: mit dem Finger auf die Karte zeichnen</span>
-    <button id="pen-back">↶ Strich</button>
-    <button id="pen-done" class="primary">Fertig</button>
-    <button id="pen-cancel">Abbrechen</button>
-  </div>
-
-  <div id="trackbar" class="trackbar" hidden>
-    <span id="track-info">Umriss: auf die Karte tippen</span>
-    <button id="track-back">↶ Punkt</button>
-    <button id="track-done" class="primary">Fertig</button>
-    <button id="track-cancel">Abbrechen</button>
-  </div>
-
-  <div id="palette" class="palette" hidden>
-    <div class="colors"></div>
-    <div class="marks"></div>
-    <div class="widths">
-      <button data-w="3">dünn</button>
-      <button data-w="5" class="active">mittel</button>
-      <button data-w="9">dick</button>
+  <!-- unten über der Werkzeugleiste: Leiste für Stift/Umriss und Farben, gestapelt (überdecken sich nicht) -->
+  <div class="bottomstack">
+    <div id="penbar" class="trackbar" hidden>
+      <span id="pen-info">Zeichnung: mit dem Finger auf die Karte zeichnen</span>
+      <button id="pen-back">↶ Strich</button>
+      <button id="pen-done" class="primary">Fertig</button>
+      <button id="pen-cancel">Abbrechen</button>
     </div>
-    <div class="penname"><button id="pen-name">🏷️ Letzte Zeichnung benennen</button></div>
+    <div id="trackbar" class="trackbar" hidden>
+      <span id="track-info">Umriss: auf die Karte tippen</span>
+      <button id="track-back">↶ Punkt</button>
+      <button id="track-done" class="primary">Fertig</button>
+      <button id="track-cancel">Abbrechen</button>
+    </div>
+    <div id="palette" class="palette" hidden>
+      <div class="colors"></div>
+      <div class="marks"></div>
+      <div class="widths">
+        <button data-w="3">dünn</button>
+        <button data-w="5" class="active">mittel</button>
+        <button data-w="9">dick</button>
+      </div>
+    </div>
   </div>
 
   <!-- Raster -->

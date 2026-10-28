@@ -93,8 +93,12 @@ button, input, select { font: inherit; }
 @media (max-height: 560px) { .zs-track { height: 90px; } }
 @media (max-height: 430px) { .zoomslider { display: none; } }
 
+.bottomstack {
+  position: fixed; left: 10px; right: 80px; bottom: 74px; z-index: 1001;
+  display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+}
+.bottomstack > * { pointer-events: auto; }
 .palette {
-  position: fixed; left: 10px; right: 80px; bottom: 74px; z-index: 1000;
   background: #fff; border-radius: 12px; padding: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.3);
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
 }
@@ -108,15 +112,14 @@ button, input, select { font: inherit; }
   border: 1px solid var(--line); background: var(--btn); border-radius: 8px; padding: 5px 8px; font-size: 12px; cursor: pointer;
 }
 .palette .widths button.active { background: var(--fg); color: #fff; }
-.palette .penname button {
-  border: 1px solid var(--line); background: var(--btn); border-radius: 8px; padding: 5px 8px; font-size: 12px; cursor: pointer;
-}
-.palette .penname button:disabled { opacity: 0.45; cursor: default; }
 
 .hint {
   position: fixed; top: 60px; left: 10px; right: 80px; z-index: 1000;
   background: rgba(29,29,31,0.88); color: #fff; padding: 8px 12px; border-radius: 10px; font-size: 14px;
+  pointer-events: none; user-select: none; /* durch den Hinweis hindurch zeichnen */
+  transition: opacity 0.6s;
 }
+.hint.fade { opacity: 0; }
 
 .panel {
   position: fixed; z-index: 2000; left: 0; right: 0; bottom: 0; max-height: 85%;
@@ -200,13 +203,13 @@ button, input, select { font: inherit; }
 
 .panel h2.sub.first { margin-top: 4px; border-top: 0; padding-top: 0; }
 .trackbar {
-  position: fixed; left: 10px; right: 80px; bottom: 134px; z-index: 1001;
   background: #fff; border-radius: 12px; padding: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.3);
   display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 14px;
 }
 .trackbar span { flex: 1 1 100%; font-weight: 600; }
 .trackbar button { border: 1px solid #ccc; background: var(--btn); border-radius: 10px; padding: 8px 10px; cursor: pointer; }
 .trackbar button.primary { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
+.trackbar button:disabled { opacity: 0.45; cursor: default; }
 
 .topsearch { flex: 1; min-width: 0; display: flex; gap: 6px; }
 .topsearch .title { background: #fff; color: var(--fg); font-weight: 500; font-size: 16px; }
@@ -315,3 +318,38 @@ button, input, select { font: inherit; }
 .viewlist h4 { margin: 10px 0 2px; font-size: 13px; color: var(--muted); }
 .viewlist label.check { margin: 4px 0; }
 .viewlist i { width: 16px; height: 16px; border-radius: 4px; display: inline-block; flex: none; }
+
+/* Handy quer: wenig Höhe – möglichst viel Karte. Leisten schmal, Knöpfe nur mit Symbol,
+   Seitenknöpfe zweispaltig, Stift/Umriss-Leiste und Farben in einer Zeile */
+@media (max-height: 500px) and (orientation: landscape) {
+  .topbar { height: 40px; padding: 4px 8px; }
+  .topsearch .title { padding: 5px 8px; font-size: 14px; }
+  .searchbtn { padding: 2px 10px; }
+  .searchbar { top: 40px; }
+  #map, #overlay { top: 40px; bottom: 40px; }
+  #overlay { height: calc(100% - 80px); }
+  .toolbar { height: 40px; }
+  .toolbar button { font-size: 0; }
+  .toolbar button span { font-size: 18px; line-height: 1; }
+  .sidebuttons { display: grid; grid-template-columns: repeat(2, 40px); gap: 4px; top: 46px; right: 6px; }
+  .sidebuttons button { width: 40px; height: 36px; font-size: 0; border-radius: 10px; }
+  .sidebuttons button span { font-size: 17px; line-height: 1; }
+  .leftbar { top: 46px; left: 6px; transform: none; gap: 4px; }
+  .leftbar > button { width: 40px; height: 34px; font-size: 0; border-radius: 10px; }
+  .leftbar > button span { font-size: 15px; }
+  .zoomslider { display: flex; width: 40px; border-radius: 10px; }
+  .zoomslider button { width: 38px; height: 28px; font-size: 19px; }
+  .zs-track { display: none; }
+  .leaflet-control-zoom { display: none; }
+  .bottomstack { left: 54px; right: 98px; bottom: 44px; gap: 4px; flex-direction: row; flex-wrap: wrap; align-items: flex-end; }
+  .trackbar { padding: 4px 6px; gap: 4px; font-size: 12px; flex-wrap: nowrap; }
+  .trackbar span { flex: 0 1 auto; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #pen-info { display: none; }
+  .trackbar button { padding: 4px 8px; font-size: 13px; }
+  .palette { padding: 4px 6px; gap: 6px; flex-wrap: nowrap; }
+  .palette .colors { gap: 3px; }
+  .palette .colors button { width: 24px; height: 24px; border-width: 2px; }
+  .palette .widths button { padding: 3px 6px; font-size: 11px; }
+  .hint { top: 46px; left: 54px; right: 98px; font-size: 12px; padding: 3px 8px; }
+  .panel { right: 98px; top: 46px; max-height: calc(100% - 52px); }
+}
