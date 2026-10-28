@@ -4,6 +4,8 @@
 
 import { colName, cellLabel, cellBounds, gridBounds } from './grid.js';
 import { toUtm, fromUtm, utmZone } from './utm.js';
+import { cellComponents, cellOutlines } from './gpx.js';
+import { cellsText } from './store.js';
 
 const GRID_COLOR = 'rgba(200, 0, 0, 0.85)';
 
@@ -40,10 +42,178 @@ export function drawOverlay(ctx, toPx, state, opt) {
   const grid = state.grid;
   if (opt.focus) dimOutside(ctx, toPx, opt.focus, opt.width, opt.height);
   if (opt.utm && opt.view) drawUtm(ctx, toPx, opt, s);
-  if (grid) drawGrid(ctx, toPx, state, grid, opt, s);
+  let areas = null;
+  if (grid && opt.noGrid) areas = drawAreas(ctx, toPx, state, grid, opt, s);
+  else if (grid) drawGrid(ctx, toPx, state, grid, opt, s);
   drawItems(ctx, toPx, state.items || [], s);
   if (state.meet) drawMeet(ctx, toPx, state.meet, s);
-  if (grid) drawEdgeLabels(ctx, toPx, grid, opt, s);
+  if (grid && !opt.noGrid) drawEdgeLabels(ctx, toPx, grid, opt, s);
+  if (areas && opt.areaLabels === 'edge' && areas.length) drawAreaList(ctx, areas, opt, s);
+  return areas;
+}
+
+// Zusammenhängende Felder gleicher Markierung (gleiche Farbe und Name) -> Flächen
+function areaGroups(map, labels) {
+  const groups = new Map();
+  for (const [key, color] of Object.entries(map || {})) {
+    const label = (labels && labels[key]) || '';
+    const g = `${color}|${label}`;
+    if (!groups.has(g)) groups.set(g, { color, label, keys: [] });
+    groups.get(g).keys.push(key);
+  }
+  const out = [];
+  for (const g of groups.values()) {
+    for (const part of cellComponents(g.keys)) out.push({ color: g.color, label: g.label, keys: part });
+  }
+  return out;
+}
+
+// Feld der Fläche, das dem Schwerpunkt am nächsten liegt (dort steht die Beschriftung)
+function labelCell(keys) {
+  const cells = keys.map((k) => k.split(',').map(Number));
+  const mc = cells.reduce((a, c) => a + c[0], 0) / cells.length;
+  const mr = cells.reduce((a, c) => a + c[1], 0) / cells.length;
+  return cells.reduce((best, c) => (Math.hypot(c[0] - mc, c[1] - mr) < Math.hypot(best[0] - mc, best[1] - mr) ? c : best));
+}
+
+// Karte ohne Raster (Abschlussbericht): Flächen mit einem Umriss statt Feldkästchen,
+// eine Beschriftung je Fläche – auf der Fläche (areaLabels 'on') oder als Nummer mit Liste ('edge')
+function drawAreas(ctx, toPx, state, grid, opt, s) {
+  const corner = ([c, r]) => toPx(gridLat(grid, r), gridLon(grid, c));
+  const rect = (key) => {
+    const [c, r] = key.split(',').map(Number);
+    const b = cellBounds(grid, c, r);
+    const [x0, y0] = toPx(b.north, b.west);
+    const [x1, y1] = toPx(b.south, b.east);
+    return [x0, y0, x1 - x0, y1 - y0];
+  };
+  const outline = (keys, color, dash) => {
+    ctx.beginPath();
+    for (const loop of cellOutlines(keys)) {
+      loop.forEach((pt, i) => { const [x, y] = corner(pt); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+      ctx.closePath();
+    }
+    ctx.setLineDash(dash ? [9 * s, 5 * s] : []);
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 6 * s;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.stroke();
+    ctx.lineWidth = 3.5 * s;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+  const a = state.markAlpha ?? 0.4;
+  const teams = areaGroups(state.fills, state.fillLabels);
+  const stats = areaGroups(state.status, state.statusLabels);
+  for (const t of teams) {
+    ctx.globalAlpha = 0.5 * a;
+    ctx.fillStyle = t.color;
+    for (const k of t.keys) ctx.fillRect(...rect(k));
+    ctx.globalAlpha = 1;
+  }
+  for (const st of stats) {
+    // Schraffur über die ganze Fläche (ohne Kästchen-Ränder)
+    ctx.save();
+    ctx.beginPath();
+    for (const k of st.keys) ctx.rect(...rect(k));
+    ctx.clip();
+    const xs = st.keys.map(rect);
+    const minX = Math.min(...xs.map((r) => r[0]));
+    const minY = Math.min(...xs.map((r) => r[1]));
+    const maxX = Math.max(...xs.map((r) => r[0] + r[2]));
+    const maxY = Math.max(...xs.map((r) => r[1] + r[3]));
+    const step = Math.max(6, 16 * s);
+    ctx.beginPath();
+    for (let d = minX - (maxY - minY); d < maxX; d += step) { ctx.moveTo(d, maxY); ctx.lineTo(d + (maxY - minY), minY); }
+    ctx.globalAlpha = Math.min(1, 0.2 + 0.6 * a);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3.2 * s;
+    ctx.stroke();
+    ctx.globalAlpha = Math.min(1, 0.3 + a);
+    ctx.strokeStyle = st.color;
+    ctx.lineWidth = 1.8 * s;
+    ctx.stroke();
+    ctx.restore();
+  }
+  for (const t of teams) outline(t.keys, t.color, false);
+  for (const st of stats) outline(st.keys, st.color, true);
+
+  // Beschriftung: eine je Fläche
+  const areas = [];
+  let n = 0;
+  const label = (g, dy) => {
+    if (!g.label) return;
+    const [c, r] = labelCell(g.keys);
+    const b = cellBounds(grid, c, r);
+    const [x0, y0] = toPx(b.north, b.west);
+    const [x1, y1] = toPx(b.south, b.east);
+    const x = (x0 + x1) / 2;
+    const y = (y0 + y1) / 2 + dy * (y1 - y0);
+    n++;
+    areas.push({ n, label: g.label, color: g.color, cells: cellsText(g.keys) });
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (opt.areaLabels === 'edge') {
+      // Nummer im Kreis, Erklärung in der Liste am Rand
+      const rr = 10 * s;
+      ctx.beginPath();
+      ctx.arc(x, y, rr, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.lineWidth = 2.5 * s;
+      ctx.strokeStyle = g.color;
+      ctx.stroke();
+      ctx.font = `bold ${12 * s}px sans-serif`;
+      ctx.fillStyle = '#111';
+      ctx.fillText(String(n), x, y + 0.5 * s);
+    } else {
+      ctx.font = `bold ${14 * s}px sans-serif`;
+      halo(ctx, g.label, x, y, '#111', s);
+    }
+  };
+  for (const t of teams) label(t, 0);
+  for (const st of stats) label(st, teams.some((t) => t.keys.some((k) => st.keys.includes(k))) ? 0.32 : 0);
+  return areas;
+}
+
+// Liste der nummerierten Flächen unten links im Kartenbild
+function drawAreaList(ctx, areas, opt, s) {
+  ctx.font = `${11 * s}px sans-serif`;
+  const lineH = 16 * s;
+  const texts = areas.map((a) => `${a.n}  ${a.label} (${a.cells})`);
+  const cols = Math.max(1, Math.min(3, Math.floor((opt.width * 0.62) / (Math.max(...texts.map((t) => ctx.measureText(t).width)) + 40 * s))));
+  const rows = Math.ceil(texts.length / cols);
+  const colW = Math.max(...texts.map((t) => ctx.measureText(t).width)) + 32 * s;
+  const w = cols * colW + 10 * s;
+  const h = rows * lineH + 10 * s;
+  const x = 10 * s;
+  const y = opt.height - h - 44 * s; // über der Maßstabsleiste
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1 * s;
+  ctx.strokeRect(x, y, w, h);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  areas.forEach((a, i) => {
+    const cx = x + 5 * s + Math.floor(i / rows) * colW;
+    const cy = y + 5 * s + lineH * ((i % rows) + 0.5);
+    ctx.beginPath();
+    ctx.arc(cx + 8 * s, cy, 6.5 * s, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.lineWidth = 2 * s;
+    ctx.strokeStyle = a.color;
+    ctx.stroke();
+    ctx.fillStyle = '#111';
+    ctx.font = `bold ${9 * s}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(String(a.n), cx + 8 * s, cy + 0.5 * s);
+    ctx.textAlign = 'left';
+    ctx.font = `${11 * s}px sans-serif`;
+    ctx.fillText(`${a.label} (${a.cells})`, cx + 20 * s, cy);
+  });
 }
 
 // Hellt alles außerhalb des Blattbereichs auf, damit klar ist, was zum Blatt gehört

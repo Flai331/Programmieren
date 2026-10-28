@@ -34,7 +34,32 @@ test('Mailtext und Kartenlegende', () => {
   });
   assert.deepEqual(lineLegend(p), [{ color: '#d50000', label: 'Spur Mantrailer', line: true }]);
   const t = missionText(p, null);
-  for (const part of ['Einsatz: Suche Wald', 'Verfasser: Anna', 'Herr M., 82 J.', 'RHS: 1 Führung', 'Gesamt: 5 Einsatzkräfte', 'Person in C4 gefunden', 'Spur Mantrailer (rot)']) {
+  for (const part of ['Einsatz: Suche Wald', 'Verfasser: Anna', 'Herr M., 82 J.', 'RHS: 1 Führung', 'Gesamt: 5 Einsatzkräfte', 'Person in C4 gefunden']) {
     assert.ok(t.includes(part), part);
   }
+});
+
+test('Empfänger: alte Liste wird zu einer Zeile, Adressen werden getrennt', async () => {
+  const { mailAddresses } = await import('../web/mission.js');
+  const m = normalizeMission({ recipients: 'a@b.de; c@d.de' });
+  assert.equal(m.mailTo.length, 1);
+  assert.deepEqual({ ...m.mailTo[0], to: undefined }, { to: undefined, person: true, forces: true, summary: true, notes: true, pad: true, photos: true, juh: true, gpx: false });
+  assert.deepEqual(mailAddresses(m.mailTo[0]), ['a@b.de', 'c@d.de']);
+  assert.equal(m.recipients, '');
+  assert.deepEqual(normalizeMission({}).mailTo, []);
+});
+
+test('Empfänger-Zeilen älterer Versionen bekommen die heutigen Häkchen', () => {
+  const m = normalizeMission({ mailTo: [{ to: 'a@b.de', report: true, map: true, notes: false, juh: false, gpx: true }, { to: 'c@d.de', juh: false, summary: false }] });
+  assert.deepEqual(m.mailTo[0], { to: 'a@b.de', person: true, forces: true, summary: true, notes: true, pad: false, photos: false, juh: false, gpx: true });
+  assert.equal(m.mailTo[1].summary, false);
+  assert.equal(m.mailTo[1].juh, false);
+  assert.equal(m.mailTo[1].person, true);
+});
+
+test('Mailtext nur mit angekreuzten Inhalten', () => {
+  const p = newProject('X');
+  Object.assign(p.mission, { person: 'Herr M.', summary: 'gefunden', forces: [{ org: 'RHS', helpers: 3 }] });
+  const t = missionText(p, null, 'Anhang', { person: false, forces: true, summary: false });
+  assert.ok(!t.includes('Herr M.') && !t.includes('gefunden') && t.includes('RHS: 3 Helfer'));
 });

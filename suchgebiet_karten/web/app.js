@@ -8,8 +8,10 @@ import {
 import { buildPdf, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
 import { buildGpx, trackLength, formatLength } from './gpx.js';
+import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import {
   FORCE_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
+  MAIL_PARTS, REPORT_SECTIONS, EXTRA_PARTS, hasReportText, newMailTo, mailAddresses,
 } from './mission.js';
 import { buildCustomMap, planCustomMap } from './kmz.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
@@ -19,7 +21,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v24';
+const APP_VERSION = 'v27';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -1016,7 +1018,6 @@ async function runExport(kind, btn, key, build, action) {
     }
     if (action === 'save') await saveFile(f.blob, f.name);
     else if (action === 'mail') await mailFile(f);
-    else if (action === 'report-mail') await mailReport(f);
     else await shareFile(f.blob, f.name, f.title, f.text, f);
   } catch (err) {
     console.error(err);
@@ -1038,6 +1039,8 @@ function pdfOpts() {
     k: Number($('pdf-k').value),
     info: $('pdf-info').checked,
     view: $('pdf-view').checked,
+    noGrid: $('pdf-nogrid').checked,
+    areaLabels: 'edge',
     title: P.title.trim() || 'Suchgebiet',
   };
 }
@@ -1060,7 +1063,7 @@ function updatePdfPlan() {
   $('pdf-mail').disabled = !sheets.length;
   $('pdf-save').disabled = !sheets.length;
 }
-['pdf-format', 'pdf-orient', 'pdf-overview', 'pdf-details', 'pdf-k', 'pdf-info', 'pdf-view'].forEach((id) => $(id).addEventListener('change', updatePdfPlan));
+['pdf-format', 'pdf-orient', 'pdf-overview', 'pdf-details', 'pdf-k', 'pdf-info', 'pdf-view', 'pdf-nogrid'].forEach((id) => $(id).addEventListener('change', updatePdfPlan));
 
 function mailText(title) {
   return `Anbei die Karte zum Suchgebiet „${title}“.`
@@ -1318,6 +1321,18 @@ function renderForces() {
       row.appendChild(l);
     };
     field('org', 'Organisation', 'org', 'text');
+    // „eigene“ Organisation (für das JUH-Formular: eigene/fremde Kräfte)
+    const own = document.createElement('label');
+    own.className = 'own';
+    own.innerHTML = '<input type="checkbox"> eigene';
+    own.querySelector('input').checked = !!f.own || (!M().forces.some((x) => x.own) && i === 0);
+    own.querySelector('input').addEventListener('change', (e) => {
+      if (!M().forces.some((x) => x.own)) M().forces[0].own = true; // bisher stillschweigend die erste
+      f.own = e.target.checked;
+      touch();
+      renderForces();
+    });
+    row.querySelector('.org small').appendChild(own);
     FORCE_KEYS.forEach(([k, l]) => field(k, l));
     const del = document.createElement('button');
     del.textContent = '✕';
@@ -1532,14 +1547,14 @@ function renderMission() {
   $('ms-summary').value = M().summary;
   if (!M().author && P.leader) M().author = P.leader;
   $('ms-author').value = M().author;
-  $('ms-to').value = M().recipients;
+  renderMailTo();
   $('ms-msg').textContent = '';
   renderForces();
   renderThumbs();
   showTab(db.missionTab || 'lage');
 }
 $('btn-mission').addEventListener('click', () => { renderMission(); openPanel('panel-mission'); });
-[['ms-person', 'person'], ['ms-summary', 'summary'], ['ms-author', 'author'], ['ms-to', 'recipients']].forEach(([id, key]) => {
+[['ms-person', 'person'], ['ms-summary', 'summary'], ['ms-author', 'author']].forEach(([id, key]) => {
   $(id).addEventListener('input', () => { M()[key] = $(id).value; touch(); });
 });
 
@@ -1652,63 +1667,165 @@ padCanvas.addEventListener('pointerup', padEnd);
 padCanvas.addEventListener('pointercancel', padEnd);
 window.addEventListener('resize', () => { if (!$('notepad').hidden) { padSize(); padDraw(); } });
 
-// Abschluss-PDF: Bericht + Notizblock + Fotos + Karte
-async function buildReportFile(progress) {
-  const opts = {
-    ...pdfOpts(),
-    overview: !!grid,
-    details: false,
-    info: false,
-    view: !grid,
-    report: true,
-    title: `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}`,
-  };
+// Abschlussbericht der App (ohne Karte) mit den angekreuzten Inhalten
+async function reportPdf(sec, progress) {
+  const parts = { ...sec, legend: false };
+  const hasPad = parts.pad && M().pages.some((pg) => pg.strokes.length);
+  const hasPhotos = parts.photos && M().photos.length;
+  if (!hasReportText(parts) && !hasPad && !hasPhotos) return null;
   progress('Bericht wird erstellt …');
-  const res = await buildPdf(P, grid, opts, layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => progress(`Karte ${i} von ${n} …`));
-  $('ms-msg').textContent = `✔ Abschluss-PDF mit ${res.pages} Seite${res.pages > 1 ? 'n' : ''} (${Math.round(res.blob.size / 1024)} KB)`;
-  const to = recipients();
-  return {
-    blob: res.blob,
-    name: safeName('_Einsatzbericht.pdf'),
-    title: opts.title,
-    text: missionText(P, grid),
-    to,
-    fallback(f) {
-      const body = `${f.text}\n\n(Bitte die heruntergeladene Datei ${f.name} anhängen.)`;
-      location.href = `mailto:${to.map(encodeURIComponent).join(',')}?subject=${encodeURIComponent(f.title)}&body=${encodeURIComponent(body)}`;
-    },
-  };
-}
-function recipients() {
-  return M().recipients.split(/[,;\s]+/).map((s) => s.trim()).filter((s) => s.includes('@'));
+  const opts = { ...pdfOpts(), orient: 'portrait', noMap: true, report: parts, title: `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}` };
+  const res = await buildPdf(P, grid, opts, layerStack(P.layerId, activeOverlays()), viewBounds(), () => {});
+  return { blob: res.blob, name: safeName(hasReportText(parts) ? '_Abschlussbericht.pdf' : '_Notizen.pdf'), title: opts.title, pages: res.pages };
 }
 
-// Mail mit Empfängern UND Anhang: Android-App kann beides. Im Browser hängt das Teilen-Menü
-// das PDF an, Empfänger lassen sich dort nicht vorgeben -> in die Zwischenablage kopieren.
-async function mailReport(f) {
-  if (bridge && bridge.emailFileTo) {
-    bridge.emailFileTo(await blobToBase64(f.blob), f.name, f.blob.type, f.title, f.text, f.to.join(','));
-    return;
-  }
-  if (bridge) {
-    bridge.emailFile(await blobToBase64(f.blob), f.name, f.blob.type, f.title, f.text);
-    return;
-  }
-  if (f.to.length && navigator.clipboard) {
-    try {
-      await navigator.clipboard.writeText(f.to.join(', '));
-      toast('Empfänger kopiert – im Mailprogramm ins „An“-Feld einfügen.');
-    } catch { /* Zwischenablage nicht erlaubt */ }
-  }
-  await shareFile(f.blob, f.name, f.title, f.text, f);
+async function buildReportFile(progress) {
+  const f = await reportPdf({}, progress);
+  $('ms-msg').textContent = `✔ Abschlussbericht mit ${f.pages} Seite${f.pages > 1 ? 'n' : ''} (${Math.round(f.blob.size / 1024)} KB)`;
+  return { ...f, text: missionText(P, grid, 'Abschlussbericht im Anhang (PDF).') };
 }
 const reportKey = () => exportKey(['report', $('pdf-format').value]);
-$('ms-mail').addEventListener('click', () => {
-  if (!recipients().length && !confirm('Keine E-Mail-Empfänger eingetragen. Trotzdem senden?')) return;
-  runExport('report', $('ms-mail'), reportKey(), buildReportFile, 'report-mail');
-});
 $('ms-share').addEventListener('click', () => runExport('report', $('ms-share'), reportKey(), buildReportFile, 'share'));
 $('ms-save').addEventListener('click', () => runExport('report', $('ms-save'), reportKey(), buildReportFile, 'save'));
+
+// JUH-Vorlage ausgefüllt (Felder bleiben beschreibbar)
+async function juhFile(progress) {
+  progress('JUH-Formular …');
+  const res = await fetch(JUH_TEMPLATE);
+  if (!res.ok) throw new Error('JUH-Vorlage nicht gefunden');
+  const bytes = await fillJuh(new Uint8Array(await res.arrayBuffer()), P);
+  return {
+    blob: new Blob([bytes], { type: 'application/pdf' }),
+    name: safeName('_JUH-Einsatzbericht.pdf'),
+    title: `JUH-Einsatzbericht ${P.title.trim() || 'Suchgebiet'}`,
+    text: 'JUH-Einsatzbericht Rettungshundestaffel – vorausgefüllt, alle Felder sind weiter ausfüllbar.',
+  };
+}
+const juhKey = () => exportKey(['juh']);
+$('ms-juh-share').addEventListener('click', () => runExport('juh', $('ms-juh-share'), juhKey(), juhFile, 'share'));
+$('ms-juh-save').addEventListener('click', () => runExport('juh', $('ms-juh-save'), juhKey(), juhFile, 'save'));
+
+// Empfänger: je Zeile Adresse(n) und Häkchen, was mitgeht
+function renderMailTo() {
+  const box = $('ms-mailto');
+  box.innerHTML = '';
+  if (!M().mailTo.length) M().mailTo.push(newMailTo());
+  M().mailTo.forEach((row, i) => {
+    const el = document.createElement('div');
+    el.className = 'mrow';
+    el.innerHTML = '<div class="top"><input type="text" inputmode="email"><button class="del" title="Zeile löschen">✕</button></div><div class="groups"></div><button class="send primary"></button>';
+    const inp = el.querySelector('input');
+    inp.value = row.to;
+    inp.placeholder = 'z. B. staffel@example.org, leitung@example.org';
+    inp.addEventListener('input', () => { row.to = inp.value; touch(); });
+    const group = (title, list) => {
+      const g = document.createElement('div');
+      g.className = 'parts';
+      g.innerHTML = '<b></b>';
+      g.querySelector('b').textContent = title;
+      for (const [k, label] of list) {
+        const l = document.createElement('label');
+        l.innerHTML = '<input type="checkbox"><span></span>';
+        l.querySelector('input').checked = !!row[k];
+        l.querySelector('span').textContent = label;
+        l.querySelector('input').addEventListener('change', (e) => { row[k] = e.target.checked; touch(); });
+        g.appendChild(l);
+      }
+      el.querySelector('.groups').appendChild(g);
+    };
+    group('Abschlussbericht:', REPORT_SECTIONS);
+    group('Zusätzlich:', EXTRA_PARTS);
+    el.querySelector('.del').addEventListener('click', () => {
+      if (row.to.trim() && !confirm(`Empfänger „${row.to}“ entfernen?`)) return;
+      M().mailTo.splice(i, 1);
+      touch();
+      renderMailTo();
+    });
+    const send = el.querySelector('.send');
+    send.textContent = '📧 Senden';
+    send.addEventListener('click', () => sendMailRow(row, send));
+    box.appendChild(el);
+  });
+}
+$('ms-mailto-add').addEventListener('click', () => {
+  M().mailTo.push(newMailTo());
+  touch();
+  renderMailTo();
+  const ins = $('ms-mailto').querySelectorAll('.top input');
+  ins[ins.length - 1].focus();
+});
+
+// Dateien einer Zeile bauen (zwischengespeichert, falls das Teilen einen zweiten Tipp braucht)
+const mailCache = new Map();
+async function mailFiles(row, progress) {
+  const key = exportKey(['mail', $('pdf-format').value, ...MAIL_PARTS.map(([k]) => !!row[k])]);
+  if (mailCache.has(key)) return mailCache.get(key);
+  const files = [];
+  const pdf = await reportPdf(row, progress);
+  if (pdf) files.push(pdf);
+  if (row.juh) files.push(await juhFile(progress));
+  if (row.gpx) {
+    for (const build of [gridGpx(), markGpx()]) {
+      const f = await build();
+      if (f) files.push(f);
+    }
+  }
+  mailCache.set(key, files);
+  return files;
+}
+
+async function sendMailRow(row, btn) {
+  const to = mailAddresses(row);
+  if (!MAIL_PARTS.some(([k]) => row[k])) { toast('Bitte ankreuzen, was mitgeschickt werden soll.'); return; }
+  if (!to.length && !confirm('Keine gültige E-Mail-Adresse in dieser Zeile. Trotzdem senden?')) return;
+  const label = btn.textContent;
+  btn.disabled = true;
+  try {
+    const files = await mailFiles(row, (t) => { btn.textContent = t; });
+    if (!files.length) { toast('Nichts zum Senden – keine Notizblock-Seiten/Fotos bzw. kein Raster vorhanden.'); return; }
+    const names = files.map((f) => f.name).join(', ');
+    const text = missionText(P, grid, `Im Anhang: ${names}`, row);
+    const title = `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}`;
+    if (bridge && bridge.emailFilesTo) {
+      bridge.emailFilesTo(await filesPayload(files), title, text, to.join(','));
+    } else if (bridge) {
+      bridge.shareFiles(await filesPayload(files), title, text);
+    } else {
+      if (to.length && navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(to.join(', '));
+          toast('Empfänger kopiert – im Mailprogramm ins „An“-Feld einfügen.');
+        } catch { /* Zwischenablage nicht erlaubt */ }
+      }
+      const list = files.map((f) => new File([f.blob], f.name, { type: f.blob.type }));
+      let shared = false;
+      if (navigator.canShare && navigator.canShare({ files: list })) {
+        try {
+          await navigator.share({ files: list, title, text });
+          shared = true;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+          if (err.name === 'NotAllowedError') { toast('Dateien sind fertig – bitte nochmal auf „Senden“ tippen.'); return; }
+        }
+      }
+      if (!shared) {
+        // PC: Dateien herunterladen, Mailprogramm mit Empfängern und Text öffnen
+        for (const f of files) { download(f.blob, f.name); await new Promise((r) => setTimeout(r, 400)); }
+        const body = `${text}\n\n(Bitte die heruntergeladenen Dateien anhängen: ${files.map((f) => f.name).join(', ')})`;
+        location.href = `mailto:${to.map(encodeURIComponent).join(',')}?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+      }
+    }
+    btn.classList.add('done');
+    btn.textContent = '✔ Gesendet – nochmal senden';
+    return;
+  } catch (err) {
+    console.error(err);
+    toast('Fehler: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+  btn.textContent = label;
+}
 
 // ---------- Suche (Adresse, Feld, Koordinaten) ----------
 let searchPin = null;

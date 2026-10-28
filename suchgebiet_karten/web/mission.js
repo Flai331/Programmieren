@@ -17,7 +17,8 @@ export function newMission() {
     photos: [], // [{t, src (JPEG data URL)}]
     summary: '',
     author: '',
-    recipients: '',
+    recipients: '', // alt (ein Feld für alle) – wird zu mailTo umgezogen
+    mailTo: [], // [{to: 'a@b.de, c@d.de', report, map, notes, gpx}] – was an wen geht
     legend: {}, // Farbe -> Bedeutung (z. B. "#d50000": "Spur Mantrailer")
   };
 }
@@ -27,7 +28,45 @@ export function normalizeMission(m) {
   const out = { ...base, ...(m && typeof m === 'object' ? m : {}) };
   for (const k of ['forces', 'pages', 'photos']) if (!Array.isArray(out[k])) out[k] = [];
   if (!out.legend || typeof out.legend !== 'object') out.legend = {};
+  if (!Array.isArray(out.mailTo)) out.mailTo = [];
+  // Zeilen älterer Versionen (Bericht/Karte/„Notizblock + Fotos“) auf die heutigen Häkchen bringen
+  out.mailTo = out.mailTo.map((r) => {
+    if (!('report' in r) && !('map' in r)) return { ...newMailTo(), ...r };
+    const rep = !!r.report;
+    return { ...newMailTo(), to: r.to || '', person: rep, forces: rep, summary: rep, notes: rep, pad: !!r.notes, photos: !!r.notes, juh: !!r.juh, gpx: !!r.gpx };
+  });
+  if (!out.mailTo.length && out.recipients.trim()) {
+    out.mailTo.push({ ...newMailTo(), to: out.recipients.trim() });
+    out.recipients = '';
+  }
   return out;
+}
+
+// Ein Empfänger (oder mehrere Adressen mit Komma) und was er bekommt
+// Je Empfänger ankreuzbar: Inhalte des Abschlussberichts der App (ohne Karte)
+// und zusätzliche Anhänge
+export const REPORT_SECTIONS = [
+  ['person', 'Vermisste Person'],
+  ['forces', 'Kräfte'],
+  ['summary', 'Zusammenfassung'],
+  ['notes', 'Notizen'],
+  ['pad', 'Notizblock'],
+  ['photos', 'Fotos'],
+];
+export const EXTRA_PARTS = [
+  ['juh', 'JUH-Formular'],
+  ['gpx', 'GPX für BaseCamp'],
+];
+export const MAIL_PARTS = [...REPORT_SECTIONS, ...EXTRA_PARTS];
+const TEXT_KEYS = ['person', 'forces', 'summary', 'notes'];
+export function newMailTo() {
+  return { to: '', person: true, forces: true, summary: true, notes: true, pad: true, photos: true, juh: true, gpx: false };
+}
+// sec: Häkchen einer Zeile (ohne Angabe: alles)
+const want = (sec, k) => !sec || sec[k] !== false;
+export const hasReportText = (sec) => TEXT_KEYS.some((k) => want(sec, k));
+export function mailAddresses(row) {
+  return String(row.to || '').split(/[,;\s]+/).map((x) => x.trim()).filter((x) => x.includes('@'));
 }
 
 const num = (v) => Math.max(0, Math.round(Number(v) || 0));
@@ -68,19 +107,17 @@ export function lineLegend(project) {
 const fmtDate = (t) => new Date(t).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
 
 // Text für die Mail (die Zusammenfassung mit Verfasser, Kräften und Legende)
-export function missionText(project, grid) {
+export function missionText(project, grid, attach = 'Abschlussbericht im Anhang (PDF).', sec = null) {
   const m = project.mission;
   const out = [`Einsatz: ${project.title || 'Suchgebiet'}`];
   if (project.leader) out.push(`Einsatzleitung: ${project.leader}`);
   if (m.author) out.push(`Verfasser: ${m.author}`);
   out.push(`Stand: ${fmtDate(Date.now())}`);
-  if (m.person.trim()) out.push('', 'Vermisste Person:', m.person.trim());
-  if (m.forces.length) out.push('', 'Kräfte:', ...m.forces.map(forceLine), totalLine(m.forces));
-  if (m.summary.trim()) out.push('', 'Zusammenfassung:', m.summary.trim());
-  const lg = lineLegend(project);
-  if (lg.length) out.push('', 'Legende Karte:', ...lg.map((e) => `${e.label} (${colorName(e.color)})`));
+  if (want(sec, 'person') && m.person.trim()) out.push('', 'Vermisste Person:', m.person.trim());
+  if (want(sec, 'forces') && m.forces.length) out.push('', 'Kräfte:', ...m.forces.map(forceLine), totalLine(m.forces));
+  if (want(sec, 'summary') && m.summary.trim()) out.push('', 'Zusammenfassung:', m.summary.trim());
   if (grid) out.push('', `Raster: ${grid.cellM} m Felder, A1 = Nordwest-Ecke.`);
-  out.push('', 'Abschlussbericht mit Karte im Anhang (PDF).');
+  if (attach) out.push('', attach);
   return out.join('\n');
 }
 
@@ -136,13 +173,17 @@ function imageSize(src) {
 
 // Bericht-Seiten für das Abschluss-PDF (vor der Karte). Gibt die Zahl der Seiten zurück.
 // Die erste Seite ist schon angelegt (doc aktuell auf Seite 1).
-export async function addReportPages(doc, project, grid, W, H, margin) {
+// parts: Häkchen (person, forces, summary, notes, pad, photos, legend) – fehlend = drin
+export async function addReportPages(doc, project, grid, W, H, margin, parts = {}) {
   const m = project.mission;
   const x = margin;
   const maxW = W - 2 * margin;
-  let pages = 1;
+  const withText = hasReportText(parts);
+  const withImages = want(parts, 'pad') || want(parts, 'photos');
+  let pages = withText ? 1 : 0;
   let y = margin + 6;
-  const newPage = () => { doc.addPage(); pages++; y = margin + 6; };
+  // Seite 1 ist schon da: die erste Seite nicht neu anlegen
+  const newPage = () => { if (pages) doc.addPage(); pages++; y = margin + 6; };
   const need = (h) => { if (y + h > H - margin) newPage(); };
   const text = (t, size = 10, bold = false, indent = 0) => {
     doc.setFont('helvetica', bold ? 'bold' : 'normal');
@@ -155,63 +196,67 @@ export async function addReportPages(doc, project, grid, W, H, margin) {
   };
   const heading = (t) => { y += 3; need(14); text(t, 12, true); y += 1; };
 
-  text(`Einsatzbericht: ${project.title || 'Suchgebiet'}`, 16, true);
-  y += 1;
-  const meta = [`Stand: ${fmtDate(Date.now())}`];
-  if (project.leader) meta.push(`Einsatzleitung: ${project.leader}`);
-  if (m.author) meta.push(`Verfasser: ${m.author}`);
-  text(meta.join('   ·   '), 9.5);
+  if (withText) {
+    text(`Einsatzbericht: ${project.title || 'Suchgebiet'}`, 16, true);
+    y += 1;
+    const meta = [`Stand: ${fmtDate(Date.now())}`];
+    if (project.leader) meta.push(`Einsatzleitung: ${project.leader}`);
+    if (m.author) meta.push(`Verfasser: ${m.author}`);
+    text(meta.join('   ·   '), 9.5);
 
-  if (m.person.trim()) { heading('Vermisste Person'); text(m.person.trim()); }
+    if (want(parts, 'person') && m.person.trim()) { heading('Vermisste Person'); text(m.person.trim()); }
 
-  if (m.forces.length) {
-    heading('Kräfte');
-    const cols = [['Organisation', 0], ...FORCE_KEYS.map(([, l], i) => [l, 0.5 + i * 0.125])];
-    const row = (vals, bold) => {
-      need(6);
-      doc.setFont('helvetica', bold ? 'bold' : 'normal');
-      doc.setFontSize(10);
-      vals.forEach((v, i) => {
-        const cx = x + cols[i][1] * maxW;
-        if (i) doc.text(String(v), cx + 18, y, { align: 'right' });
-        else doc.text(doc.splitTextToSize(String(v), maxW * 0.48)[0], cx, y);
-      });
-      y += 5.2;
-    };
-    row(cols.map((c) => c[0]), true);
-    doc.setLineWidth(0.2);
-    doc.line(x, y - 3.8, x + maxW, y - 3.8);
-    for (const f of m.forces) row([f.org || '–', ...FORCE_KEYS.map(([k]) => num(f[k]))], false);
-    const t = forceTotals(m.forces);
-    doc.line(x, y - 3.8, x + maxW, y - 3.8);
-    row(['Gesamt', t.lead, t.helpers, t.dogs, t.vehicles], true);
-    text(`${t.people} Einsatzkräfte`, 9.5);
-  }
-
-  if (m.summary.trim()) { heading('Zusammenfassung'); text(m.summary.trim()); }
-  if ((project.notes || '').trim()) { heading('Notizen'); text(project.notes.trim()); }
-
-  const lg = lineLegend(project);
-  if (lg.length) {
-    heading('Legende Karte');
-    for (const e of lg) {
-      need(6);
-      const n = parseInt(e.color.slice(1), 16);
-      doc.setDrawColor((n >> 16) & 255, (n >> 8) & 255, n & 255);
-      doc.setLineWidth(1.2);
-      doc.line(x, y - 1.3, x + 10, y - 1.3);
-      doc.setDrawColor(0);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.text(e.label, x + 14, y);
-      y += 5.5;
+    if (want(parts, 'forces') && m.forces.length) {
+      heading('Kräfte');
+      const cols = [['Organisation', 0], ...FORCE_KEYS.map(([, l], i) => [l, 0.5 + i * 0.125])];
+      const row = (vals, bold) => {
+        need(6);
+        doc.setFont('helvetica', bold ? 'bold' : 'normal');
+        doc.setFontSize(10);
+        vals.forEach((v, i) => {
+          const cx = x + cols[i][1] * maxW;
+          if (i) doc.text(String(v), cx + 18, y, { align: 'right' });
+          else doc.text(doc.splitTextToSize(String(v), maxW * 0.48)[0], cx, y);
+        });
+        y += 5.2;
+      };
+      row(cols.map((c) => c[0]), true);
+      doc.setLineWidth(0.2);
+      doc.line(x, y - 3.8, x + maxW, y - 3.8);
+      for (const f of m.forces) row([f.org || '–', ...FORCE_KEYS.map(([k]) => num(f[k]))], false);
+      const t = forceTotals(m.forces);
+      doc.line(x, y - 3.8, x + maxW, y - 3.8);
+      row(['Gesamt', t.lead, t.helpers, t.dogs, t.vehicles], true);
+      text(`${t.people} Einsatzkräfte`, 9.5);
     }
+
+    if (want(parts, 'summary') && m.summary.trim()) { heading('Zusammenfassung'); text(m.summary.trim()); }
+    if (want(parts, 'notes') && (project.notes || '').trim()) { heading('Notizen'); text(project.notes.trim()); }
+
+    const lg = want(parts, 'legend') ? lineLegend(project) : [];
+    if (lg.length) {
+      heading('Legende Karte');
+      for (const e of lg) {
+        need(6);
+        const n = parseInt(e.color.slice(1), 16);
+        doc.setDrawColor((n >> 16) & 255, (n >> 8) & 255, n & 255);
+        doc.setLineWidth(1.2);
+        doc.line(x, y - 1.3, x + 10, y - 1.3);
+        doc.setDrawColor(0);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text(e.label, x + 14, y);
+        y += 5.5;
+      }
+    }
+
   }
 
   // Handschrift und Fotos: eins pro Seite (Hochformat), zwei nebeneinander (Querformat)
+  if (!withImages) return pages;
   const imgs = [
-    ...m.pages.filter((p) => p.strokes.length).map((p, i) => ({ title: `Notizblock Seite ${i + 1} (${fmtDate(p.t)})`, src: notePageImage(p), ratio: PAGE_RATIO })),
-    ...m.photos.map((p, i) => ({ title: `Foto ${i + 1} (${fmtDate(p.t)})`, src: p.src })),
+    ...(want(parts, 'pad') ? m.pages : []).filter((p) => p.strokes.length).map((p, i) => ({ title: `Notizblock Seite ${i + 1} (${fmtDate(p.t)})`, src: notePageImage(p), ratio: PAGE_RATIO })),
+    ...(want(parts, 'photos') ? m.photos : []).map((p, i) => ({ title: `Foto ${i + 1} (${fmtDate(p.t)})`, src: p.src })),
   ];
   for (const im of imgs) {
     if (!im.ratio) {

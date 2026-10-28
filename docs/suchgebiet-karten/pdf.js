@@ -175,7 +175,8 @@ export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW, extra = {}
   const s = pxPerMm * 0.3;
   const view = { north: mercLat(box.y0), south: mercLat(box.y1), west: mercLon(box.x0), east: mercLon(box.x1) };
   drawOverlay(ctx, toPx, state, {
-    s, width: Wpx, height: Hpx, view, allEdges: true, sheets: sheet.outlines, focus: sheet.focus ? sheet.bounds : null, utm: extra.utm,
+    s, width: Wpx, height: Hpx, view, allEdges: true, sheets: extra.noGrid ? null : sheet.outlines, focus: sheet.focus ? sheet.bounds : null,
+    utm: extra.utm, noGrid: extra.noGrid, areaLabels: extra.areaLabels,
   });
 
   // Maßstab
@@ -389,9 +390,10 @@ export function renderState(project, grid) {
 // opts: { format, orient, overview, view, details, k, info, title, dpi }
 export async function buildPdf(project, grid, opts, layer, viewBounds, onProgress) {
   const { jsPDF } = window.jspdf;
-  const sheets = planSheets(grid, opts, viewBounds);
-  if (!sheets.length) throw new Error('Keine Blätter ausgewählt.');
-  const orient = resolveOrient(opts.orient, sheets);
+  const sheets = opts.noMap ? [] : planSheets(grid, opts, viewBounds);
+  if (!sheets.length && !opts.report) throw new Error('Keine Blätter ausgewählt.');
+  // nur Bericht ohne Karte: Hochformat
+  const orient = sheets.length ? resolveOrient(opts.orient, sheets) : (opts.orient === 'auto' ? 'portrait' : opts.orient);
   const [W, H] = pageSize(opts.format, orient);
   const doc = new jsPDF({ orientation: orient, unit: 'mm', format: opts.format.toLowerCase() });
 
@@ -413,7 +415,7 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
     .map((a) => ({ color: a.mark.color, label: markLabel(a.mark), hatch: a.mark.kind !== 'team' })), ...lineLegend(project)];
 
   // Abschlussbericht: Berichtsseiten vor der Karte
-  const reportPages = opts.report ? await addReportPages(doc, project, grid, W, H, MARGIN) : 0;
+  const reportPages = opts.report ? await addReportPages(doc, project, grid, W, H, MARGIN, opts.report === true ? {} : opts.report) : 0;
   const total = reportPages + sheets.length;
 
   const date = new Date().toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
@@ -440,7 +442,7 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
       continue;
     }
 
-    const r = await renderSheet(rstate, sh, layer, Wpx, Hpx, area.w, { utm: project.showUtm, legend });
+    const r = await renderSheet(rstate, sh, layer, Wpx, Hpx, area.w, { utm: project.showUtm, legend, noGrid: opts.noGrid, areaLabels: opts.areaLabels });
     missing += r.missing;
     if (captionLines.length) {
       doc.setFont('helvetica', 'normal');

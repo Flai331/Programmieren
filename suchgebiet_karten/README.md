@@ -31,7 +31,9 @@ von der einen in die andere übernehmen.
 | **GPS** | Eigener Standort, oben steht das aktuelle Feld (mit UTM-Schalter auch UTMREF) |
 | **Export** | PDF, GPX für Garmin/BaseCamp, Garmin-Karte (KMZ) – jeweils **📤 Teilen** (WhatsApp, Mail, Signal …) oder **💾 Speichern** |
 | Stift / Text / Feld / Track / Radierer | Freihand zeichnen, Punkt mit Text, Felder einem Team zuteilen (antippen oder drüberwischen), Track Punkt für Punkt setzen, löschen |
-| **Einsatz** (📋) | Einsatzprotokoll mit Eckdaten, kein ETB. Reiter **Lage**: vermisste Person, Kräfte je Organisation (Führung, Helfer, Hunde, Fahrzeuge, Summe), Notizen getippt, **Notizblock** für Handschrift mit Stift oder Finger (Seiten, 3 Farben, Rückgängig), **Fotos** vom Papier. Reiter **Einsatzende**: Notizen und Fotos links ansehen, rechts zusammenfassen; Legende für die Stiftfarben auf der Karte; Verfasser; E-Mail-Empfänger. **Abschluss-PDF** mit Bericht, Notizseiten, Fotos und Karte. „Per Mail“: In der Android-App kommen PDF und Empfänger direkt ins Mailprogramm. Im Browser hängt das Teilen-Menü das PDF an, die Empfänger werden in die Zwischenablage kopiert |
+| **Einsatz** (📋) | Einsatzprotokoll mit Eckdaten, kein ETB. Reiter **Lage**: vermisste Person, Kräfte je Organisation (Führung, Helfer, Hunde, Fahrzeuge, Summe), Notizen getippt, **Notizblock** für Handschrift mit Stift oder Finger (Seiten, 3 Farben, Rückgängig), **Fotos** vom Papier. Reiter **Einsatzende**: Notizen und Fotos links ansehen, rechts zusammenfassen; Legende für die Stiftfarben auf der Karte; Verfasser; E-Mail-Empfänger. **Abschlussbericht** (PDF, ohne Karte) mit Bericht, Notizseiten und Fotos; Versand siehe unten. Im Browser hängt das Teilen-Menü die Dateien an, die Empfänger werden in die Zwischenablage kopiert |
+| **Einsatzende – Versand** | Je Empfänger-Zeile ankreuzen, was mitgeht. **Abschlussbericht** (ohne Karte): Vermisste Person, Kräfte, Zusammenfassung, Notizen, Notizblock, Fotos. **Zusätzlich:** JUH-Formular, GPX. „Senden“ öffnet das Mailprogramm mit genau diesen Anhängen, auch der Mailtext enthält nur die angekreuzten Inhalte (Android-App: inkl. Empfänger) |
+| **JUH-Formular** | Vorlage „Einsatzbericht Rettungshundestaffel“ wird mit den vorhandenen Daten vorausgefüllt (Kräfte eigene/fremde, Lage, Verlauf, Besonderheiten, Einsatzleitung …); alle Felder bleiben im PDF ausfüllbar. Bei den Kräften „eigene“ anhaken |
 | Zeichnung benennen | Im Stift-Werkzeug „🏷️ Letzte Zeichnung benennen“ oder eine Zeichnung (auch einen Track) antippen. Der Name steht auf der Karte, im PDF und als Trackname im GPX |
 
 Antippen der Karte im Modus „Bewegen“ zeigt Feld, zugeteiltes Team und ggf. UTMREF.
@@ -123,7 +125,7 @@ Karteninformationen* ein- und ausschalten. Wer die eigene Wanderkarte sehen will
 | Geobasis NRW | Luftbild NRW | dl-de/zero-2-0 – frei, ohne Bedingungen |
 | Photon (komoot) / Nominatim | Adresssuche | Daten ODbL (Namensnennung); öffentliche Server kostenlos bei fairer Nutzung, ohne Garantie. Bei vielen Nutzern eigenen Photon-Server betreiben (freie Software) |
 | Overpass API | Kreuzungssuche | Daten ODbL (Namensnennung); öffentliche Server kostenlos bei fairer Nutzung (unter 10 000 Abfragen am Tag), ohne Garantie |
-| Leaflet, jsPDF | Programmbibliotheken | BSD-2 / MIT – frei, auch kommerziell |
+| Leaflet, jsPDF, pdf-lib | Programmbibliotheken | BSD-2 / MIT – frei, auch kommerziell |
 
 Die Namensnennung steht unten rechts auf der Karte und in der Fußzeile jedes PDFs.
 Bewusst **nicht** verwendet: Google Maps (Export verboten), die Kachelserver von

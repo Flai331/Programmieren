@@ -254,3 +254,16 @@ button, input, select { font: inherit; }
 .padwrap { flex: 1; overflow: auto; display: flex; justify-content: center; padding: 10px; }
 #pad-canvas { background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.25); touch-action: none; }
 @media (min-width: 900px) { #ms-summary { min-height: 52vh; } }
+
+.mailto .mrow { border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin: 6px 0; }
+.mailto .mrow .top { display: flex; gap: 6px; }
+.mailto .mrow .top input { flex: 1; min-width: 0; padding: 8px; border: 1px solid #bbb; border-radius: 8px; }
+.mailto .mrow .top .del { color: var(--red); padding: 6px 10px; }
+.mailto .mrow .parts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0; align-items: center; }
+.mailto .mrow .parts b { flex: 1 1 100%; font-size: 13px; }
+.mailto .mrow .parts label { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 400; font-size: 14px; }
+.mailto .mrow .send { width: 100%; }
+.mailto .mrow .send.done { background: #e8f5e9; border-color: #2e7d32; }
+.forces .force .org small { display: flex; justify-content: space-between; align-items: center; }
+.forces .force .own { display: inline-flex; align-items: center; gap: 4px; margin: 0; font-weight: 400; font-size: 12px; color: var(--fg); }
+.forces .force .own input { width: auto; }
