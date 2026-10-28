@@ -103,6 +103,7 @@ jobs:
             adb shell pidof de.klaas.suchgebiet
             ! grep -qE "FATAL EXCEPTION" /tmp/logcat.txt
             ! grep -E "E SuchgebietJS" /tmp/logcat.txt | grep -q .
+            grep -q "Suchgebiet-Karten bereit (Android-App)" /tmp/logcat.txt
             adb exec-out screencap -p > /tmp/start.png
 
       - name: Screenshot hochladen

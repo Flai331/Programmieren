@@ -925,6 +925,9 @@ if ('serviceWorker' in navigator && location.protocol === 'https:' && !bridge) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
+// Startmeldung (der Emulator-Test der Android-App wartet darauf)
+console.info(`Suchgebiet-Karten bereit (${bridge ? 'Android-App' : 'Browser'})`);
+
 // Für Tests
 window.__app = {
   get P() { return P; }, get grid() { return grid; }, get db() { return db; }, map, setArea, setTool, saveNow,
