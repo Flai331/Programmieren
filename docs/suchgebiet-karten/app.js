@@ -2,7 +2,9 @@ import {
   makeGrid, cellCount, cellAt, cellBounds, cellLabel, parseCell, formatMeters, MAX_CELLS,
 } from './grid.js';
 import { drawOverlay, hitItem } from './render.js';
-import { LAYERS, layerById, tileUrl } from './layers.js';
+import {
+  LAYERS, OVERLAYS, DEFAULT_OVERLAYS, layerById, layerStack, tileUrl,
+} from './layers.js';
 import { buildPdf, planSheets } from './pdf.js';
 import { formatMgrs } from './utm.js';
 import { buildGpx, trackLength, formatLength } from './gpx.js';
@@ -109,18 +111,36 @@ const AppTiles = L.TileLayer.extend({
 });
 
 let baseLayer = null;
+let overlayLayers = [];
 function setLayer(id) {
   const l = layerById(id);
   P.layerId = l.id;
   if (baseLayer) map.removeLayer(baseLayer);
   baseLayer = makeTiles(l, true).addTo(map);
+  updateOverlays();
   renderLayerList();
   save();
 }
 
-function makeTiles(l, cors) {
+function activeOverlays() {
+  return P.overlays || DEFAULT_OVERLAYS;
+}
+
+// Straßen/Wanderwege über Luftbildern. Auf dem Bildschirm ohne CORS-Anfrage, damit sie
+// immer erscheinen; ins PDF kommen sie, wenn der Dienst es erlaubt.
+function updateOverlays() {
+  overlayLayers.forEach((o) => map.removeLayer(o));
+  overlayLayers = [];
+  if (!layerById(P.layerId).aerial) return;
+  OVERLAYS.filter((o) => activeOverlays().includes(o.id)).forEach((o, i) => {
+    overlayLayers.push(makeTiles(o, false, 10 + i).addTo(map));
+  });
+}
+
+function makeTiles(l, cors, zIndex = 1) {
   const layer = new AppTiles('', {
     def: l,
+    zIndex,
     maxNativeZoom: l.maxNative,
     maxZoom: 20,
     attribution: l.attribution,
@@ -668,6 +688,25 @@ function renderLayerList() {
     b.addEventListener('click', () => setLayer(l.id));
     box.appendChild(b);
   }
+  const ovBox = $('overlay-list');
+  ovBox.innerHTML = '';
+  for (const o of OVERLAYS) {
+    const lab = document.createElement('label');
+    lab.className = 'check';
+    lab.innerHTML = '<input type="checkbox"> <span></span>';
+    lab.querySelector('span').textContent = o.name;
+    const cb = lab.querySelector('input');
+    cb.checked = activeOverlays().includes(o.id);
+    cb.addEventListener('change', () => {
+      const set = new Set(activeOverlays());
+      if (cb.checked) set.add(o.id); else set.delete(o.id);
+      P.overlays = OVERLAYS.map((x) => x.id).filter((x) => set.has(x));
+      P.updated = Date.now();
+      updateOverlays();
+      save();
+    });
+    ovBox.appendChild(lab);
+  }
 }
 
 // ---------- GPS ----------
@@ -955,7 +994,7 @@ function mailText(title) {
 
 async function buildPdfFile(progress) {
   const opts = pdfOpts();
-  const res = await buildPdf(P, grid, opts, layerById(P.layerId), viewBounds(), (i, n) => progress(`Seite ${i} von ${n} …`));
+  const res = await buildPdf(P, grid, opts, layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => progress(`Seite ${i} von ${n} …`));
   $('pdf-msg').textContent = `✔ ${res.pages} Seite${res.pages > 1 ? 'n' : ''} (${Math.round(res.blob.size / 1024)} KB)`
     + (res.missing ? ` – ${res.missing} Kartenkacheln fehlen (keine Verbindung oder Karte nicht exportierbar)` : '');
   return {
@@ -1096,7 +1135,7 @@ function updateKmzPlan() {
 ['kmz-area', 'kmz-res'].forEach((id) => $(id).addEventListener('change', updateKmzPlan));
 
 async function buildKmzFile(progress) {
-  const res = await buildCustomMap(P, grid, layerById(P.layerId), kmzBounds(), Number($('kmz-res').value),
+  const res = await buildCustomMap(P, grid, layerStack(P.layerId, activeOverlays()), kmzBounds(), Number($('kmz-res').value),
     (i, n) => progress(`Kachel ${i} von ${n} …`));
   $('kmz-msg').textContent = `✔ ${res.tiles} Kachel${res.tiles > 1 ? 'n' : ''} (${Math.round(res.blob.size / 1024)} KB)`
     + (res.missing ? ` – ${res.missing} Kartenkacheln fehlen (keine Verbindung oder Karte nicht exportierbar)` : '');

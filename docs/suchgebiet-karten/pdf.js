@@ -104,11 +104,11 @@ async function loadAll(urls, limit) {
   return out;
 }
 
-// Rendert ein Kartenblatt; Wpx/Hpx = Canvasgröße, mmW = Breite auf Papier
-export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW, extra = {}) {
-  const box = fitBox(sheet.bounds, Wpx / Hpx, sheet.pad);
+// Zeichnet die Kacheln eines Dienstes in den Ausschnitt box (Mercator-Einheiten).
+// Gibt die Zahl fehlender Kacheln zurück.
+async function drawLayerTiles(ctx, def, box, Wpx, zWanted, maxTiles) {
   const w0 = box.x1 - box.x0;
-  let z = Math.max(0, Math.min(layer.maxNative, Math.ceil(Math.log2(Wpx / w0))));
+  let z = Math.max(0, Math.min(def.maxNative, zWanted));
   const tileRange = (zz) => {
     const n = 2 ** zz / 256;
     return {
@@ -117,20 +117,12 @@ export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW, extra = {}
     };
   };
   let tr = tileRange(z);
-  const maxTiles = extra.maxTiles || MAX_TILES;
   while (z > 0 && (tr.tx1 - tr.tx0 + 1) * (tr.ty1 - tr.ty0 + 1) > maxTiles) tr = tileRange(--z);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = Wpx;
-  canvas.height = Hpx;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#eee';
-  ctx.fillRect(0, 0, Wpx, Hpx);
 
   const k = Wpx / (w0 * 2 ** z); // Canvas-px pro Kachel-px
   const list = [];
   for (let ty = tr.ty0; ty <= tr.ty1; ty++) {
-    for (let tx = tr.tx0; tx <= tr.tx1; tx++) list.push({ tx, ty, url: tileUrl(layer, z, tx, ty) });
+    for (let tx = tr.tx0; tx <= tr.tx1; tx++) list.push({ tx, ty, url: tileUrl(def, z, tx, ty) });
   }
   const imgs = await loadAll(list.map((t) => t.url), 8);
   let missing = 0;
@@ -141,6 +133,30 @@ export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW, extra = {}
     if (img) ctx.drawImage(img, Math.floor(x), Math.floor(y), Math.ceil(256 * k) + 1, Math.ceil(256 * k) + 1);
     else missing++;
   });
+  return { missing, tiles: list.length };
+}
+
+// Rendert ein Kartenblatt; Wpx/Hpx = Canvasgröße, mmW = Breite auf Papier.
+// layer.overlays (z. B. Straßen, Wanderwege) werden über die Grundkarte gelegt.
+export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW, extra = {}) {
+  const box = fitBox(sheet.bounds, Wpx / Hpx, sheet.pad);
+  const w0 = box.x1 - box.x0;
+  const zWanted = Math.ceil(Math.log2(Wpx / w0));
+  const maxTiles = extra.maxTiles || MAX_TILES;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Wpx;
+  canvas.height = Hpx;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#eee';
+  ctx.fillRect(0, 0, Wpx, Hpx);
+
+  const base = await drawLayerTiles(ctx, layer, box, Wpx, zWanted, maxTiles);
+  const { missing } = base;
+  for (const ov of layer.overlays || []) {
+    // fehlende Overlay-Kacheln (z. B. keine Wanderwege) sind normal und zählen nicht
+    await drawLayerTiles(ctx, ov, box, Wpx, zWanted, maxTiles);
+  }
 
   const sx = Wpx / w0;
   const sy = Hpx / (box.y1 - box.y0);
@@ -163,7 +179,7 @@ export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW, extra = {}
     drawNorth(ctx, Wpx, s);
     if (extra.legend && extra.legend.length) drawLegend(ctx, extra.legend, s, Wpx, Hpx, extra.utm);
   }
-  return { canvas, scale, missing, tiles: list.length, box };
+  return { canvas, scale, missing, tiles: base.tiles, box };
 }
 
 function drawScaleBar(ctx, barPx, label, s, H) {
