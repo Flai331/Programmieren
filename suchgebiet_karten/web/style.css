@@ -126,6 +126,11 @@ button, input, select { font: inherit; }
 @media (min-width: 700px) {
   .panel { left: auto; right: 80px; top: 64px; bottom: auto; width: 400px; border-radius: 16px; }
 }
+/* Handy: Fenster lässt rechts die Seitenknöpfe frei – nochmal antippen schließt das Fenster */
+@media (max-width: 699px) {
+  .panel { right: 74px; border-radius: 16px 16px 0 0; }
+  body:has(.panel:not([hidden])) .sidebuttons { z-index: 2100; }
+}
 .panel h2 { margin: 0 0 8px; font-size: 18px; }
 .panel label { display: block; margin: 10px 0 4px; font-size: 14px; font-weight: 600; }
 .panel label.check { font-weight: 400; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
