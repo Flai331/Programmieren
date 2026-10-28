@@ -4,14 +4,14 @@
 
 import { addReportPages, forceLine, lineLegend, totalLine } from './mission.js';
 import {
-  blocks, cellBounds, gridBounds, rangeBounds, rangeLabel, fitBox,
+  blocks, cellBounds, gridBounds, makeGrid, rangeBounds, rangeLabel, fitBox,
   mercLat, mercLon, mercX, mercY, metersPerUnit, niceScale, niceLength, formatMeters,
 } from './grid.js';
 import { drawOverlay, hatchRect } from './render.js';
 import { tileUrl } from './layers.js';
 import { formatMgrs, formatUtm, utmZone } from './utm.js';
 import {
-  assignments, embedMarker, markLabel, resolveFills, teamStatus,
+  allGrids, assignments, embedMarker, gridLabel, markLabel, resolveFills, teamStatus,
 } from './store.js';
 
 export const PAGES = { A4: [297, 210], A3: [420, 297] };
@@ -49,10 +49,11 @@ export function planSheets(grid, opts, viewBounds) {
   const sheets = [];
   const detail = grid && opts.details ? blocks(grid, opts.k || 3) : [];
   const useDetail = detail.length > 1 || (detail.length === 1 && !opts.overview);
-  let page = 1;
+  // pageOffset: Blätter davor (mehrere Rastergebiete in einem PDF)
+  let page = 1 + (opts.pageOffset || 0);
   const overview = grid && opts.overview;
   // Seitenzahlen der Detailblätter vorab berechnen (Übersicht zeigt sie an)
-  const firstDetail = 1 + (overview ? 1 : 0) + (opts.info ? 1 : 0);
+  const firstDetail = page + (overview ? 1 : 0) + (opts.info ? 1 : 0);
   if (overview) {
     sheets.push({
       title: `Übersicht – Felder ${rangeLabel(0, 0, grid.cols - 1, grid.rows - 1)}`,
@@ -375,8 +376,19 @@ export function renderState(project, grid) {
     }
     return out;
   };
+  // weitere Rastergebiete (project.otherGrids) werden mitgezeichnet, alle mit Namen
+  const others = (project.otherGrids || []).map((g) => ({
+    grid: makeGrid(g.area, g.cellM),
+    name: gridLabel(project, g),
+    fills: resolveFills({ ...project, fills: g.fills }),
+    status: resolveFills({ ...project, status: g.status }, 'status'),
+    fillLabels: label(g.fills),
+    statusLabels: label(g.status),
+  }));
   return {
     grid,
+    gridName: others.length && grid ? gridLabel(project, { name: project.gridName }) : '',
+    others,
     fills: resolveFills(project),
     status: resolveFills(project, 'status'),
     markAlpha: project.markAlpha ?? 0.4,
@@ -387,6 +399,33 @@ export function renderState(project, grid) {
   };
 }
 
+// opts.mapTeams / opts.mapStatus === false: Teams bzw. Status (abgesucht …) weglassen
+function filterState(st, opts) {
+  const strip = (x) => Object.assign(x,
+    opts.mapTeams === false ? { fills: {}, fillLabels: {} } : {},
+    opts.mapStatus === false ? { status: {}, statusLabels: {} } : {});
+  strip(st);
+  st.others = (st.others || []).map((o) => strip({ ...o }));
+  return st;
+}
+
+// Mehrere Rastergebiete: je Gebiet Übersicht/Detailblätter (Titel mit Gebietsnamen),
+// Einsatzinfo vorne, Kartenausschnitt hinten. views: [{ project, grid, label }]
+export function planMultiSheets(views, opts, viewBounds) {
+  const sheets = [];
+  if (opts.info) sheets.push({ info: true, title: 'Einsatzinformationen' });
+  for (const v of views) {
+    const part = planSheets(v.grid, { ...opts, info: false, view: false, pageOffset: sheets.length }, null);
+    for (const sh of part) {
+      sh.title = sh.title.replace(' – ', ` – ${v.label}: `);
+      sh.view = v;
+      sheets.push(sh);
+    }
+  }
+  if (opts.view && viewBounds) sheets.push({ title: 'Kartenausschnitt', bounds: viewBounds, pad: 0 });
+  return sheets.some((sh) => !sh.info) ? sheets : sheets.filter((sh) => !sh.info);
+}
+
 // Ausschnitt, auf dem alle markierten Felder, Zeichnungen, Tracks, Texte und der Treffpunkt
 // samt Beschriftung zu sehen sind (null, wenn nichts eingezeichnet ist).
 // aspect/mmW: Seitenverhältnis und Breite der Karte auf Papier, um Beschriftungen
@@ -394,11 +433,11 @@ export function renderState(project, grid) {
 export function contentBounds(state, aspect, mmW, pad = 0.06) {
   const pts = [];
   const labels = [];
-  const g = state.grid;
-  if (g) {
-    for (const k of new Set([...Object.keys(state.fills || {}), ...Object.keys(state.status || {})])) {
+  for (const o of [state, ...(state.others || [])]) {
+    if (!o.grid) continue;
+    for (const k of new Set([...Object.keys(o.fills || {}), ...Object.keys(o.status || {})])) {
       const [c, r] = k.split(',').map(Number);
-      const b = cellBounds(g, c, r);
+      const b = cellBounds(o.grid, c, r);
       pts.push([b.north, b.west], [b.south, b.east]);
     }
   }
@@ -445,13 +484,13 @@ export function contentBounds(state, aspect, mmW, pad = 0.06) {
 // opts: { format, orient, overview, view, details, k, info, title, dpi }
 export async function buildPdf(project, grid, opts, layer, viewBounds, onProgress) {
   const { jsPDF } = window.jspdf;
-  const rstate = renderState(project, grid);
-  // opts.mapTeams / opts.mapStatus === false: Teams bzw. Status (abgesucht …) auf der Karte weglassen
-  if (opts.mapTeams === false) Object.assign(rstate, { fills: {}, fillLabels: {} });
-  if (opts.mapStatus === false) Object.assign(rstate, { status: {}, statusLabels: {} });
+  const rstate = filterState(renderState(project, grid), opts);
   // opts.fitContent: eine Karte, gezoomt auf alles Eingezeichnete
   const fit = !opts.noMap && opts.fitContent ? contentBounds(rstate) : null;
-  const sheets = opts.noMap ? [] : fit ? [{ title: 'Einsatzkarte', bounds: fit, pad: 0.06 }] : planSheets(grid, opts, viewBounds);
+  // opts.views: mehrere Rastergebiete [{ project, grid, label }] (Auswahl im Export)
+  const sheets = opts.noMap ? [] : fit ? [{ title: 'Einsatzkarte', bounds: fit, pad: 0.06 }]
+    : opts.views && opts.views.length ? planMultiSheets(opts.views, opts, viewBounds) : planSheets(grid, opts, viewBounds);
+  for (const sh of sheets) if (sh.view) sh.state = filterState(renderState(sh.view.project, sh.view.grid), opts);
   if (!sheets.length && !opts.report) throw new Error('Keine Blätter ausgewählt.');
   // nur Bericht ohne Karte: Hochformat
   const orient = sheets.length ? resolveOrient(opts.orient, sheets) : (opts.orient === 'auto' ? 'portrait' : opts.orient);
@@ -504,7 +543,7 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
       continue;
     }
 
-    const r = await renderSheet(rstate, sh, layer, Wpx, Hpx, area.w, { utm: project.showUtm, legend, noGrid: opts.noGrid, areaLabels: opts.areaLabels });
+    const r = await renderSheet(sh.state || rstate, sh, layer, Wpx, Hpx, area.w, { utm: project.showUtm, legend, noGrid: opts.noGrid, areaLabels: opts.areaLabels });
     missing += r.missing;
     if (captionLines.length) {
       doc.setFont('helvetica', 'normal');
@@ -517,7 +556,8 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
     doc.rect(area.x, area.y, area.w, area.h);
 
     const info = [`Maßstab ca. 1:${r.scale.toLocaleString('de-DE')} (bei Druck ${opts.format})`];
-    if (grid) info.push(`Raster ${formatMeters(grid.cellM)}, A1 = NW-Ecke`);
+    const g = sh.view ? sh.view.grid : grid;
+    if (g) info.push(`Raster ${formatMeters(g.cellM)}, A1 = NW-Ecke`);
     if (project.meet) {
       const m = project.meet;
       info.push(`TP ${m.text ? m.text + ': ' : ''}${project.showUtm ? formatMgrs(m.lat, m.lon) : `${m.lat.toFixed(5)}, ${m.lon.toFixed(5)}`}`);

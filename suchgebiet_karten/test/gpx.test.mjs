@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cellOutlines, buildGpx, garminColor, trackLength, labelTracks, polygonArea, formatArea, trackDesc, parseGpx } from '../web/gpx.js';
+import { cellOutlines, buildGpx, garminColor, trackLength, labelTracks, polygonArea, formatArea, trackDesc, parseGpx, mergeGpx } from '../web/gpx.js';
 import { CAP, FONT_CHARS, textPath } from '../web/font.js';
 import { makeZip, crc32 } from '../web/zip.js';
 import { planCustomMap, TILE, MAX_TILES } from '../web/kmz.js';
@@ -261,4 +261,21 @@ test('parseGpx: eigener Export wird wieder eingelesen', () => {
   const g = parseGpx(buildGpx(p, null, { tracks: true, drawings: true }));
   const t = g.tracks.find((x) => x.name === 'Waldstück');
   assert.ok(t && t.pts.length === 3 && t.color === '#d50000');
+});
+
+test('mergeGpx: zwei Rastergebiete in einer Datei', () => {
+  const p = newProject('T');
+  p.items.push({ kind: 'text', text: 'TP', lat: 51, lon: 7, color: '#000' });
+  const g1 = makeGrid({ north: 51.01, south: 51, west: 7, east: 7.01 }, 250);
+  const g2 = makeGrid({ north: 51.11, south: 51.1, west: 7.1, east: 7.11 }, 250);
+  const a = buildGpx({ ...p, title: 'T Nord' }, g1, { grid: 'all', cells: 'lines', points: true });
+  const b = buildGpx({ ...p, title: 'T Süd' }, g2, { grid: 'all', cells: 'lines' });
+  const m = mergeGpx([a, b]);
+  const g = parseGpx(m);
+  assert.equal(g.waypoints.length, 1);
+  assert.equal((m.match(/<trk>/g) || []).length, 2);
+  assert.match(m, /Raster T Nord/);
+  assert.match(m, /Raster T Süd/);
+  assert.ok(m.indexOf('<wpt') < m.indexOf('<trk>'));
+  assert.ok(m.trim().endsWith('</gpx>'));
 });

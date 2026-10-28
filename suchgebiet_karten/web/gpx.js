@@ -15,7 +15,7 @@ const GARMIN_COLORS = {
 // Feste Zuordnung für die Farben der App, sonst nächstliegende Garmin-Farbe
 const KNOWN = {
   '#d50000': 'Red', '#1565c0': 'Blue', '#2e7d32': 'Green', '#ef6c00': 'DarkYellow', '#6a1b9a': 'DarkMagenta',
-  '#000000': 'Black', '#fdd835': 'Yellow', '#00838f': 'DarkCyan', '#ad1457': 'Magenta', '#4e342e': 'DarkRed',
+  '#000000': 'Black', '#fdd835': 'Yellow', '#00838f': 'DarkCyan', '#ad1457': 'Magenta', '#f06292': 'Magenta', '#4e342e': 'DarkRed',
   '#558b2f': 'DarkGreen', '#616161': 'DarkGray', '#00c853': 'Green',
 };
 
@@ -261,7 +261,8 @@ function wpt(lat, lon, name, sym, desc = '') {
     + `${desc ? `  <desc>${esc(desc)}</desc>\n` : ''}  <sym>${sym}</sym>\n </wpt>\n`;
 }
 
-// opts: { tracks, drawings, teams, grid: 'outline'|'all'|'none', cells: 'lines'|'all'|'none', points }
+// opts: { tracks, drawings, teams, grid: 'outline'|'all'|'none', cells: 'lines'|'all'|'none', points,
+//         prefix: vor den Feldern in Team-Tracknamen, z. B. „Nord “ bei mehreren Rastergebieten }
 export function buildGpx(project, grid, opts, part = '') {
   const title = project.title || 'Suchgebiet';
   const docName = part ? `${title} – ${part}` : title;
@@ -296,7 +297,7 @@ export function buildGpx(project, grid, opts, part = '') {
       if (it.kind !== 'stroke') continue;
       n++;
       if (it.pts.length < 2) continue;
-      const color = COLOR_DE[garminColor(it.color)] || '';
+      const color = String(it.color).toLowerCase() === '#f06292' ? 'rosa' : COLOR_DE[garminColor(it.color)] || '';
       trks += trk(it.name || `Stift ${n}${color ? ` (${color})` : ''}`, it.color, [it.pts], formatLength(trackLength(it.pts)));
     }
   }
@@ -308,7 +309,7 @@ export function buildGpx(project, grid, opts, part = '') {
       // Ein Track pro zusammenhängendem Bereich: Teilstücke in EINEM Track verbinden
       // BaseCamp und Garmin-Geräte mit (schrägen) Linien. Name mit Feldern, z. B. „abgesucht: D3–E4“.
       for (const part of cellComponents(keys)) {
-        const name = `${markLabel(m)}: ${cellsText(part)}`;
+        const name = `${markLabel(m)}: ${opts.prefix || ''}${cellsText(part)}`;
         cellOutlines(part).forEach((loop, i) => {
           trks += trk(i ? `${name} (Innenrand)` : name, m.color, [loop.map(corner)]);
         });
@@ -402,4 +403,14 @@ export function parseGpx(xml) {
     waypoints.push({ name, lat: p[0], lon: p[1] });
   }
   return { tracks, waypoints, skipped };
+}
+
+// Mehrere GPX-Texte (je Rastergebiet) zu einer Datei: Kopf der ersten, alle Wegpunkte, dann alle Tracks
+// docName: Name der Datei/Liste (ersetzt den ersten <name> im Kopf)
+export function mergeGpx(list, docName = '') {
+  if (list.length < 2) return list[0] || '';
+  let head = list[0].slice(0, list[0].search(/ <wpt\b| <trk>|<\/gpx>/));
+  if (docName) head = head.replace(/<name>[^<]*<\/name>/, `<name>${esc(docName)}</name>`);
+  const all = (re) => list.flatMap((x) => x.match(re) || []).join('');
+  return `${head}${all(/ <wpt\b[\s\S]*?<\/wpt>\n/g)}${all(/ <trk>[\s\S]*?<\/trk>\n/g)}</gpx>\n`;
 }
