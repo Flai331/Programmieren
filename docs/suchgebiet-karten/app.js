@@ -19,7 +19,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v21';
+const APP_VERSION = 'v22';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -960,13 +960,23 @@ $('import-file').addEventListener('change', async () => {
 });
 
 // ---------- Panels ----------
+// Zurück-Taste/-Geste im Browser: schließt Notizblock bzw. Fenster statt die Seite zu verlassen.
+// Solange etwas offen ist, liegt ein zusätzlicher Verlaufseintrag oben.
+function pushOverlay() {
+  if (!(history.state && history.state.overlay)) history.pushState({ overlay: 1 }, '');
+}
+function dropOverlay() {
+  if (history.state && history.state.overlay) history.back();
+}
 function openPanel(id) {
-  closePanels();
+  document.querySelectorAll('.panel').forEach((p) => { p.hidden = true; });
   closeSearch();
   $(id).hidden = false;
+  pushOverlay();
 }
 function closePanels() {
   document.querySelectorAll('.panel').forEach((p) => { p.hidden = true; });
+  if ($('notepad').hidden) dropOverlay();
 }
 document.querySelectorAll('.panel .close').forEach((b) => b.addEventListener('click', closePanels));
 $('btn-projects').addEventListener('click', () => { fillProjectForm(); renderProjects(); openPanel('panel-projects'); });
@@ -1485,6 +1495,7 @@ function padDraw() {
   $('pad-undo').disabled = !page.strokes.length;
 }
 function openPad(i) {
+  pushOverlay();
   if (!M().pages.length) M().pages.push({ t: Date.now(), strokes: [] });
   padIdx = Math.max(0, Math.min(i ?? M().pages.length - 1, M().pages.length - 1));
   $('notepad').hidden = false;
@@ -1498,7 +1509,18 @@ function closePad() {
   touch();
   saveNow();
   renderThumbs();
+  // Fenster darunter noch offen -> Verlaufseintrag behalten, sonst entfernen
+  if (![...document.querySelectorAll('.panel')].some((p) => !p.hidden)) dropOverlay();
 }
+window.addEventListener('popstate', () => {
+  const panelOpen = () => [...document.querySelectorAll('.panel')].some((p) => !p.hidden);
+  if (!$('notepad').hidden) {
+    closePad();
+    if (panelOpen()) pushOverlay(); // Einsatz-Fenster bleibt offen, nächstes Zurück schließt es
+  } else if (panelOpen()) {
+    document.querySelectorAll('.panel').forEach((p) => { p.hidden = true; });
+  }
+});
 $('ms-pad').addEventListener('click', () => openPad());
 $('pad-done').addEventListener('click', closePad);
 $('pad-prev').addEventListener('click', () => { padIdx--; padDraw(); });
