@@ -197,19 +197,27 @@
     <p id="pdf-msg" class="info"></p>
 
     <h2 class="sub">🧭 Garmin: GPX für BaseCamp</h2>
-    <p class="small">Tracks und Wegpunkte, die du in BaseCamp öffnest und von dort an das GPS-Gerät sendest. Sie liegen über jeder Karte auf dem Gerät.</p>
-    <label class="check"><input type="checkbox" id="gpx-tracks" checked> Eigene Tracks</label>
-    <label class="check"><input type="checkbox" id="gpx-teams" checked> Team-Bereiche und Markierungen (Umrisse)</label>
-    <label>Suchgebiet / Raster
+    <p class="small">Zwei Dateien – BaseCamp macht aus jeder Datei eine eigene Liste. Importieren mit <i>Datei → In „Meine Sammlung“ importieren</i>, dann an das Gerät senden. Die Linien liegen über jeder Karte auf dem Gerät.</p>
+
+    <h3 class="gpxhead">1. Raster</h3>
+    <label>Rasterlinien
       <select id="gpx-grid">
-        <option value="outline" selected>Nur Umrandung des Suchgebiets</option>
-        <option value="all">Umrandung und alle Rasterlinien</option>
-        <option value="none">Nichts</option>
+        <option value="all" selected>Umrandung und alle Rasterlinien</option>
+        <option value="outline">Nur Umrandung des Suchgebiets</option>
+        <option value="none">Keine Linien</option>
       </select>
     </label>
-    <label class="check"><input type="checkbox" id="gpx-points" checked> Treffpunkt und Textpunkte als Wegpunkte</label>
-    <label class="check"><input type="checkbox" id="gpx-cells"> Feldnamen als Wegpunkte (A1, B1 …)</label>
+    <label class="check"><input type="checkbox" id="gpx-cells" checked> Feldnamen als Wegpunkte (A1, B1 …)</label>
+    <div class="row">
+      <button id="gpx-grid-share" class="primary">📤 Teilen</button>
+      <button id="gpx-grid-save">💾 Speichern</button>
+    </div>
+
+    <h3 class="gpxhead">2. Markierungen</h3>
+    <label class="check"><input type="checkbox" id="gpx-tracks" checked> Eigene Tracks</label>
     <label class="check"><input type="checkbox" id="gpx-drawings" checked> Stift-Markierungen (als Tracks)</label>
+    <label class="check"><input type="checkbox" id="gpx-teams" checked> Team-Bereiche und Status (Umrisse)</label>
+    <label class="check"><input type="checkbox" id="gpx-points" checked> Treffpunkt und Textpunkte als Wegpunkte</label>
     <div class="row">
       <button id="gpx-share" class="primary">📤 Teilen</button>
       <button id="gpx-save">💾 Speichern</button>

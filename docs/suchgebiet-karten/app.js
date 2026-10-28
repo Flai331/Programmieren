@@ -880,13 +880,15 @@ $('meet-remove').addEventListener('click', () => {
   renderMeet();
 });
 
-function safeName(ext) {
+// withTime=false: nur Datum (kürzer, z. B. als Listenname in BaseCamp)
+function safeName(ext, withTime = true) {
   const umlaut = { ä: 'ae', ö: 'oe', ü: 'ue', Ä: 'Ae', Ö: 'Oe', Ü: 'Ue', ß: 'ss' };
   const t = (P.title.trim() || 'Suchgebiet').replace(/[äöüÄÖÜß]/g, (ch) => umlaut[ch])
     .replace(/[^\w-]+/g, '_').slice(0, 40);
   const d = new Date();
   const pad = (n) => String(n).padStart(2, '0');
-  return `${t}_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${ext}`;
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return withTime ? `${t}_${date}_${pad(d.getHours())}${pad(d.getMinutes())}${ext}` : `${t}_${date}${ext}`;
 }
 
 $('proj-share').addEventListener('click', async () => {
@@ -1105,32 +1107,43 @@ async function shareFile(blob, name, title, text, f = null, allowTxt = false) {
 }
 
 // ---------- Garmin: GPX ----------
-function gpxOpts() {
+// Zwei GPX-Dateien = zwei Listen in BaseCamp: Raster und Markierungen
+function gpxGridOpts() {
+  return { grid: $('gpx-grid').value, cells: $('gpx-cells').checked };
+}
+
+function gpxMarkOpts() {
   return {
     tracks: $('gpx-tracks').checked,
-    teams: $('gpx-teams').checked,
-    grid: $('gpx-grid').value,
-    points: $('gpx-points').checked,
-    cells: $('gpx-cells').checked,
     drawings: $('gpx-drawings').checked,
+    teams: $('gpx-teams').checked,
+    points: $('gpx-points').checked,
   };
 }
 
-async function buildGpxFile() {
-  const gpx = buildGpx(P, grid, gpxOpts());
-  if (!/<(trk|wpt)[ >]/.test(gpx)) {
-    toast('Nichts zum Exportieren – erst einen Track zeichnen oder ein Raster anlegen.');
-    return null;
-  }
-  return {
-    blob: new Blob([gpx], { type: 'application/gpx+xml' }),
-    name: safeName('.gpx'),
-    title: P.title || 'Suchgebiet',
-    text: 'GPX für Garmin: in BaseCamp öffnen (Datei → Importieren) und an das Gerät senden.',
+function gpxBuilder(opts, part, empty) {
+  return async () => {
+    const gpx = buildGpx(P, grid, opts, part);
+    if (!/<(trk|wpt)[ >]/.test(gpx)) {
+      toast(empty);
+      return null;
+    }
+    return {
+      blob: new Blob([gpx], { type: 'application/gpx+xml' }),
+      // Dateiname = Listenname in BaseCamp
+      name: safeName(`_${part}.gpx`, false),
+      title: `${P.title || 'Suchgebiet'} – ${part}`,
+      text: 'GPX für Garmin: in BaseCamp öffnen (Datei → In „Meine Sammlung“ importieren) und an das Gerät senden.',
+    };
   };
 }
-$('gpx-share').addEventListener('click', () => runExport('gpx', $('gpx-share'), exportKey(gpxOpts()), buildGpxFile, 'share'));
-$('gpx-save').addEventListener('click', () => runExport('gpx', $('gpx-save'), exportKey(gpxOpts()), buildGpxFile, 'save'));
+
+const gridGpx = () => gpxBuilder(gpxGridOpts(), 'Raster', 'Kein Raster vorhanden – erst ein Raster anlegen.');
+const markGpx = () => gpxBuilder(gpxMarkOpts(), 'Markierungen', 'Keine Markierungen vorhanden.');
+$('gpx-grid-share').addEventListener('click', () => runExport('gpx-grid', $('gpx-grid-share'), exportKey(gpxGridOpts()), gridGpx(), 'share'));
+$('gpx-grid-save').addEventListener('click', () => runExport('gpx-grid', $('gpx-grid-save'), exportKey(gpxGridOpts()), gridGpx(), 'save'));
+$('gpx-share').addEventListener('click', () => runExport('gpx', $('gpx-share'), exportKey(gpxMarkOpts()), markGpx(), 'share'));
+$('gpx-save').addEventListener('click', () => runExport('gpx', $('gpx-save'), exportKey(gpxMarkOpts()), markGpx(), 'save'));
 
 // ---------- Garmin: Custom Map (KMZ) ----------
 function kmzBounds() {

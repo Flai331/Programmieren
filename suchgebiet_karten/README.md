@@ -72,9 +72,14 @@ mit dem PDF als Anhang. Am PC wird es heruntergeladen und das E-Mail-Programm ge
 **Track zeichnen:** Werkzeug „Track“ → Punkte auf die Karte tippen (Ziehen verschiebt die Karte) →
 „Fertig“ → Namen eingeben. Länge wird angezeigt; Tracks erscheinen auch im PDF.
 
-**GPX (Export → Garmin: GPX):** Tracks, Stift-Markierungen, Team-Bereiche als farbige Umrisse, Raster-Linien,
-Treffpunkt/Textpunkte und optional Feldnamen als Wegpunkte. In BaseCamp über *Datei → Importieren*
-öffnen und an das Gerät senden. GPX-Linien liegen **über deiner Karte auf dem Gerät** (z. B. der Wanderkarte).
+**GPX (Export → Garmin: GPX):** zwei Dateien, BaseCamp macht aus jeder eine eigene Liste:
+1. **…_Raster.gpx** – alle Rasterlinien (als eine durchgehende Linie, ohne Schrägen) und
+   Feldnamen als Wegpunkte (A1, B1 …)
+2. **…_Markierungen.gpx** – eigene Tracks, Stift-Markierungen, Team-/Status-Umrisse,
+   Treffpunkt und Textpunkte
+
+In BaseCamp über *Datei → In „Meine Sammlung“ importieren* öffnen und an das Gerät senden.
+GPX-Linien liegen **über deiner Karte auf dem Gerät** (z. B. der Wanderkarte).
 
 **Garmin-Karte (Export → Garmin: Karte):** Das Kartenbild mit Raster, Teams und Tracks als
 KMZ-Datei („Custom Map“). Per USB in den Ordner **Garmin/CustomMaps** auf dem Gerät kopieren
