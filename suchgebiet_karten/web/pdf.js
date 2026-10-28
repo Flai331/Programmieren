@@ -110,7 +110,9 @@ async function loadAll(urls, limit) {
 // Gibt die Zahl fehlender Kacheln zurück.
 async function drawLayerTiles(ctx, def, box, Wpx, zWanted, maxTiles) {
   const w0 = box.x1 - box.x0;
-  let z = Math.max(0, Math.min(def.maxNative, zWanted));
+  // Große Kacheln (512 px) decken dieselbe Fläche ab wie 256er eine Stufe höher
+  const off = Math.log2((def.tileSize || 256) / 256);
+  let z = Math.max(0, Math.min(def.maxNative, zWanted) - off);
   const tileRange = (zz) => {
     const n = 2 ** zz / 256;
     return {
@@ -245,7 +247,7 @@ function drawLegend(ctx, entries, s, W, H, utm) {
   entries.forEach((e, i) => {
     const cy = y + 5 * s + lineH * (i + 0.5);
     if (e.hatch) {
-      hatchRect(ctx, x + 7 * s, cy - 6 * s, 16 * s, 12 * s, e.color, s * 0.6, true);
+      hatchRect(ctx, x + 7 * s, cy - 6 * s, 16 * s, 12 * s, e.color, s * 0.5, true, 0.8);
     } else {
       ctx.globalAlpha = 0.6;
       ctx.fillStyle = e.color;
@@ -359,6 +361,7 @@ export function renderState(project, grid) {
     grid,
     fills: resolveFills(project),
     status: resolveFills(project, 'status'),
+    markAlpha: project.markAlpha ?? 0.4,
     fillLabels: label(project.fills),
     statusLabels: label(project.status),
     items: project.items,

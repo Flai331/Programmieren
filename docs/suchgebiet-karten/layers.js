@@ -37,6 +37,7 @@ export const LAYERS = [
     name: 'Luftbild Niedersachsen (LGLN, amtlich)',
     wms: 'https://opendata.lgln.niedersachsen.de/doorman/noauth/dop_wms',
     wmsLayer: 'ni_dop20',
+    tileSize: 512, // WMS rechnet jede Kachel einzeln – große Kacheln = viel weniger Anfragen
     maxNative: 19,
     attribution: `Luftbild © LGLN (${YEAR}) CC BY 4.0`,
   },
@@ -46,6 +47,7 @@ export const LAYERS = [
     name: 'Luftbild NRW (Geobasis NRW, amtlich)',
     wms: 'https://www.wms.nrw.de/geobasis/wms_nw_dop',
     wmsLayer: 'nw_dop_rgb',
+    tileSize: 512,
     maxNative: 19,
     attribution: `Luftbild © Geobasis NRW (${YEAR}) dl-de/zero-2-0`,
   },
@@ -91,8 +93,9 @@ export function tileUrl(layer, z, x, y) {
     const minx = -HALF + wx * size;
     const maxy = HALF - y * size;
     const bbox = [minx, maxy - size, minx + size, maxy].map((v) => v.toFixed(2)).join(',');
+    const px = layer.tileSize || 256;
     return `${layer.wms}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${layer.wmsLayer}&STYLES=`
-      + `&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&FORMAT=image/jpeg&BBOX=${bbox}`;
+      + `&CRS=EPSG:3857&WIDTH=${px}&HEIGHT=${px}&FORMAT=image/jpeg&BBOX=${bbox}`;
   }
   const sub = layer.subdomains ? layer.subdomains[Math.abs(wx + y) % layer.subdomains.length] : '';
   return layer.url
