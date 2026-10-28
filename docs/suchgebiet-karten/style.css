@@ -196,3 +196,5 @@ button, input, select { font: inherit; }
 .blend-multiply { mix-blend-mode: multiply; }
 
 .panel h3.gpxhead { margin: 14px 0 2px; font-size: 15px; }
+
+.version { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 6px; }
