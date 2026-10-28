@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.provider.DocumentsContract
 import android.util.Base64
 import android.util.Log
 import android.webkit.ConsoleMessage
@@ -25,6 +26,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.webkit.WebViewAssetLoader
+import org.json.JSONArray
 import java.io.File
 
 // Die App ist eine Hülle um die Web-App (assets = suchgebiet_karten/web).
@@ -70,6 +72,34 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.e("Suchgebiet", "Speichern fehlgeschlagen", e)
             toast("Speichern fehlgeschlagen: ${e.message}")
+        }
+    }
+
+    // „Alles speichern“: einmal einen Ordner wählen, alle Dateien landen dort
+    private var pendingFiles: List<Triple<String, String, ByteArray>>? = null
+    private val pickDir = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        val files = pendingFiles
+        pendingFiles = null
+        if (tree == null || files == null) return@registerForActivityResult
+        try {
+            val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+            for ((name, _, bytes) in files) {
+                // octet-stream: Dateiname (mit .gpx) bleibt unverändert
+                val doc = DocumentsContract.createDocument(contentResolver, parent, "application/octet-stream", name) ?: continue
+                contentResolver.openOutputStream(doc)?.use { it.write(bytes) }
+            }
+            toast("${files.size} Dateien gespeichert")
+        } catch (e: Exception) {
+            Log.e("Suchgebiet", "Speichern fehlgeschlagen", e)
+            toast("Speichern fehlgeschlagen: ${e.message}")
+        }
+    }
+
+    private fun parseFiles(json: String): List<Triple<String, String, ByteArray>> {
+        val arr = JSONArray(json)
+        return (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            Triple(o.getString("name"), o.optString("mime"), Base64.decode(o.getString("b64"), Base64.DEFAULT))
         }
     }
 
@@ -177,6 +207,42 @@ class MainActivity : ComponentActivity() {
     }
 
     inner class Bridge {
+        // Mehrere Dateien in einen frei wählbaren Ordner speichern (JSON: [{b64, name, mime}])
+        @JavascriptInterface
+        fun saveFiles(json: String) {
+            val files = try { parseFiles(json) } catch (e: Exception) { toast("Speichern fehlgeschlagen"); return }
+            runOnUiThread {
+                pendingFiles = files
+                pickDir.launch(null)
+            }
+        }
+
+        // Mehrere Dateien in einem Teilen-Dialog senden
+        @JavascriptInterface
+        fun shareFiles(json: String, title: String, text: String) {
+            try {
+                val dir = File(cacheDir, "shared").apply { mkdirs() }
+                dir.listFiles()?.forEach { it.delete() }
+                val uris = ArrayList<Uri>()
+                for ((name, _, bytes) in parseFiles(json)) {
+                    val file = File(dir, name.replace(Regex("[^A-Za-z0-9._-]"), "_"))
+                    file.writeBytes(bytes)
+                    uris.add(FileProvider.getUriForFile(this@MainActivity, "$packageName.files", file))
+                }
+                val send = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                    type = "*/*"
+                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                    putExtra(Intent.EXTRA_SUBJECT, title)
+                    putExtra(Intent.EXTRA_TEXT, text)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                runOnUiThread { startActivity(Intent.createChooser(send, "Senden an …")) }
+            } catch (e: Exception) {
+                Log.e("Suchgebiet", "Teilen fehlgeschlagen", e)
+                toast("Teilen fehlgeschlagen: ${e.message}")
+            }
+        }
+
         // Wird aus app.js aufgerufen: Datei (Base64) an einem frei wählbaren Ort speichern
         @JavascriptInterface
         fun saveFile(base64: String, name: String, mime: String) {
