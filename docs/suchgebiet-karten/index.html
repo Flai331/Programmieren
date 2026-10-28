@@ -213,7 +213,13 @@
         <option value="none">Keine Linien</option>
       </select>
     </label>
-    <label class="check"><input type="checkbox" id="gpx-cells" checked> Feldnamen als Wegpunkte (A1, B1 …)</label>
+    <label>Beschriftung
+      <select id="gpx-cells">
+        <option value="edge" selected>Am Rand: A, B, C … oben, 1, 2, 3 … links (wenige Punkte)</option>
+        <option value="all">In jedem Feld: A1, B1 … (viele Punkte)</option>
+        <option value="none">Keine</option>
+      </select>
+    </label>
     <div class="row">
       <button id="gpx-grid-share" class="primary">📤 Teilen</button>
       <button id="gpx-grid-save">💾 Speichern</button>
