@@ -1,8 +1,9 @@
 // GPX-Export für Garmin-Geräte und BaseCamp: Tracks, Team-Bereiche, Raster, Wegpunkte.
 // Farben über die Garmin-Erweiterung (gpxx:DisplayColor), die BaseCamp und die Geräte anzeigen.
 
-import { cellLabel, colName, gridBounds } from './grid.js';
+import { cellLabel, gridBounds } from './grid.js';
 import { markLabel, mapFor, cellsText } from './store.js';
+import { CAP, textPath } from './font.js';
 
 const GARMIN_COLORS = {
   Black: [0, 0, 0], DarkRed: [139, 0, 0], DarkGreen: [0, 100, 0], DarkYellow: [139, 139, 0],
@@ -150,6 +151,45 @@ export function gridPath(grid) {
   return pts;
 }
 
+// Feldnamen als Linienschrift: unten links in jedem Feld, auf der unteren Rasterlinie stehend.
+// Zeile für Zeile im Zickzack; alle Wege zwischen den Namen laufen auf Rasterlinien, darum
+// reicht ein Track für alle Felder. Höchstens maxPts Punkte je Track (viele Garmin-Geräte
+// nehmen 10 000 Punkte pro Track), bei sehr großen Rastern mehrere Tracks nach Zeilen.
+export function labelTracks(grid, maxPts = 9000) {
+  const texts = [];
+  let maxW = 0;
+  for (let r = 0; r < grid.rows; r++) {
+    texts.push([]);
+    for (let c = 0; c < grid.cols; c++) {
+      const t = textPath(cellLabel(c, r));
+      texts[r].push(t);
+      maxW = Math.max(maxW, t.width);
+    }
+  }
+  // Schrifthöhe 1/4 Feld, lange Namen kleiner (höchstens 80 % der Feldbreite)
+  const u = Math.min(0.25 / CAP, 0.8 / maxW);
+  const ll = ([x, y]) => [grid.originLat - y * grid.dLat, grid.originLon + x * grid.dLon];
+  const tracks = [];
+  let cur = null;
+  for (let r = 0; r < grid.rows; r++) {
+    const y = r + 1; // untere Rasterlinie der Zeile (in Feldern von oben)
+    const row = [[0, y]];
+    texts[r].forEach((t, c) => {
+      for (const [gx, gy] of t.pts) row.push([c + 0.12 + gx * u, y - gy * u]);
+    });
+    row.push([grid.cols, y]);
+    if (!cur || (cur.pts.length && cur.pts.length + row.length > maxPts)) {
+      cur = { rows: [r, r], pts: [] };
+      tracks.push(cur);
+    }
+    // jede zweite Zeile rückwärts: Übergang am Rand entlang
+    if ((r - cur.rows[0]) % 2) row.reverse();
+    cur.pts.push(...row.map(ll));
+    cur.rows[1] = r;
+  }
+  return tracks;
+}
+
 function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -170,7 +210,7 @@ function wpt(lat, lon, name, sym, desc = '') {
     + `${desc ? `  <desc>${esc(desc)}</desc>\n` : ''}  <sym>${sym}</sym>\n </wpt>\n`;
 }
 
-// opts: { tracks, drawings, teams, grid: 'outline'|'all'|'none', cells, points }
+// opts: { tracks, drawings, teams, grid: 'outline'|'all'|'none', cells: 'lines'|'all'|'none', points }
 export function buildGpx(project, grid, opts, part = '') {
   const title = project.title || 'Suchgebiet';
   const docName = part ? `${title} – ${part}` : title;
@@ -184,18 +224,9 @@ export function buildGpx(project, grid, opts, part = '') {
       if (it.kind === 'text') wpts += wpt(it.lat, it.lon, it.text, 'Pin, Red');
     }
   }
-  // opts.cells: 'edge' = Buchstaben oben, Zahlen links (wenige Punkte, wie am Kartenrand),
+  // opts.cells: 'lines' = Feldnamen als Linienschrift (ein Track, siehe unten),
   // 'all' (oder true) = ein Wegpunkt je Feld, sonst keine
-  if (opts.cells === 'edge' && grid) {
-    const above = grid.originLat + grid.dLat * 0.3;
-    const left = grid.originLon - grid.dLon * 0.3;
-    for (let c = 0; c < grid.cols; c++) {
-      wpts += wpt(above, grid.originLon + (c + 0.5) * grid.dLon, colName(c), 'Navaid, Red', `Rasterspalte ${colName(c)}`);
-    }
-    for (let r = 0; r < grid.rows; r++) {
-      wpts += wpt(grid.originLat - (r + 0.5) * grid.dLat, left, String(r + 1), 'Navaid, Red', `Rasterzeile ${r + 1}`);
-    }
-  } else if (opts.cells && opts.cells !== 'none' && grid) {
+  if (opts.cells && opts.cells !== 'none' && opts.cells !== 'lines' && grid) {
     for (let r = 0; r < grid.rows; r++) {
       for (let c = 0; c < grid.cols; c++) {
         wpts += wpt(grid.originLat - (r + 0.5) * grid.dLat, grid.originLon + (c + 0.5) * grid.dLon, cellLabel(c, r), 'Waypoint', `Feld ${cellLabel(c, r)}`);
@@ -239,6 +270,13 @@ export function buildGpx(project, grid, opts, part = '') {
       trks += trk(`Suchgebiet ${title}`, '#d50000', [ring], desc);
     } else {
       trks += trk(`Raster ${title}`, '#d50000', [gridPath(grid)], desc);
+    }
+  }
+  if (opts.cells === 'lines' && grid) {
+    const parts = labelTracks(grid);
+    for (const t of parts) {
+      const rows = parts.length > 1 ? ` (Zeilen ${t.rows[0] + 1}–${t.rows[1] + 1})` : '';
+      trks += trk(`Feldnamen ${title}${rows}`, '#d50000', [t.pts], 'Feldnamen A1, B1 … als Linienschrift, unten links in jedem Feld');
     }
   }
 

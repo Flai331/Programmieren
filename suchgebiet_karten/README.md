@@ -23,7 +23,7 @@ von der einen in die andere übernehmen.
 
 | Knopf | Funktion |
 |---|---|
-| **Suchfeld (oben)** | Adresse, Ort, Straße suchen (OpenStreetMap), außerdem Feldnamen („C4“) und Koordinaten („50.12, 8.61“) |
+| **Suchfeld (oben)** | Adresse, Ort, Straße suchen (OpenStreetMap), **Kreuzungen** („Hauptstraße Ecke Bahnhofstraße, Celle“ oder „Hauptstr./Bahnhofstr.“), außerdem Feldnamen („C4“) und Koordinaten („50.12, 8.61“) |
 | **Gebiete** | Name des Einsatzes, mehrere Suchgebiete speichern, wechseln, kopieren, löschen · Einsatzleitung, Notizen, Treffpunkt · Suchgebiet als Datei senden / Datei öffnen |
 | **Raster** | Feldgröße (25 m – 1 km), Suchgebiet aufziehen oder Ausschnitt nehmen, Feld suchen („C4“), **UTM-Schalter** |
 | **Teams** | Teams (Name, Hund, Farbe) und Status („abgesucht“, „nicht begehbar“ …) anlegen. Ein Feld behält sein Team; der Status liegt zusätzlich schraffiert darüber |
@@ -74,8 +74,9 @@ mit dem PDF als Anhang. Am PC wird es heruntergeladen und das E-Mail-Programm ge
 
 **GPX (Export → Garmin: GPX):** zwei Dateien, BaseCamp macht aus jeder eine eigene Liste:
 1. **…_Raster.gpx** – alle Rasterlinien (als eine durchgehende Linie, ohne Schrägen) und die
-   Beschriftung als Wegpunkte: am Rand (A, B … oben, 1, 2 … links – Voreinstellung, wenige
-   Listeneinträge), in jedem Feld (A1, B1 …) oder keine
+   Feldnamen: als **Linienschrift** unten links in jedem Feld (Voreinstellung – alle Namen
+   zusammen sind nur *ein* Eintrag „Feldnamen …“ in der Liste), als Wegpunkte (ein Eintrag pro
+   Feld) oder keine
 2. **…_Markierungen.gpx** – eigene Tracks, Stift-Markierungen, Team-/Status-Umrisse,
    Treffpunkt und Textpunkte
 
@@ -107,7 +108,8 @@ Karteninformationen* ein- und ausschalten. Wer die eigene Wanderkarte sehen will
 - Bereits angesehene Kartenkacheln werden zwischengespeichert und sind bei
   schlechtem Empfang verfügbar.
 - Google Maps ist nicht enthalten: Die Nutzungsbedingungen verbieten das
-  Abfotografieren/Exportieren der Karten. Luftbilder kommen stattdessen von Esri.
+  Abfotografieren/Exportieren der Karten. Luftbilder kommen von den Landesvermessungen
+  (Niedersachsen, NRW).
 
 ## Lizenzen (auch bei Verkauf der App kostenlos)
 
@@ -118,6 +120,7 @@ Karteninformationen* ein- und ausschalten. Wer die eigene Wanderkarte sehen will
 | LGLN Niedersachsen | Luftbild Niedersachsen | CC BY 4.0 – frei, auch kommerziell, mit Namensnennung |
 | Geobasis NRW | Luftbild NRW | dl-de/zero-2-0 – frei, ohne Bedingungen |
 | Photon (komoot) / Nominatim | Adresssuche | Daten ODbL (Namensnennung); öffentliche Server kostenlos bei fairer Nutzung, ohne Garantie. Bei vielen Nutzern eigenen Photon-Server betreiben (freie Software) |
+| Overpass API | Kreuzungssuche | Daten ODbL (Namensnennung); öffentliche Server kostenlos bei fairer Nutzung (unter 10 000 Abfragen am Tag), ohne Garantie |
 | Leaflet, jsPDF | Programmbibliotheken | BSD-2 / MIT – frei, auch kommerziell |
 
 Die Namensnennung steht unten rechts auf der Karte und in der Fußzeile jedes PDFs.

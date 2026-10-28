@@ -9,14 +9,14 @@ import { buildPdf, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
 import { buildGpx, trackLength, formatLength } from './gpx.js';
 import { buildCustomMap, planCustomMap } from './kmz.js';
-import { parseQuery, searchAddress, suggestPlaces } from './search.js';
+import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
   newProject, normalizeProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
   exportProject, importProject, uid, TEAM_COLORS,
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v18';
+const APP_VERSION = 'v19';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -1328,6 +1328,49 @@ const asResult = (r) => ({ ...r, go: () => goToPlace(r) });
 let suggestTimer = null;
 let suggestAbort = null;
 
+// Kreuzung („Hauptstraße Ecke Bahnhofstraße, Celle“): erst auf Enter/Antippen suchen,
+// die Overpass API ist für Abfragen bei jedem Tastendruck zu schwer
+const cornerEntry = (q) => ({
+  name: `Kreuzung suchen: ${q.a} / ${q.b}`,
+  sub: q.place ? `in ${q.place}` : 'rund 10 km um die Kartenmitte – oder Ort mit Komma anhängen',
+  go: () => findCorner(q),
+});
+
+async function findCorner(q) {
+  if (suggestAbort) suggestAbort.abort();
+  suggestAbort = new AbortController();
+  const { signal } = suggestAbort;
+  showResults([], `Suche Kreuzung ${q.a} / ${q.b} …`);
+  const c = map.getCenter();
+  try {
+    let ref = { lat: c.lat, lon: c.lng };
+    let bounds = null;
+    if (q.place) {
+      const places = await suggestPlaces(q.place, ref, signal);
+      if (!places.length) { showResults([], `Ort „${q.place}“ nicht gefunden.`); return; }
+      ref = { lat: places[0].lat, lon: places[0].lon };
+      bounds = places[0].bounds;
+    }
+    const list = await searchCorner(q.a, q.b, cornerBox(ref, bounds), ref, signal);
+    if (signal.aborted) return;
+    if (!list.length) {
+      showResults([], `Keine Kreuzung ${q.a} / ${q.b} gefunden${q.place ? ` in ${q.place}` : ' im Umkreis von 10 km'}. `
+        + `Tipp: Straßennamen prüfen${q.place ? '' : ' oder den Ort mit Komma anhängen, z. B. „…, Celle“'}.`);
+      return;
+    }
+    if (list.length === 1) {
+      goToPlace(list[0]);
+      toast(`${list[0].name} – ${list[0].sub}`);
+      return;
+    }
+    showResults(list.map(asResult), 'Kreuzungen: © OpenStreetMap-Mitwirkende (Overpass API)');
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    const msg = err.message.startsWith('Kreuzungssuche') ? err.message : `Kreuzungssuche fehlgeschlagen: ${err.message}`;
+    showResults([], navigator.onLine === false ? 'Keine Internetverbindung – Kreuzungssuche nicht möglich.' : msg);
+  }
+}
+
 async function updateSuggestions(immediate = false) {
   clearTimeout(suggestTimer);
   if (suggestAbort) suggestAbort.abort();
@@ -1336,6 +1379,11 @@ async function updateSuggestions(immediate = false) {
   if (!q) { closeSearch(); return; }
   const local = localResult(q);
   if (local) { showResults([local]); return; }
+  if (q.type === 'corner') {
+    if (immediate) await findCorner(q);
+    else showResults([cornerEntry(q)]);
+    return;
+  }
   if (q.type !== 'address' || text.length < 3) { closeSearch(); return; }
   const run = async () => {
     suggestAbort = new AbortController();
