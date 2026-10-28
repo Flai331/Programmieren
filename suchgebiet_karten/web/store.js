@@ -27,7 +27,7 @@ export function newProject(title = '') {
     caption: '', // Beschriftung auf dem PDF-Blatt
     created: now,
     updated: now,
-    layerId: 'osm',
+    layerId: 'topplus',
     cellM: 100,
     area: null,
     fills: {}, // "c,r" -> Team-ID (bleibt, auch wenn das Feld abgesucht ist)
@@ -64,7 +64,7 @@ export function normalizeProject(p) {
 export function migrateV1(old) {
   const p = newProject(old.title || '');
   Object.assign(p, {
-    layerId: old.layerId || 'osm',
+    layerId: old.layerId || 'topplus',
     cellM: old.cellM || 100,
     area: old.area || null,
     items: old.items || [],
