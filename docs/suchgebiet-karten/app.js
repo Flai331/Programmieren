@@ -15,6 +15,8 @@ import {
   exportProject, importProject, uid, TEAM_COLORS,
 } from './store.js';
 
+// Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
+const APP_VERSION = 'v14';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -933,6 +935,7 @@ $('btn-projects').addEventListener('click', () => { fillProjectForm(); renderPro
 $('btn-grid').addEventListener('click', () => { updateGridInfo(); openPanel('panel-grid'); });
 $('btn-teams').addEventListener('click', () => { renderMarks(); renderAlpha(); openPanel('panel-teams'); });
 $('btn-layers').addEventListener('click', () => openPanel('panel-layers'));
+$('app-version').textContent = `Version ${APP_VERSION}`;
 $('btn-pdf').addEventListener('click', () => {
   $('pdf-caption').value = P.caption || '';
   updatePdfPlan();
