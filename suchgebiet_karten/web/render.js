@@ -58,8 +58,8 @@ function dimOutside(ctx, toPx, b, W, H) {
 }
 
 // Rand innen im Feld, mit weißer Kontur (auf Luftbildern gut sichtbar)
-export function outlineRect(ctx, x, y, w, h, color, s, width = 3) {
-  const inset = (width / 2 + 1.5) * s;
+export function outlineRect(ctx, x, y, w, h, color, s, width = 3, extraInset = 0) {
+  const inset = (width / 2 + 1.5 + extraInset) * s;
   ctx.lineWidth = (width + 2.5) * s;
   ctx.strokeStyle = 'rgba(255,255,255,0.9)';
   ctx.strokeRect(x + inset, y + inset, w - 2 * inset, h - 2 * inset);
@@ -69,18 +69,18 @@ export function outlineRect(ctx, x, y, w, h, color, s, width = 3) {
 }
 
 // Schraffur (diagonal) mit weißer Kontur und Rand; ohne Team zusätzlich leicht flächig gefüllt
-export function hatchRect(ctx, x, y, w, h, color, s, tint) {
+// a = Deckkraft 0..1 (Regler „Deckkraft der Markierungen“); der Rand bleibt immer kräftig
+export function hatchRect(ctx, x, y, w, h, color, s, tint, a = 0.4) {
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, y, w, h);
   ctx.clip();
   if (tint) {
-    ctx.globalAlpha = 0.25;
+    ctx.globalAlpha = 0.25 * a;
     ctx.fillStyle = color;
     ctx.fillRect(x, y, w, h);
-    ctx.globalAlpha = 1;
   }
-  const step = Math.max(6, 11 * s);
+  const step = Math.max(6, 16 * s);
   const lines = () => {
     ctx.beginPath();
     for (let d = -h; d < w; d += step) {
@@ -89,13 +89,17 @@ export function hatchRect(ctx, x, y, w, h, color, s, tint) {
     }
     ctx.stroke();
   };
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-  ctx.lineWidth = 4.5 * s;
+  ctx.globalAlpha = Math.min(1, 0.2 + 0.6 * a);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 3.2 * s;
   lines();
+  ctx.globalAlpha = Math.min(1, 0.3 + a);
   ctx.strokeStyle = color;
-  ctx.lineWidth = 2.5 * s;
+  ctx.lineWidth = 1.8 * s;
   lines();
-  outlineRect(ctx, x, y, w, h, color, s, 3.5);
+  ctx.globalAlpha = 1;
+  // innerhalb des Teamrands, damit beide Ränder sichtbar bleiben
+  outlineRect(ctx, x, y, w, h, color, s, 3, tint ? 0 : 4.5);
   ctx.restore();
 }
 
@@ -121,7 +125,7 @@ function drawGrid(ctx, toPx, state, grid, opt, s) {
     const b = cellBounds(grid, c, r);
     const [x0, y0] = toPx(b.north, b.west);
     const [x1, y1] = toPx(b.south, b.east);
-    ctx.globalAlpha = 0.45;
+    ctx.globalAlpha = 0.5 * (state.markAlpha ?? 0.4);
     ctx.fillStyle = color;
     ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
     ctx.globalAlpha = 1;
@@ -136,7 +140,7 @@ function drawGrid(ctx, toPx, state, grid, opt, s) {
     const b = cellBounds(grid, c, r);
     const [x0, y0] = toPx(b.north, b.west);
     const [x1, y1] = toPx(b.south, b.east);
-    hatchRect(ctx, x0, y0, x1 - x0, y1 - y0, color, s, !(state.fills && state.fills[key]));
+    hatchRect(ctx, x0, y0, x1 - x0, y1 - y0, color, s, !(state.fills && state.fills[key]), state.markAlpha ?? 0.4);
   }
 
   // Team-Name in der Feldmitte, Status darunter – wenn genug Platz

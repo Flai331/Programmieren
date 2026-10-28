@@ -71,3 +71,11 @@ test('Garmin-Karte hält die Kachelgrenze ein', () => {
   assert.ok(huge.tiles <= MAX_TILES && huge.W <= 6144 && huge.mPerPx > 1);
   assert.equal(TILE, 1024);
 });
+
+test('WMS-Kacheln mit 512 px decken dieselbe Fläche ab', async () => {
+  const { tileUrl, layerById } = await import('../web/layers.js');
+  const ni = layerById('dop-ni');
+  const u = tileUrl(ni, 1, 0, 0);
+  assert.match(u, /WIDTH=512&HEIGHT=512/);
+  assert.match(u, /BBOX=-20037508\.34,0\.00,0\.00,20037508\.34/);
+});

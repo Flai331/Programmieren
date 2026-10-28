@@ -106,7 +106,8 @@ L.control.zoom({ position: 'bottomright' }).addTo(map);
 // Eine Kachelschicht für alle Dienste (auch WMS), dieselben URLs wie im PDF
 const AppTiles = L.TileLayer.extend({
   getTileUrl(coords) {
-    return tileUrl(this.options.def, coords.z, coords.x, coords.y);
+    // _getZoomForUrl berücksichtigt zoomOffset (512er-Kacheln)
+    return tileUrl(this.options.def, this._getZoomForUrl(), coords.x, coords.y);
   },
 });
 
@@ -148,6 +149,13 @@ function makeTiles(l, cors, zIndex = 1) {
     maxNativeZoom: l.maxNative,
     maxZoom: 20,
     attribution: l.attribution,
+    // 512er-Kacheln (WMS): eine Zoomstufe versetzt, damit sie dieselbe Fläche wie 256er abdecken
+    tileSize: l.tileSize || 256,
+    zoomOffset: -Math.log2((l.tileSize || 256) / 256),
+    // WMS rechnet langsam: erst nachladen, wenn Zoomen/Verschieben vorbei ist
+    updateWhenZooming: !l.wms,
+    updateWhenIdle: !!l.wms,
+    keepBuffer: l.wms ? 1 : 2,
     crossOrigin: cors ? 'anonymous' : undefined, // nötig, damit die Kacheln ins PDF dürfen
   });
   if (cors) {
@@ -580,6 +588,20 @@ function renderMarks() {
   }
 }
 $('team-add').addEventListener('click', () => addMark('team'));
+
+// Deckkraft: wie stark Team-Farbe und Schraffur die Karte überdecken (Rand bleibt kräftig)
+function renderAlpha() {
+  const v = Math.round((P.markAlpha ?? 0.4) * 100);
+  $('mark-alpha').value = String(v);
+  $('mark-alpha-val').textContent = `${v} %`;
+}
+$('mark-alpha').addEventListener('input', () => {
+  P.markAlpha = Number($('mark-alpha').value) / 100;
+  P.updated = Date.now();
+  renderAlpha();
+  redraw();
+  save();
+});
 $('mark-add').addEventListener('click', () => addMark('status'));
 
 // ---------- Raster ----------
@@ -907,7 +929,7 @@ function closePanels() {
 document.querySelectorAll('.panel .close').forEach((b) => b.addEventListener('click', closePanels));
 $('btn-projects').addEventListener('click', () => { fillProjectForm(); renderProjects(); openPanel('panel-projects'); });
 $('btn-grid').addEventListener('click', () => { updateGridInfo(); openPanel('panel-grid'); });
-$('btn-teams').addEventListener('click', () => { renderMarks(); openPanel('panel-teams'); });
+$('btn-teams').addEventListener('click', () => { renderMarks(); renderAlpha(); openPanel('panel-teams'); });
 $('btn-layers').addEventListener('click', () => openPanel('panel-layers'));
 $('btn-pdf').addEventListener('click', () => {
   $('pdf-caption').value = P.caption || '';
