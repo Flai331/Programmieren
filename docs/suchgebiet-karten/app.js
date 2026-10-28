@@ -19,7 +19,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v23';
+const APP_VERSION = 'v24';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -1415,12 +1415,81 @@ function renderViewer() {
     box.appendChild(pre);
   } else {
     const img = document.createElement('img');
-    img.src = s.page ? notePageImage(s.page) : s.src;
+    img.src = s.page ? notePageImage(s.page, 2000) : s.src; // Seiten scharf genug zum Zoomen
+    img.draggable = false;
     box.appendChild(img);
   }
+  setZoom(1);
 }
 $('ms-prev').addEventListener('click', () => { viewIdx--; renderViewer(); });
 $('ms-next').addEventListener('click', () => { viewIdx++; renderViewer(); });
+
+// Zoomen: Knöpfe, Zwei-Finger-Geste, Doppeltippen, Strg+Mausrad. Verschieben = Scrollen.
+let zoom = 1;
+function setZoom(z, cx, cy) {
+  const box = $('ms-view');
+  const img = box.querySelector('img');
+  const old = zoom;
+  zoom = Math.max(1, Math.min(6, z));
+  $('ms-zoom-fit').textContent = `${Math.round(zoom * 100)} %`;
+  if (!img) return;
+  // Punkt unter Finger/Maus (cx, cy relativ zur Box) bleibt an seiner Stelle
+  const r = box.getBoundingClientRect();
+  const px = cx ?? r.width / 2;
+  const py = cy ?? r.height / 2;
+  const ix = (box.scrollLeft + px) / old;
+  const iy = (box.scrollTop + py) / old;
+  img.style.width = `${zoom * 100}%`;
+  box.scrollLeft = ix * zoom - px;
+  box.scrollTop = iy * zoom - py;
+}
+$('ms-zoom-in').addEventListener('click', () => setZoom(zoom * 1.5));
+$('ms-zoom-out').addEventListener('click', () => setZoom(zoom / 1.5));
+$('ms-zoom-fit').addEventListener('click', () => setZoom(1));
+$('ms-zoom-full').addEventListener('click', () => {
+  const v = document.querySelector('#panel-mission .viewer');
+  const full = v.classList.toggle('full');
+  $('ms-zoom-full').textContent = full ? '✕ Schließen' : '⛶ Vollbild';
+  setZoom(zoom);
+});
+{
+  const box = $('ms-view');
+  const pts = new Map();
+  let pinch = null;
+  let lastTap = 0;
+  const local = (e) => { const r = box.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  box.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') return;
+    pts.set(e.pointerId, local(e));
+    if (pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, z: zoom };
+    } else if (pts.size === 1) {
+      const now = Date.now();
+      if (now - lastTap < 300) { const [x, y] = local(e); setZoom(zoom > 1.2 ? 1 : 2.5, x, y); }
+      lastTap = now;
+    }
+  });
+  box.addEventListener('pointermove', (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, local(e));
+    if (pinch && pts.size === 2) {
+      e.preventDefault();
+      const [a, b] = [...pts.values()];
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      setZoom(pinch.z * (d / pinch.d), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+    }
+  });
+  const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+  box.addEventListener('pointerup', up);
+  box.addEventListener('pointercancel', up);
+  box.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const [x, y] = local(e);
+    setZoom(zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2), x, y);
+  }, { passive: false });
+}
 
 function renderLegend() {
   const box = $('ms-legend');
@@ -1443,7 +1512,12 @@ function renderLegend() {
   }
 }
 
+function endFullView() {
+  const v = document.querySelector('#panel-mission .viewer');
+  if (v.classList.contains('full')) { v.classList.remove('full'); $('ms-zoom-full').textContent = '⛶ Vollbild'; }
+}
 function showTab(t) {
+  endFullView();
   document.querySelectorAll('#panel-mission .tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
   $('tab-lage').hidden = t !== 'lage';
   $('tab-ende').hidden = t !== 'ende';
@@ -1514,7 +1588,10 @@ function closePad() {
 }
 window.addEventListener('popstate', () => {
   const panelOpen = () => [...document.querySelectorAll('.panel')].some((p) => !p.hidden);
-  if (!$('notepad').hidden) {
+  if (document.querySelector('#panel-mission .viewer.full')) {
+    endFullView();
+    pushOverlay();
+  } else if (!$('notepad').hidden) {
     closePad();
     if (panelOpen()) pushOverlay(); // Einsatz-Fenster bleibt offen, nächstes Zurück schließt es
   } else if (panelOpen()) {
