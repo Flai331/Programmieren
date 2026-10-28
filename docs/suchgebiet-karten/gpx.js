@@ -51,6 +51,33 @@ export function trackLength(pts) {
   return m;
 }
 
+// Fläche des Umrisses in m² (als geschlossen betrachtet: letzter Punkt zurück zum ersten)
+export function polygonArea(pts) {
+  if (pts.length < 3) return 0;
+  const lat0 = pts.reduce((a, p) => a + p[0], 0) / pts.length;
+  const ky = 6371008.8 * Math.PI / 180;
+  const kx = ky * Math.cos(lat0 * Math.PI / 180);
+  let a = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [la1, lo1] = pts[i];
+    const [la2, lo2] = pts[(i + 1) % pts.length];
+    a += lo1 * kx * la2 * ky - lo2 * kx * la1 * ky;
+  }
+  return Math.abs(a) / 2;
+}
+
+// 12345 m² -> "1,23 ha"
+export function formatArea(m2) {
+  const ha = m2 / 10000;
+  return `${ha.toLocaleString('de-DE', { maximumFractionDigits: ha < 10 ? 2 : 1 })} ha`;
+}
+
+// Beschreibung eines Umrisses: Länge, ab 3 Punkten auch die Fläche
+export function trackDesc(pts) {
+  const len = formatLength(trackLength(pts));
+  return pts.length > 2 ? `${len} · ${formatArea(polygonArea(pts))}` : len;
+}
+
 export function formatLength(m) {
   return m >= 1000 ? `${(m / 1000).toLocaleString('de-DE', { maximumFractionDigits: 2 })} km` : `${Math.round(m)} m`;
 }
@@ -254,7 +281,7 @@ export function buildGpx(project, grid, opts, part = '') {
   }
   if (opts.tracks) {
     for (const it of project.items) {
-      if (it.kind === 'track') trks += trk(it.name || 'Track', it.color, [it.pts], formatLength(trackLength(it.pts)));
+      if (it.kind === 'track') trks += trk(it.name || 'Umriss', it.color, [it.pts], trackDesc(it.pts));
     }
   }
   if (opts.drawings) {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cellOutlines, buildGpx, garminColor, trackLength, labelTracks } from '../web/gpx.js';
+import { cellOutlines, buildGpx, garminColor, trackLength, labelTracks, polygonArea, formatArea, trackDesc } from '../web/gpx.js';
 import { CAP, FONT_CHARS, textPath } from '../web/font.js';
 import { makeZip, crc32 } from '../web/zip.js';
 import { planCustomMap, TILE, MAX_TILES } from '../web/kmz.js';
@@ -217,4 +217,17 @@ test('Sehr großes Raster: Feldnamen auf mehrere Tracks verteilt, je unter 9000 
   assert.equal(next, g.rows);
   const gpx = buildGpx(newProject('G'), g, { cells: 'lines' });
   assert.match(gpx, /<name>Feldnamen G \(Zeilen 1–\d+\)<\/name>/);
+});
+
+test('polygonArea: 100 m × 100 m = 1 ha, offen wie geschlossen', () => {
+  const dLat = 100 / 111194.9;
+  const dLon = dLat / Math.cos((51 * Math.PI) / 180);
+  const sq = [[51, 7], [51, 7 + dLon], [51 - dLat, 7 + dLon], [51 - dLat, 7]];
+  assert.ok(Math.abs(polygonArea(sq) - 10000) < 50);
+  assert.ok(Math.abs(polygonArea([...sq, sq[0]]) - 10000) < 50);
+  assert.equal(polygonArea(sq.slice(0, 2)), 0);
+  assert.equal(formatArea(polygonArea(sq)), '1 ha');
+  assert.equal(formatArea(123456), '12,3 ha');
+  assert.match(trackDesc(sq), /^300 m · 1 ha$/);
+  assert.doesNotMatch(trackDesc(sq.slice(0, 2)), /ha/);
 });

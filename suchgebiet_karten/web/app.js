@@ -7,7 +7,7 @@ import {
 } from './layers.js';
 import { buildPdf, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { buildGpx, trackLength, formatLength } from './gpx.js';
+import { buildGpx, trackDesc } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -21,7 +21,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v35';
+const APP_VERSION = 'v36';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -482,7 +482,7 @@ function updateTrackbar() {
   if (!draftTrack) return;
   const n = draftTrack.pts.length;
   $('track-info').textContent = n
-    ? `Umriss: ${n} Punkt${n > 1 ? 'e' : ''} · ${formatLength(trackLength(draftTrack.pts))}`
+    ? `Umriss: ${n} Punkt${n > 1 ? 'e' : ''} · ${trackDesc(draftTrack.pts)}`
     : 'Umriss: ersten Punkt auf die Karte tippen';
   $('track-back').disabled = !n;
   $('track-done').disabled = n < 2;
@@ -504,7 +504,7 @@ function finishTrack(auto) {
   d.name = name;
   P.items.push(d);
   changed();
-  toast(`„${name}“ gespeichert (${formatLength(trackLength(d.pts))})`);
+  toast(`„${name}“ gespeichert (${trackDesc(d.pts)})`);
 }
 
 $('track-back').addEventListener('click', () => {
@@ -704,7 +704,7 @@ $('show-utm').addEventListener('change', () => { P.showUtm = $('show-utm').check
 // Was auf der Arbeitskarte zu sehen ist – alles einzeln (nur Anzeige, PDF/Export unverändert)
 function itemName(it, n) {
   if (it.kind === 'text') return `Text: ${it.text}`;
-  if (it.kind === 'track') return `Umriss: ${it.name || 'ohne Namen'}`;
+  if (it.kind === 'track') return `Umriss: ${it.name || 'ohne Namen'} (${trackDesc(it.pts)})`;
   return it.name ? `Zeichnung: ${it.name}` : `Stift ${n} (${COLOR_NAMES[it.color] || it.color})`;
 }
 function renderViewToggles() {

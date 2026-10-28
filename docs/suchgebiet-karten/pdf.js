@@ -408,7 +408,9 @@ export function contentBounds(state, aspect, mmW, pad = 0.06) {
       if (it.text) labels.push([it.lat, it.lon, it.text]);
     } else if (it.pts && it.pts.length) {
       pts.push(...it.pts);
-      if (it.name) labels.push([it.pts[0][0], it.pts[0][1], it.name]);
+      // Umriss ab 3 Punkten: „· 12,34 ha“ hinter dem Namen
+      const text = (it.name || '') + (it.kind === 'track' && it.pts.length > 2 ? ' · 12,34 ha' : '');
+      if (text) labels.push([it.pts[0][0], it.pts[0][1], text]);
     }
   }
   const m = state.meet;
