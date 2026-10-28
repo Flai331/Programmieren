@@ -21,7 +21,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v34';
+const APP_VERSION = 'v35';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -254,10 +254,10 @@ const HINTS = {
   pen: 'Mit dem Finger auf die Karte zeichnen. Zeichnung antippen: Namen geben (steht dann auch im GPX). Verschieben: „Bewegen“.',
   text: 'Auf die Karte tippen, um einen Punkt mit Text zu setzen.',
   fill: 'Team/Markierung wählen, dann Felder antippen oder darüberwischen. Nochmal tippen entfernt.',
-  erase: 'Antippen oder darüberwischen löscht Zeichnungen, Tracks, Texte, Treffpunkt und Feldfarben.',
+  erase: 'Antippen oder darüberwischen löscht Zeichnungen, Umrisse, Texte, Treffpunkt und Feldfarben.',
   grid: 'Suchgebiet als Rechteck mit dem Finger aufziehen.',
   meet: 'Auf die Karte tippen, um den Treffpunkt zu setzen.',
-  track: 'Track: Punkte antippen. Karte mit dem Finger verschieben, Zoom mit +/−.',
+  track: 'Umriss: Punkte antippen. Karte mit dem Finger verschieben, Zoom mit +/−.',
 };
 
 function setTool(t) {
@@ -463,7 +463,7 @@ function renameItem(i) {
     changed();
     return;
   }
-  const what = it.kind === 'track' ? 'des Tracks' : 'der Zeichnung';
+  const what = it.kind === 'track' ? 'des Umrisses' : 'der Zeichnung';
   const t = prompt(`Name ${what} (steht so auf der Karte und im GPX für Garmin):`, it.name || '');
   if (t === null || t.trim() === (it.name || '')) return;
   snapshot();
@@ -482,8 +482,8 @@ function updateTrackbar() {
   if (!draftTrack) return;
   const n = draftTrack.pts.length;
   $('track-info').textContent = n
-    ? `Track: ${n} Punkt${n > 1 ? 'e' : ''} · ${formatLength(trackLength(draftTrack.pts))}`
-    : 'Track: ersten Punkt auf die Karte tippen';
+    ? `Umriss: ${n} Punkt${n > 1 ? 'e' : ''} · ${formatLength(trackLength(draftTrack.pts))}`
+    : 'Umriss: ersten Punkt auf die Karte tippen';
   $('track-back').disabled = !n;
   $('track-done').disabled = n < 2;
 }
@@ -494,9 +494,9 @@ function finishTrack(auto) {
   draftTrack = null;
   if (!d || d.pts.length < 2) { redraw(); return; }
   const n = P.items.filter((it) => it.kind === 'track').length + 1;
-  let name = `Track ${n}`;
+  let name = `Umriss ${n}`;
   if (!auto) {
-    const t = prompt('Name des Tracks (erscheint so auf dem Garmin):', name);
+    const t = prompt('Name des Umrisses (erscheint so auf dem Garmin):', name);
     if (t === null) { draftTrack = d; return; }
     name = t.trim() || name;
   }
@@ -518,7 +518,7 @@ $('track-done').addEventListener('click', () => {
   if (!draftTrack) setTool('pan');
 });
 $('track-cancel').addEventListener('click', () => {
-  if (draftTrack && draftTrack.pts.length > 1 && !confirm('Track verwerfen?')) return;
+  if (draftTrack && draftTrack.pts.length > 1 && !confirm('Umriss verwerfen?')) return;
   draftTrack = null;
   setTool('pan');
   redraw();
@@ -704,7 +704,7 @@ $('show-utm').addEventListener('change', () => { P.showUtm = $('show-utm').check
 // Was auf der Arbeitskarte zu sehen ist – alles einzeln (nur Anzeige, PDF/Export unverändert)
 function itemName(it, n) {
   if (it.kind === 'text') return `Text: ${it.text}`;
-  if (it.kind === 'track') return `Track: ${it.name || 'ohne Namen'}`;
+  if (it.kind === 'track') return `Umriss: ${it.name || 'ohne Namen'}`;
   return it.name ? `Zeichnung: ${it.name}` : `Stift ${n} (${COLOR_NAMES[it.color] || it.color})`;
 }
 function renderViewToggles() {
@@ -731,7 +731,7 @@ function renderViewToggles() {
   const marks = P.marks.filter((m) => used.has(m.id));
   if (marks.length) head('Teams und Markierungen');
   for (const m of marks) row(markLabel(m), !m.hidden, (on) => { m.hidden = !on; }, m.color);
-  if (P.items.length) head('Zeichnungen, Tracks, Texte');
+  if (P.items.length) head('Zeichnungen, Umrisse, Texte');
   let n = 0;
   for (const it of P.items) {
     if (it.kind === 'stroke') n++;
@@ -1635,7 +1635,7 @@ function renderLegend() {
   box.innerHTML = '';
   const colors = usedColors(P);
   if (!colors.length) {
-    box.innerHTML = '<p class="small">Noch keine Stift-Zeichnungen oder Tracks auf der Karte. Teams und Status stehen ohnehin in der Legende.</p>';
+    box.innerHTML = '<p class="small">Noch keine Stift-Zeichnungen oder Umrisse auf der Karte. Teams und Status stehen ohnehin in der Legende.</p>';
     return;
   }
   for (const c of colors) {

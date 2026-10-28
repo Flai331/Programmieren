@@ -38,7 +38,7 @@
     <button data-tool="pen" title="Freihand zeichnen"><span>✏️</span>Stift</button>
     <button data-tool="text" title="Text / Punkt setzen"><span>📍</span>Text</button>
     <button data-tool="fill" title="Feld einfärben / Team zuteilen"><span>▦</span>Feld</button>
-    <button data-tool="track" title="Track Punkt für Punkt setzen (für Garmin)"><span>〰️</span>Track</button>
+    <button data-tool="track" title="Gebiet Punkt für Punkt umranden (auch als Track für Garmin)"><span>📐</span>Umriss</button>
     <button data-tool="erase" title="Zeichnung löschen"><span>🧽</span>Radierer</button>
     <button id="undo" title="Rückgängig"><span>↶</span>Zurück</button>
   </nav>
@@ -54,7 +54,7 @@
   </div>
 
   <div id="trackbar" class="trackbar" hidden>
-    <span id="track-info">Track: auf die Karte tippen</span>
+    <span id="track-info">Umriss: auf die Karte tippen</span>
     <button id="track-back">↶ Punkt</button>
     <button id="track-done" class="primary">Fertig</button>
     <button id="track-cancel">Abbrechen</button>
@@ -230,7 +230,7 @@
     </div>
 
     <h3 class="gpxhead">2. Markierungen</h3>
-    <label class="check"><input type="checkbox" id="gpx-tracks" checked> Eigene Tracks</label>
+    <label class="check"><input type="checkbox" id="gpx-tracks" checked> Umrisse (als Tracks)</label>
     <label class="check"><input type="checkbox" id="gpx-drawings" checked> Stift-Markierungen (als Tracks)</label>
     <label class="check"><input type="checkbox" id="gpx-teams" checked> Team-Bereiche und Status (Umrisse)</label>
     <label class="check"><input type="checkbox" id="gpx-points" checked> Treffpunkt und Textpunkte als Wegpunkte</label>
@@ -240,7 +240,7 @@
     </div>
 
     <h2 class="sub">🗺️ Garmin: Karte (Custom Map)</h2>
-    <p class="small">Das Kartenbild mit Raster, Teams und Tracks als KMZ-Datei. Auf das Gerät per USB in den Ordner <b>Garmin/CustomMaps</b> kopieren (Ordner ggf. anlegen) – die Karte liegt dann über deiner Wanderkarte. Funktioniert z. B. bei GPSMAP, eTrex 22x/32x, Oregon, Montana.</p>
+    <p class="small">Das Kartenbild mit Raster, Teams und Zeichnungen als KMZ-Datei. Auf das Gerät per USB in den Ordner <b>Garmin/CustomMaps</b> kopieren (Ordner ggf. anlegen) – die Karte liegt dann über deiner Wanderkarte. Funktioniert z. B. bei GPSMAP, eTrex 22x/32x, Oregon, Montana.</p>
     <label>Bereich
       <select id="kmz-area">
         <option value="grid">Raster (mit Rand)</option>

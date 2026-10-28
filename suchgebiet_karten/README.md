@@ -25,16 +25,16 @@ von der einen in die andere übernehmen.
 |---|---|
 | **Suchfeld (oben)** | Adresse, Ort, Straße suchen (OpenStreetMap), **Kreuzungen** („Hauptstraße Ecke Bahnhofstraße, Celle“ oder „Hauptstr./Bahnhofstr.“), außerdem Feldnamen („C4“) und Koordinaten („50.12, 8.61“) |
 | **Gebiete** | Name des Einsatzes, mehrere Suchgebiete speichern, wechseln, kopieren, löschen · Einsatzleitung, Notizen, Treffpunkt · Suchgebiet als Datei senden / Datei öffnen |
-| **Raster** | Feldgröße (25 m – 1 km), Suchgebiet aufziehen oder Ausschnitt nehmen, Feld suchen („C4“), **Auf der Karte zeigen**: Raster, Randbeschriftung, Treffpunkt, jedes Team, jede Markierung, jede Zeichnung, jeder Track und Text einzeln ausblendbar; „Karte nackt“ blendet alles aus (nur Anzeige), **UTM-Schalter** |
+| **Raster** | Feldgröße (25 m – 1 km), Suchgebiet aufziehen oder Ausschnitt nehmen, Feld suchen („C4“), **Auf der Karte zeigen**: Raster, Randbeschriftung, Treffpunkt, jedes Team, jede Markierung, jede Zeichnung, jeder Umriss und Text einzeln ausblendbar; „Karte nackt“ blendet alles aus (nur Anzeige), **UTM-Schalter** |
 | **Teams** | Teams (Name, Hund, Farbe) und Status („abgesucht“, „nicht begehbar“ …) anlegen. Ein Feld behält sein Team; der Status liegt zusätzlich schraffiert darüber |
 | **Karte** | TopPlusOpen (topografisch, mit Waldwegen), basemap.de farbig/grau, Luftbild Niedersachsen (LGLN), Luftbild NRW – über Luftbildern zuschaltbar: Wege, Straßen, Ortsnamen |
 | **GPS** | Eigener Standort, oben steht das aktuelle Feld (mit UTM-Schalter auch UTMREF) |
 | **Export** | PDF, GPX für Garmin/BaseCamp, Garmin-Karte (KMZ) – jeweils **📤 Teilen** (WhatsApp, Mail, Signal …) oder **💾 Speichern** |
-| Stift / Text / Feld / Track / Radierer | Freihand zeichnen, Punkt mit Text, Felder einem Team zuteilen (antippen oder drüberwischen), Track Punkt für Punkt setzen, löschen |
+| Stift / Text / Feld / Umriss / Radierer | Freihand zeichnen, Punkt mit Text, Felder einem Team zuteilen (antippen oder drüberwischen), Gebiet Punkt für Punkt umranden (im GPX ein Track), löschen |
 | **Einsatz** (📋) | Einsatzprotokoll mit Eckdaten, kein ETB. Reiter **Lage**: vermisste Person, **Zeiten** (Alarmierung mit Datum, Abfahrt, Eintreffen, Einsatzbeginn, Einsatzende, Rückkehr – „Jetzt“ oder von Hand), Kräfte je Organisation (Stärke als Zahlen: Führung/Helfer//Gesamt + Hunde), Notizen getippt, **Notizblock** für Handschrift mit Stift oder Finger (Seiten, 3 Farben, Rückgängig), **Fotos** vom Papier. Reiter **Einsatzende**: Notizen und Fotos links ansehen (zoombar; gezoomt mit Finger oder Maus frei verschieben, Doppelklick/-tippen zoomt), rechts zusammenfassen; Legende für die Stiftfarben auf der Karte; Verfasser; E-Mail-Empfänger. **Abschlussbericht** (PDF, ohne Karte) mit Bericht, Notizseiten und Fotos; Versand siehe unten. Im Browser hängt das Teilen-Menü die Dateien an, die Empfänger werden in die Zwischenablage kopiert |
-| **Einsatzende – Versand** | Je Empfänger-Zeile ankreuzen, was mitgeht. **Abschlussbericht**: Zeiten, Vermisste Person, Kräfte, Zusammenfassung, Notizen, Notizblock, Fotos, Karte (ohne Raster, Flächen beschriftet, automatisch so gezoomt, dass alle Markierungen, Zeichnungen, Tracks, Texte und der Treffpunkt samt Beschriftung drauf sind; voreingestellt aus) – dazu je Empfänger, ob die Karte Teams und/oder Status (abgesucht, teilweise, nicht begehbar) zeigt. **Zusätzlich:** JUH-Formular, GPX. „Senden“ öffnet das Mailprogramm mit genau diesen Anhängen, auch der Mailtext enthält nur die angekreuzten Inhalte (Android-App: inkl. Empfänger) |
+| **Einsatzende – Versand** | Je Empfänger-Zeile ankreuzen, was mitgeht. **Abschlussbericht**: Zeiten, Vermisste Person, Kräfte, Zusammenfassung, Notizen, Notizblock, Fotos, Karte (ohne Raster, Flächen beschriftet, automatisch so gezoomt, dass alle Markierungen, Zeichnungen, Umrisse, Texte und der Treffpunkt samt Beschriftung drauf sind; voreingestellt aus) – dazu je Empfänger, ob die Karte Teams und/oder Status (abgesucht, teilweise, nicht begehbar) zeigt. **Zusätzlich:** JUH-Formular, GPX. „Senden“ öffnet das Mailprogramm mit genau diesen Anhängen, auch der Mailtext enthält nur die angekreuzten Inhalte (Android-App: inkl. Empfänger) |
 | **JUH-Formular** | Vorlage „Einsatzbericht Rettungshundestaffel“ wird mit den vorhandenen Daten vorausgefüllt (Kräfte eigene/fremde, Lage, Verlauf, Besonderheiten, Einsatzleitung …); alle Felder bleiben im PDF ausfüllbar. Bei den Kräften „eigene“ anhaken |
-| Zeichnung benennen | Im Stift-Werkzeug „🏷️ Letzte Zeichnung benennen“ oder eine Zeichnung (auch einen Track) antippen. Der Name steht auf der Karte, im PDF und als Trackname im GPX |
+| Zeichnung benennen | Im Stift-Werkzeug „🏷️ Letzte Zeichnung benennen“ oder eine Zeichnung (auch einen Umriss) antippen. Der Name steht auf der Karte, im PDF und als Trackname im GPX |
 
 Antippen der Karte im Modus „Bewegen“ zeigt Feld, zugeteiltes Team und ggf. UTMREF.
 
@@ -73,15 +73,15 @@ mit dem PDF als Anhang. Am PC wird es heruntergeladen und das E-Mail-Programm ge
 
 ### Garmin (BaseCamp und GPS-Gerät)
 
-**Track zeichnen:** Werkzeug „Track“ → Punkte auf die Karte tippen (Ziehen verschiebt die Karte) →
-„Fertig“ → Namen eingeben. Länge wird angezeigt; Tracks erscheinen auch im PDF.
+**Umriss zeichnen:** Werkzeug „📐 Umriss“ → Punkte auf die Karte tippen (Ziehen verschiebt die Karte) →
+„Fertig“ → Namen eingeben. Länge wird angezeigt; Umrisse erscheinen im PDF und als Track im GPX.
 
 **GPX (Export → Garmin: GPX):** zwei Dateien, BaseCamp macht aus jeder eine eigene Liste:
 1. **…_Raster.gpx** – alle Rasterlinien (als eine durchgehende Linie, ohne Schrägen) und die
    Feldnamen: als **Linienschrift** unten links in jedem Feld (Voreinstellung – Rasterlinien und
    Feldnamen sind zusammen *ein einziger* Track „Raster …“ in der Liste), als Wegpunkte (ein
    Eintrag pro Feld) oder keine
-2. **…_Markierungen.gpx** – eigene Tracks, Stift-Markierungen (mit ihrem Namen, sonst „Stift 1 (rot)“), Team-/Status-Umrisse,
+2. **…_Markierungen.gpx** – Umrisse, Stift-Markierungen (mit ihrem Namen, sonst „Stift 1 (rot)“), Ränder der Team-/Status-Flächen,
    Treffpunkt und Textpunkte
 
 In BaseCamp: im Einsatz-Ordner zwei Listen anlegen (Rechtsklick → *Neue Liste*, z. B. „Raster“ und
