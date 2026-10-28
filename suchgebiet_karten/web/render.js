@@ -3,6 +3,7 @@
 // gleich aus. toPx(lat, lon) -> [x, y] rechnet in Canvas-Pixel um.
 
 import { colName, cellLabel, cellBounds, gridBounds } from './grid.js';
+import { toUtm, fromUtm, utmZone } from './utm.js';
 
 const GRID_COLOR = 'rgba(200, 0, 0, 0.85)';
 
@@ -31,13 +32,16 @@ function pill(ctx, text, cx, cy, s) {
 
 // opt: { s: Skalierung für Linien/Schrift, width, height, view: Bounds für Culling,
 //        allEdges: Randbeschriftung auch unten/rechts, sheets: Blattumrisse,
-//        focus: Bereich des Detailblatts (Rest wird aufgehellt) }
+//        focus: Bereich des Detailblatts (Rest wird aufgehellt), utm: UTM-Gitter zeigen }
+// state: { grid, fills: "c,r" -> Farbe, fillLabels: "c,r" -> Text, items, meet }
 export function drawOverlay(ctx, toPx, state, opt) {
   const s = opt.s || 1;
   const grid = state.grid;
   if (opt.focus) dimOutside(ctx, toPx, opt.focus, opt.width, opt.height);
+  if (opt.utm && opt.view) drawUtm(ctx, toPx, opt, s);
   if (grid) drawGrid(ctx, toPx, state, grid, opt, s);
   drawItems(ctx, toPx, state.items || [], s);
+  if (state.meet) drawMeet(ctx, toPx, state.meet, s);
   if (grid) drawEdgeLabels(ctx, toPx, grid, opt, s);
 }
 
@@ -78,6 +82,28 @@ function drawGrid(ctx, toPx, state, grid, opt, s) {
     ctx.fillStyle = color;
     ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
     ctx.globalAlpha = 1;
+  }
+
+  // Team-/Markierungsname in der Feldmitte, wenn genug Platz
+  if (state.fillLabels) {
+    const [ax] = toPx(grid.originLat, gridLon(grid, 0));
+    const [bx] = toPx(grid.originLat, gridLon(grid, 1));
+    const cw = Math.abs(bx - ax);
+    if (cw >= 60 * s) {
+      ctx.font = `bold ${Math.min(14, cw / (7 * s)) * s}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const [key, text] of Object.entries(state.fillLabels)) {
+        const [c, r] = key.split(',').map(Number);
+        if (c < v.c0 || c > v.c1 || r < v.r0 || r > v.r1) continue;
+        const b = cellBounds(grid, c, r);
+        const [x0, y0] = toPx(b.north, b.west);
+        const [x1, y1] = toPx(b.south, b.east);
+        let t = text;
+        while (t.length > 3 && ctx.measureText(t).width > cw - 8 * s) t = t.slice(0, -2) + '…';
+        halo(ctx, t, (x0 + x1) / 2, (y0 + y1) / 2 + 6 * s, '#111', s);
+      }
+    }
   }
 
   // Linien
@@ -266,4 +292,97 @@ export function hitItem(items, toPx, x, y, tol) {
     }
   }
   return -1;
+}
+
+function drawMeet(ctx, toPx, m, s) {
+  const [x, y] = toPx(m.lat, m.lon);
+  const r = 11 * s;
+  ctx.fillStyle = '#0d47a1';
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2.5 * s;
+  ctx.beginPath();
+  ctx.rect(x - r, y - r, 2 * r, 2 * r);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = `bold ${10 * s}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('TP', x, y + 0.5 * s);
+  if (m.text) {
+    ctx.font = `bold ${14 * s}px sans-serif`;
+    ctx.textAlign = 'left';
+    halo(ctx, m.text, x + r + 5 * s, y, '#0d47a1', s);
+  }
+}
+
+const UTM_COLOR = 'rgba(13, 71, 161, 0.75)';
+const UTM_STEPS = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+
+function utmText(v, step) {
+  // Kilometerwert, bei Abständen < 1 km mit einer Nachkommastelle
+  const km = v / 1000;
+  return step < 1000 ? km.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : String(Math.round(km));
+}
+
+// UTM-Gitter (Zone der Kartenmitte) mit Beschriftung unten und rechts
+function drawUtm(ctx, toPx, opt, s) {
+  const v = opt.view;
+  const W = opt.width;
+  const H = opt.height;
+  const midLat = (v.north + v.south) / 2;
+  const midLon = (v.west + v.east) / 2;
+  const zone = utmZone(midLat, midLon);
+  const corners = [[v.north, v.west], [v.north, v.east], [v.south, v.west], [v.south, v.east], [v.north, midLon], [v.south, midLon]]
+    .map(([la, lo]) => toUtm(la, lo, zone));
+  const south = midLat < 0;
+  const minE = Math.min(...corners.map((u) => u.easting));
+  const maxE = Math.max(...corners.map((u) => u.easting));
+  const minN = Math.min(...corners.map((u) => u.northing));
+  const maxN = Math.max(...corners.map((u) => u.northing));
+  const pxPerM = W / Math.max(1, maxE - minE);
+  const step = UTM_STEPS.find((st) => st * pxPerM >= 70 * s) || UTM_STEPS[UTM_STEPS.length - 1];
+  const px = (e, n) => {
+    const p = fromUtm(zone, e, n, south);
+    return toPx(p.lat, p.lon);
+  };
+  const SEG = 8;
+  ctx.strokeStyle = UTM_COLOR;
+  ctx.lineWidth = 1 * s;
+  ctx.setLineDash([6 * s, 4 * s]);
+  ctx.beginPath();
+  const e0 = Math.ceil(minE / step) * step;
+  const n0 = Math.ceil(minN / step) * step;
+  for (let e = e0; e <= maxE; e += step) {
+    for (let i = 0; i <= SEG; i++) {
+      const [x, y] = px(e, minN + ((maxN - minN) * i) / SEG);
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+  }
+  for (let n = n0; n <= maxN; n += step) {
+    for (let i = 0; i <= SEG; i++) {
+      const [x, y] = px(minE + ((maxE - minE) * i) / SEG, n);
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.font = `bold ${10 * s}px sans-serif`;
+  ctx.textBaseline = 'bottom';
+  const lbl = (t, x, y, align) => {
+    ctx.textAlign = align;
+    halo(ctx, t, x, y, '#0d47a1', s);
+  };
+  const bottomY = H - 3 * s;
+  const southCenterN = toUtm(v.south, midLon, zone).northing;
+  for (let e = e0; e <= maxE; e += step) {
+    const [x] = px(e, southCenterN);
+    if (x > 30 * s && x < W - 30 * s) lbl(utmText(e, step), x + 2 * s, bottomY, 'left');
+  }
+  const eastCenterE = toUtm(midLat, v.east, zone).easting;
+  for (let n = n0; n <= maxN; n += step) {
+    const [, y] = px(eastCenterE, n);
+    if (y > 20 * s && y < H - 20 * s) lbl(utmText(n, step), W - 4 * s, y - 2 * s, 'right');
+  }
 }

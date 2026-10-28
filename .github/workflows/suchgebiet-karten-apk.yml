@@ -1,0 +1,135 @@
+name: Suchgebiet-Karten APK Build
+
+# Baut die Android-App (WebView-Hülle um suchgebiet_karten/web) auf einem
+# GitHub-Runner (lokal gibt es kein Android-SDK) und aktualisiert das Release:
+# https://github.com/Flai331/Programmieren/releases/download/suchgebiet-karten/Suchgebiet-Karten.apk
+
+on:
+  push:
+    branches:
+      - main
+      - ccr-6c66e3f9-**
+      - claude/suchgebiet-**
+    paths:
+      - 'suchgebiet_karten/**'
+      - '.github/workflows/suchgebiet-karten-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: suchgebiet-karten-apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Tests der Web-App
+        working-directory: suchgebiet_karten
+        run: npm test
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Signatur-Secret prüfen
+        env:
+          MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
+        run: |
+          # Ohne festen Schlüssel ließe sich die APK nicht als Update installieren –
+          # dann lieber kein Release als ein unbrauchbares.
+          if [ -z "$MERKER_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Secret MERKER_KEYSTORE_PASSWORD fehlt – kein signierter Build möglich."
+            exit 1
+          fi
+
+      - name: Build APK
+        working-directory: suchgebiet_karten/android
+        env:
+          MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
+        # Fortlaufende Versionsnummer, damit Android jede neue APK als Update sieht.
+        run: gradle assembleRelease -PversionCode=${{ github.run_number }} --no-daemon
+
+      - name: Signatur der APK prüfen
+        run: |
+          APK=suchgebiet_karten/android/app/build/outputs/apk/release/app-release.apk
+          CERT=$(keytool -printcert -jarfile "$APK")
+          echo "$CERT" | head -5
+          if echo "$CERT" | grep -q "Android Debug"; then
+            echo "::error::APK ist mit dem Debug-Schlüssel signiert."
+            exit 1
+          fi
+
+      - name: KVM für den Emulator aktivieren
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Starttest im Android-Emulator
+        # Prüft, dass die App startet und die Web-App ohne JavaScript-Fehler lädt.
+        # Jede Zeile läuft einzeln; schlägt eine fehl, scheitert der Schritt.
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r suchgebiet_karten/android/app/build/outputs/apk/release/app-release.apk
+            adb logcat -c
+            adb shell monkey -p de.klaas.suchgebiet -c android.intent.category.LAUNCHER 1
+            sleep 25
+            adb logcat -d > /tmp/logcat.txt
+            grep -E "SuchgebietJS|FATAL EXCEPTION" -A8 /tmp/logcat.txt | head -80 || true
+            adb shell pidof de.klaas.suchgebiet
+            ! grep -qE "FATAL EXCEPTION" /tmp/logcat.txt
+            ! grep -E "E SuchgebietJS" /tmp/logcat.txt | grep -q .
+            adb exec-out screencap -p > /tmp/start.png
+
+      - name: Screenshot hochladen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Suchgebiet-Startbild-${{ github.sha }}
+          path: /tmp/start.png
+          if-no-files-found: ignore
+
+      - name: Upload APK to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Suchgebiet-Karten-${{ github.sha }}
+          path: suchgebiet_karten/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp suchgebiet_karten/android/app/build/outputs/apk/release/app-release.apk Suchgebiet-Karten.apk
+          if gh release view suchgebiet-karten > /dev/null 2>&1; then
+            gh release upload suchgebiet-karten Suchgebiet-Karten.apk --clobber
+          else
+            gh release create suchgebiet-karten Suchgebiet-Karten.apk --target "${{ github.sha }}" \
+              --title "Suchgebiet-Karten" \
+              --notes "Karten mit festem Raster für Rettungshunde-Einsätze. Automatisch gebaut. APK herunterladen und auf dem Handy installieren."
+          fi

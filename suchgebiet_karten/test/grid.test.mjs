@@ -97,15 +97,18 @@ test('Maßstab und Maßstabsleiste runden sinnvoll', () => {
 
 test('PDF-Blattplanung', () => {
   const g = makeGrid(AREA, 100);
-  const st = { grid: g };
   const n = blocks(g, 3).length;
-  const sheets = planSheets(st, { overview: true, details: true, k: 3, view: true }, AREA);
-  assert.equal(sheets.length, 1 + n + 1);
+  const sheets = planSheets(g, { overview: true, details: true, k: 3, view: true, info: true }, AREA);
+  assert.equal(sheets.length, 1 + 1 + n + 1);
   assert.match(sheets[0].title, /^Übersicht – Felder A1–/);
+  assert.ok(sheets[1].info);
   assert.equal(sheets[0].outlines.length, n);
-  assert.equal(sheets[0].outlines[0].page, 2);
-  assert.match(sheets[1].title, /^Blatt 2 – Felder A1–C3$/);
-  assert.equal(planSheets({ grid: null }, { overview: true, details: true, view: false }, AREA).length, 0);
+  assert.equal(sheets[0].outlines[0].page, 3);
+  assert.match(sheets[2].title, /^Blatt 3 – Felder A1–C3$/);
+  // Seitenzahl im Übersichts-Umriss = tatsächliche Seite des Blatts
+  sheets[0].outlines.forEach((o) => assert.match(sheets[o.page - 1].title, new RegExp(`^Blatt ${o.page} – Felder ${o.label}$`)));
+  assert.equal(planSheets(null, { overview: true, details: true, view: false, info: true }, AREA).length, 0);
+  assert.equal(planSheets(g, { overview: false, details: true, k: 3 }, AREA)[0].title, 'Blatt 1 – Felder A1–C3');
   assert.deepEqual(pageSize('A4', 'portrait'), [210, 297]);
   assert.ok(mapArea('A3', 'landscape').w > mapArea('A4', 'landscape').w);
 });

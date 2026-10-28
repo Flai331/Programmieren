@@ -1,12 +1,12 @@
 // Service Worker: App offline verfügbar machen und angesehene Kartenkacheln
 // zwischenspeichern (hilft bei schlechtem Empfang im Gelände).
-const VERSION = 'v1';
+const VERSION = 'v2';
 const APP_CACHE = `suchgebiet-app-${VERSION}`;
 const TILE_CACHE = 'suchgebiet-tiles';
 const MAX_TILES = 4000;
 
 const APP_FILES = [
-  './', './index.html', './style.css', './app.js', './grid.js', './render.js', './pdf.js', './layers.js',
+  './', './index.html', './style.css', './app.js', './grid.js', './render.js', './pdf.js', './layers.js', './utm.js', './store.js',
   './manifest.json', './icon.svg', './icon-192.png', './icon-512.png',
   './lib/leaflet.js', './lib/leaflet.css', './lib/jspdf.umd.min.js',
 ];
@@ -23,7 +23,7 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-const TILE_HOSTS = ['tile.openstreetmap.org', 'tile.opentopomap.org', 'geodatenzentrum.de', 'arcgisonline.com'];
+const TILE_HOSTS = ['tile.openstreetmap.org', 'tile.opentopomap.org', 'geodatenzentrum.de', 'arcgisonline.com', 'lgln.niedersachsen.de', 'wms.nrw.de'];
 
 async function trimTiles() {
   const cache = await caches.open(TILE_CACHE);

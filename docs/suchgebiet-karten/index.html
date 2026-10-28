@@ -25,13 +25,15 @@
     <button data-tool="pan" class="active" title="Karte bewegen"><span>✋</span>Bewegen</button>
     <button data-tool="pen" title="Freihand zeichnen"><span>✏️</span>Stift</button>
     <button data-tool="text" title="Text / Punkt setzen"><span>📍</span>Text</button>
-    <button data-tool="fill" title="Feld einfärben"><span>▦</span>Feld</button>
+    <button data-tool="fill" title="Feld einfärben / Team zuteilen"><span>▦</span>Feld</button>
     <button data-tool="erase" title="Zeichnung löschen"><span>🧽</span>Radierer</button>
     <button id="undo" title="Rückgängig"><span>↶</span>Zurück</button>
   </nav>
 
   <div class="sidebuttons">
+    <button id="btn-projects" title="Suchgebiete"><span>📁</span>Gebiete</button>
     <button id="btn-grid" title="Raster"><span>#</span>Raster</button>
+    <button id="btn-teams" title="Teams &amp; Legende"><span>👥</span>Teams</button>
     <button id="btn-layers" title="Kartenart"><span>🗺️</span>Karte</button>
     <button id="btn-gps" title="Mein Standort"><span>◎</span>GPS</button>
     <button id="btn-pdf" class="primary" title="PDF erstellen &amp; senden"><span>📄</span>PDF</button>
@@ -39,6 +41,7 @@
 
   <div id="palette" class="palette" hidden>
     <div class="colors"></div>
+    <div class="marks"></div>
     <div class="widths">
       <button data-w="3">dünn</button>
       <button data-w="5" class="active">mittel</button>
@@ -67,6 +70,7 @@
       <button id="grid-view">Aktuellen Ausschnitt nehmen</button>
     </div>
     <p id="grid-info" class="info"></p>
+    <label class="check"><input type="checkbox" id="show-utm"> UTM-Koordinaten anzeigen (Gitter, UTMREF bei GPS und im PDF)</label>
     <label>Feld suchen
       <span class="row"><input id="cell-search" type="text" placeholder="z. B. C4"><button id="cell-go">Zeigen</button></span>
     </label>
@@ -74,6 +78,48 @@
       <button id="clear-fills">Feldfarben löschen</button>
       <button id="clear-drawings">Zeichnungen löschen</button>
       <button id="grid-remove" class="danger">Raster entfernen</button>
+    </div>
+    <button class="close">Schließen</button>
+  </section>
+
+  <!-- Suchgebiete -->
+  <section id="panel-projects" class="panel" hidden>
+    <h2>Suchgebiet</h2>
+    <label>Einsatzleitung / Ersteller
+      <input id="leader" type="text" placeholder="Name">
+    </label>
+    <label>Notizen (kommen ins PDF)
+      <textarea id="notes" rows="3" placeholder="z. B. vermisste Person, Funkkanal, Hinweise"></textarea>
+    </label>
+    <label>Treffpunkt</label>
+    <p id="meet-info" class="info"></p>
+    <div class="row">
+      <button id="meet-set">Treffpunkt auf Karte setzen</button>
+      <button id="meet-remove">Treffpunkt entfernen</button>
+    </div>
+
+    <h2 class="sub">Datei</h2>
+    <p class="small">Zum Weitergeben an die Staffel. Jedes PDF aus dieser App enthält das Suchgebiet ebenfalls und kann hier wieder geöffnet werden.</p>
+    <div class="row">
+      <button id="proj-share" class="primary">Suchgebiet als Datei senden</button>
+      <button id="proj-import">Datei öffnen (Suchgebiet oder PDF)</button>
+      <input id="import-file" type="file" accept=".json,.txt,.pdf,application/json,text/plain,application/pdf" hidden>
+    </div>
+
+    <h2 class="sub">Gespeicherte Suchgebiete</h2>
+    <div class="row"><button id="proj-new">+ Neues Suchgebiet</button></div>
+    <div id="project-list" class="plist"></div>
+    <button class="close">Schließen</button>
+  </section>
+
+  <!-- Teams & Legende -->
+  <section id="panel-teams" class="panel" hidden>
+    <h2>Teams &amp; Legende</h2>
+    <p class="small">Farbe antippen zum Einfärben auswählen, dann mit dem Werkzeug „Feld“ Felder zuteilen. Alles erscheint im PDF als Liste und Legende.</p>
+    <div id="mark-list"></div>
+    <div class="row">
+      <button id="team-add" class="primary">+ Team</button>
+      <button id="mark-add">+ Markierung (z. B. „Fundstelle“)</button>
     </div>
     <button class="close">Schließen</button>
   </section>
@@ -105,6 +151,7 @@
         <option value="5">5×5</option>
       </select> Feldern
     </label>
+    <label class="check"><input type="checkbox" id="pdf-info" checked> Einsatzinfo-Seite (Teams, Legende, Treffpunkt, Notizen)</label>
     <label class="check"><input type="checkbox" id="pdf-view"> Aktueller Kartenausschnitt</label>
     <p id="pdf-plan" class="info"></p>
     <div class="row">

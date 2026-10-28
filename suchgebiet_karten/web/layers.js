@@ -28,6 +28,22 @@ export const LAYERS = [
     attribution: `© GeoBasis-DE / BKG (${YEAR}) CC BY 4.0`,
   },
   {
+    id: 'dop-ni',
+    name: 'Luftbild Niedersachsen (LGLN, amtlich)',
+    wms: 'https://opendata.lgln.niedersachsen.de/doorman/noauth/dop_wms',
+    wmsLayer: 'ni_dop20',
+    maxNative: 19,
+    attribution: `Luftbild © LGLN (${YEAR}) CC BY 4.0`,
+  },
+  {
+    id: 'dop-nw',
+    name: 'Luftbild NRW (Geobasis NRW, amtlich)',
+    wms: 'https://www.wms.nrw.de/geobasis/wms_nw_dop',
+    wmsLayer: 'nw_dop_rgb',
+    maxNative: 19,
+    attribution: `Luftbild © Geobasis NRW (${YEAR}) dl-de/zero-2-0`,
+  },
+  {
     id: 'sat',
     name: 'Luftbild (Esri)',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -40,9 +56,20 @@ export function layerById(id) {
   return LAYERS.find((l) => l.id === id) || LAYERS[0];
 }
 
+const HALF = 20037508.342789244; // halbe Weltbreite in EPSG:3857-Metern
+
 export function tileUrl(layer, z, x, y) {
   const n = 2 ** z;
   const wx = ((x % n) + n) % n;
+  if (layer.wms) {
+    // WMS-Dienste liefern keine Kacheln: Kachel als Kartenausschnitt (BBOX) anfragen
+    const size = (2 * HALF) / n;
+    const minx = -HALF + wx * size;
+    const maxy = HALF - y * size;
+    const bbox = [minx, maxy - size, minx + size, maxy].map((v) => v.toFixed(2)).join(',');
+    return `${layer.wms}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${layer.wmsLayer}&STYLES=`
+      + `&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&FORMAT=image/jpeg&BBOX=${bbox}`;
+  }
   const sub = layer.subdomains ? layer.subdomains[Math.abs(wx + y) % layer.subdomains.length] : '';
   return layer.url
     .replace('{s}', sub)

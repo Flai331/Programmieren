@@ -8,6 +8,8 @@ import {
 } from './grid.js';
 import { drawOverlay } from './render.js';
 import { tileUrl } from './layers.js';
+import { formatMgrs, formatUtm, utmZone } from './utm.js';
+import { assignments, embedMarker, markLabel, resolveFills } from './store.js';
 
 export const PAGES = { A4: [297, 210], A3: [420, 297] };
 const MARGIN = 8;
@@ -26,23 +28,29 @@ export function mapArea(format, orient) {
 }
 
 // Welche Blätter kommen ins PDF?
-// opts: { overview, view, details, k }
-export function planSheets(state, opts, viewBounds) {
+// opts: { overview, view, details, k, info }
+export function planSheets(grid, opts, viewBounds) {
   const sheets = [];
-  const grid = state.grid;
   const detail = grid && opts.details ? blocks(grid, opts.k || 3) : [];
+  const useDetail = detail.length > 1 || (detail.length === 1 && !opts.overview);
   let page = 1;
-  if (grid && opts.overview) {
-    const gb = gridBounds(grid);
+  const overview = grid && opts.overview;
+  // Seitenzahlen der Detailblätter vorab berechnen (Übersicht zeigt sie an)
+  const firstDetail = 1 + (overview ? 1 : 0) + (opts.info ? 1 : 0);
+  if (overview) {
     sheets.push({
       title: `Übersicht – Felder ${rangeLabel(0, 0, grid.cols - 1, grid.rows - 1)}`,
-      bounds: gb,
+      bounds: gridBounds(grid),
       pad: 0.04,
-      outlines: detail.length > 1 ? detail.map((d, i) => ({ ...d, page: page + 1 + i })) : null,
+      outlines: useDetail && detail.length > 1 ? detail.map((d, i) => ({ ...d, page: firstDetail + i })) : null,
     });
     page++;
   }
-  if (detail.length > 1 || (detail.length === 1 && !opts.overview)) {
+  if (opts.info) {
+    sheets.push({ info: true, title: 'Einsatzinformationen' });
+    page++;
+  }
+  if (useDetail) {
     for (const d of detail) {
       sheets.push({
         title: `Blatt ${page} – Felder ${d.label}`,
@@ -56,7 +64,7 @@ export function planSheets(state, opts, viewBounds) {
   if (opts.view && viewBounds) {
     sheets.push({ title: 'Kartenausschnitt', bounds: viewBounds, pad: 0 });
   }
-  return sheets;
+  return sheets.some((sh) => !sh.info) ? sheets : sheets.filter((sh) => !sh.info);
 }
 
 function loadImage(url) {
@@ -84,7 +92,7 @@ async function loadAll(urls, limit) {
 }
 
 // Rendert ein Kartenblatt; Wpx/Hpx = Canvasgröße, mmW = Breite auf Papier
-export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW) {
+export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW, extra = {}) {
   const box = fitBox(sheet.bounds, Wpx / Hpx, sheet.pad);
   const w0 = box.x1 - box.x0;
   let z = Math.max(0, Math.min(layer.maxNative, Math.ceil(Math.log2(Wpx / w0))));
@@ -126,7 +134,9 @@ export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW) {
   const pxPerMm = Wpx / mmW;
   const s = pxPerMm * 0.3;
   const view = { north: mercLat(box.y0), south: mercLat(box.y1), west: mercLon(box.x0), east: mercLon(box.x1) };
-  drawOverlay(ctx, toPx, state, { s, width: Wpx, height: Hpx, view, allEdges: true, sheets: sheet.outlines, focus: sheet.focus ? sheet.bounds : null });
+  drawOverlay(ctx, toPx, state, {
+    s, width: Wpx, height: Hpx, view, allEdges: true, sheets: sheet.outlines, focus: sheet.focus ? sheet.bounds : null, utm: extra.utm,
+  });
 
   // Maßstab
   const midLat = (view.north + view.south) / 2;
@@ -136,6 +146,7 @@ export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW) {
   const barPx = barM / mPerPx;
   drawScaleBar(ctx, barPx, formatMeters(barM), s, Hpx);
   drawNorth(ctx, Wpx, s);
+  if (extra.legend && extra.legend.length) drawLegend(ctx, extra.legend, s, Wpx, Hpx, extra.utm);
   return { canvas, scale, missing, tiles: list.length };
 }
 
@@ -178,27 +189,142 @@ function drawNorth(ctx, W, s) {
   ctx.fillText('N', x, y + 9 * s);
 }
 
-// opts: { format, orient, overview, view, details, k, title, dpi }
-export async function buildPdf(state, opts, layer, viewBounds, onProgress) {
+function drawLegend(ctx, entries, s, W, H, utm) {
+  ctx.font = `${11 * s}px sans-serif`;
+  const lineH = 17 * s;
+  const w = Math.max(...entries.map((e) => ctx.measureText(e.label).width)) + 34 * s;
+  const h = entries.length * lineH + 10 * s;
+  const x = W - w - (utm ? 48 : 10) * s;
+  const y = H - h - (utm ? 22 : 10) * s;
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1 * s;
+  ctx.strokeRect(x, y, w, h);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  entries.forEach((e, i) => {
+    const cy = y + 5 * s + lineH * (i + 0.5);
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = e.color;
+    ctx.fillRect(x + 7 * s, cy - 6 * s, 16 * s, 12 * s);
+    ctx.globalAlpha = 1;
+    ctx.strokeRect(x + 7 * s, cy - 6 * s, 16 * s, 12 * s);
+    ctx.fillStyle = '#111';
+    ctx.fillText(e.label, x + 28 * s, cy);
+  });
+}
+
+function hexRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function coordText(lat, lon, utm) {
+  const dec = `${lat.toFixed(5)}° N, ${lon.toFixed(5)}° E`;
+  return utm ? `UTMREF ${formatMgrs(lat, lon, 5)} · UTM ${formatUtm(lat, lon)} · ${dec}` : dec;
+}
+
+// Seite mit Einsatzinformationen: Teams, Legende, Treffpunkt, Notizen
+function infoPage(doc, project, grid, W, H, top) {
+  let y = top;
+  const x = MARGIN;
+  const maxW = W - 2 * MARGIN;
+  const need = (h) => {
+    if (y + h > H - MARGIN) { doc.addPage(); y = MARGIN + 8; }
+  };
+  const heading = (t) => {
+    need(12);
+    y += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text(t, x, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+  };
+  const row = (label, value) => {
+    const lines = doc.splitTextToSize(value, maxW - 45);
+    need(lines.length * 4.6 + 1);
+    doc.setFont('helvetica', 'bold');
+    doc.text(label, x, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(lines, x + 45, y);
+    y += lines.length * 4.6 + 1;
+  };
+  doc.setFontSize(10);
+  heading('Einsatz');
+  row('Bezeichnung:', project.title || '–');
+  row('Einsatzleitung/Ersteller:', project.leader || '–');
+  row('Erstellt am:', new Date().toLocaleString('de-DE', { dateStyle: 'full', timeStyle: 'short' }));
+  if (project.meet) {
+    row('Treffpunkt:', project.meet.text || 'Treffpunkt');
+    row('Koordinaten:', coordText(project.meet.lat, project.meet.lon, project.showUtm));
+  }
+  if (grid) {
+    row('Raster:', `${grid.cols} × ${grid.rows} Felder à ${formatMeters(grid.cellM)}, A1 bis ${rangeLabel(grid.cols - 1, grid.rows - 1, grid.cols - 1, grid.rows - 1)}`);
+    row('A1 (NW-Ecke):', coordText(grid.originLat, grid.originLon, project.showUtm));
+  }
+
+  const as = assignments(project);
+  const table = (title, list, team) => {
+    if (!list.length) return;
+    heading(title);
+    for (const a of list) {
+      const name = team ? markLabel(a.mark) : a.mark.label;
+      const cells = a.count ? `${a.text}  (${a.count} Feld${a.count > 1 ? 'er' : ''})` : 'keine Felder zugeteilt';
+      const lines = doc.splitTextToSize(cells, maxW - 75);
+      need(lines.length * 4.6 + 2);
+      doc.setFillColor(...hexRgb(a.mark.color));
+      doc.rect(x, y - 3.4, 5, 4, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.text(doc.splitTextToSize(name, 62)[0], x + 8, y);
+      doc.setFont('helvetica', 'normal');
+      doc.text(lines, x + 75, y);
+      y += lines.length * 4.6 + 2;
+    }
+  };
+  table('Teams', as.filter((a) => a.mark.kind === 'team'), true);
+  table('Legende', as.filter((a) => a.mark.kind !== 'team' && a.count), false);
+
+  if (project.notes && project.notes.trim()) {
+    heading('Notizen');
+    for (const line of doc.splitTextToSize(project.notes.trim(), maxW)) {
+      need(5);
+      doc.text(line, x, y);
+      y += 4.6;
+    }
+  }
+}
+
+// opts: { format, orient, overview, view, details, k, info, title, dpi }
+export async function buildPdf(project, grid, opts, layer, viewBounds, onProgress) {
   const { jsPDF } = window.jspdf;
   const [W, H] = pageSize(opts.format, opts.orient);
   const area = mapArea(opts.format, opts.orient);
   const dpi = opts.dpi || 150;
   const Wpx = Math.round((area.w / 25.4) * dpi);
   const Hpx = Math.round((area.h / 25.4) * dpi);
-  const sheets = planSheets(state, opts, viewBounds);
+  const sheets = planSheets(grid, opts, viewBounds);
   if (!sheets.length) throw new Error('Keine Blätter ausgewählt.');
+
+  const fills = resolveFills(project);
+  const fillLabels = {};
+  for (const [k, id] of Object.entries(project.fills)) {
+    const m = project.marks.find((mm) => mm.id === id);
+    if (m && m.kind === 'team') fillLabels[k] = m.label;
+  }
+  const rstate = { grid, fills, fillLabels, items: project.items, meet: project.meet };
+  const legend = assignments(project).filter((a) => a.count).map((a) => ({ color: a.mark.color, label: markLabel(a.mark) }));
 
   const doc = new jsPDF({ orientation: opts.orient, unit: 'mm', format: opts.format.toLowerCase() });
   const date = new Date().toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
-  const grid = state.grid;
+  const right1 = project.leader ? `${project.leader} · ${date}` : date;
   let missing = 0;
 
   for (let i = 0; i < sheets.length; i++) {
     onProgress && onProgress(i + 1, sheets.length);
     const sh = sheets[i];
-    const r = await renderSheet(state, sh, layer, Wpx, Hpx, area.w);
-    missing += r.missing;
     if (i) doc.addPage();
 
     doc.setFont('helvetica', 'bold');
@@ -208,23 +334,37 @@ export async function buildPdf(state, opts, layer, viewBounds, onProgress) {
     doc.text(sh.title, MARGIN, MARGIN + 12);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
-    doc.text(date, W - MARGIN, MARGIN + 6, { align: 'right' });
+    doc.text(right1, W - MARGIN, MARGIN + 6, { align: 'right' });
     doc.text(`Seite ${i + 1} von ${sheets.length}`, W - MARGIN, MARGIN + 12, { align: 'right' });
 
+    if (sh.info) {
+      infoPage(doc, project, grid, W, H, MARGIN + HEADER + 4);
+      continue;
+    }
+
+    const r = await renderSheet(rstate, sh, layer, Wpx, Hpx, area.w, { utm: project.showUtm, legend });
+    missing += r.missing;
     doc.addImage(r.canvas.toDataURL('image/jpeg', 0.85), 'JPEG', area.x, area.y, area.w, area.h);
     doc.setDrawColor(0);
     doc.setLineWidth(0.3);
     doc.rect(area.x, area.y, area.w, area.h);
 
     const info = [`Maßstab ca. 1:${r.scale.toLocaleString('de-DE')} (bei Druck ${opts.format})`];
-    if (grid) info.push(`Raster ${formatMeters(grid.cellM)} × ${formatMeters(grid.cellM)}, Ursprung A1 = NW-Ecke (${grid.originLat.toFixed(5)}, ${grid.originLon.toFixed(5)})`);
+    if (grid) info.push(`Raster ${formatMeters(grid.cellM)}, A1 = NW-Ecke`);
+    if (project.meet) {
+      const m = project.meet;
+      info.push(`TP ${m.text ? m.text + ': ' : ''}${project.showUtm ? formatMgrs(m.lat, m.lon) : `${m.lat.toFixed(5)}, ${m.lon.toFixed(5)}`}`);
+    }
+    if (project.showUtm) info.push(`UTM-Gitter blau, Zone ${utmZone((sh.bounds.north + sh.bounds.south) / 2, (sh.bounds.west + sh.bounds.east) / 2)}`);
     doc.setFontSize(8.5);
-    doc.text(info.join('   ·   '), MARGIN, H - MARGIN - 5);
+    doc.text(doc.splitTextToSize(info.join('   ·   '), W - 2 * MARGIN)[0], MARGIN, H - MARGIN - 5);
     doc.setFontSize(7.5);
     doc.setTextColor(90);
     doc.text(`Kartengrundlage: ${layer.attribution}`, MARGIN, H - MARGIN - 1);
     doc.setTextColor(0);
   }
-  return { blob: doc.output('blob'), pages: sheets.length, missing };
+  // Suchgebiet ins PDF einbetten -> PDF kann in der App wieder geöffnet werden
+  doc.addMetadata(embedMarker(project), 'https://flai331.github.io/suchgebiet-karten/');
+  doc.setProperties({ title: opts.title || 'Suchgebiet', subject: 'Suchgebiet-Karte', creator: 'Suchgebiet-Karten' });
+  return { blob: doc.output('blob'), pages: doc.getNumberOfPages(), missing };
 }
-
