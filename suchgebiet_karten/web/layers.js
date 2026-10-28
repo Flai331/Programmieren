@@ -29,6 +29,7 @@ export const LAYERS = [
   },
   {
     id: 'dop-ni',
+    aerial: true,
     name: 'Luftbild Niedersachsen (LGLN, amtlich)',
     wms: 'https://opendata.lgln.niedersachsen.de/doorman/noauth/dop_wms',
     wmsLayer: 'ni_dop20',
@@ -37,6 +38,7 @@ export const LAYERS = [
   },
   {
     id: 'dop-nw',
+    aerial: true,
     name: 'Luftbild NRW (Geobasis NRW, amtlich)',
     wms: 'https://www.wms.nrw.de/geobasis/wms_nw_dop',
     wmsLayer: 'nw_dop_rgb',
@@ -45,12 +47,49 @@ export const LAYERS = [
   },
   {
     id: 'sat',
+    aerial: true,
     name: 'Luftbild (Esri)',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     maxNative: 19,
     attribution: 'Luftbild © Esri, Maxar, Earthstar Geographics',
   },
 ];
+
+// Durchsichtige Ebenen über Luftbildern
+export const OVERLAYS = [
+  {
+    id: 'roads',
+    name: 'Straßen',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+    maxNative: 19,
+    attribution: 'Straßen © Esri',
+  },
+  {
+    id: 'places',
+    name: 'Ortsnamen und Grenzen',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    maxNative: 19,
+    attribution: 'Namen © Esri',
+  },
+  {
+    id: 'hiking',
+    name: 'Wanderwege (markierte Routen)',
+    url: 'https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png',
+    maxNative: 18,
+    attribution: 'Wanderwege © waymarkedtrails.org, OpenStreetMap-Mitwirkende (CC BY-SA)',
+  },
+];
+
+export const DEFAULT_OVERLAYS = ['roads', 'places', 'hiking'];
+
+// Grundkarte + gewählte Overlays (nur bei Luftbildern) als ein Objekt für PDF/KMZ
+export function layerStack(id, overlayIds = DEFAULT_OVERLAYS) {
+  const base = layerById(id);
+  if (!base.aerial) return base;
+  const overlays = OVERLAYS.filter((o) => overlayIds.includes(o.id));
+  if (!overlays.length) return base;
+  return { ...base, overlays, attribution: [base.attribution, ...overlays.map((o) => o.attribution)].join(' · ') };
+}
 
 export function layerById(id) {
   return LAYERS.find((l) => l.id === id) || LAYERS[0];
