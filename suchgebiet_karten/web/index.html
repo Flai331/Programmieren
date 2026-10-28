@@ -12,17 +12,19 @@
 </head>
 <body>
   <header class="topbar">
-    <input id="title" class="title" type="text" placeholder="Einsatz / Suchgebiet" aria-label="Titel">
+    <form id="search-form" class="topsearch" role="search">
+      <input id="search-input" class="title" type="search" placeholder="🔍 Adresse, Ort, Feld (C4) suchen …"
+        autocomplete="off" enterkeyhint="search" aria-label="Suchen">
+      <button type="submit" class="searchbtn" aria-label="Suchen">🔍</button>
+    </form>
     <div id="status" class="status"></div>
-    <button id="btn-search" class="searchbtn" title="Adresse, Ort, Feld oder Koordinaten suchen" aria-label="Suchen">🔍</button>
   </header>
 
   <div id="searchbar" class="searchbar" hidden>
-    <form id="search-form" class="searchrow">
-      <input id="search-input" type="search" placeholder="Adresse, Ort, Feld (C4) oder 50.12, 8.61" autocomplete="off" enterkeyhint="search">
-      <button type="submit" class="primary">Suchen</button>
+    <div class="searchhead">
+      <span>Suchergebnisse</span>
       <button type="button" id="search-close" aria-label="Schließen">✕</button>
-    </form>
+    </div>
     <div id="search-results"></div>
   </div>
 
@@ -103,6 +105,9 @@
   <!-- Suchgebiete -->
   <section id="panel-projects" class="panel" hidden>
     <h2>Suchgebiet</h2>
+    <label>Name des Einsatzes (Überschrift im PDF)
+      <input id="title" type="text" placeholder="z. B. Übung Stadtwald">
+    </label>
     <label>Einsatzleitung / Ersteller
       <input id="leader" type="text" placeholder="Name">
     </label>
