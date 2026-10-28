@@ -52,6 +52,27 @@ class MainActivity : ComponentActivity() {
         fileCallback = null
     }
 
+    // „Speichern“: Android fragt nach Ordner und Dateiname, dann wird die Datei geschrieben
+    private class CreateDoc : ActivityResultContracts.CreateDocument("*/*") {
+        var mime = "*/*"
+        override fun createIntent(context: android.content.Context, input: String): Intent =
+            super.createIntent(context, input).setType(mime)
+    }
+    private val createDoc = CreateDoc()
+    private var pendingSave: ByteArray? = null
+    private val saveDoc = registerForActivityResult(createDoc) { uri ->
+        val bytes = pendingSave
+        pendingSave = null
+        if (uri == null || bytes == null) return@registerForActivityResult
+        try {
+            contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+            toast("Gespeichert")
+        } catch (e: Exception) {
+            Log.e("Suchgebiet", "Speichern fehlgeschlagen", e)
+            toast("Speichern fehlgeschlagen: ${e.message}")
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -156,9 +177,35 @@ class MainActivity : ComponentActivity() {
     }
 
     inner class Bridge {
+        // Wird aus app.js aufgerufen: Datei (Base64) an einem frei wählbaren Ort speichern
+        @JavascriptInterface
+        fun saveFile(base64: String, name: String, mime: String) {
+            val bytes = try {
+                Base64.decode(base64, Base64.DEFAULT)
+            } catch (e: IllegalArgumentException) {
+                toast("Speichern fehlgeschlagen")
+                return
+            }
+            runOnUiThread {
+                pendingSave = bytes
+                createDoc.mime = mime.ifEmpty { "application/octet-stream" }
+                saveDoc.launch(name)
+            }
+        }
+
         // Wird aus app.js aufgerufen: Datei (Base64) über den Android-Teilen-Dialog senden
         @JavascriptInterface
         fun shareFile(base64: String, name: String, mime: String, title: String, text: String) {
+            send(base64, name, mime, title, text, emailOnly = false)
+        }
+
+        // Wie shareFile, aber nur Mail-Apps (Gmail, Outlook …) – die Datei ist bereits angehängt
+        @JavascriptInterface
+        fun emailFile(base64: String, name: String, mime: String, subject: String, text: String) {
+            send(base64, name, mime, subject, text, emailOnly = true)
+        }
+
+        private fun send(base64: String, name: String, mime: String, title: String, text: String, emailOnly: Boolean) {
             try {
                 val dir = File(cacheDir, "shared").apply { mkdirs() }
                 dir.listFiles()?.forEach { it.delete() }
@@ -172,9 +219,15 @@ class MainActivity : ComponentActivity() {
                     putExtra(Intent.EXTRA_SUBJECT, title)
                     putExtra(Intent.EXTRA_TEXT, text)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    // Selektor mailto: -> Android bietet nur E-Mail-Apps an
+                    if (emailOnly) selector = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"))
                 }
                 runOnUiThread {
-                    startActivity(Intent.createChooser(send, "Senden an …"))
+                    try {
+                        startActivity(Intent.createChooser(send, if (emailOnly) "E-Mail senden mit …" else "Senden an …"))
+                    } catch (e: ActivityNotFoundException) {
+                        toast(if (emailOnly) "Keine E-Mail-App gefunden" else "Keine App zum Teilen gefunden")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("Suchgebiet", "Teilen fehlgeschlagen", e)

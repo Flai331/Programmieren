@@ -249,6 +249,8 @@ function drawItems(ctx, toPx, items, s) {
         ctx.lineTo(x + 0.1, y);
       }
       ctx.stroke();
+    } else if (it.kind === 'track' && it.pts.length) {
+      drawTrack(ctx, toPx, it, s);
     } else if (it.kind === 'text') {
       const [x, y] = toPx(it.lat, it.lon);
       ctx.fillStyle = it.color;
@@ -263,6 +265,35 @@ function drawItems(ctx, toPx, items, s) {
       ctx.textBaseline = 'middle';
       halo(ctx, it.text, x + 9 * s, y, it.color, s);
     }
+  }
+}
+
+// Track (Punkt für Punkt gesetzt): Linie mit weißem Rand, Knotenpunkte, Name am Start
+function drawTrack(ctx, toPx, it, s) {
+  const pts = it.pts.map(([lat, lon]) => toPx(lat, lon));
+  const line = (w, color) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.stroke();
+  };
+  line((it.w + 3) * s, 'rgba(255,255,255,0.9)');
+  line(it.w * s, it.color);
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = it.color;
+  ctx.lineWidth = 2 * s;
+  pts.forEach(([x, y], i) => {
+    ctx.beginPath();
+    ctx.arc(x, y, (i === 0 || i === pts.length - 1 ? 5 : 3) * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  });
+  if (it.name) {
+    ctx.font = `bold ${13 * s}px sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    halo(ctx, it.name, pts[0][0] + 7 * s, pts[0][1] - 5 * s, it.color, s);
   }
 }
 
@@ -282,7 +313,7 @@ export function hitItem(items, toPx, x, y, tol) {
     if (it.kind === 'text') {
       const [px, py] = toPx(it.lat, it.lon);
       if (Math.hypot(px - x, py - y) <= tol + 6) return i;
-    } else if (it.kind === 'stroke') {
+    } else if (it.kind === 'stroke' || it.kind === 'track') {
       const pts = it.pts.map(([lat, lon]) => toPx(lat, lon));
       for (let k = 0; k < pts.length; k++) {
         const a = pts[k];

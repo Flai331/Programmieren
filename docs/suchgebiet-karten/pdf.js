@@ -14,8 +14,21 @@ import { assignments, embedMarker, markLabel, resolveFills } from './store.js';
 export const PAGES = { A4: [297, 210], A3: [420, 297] };
 const MARGIN = 8;
 const HEADER = 15;
-const FOOTER = 11;
+const FOOTER = 14;
 const MAX_TILES = 300;
+
+// „Automatisch“: hoch oder quer, je nachdem, wie die erste Karte geformt ist
+export function resolveOrient(orient, sheets) {
+  if (orient !== 'auto') return orient;
+  const first = sheets.find((sh) => !sh.info);
+  if (!first) return 'landscape';
+  const b = first.bounds;
+  const w = mercX(b.east) - mercX(b.west);
+  const h = mercY(b.south) - mercY(b.north);
+  // Kartenfläche A4/A3: quer ca. 1,69 : 1, hoch ca. 0,77 : 1. Ab ca. 1,17 : 1
+  // wird die Karte im Querformat größer als im Hochformat.
+  return w / h >= 1.17 ? 'landscape' : 'portrait';
+}
 
 export function pageSize(format, orient) {
   const [a, b] = PAGES[format] || PAGES.A4;
@@ -104,7 +117,8 @@ export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW, extra = {}
     };
   };
   let tr = tileRange(z);
-  while (z > 0 && (tr.tx1 - tr.tx0 + 1) * (tr.ty1 - tr.ty0 + 1) > MAX_TILES) tr = tileRange(--z);
+  const maxTiles = extra.maxTiles || MAX_TILES;
+  while (z > 0 && (tr.tx1 - tr.tx0 + 1) * (tr.ty1 - tr.ty0 + 1) > maxTiles) tr = tileRange(--z);
 
   const canvas = document.createElement('canvas');
   canvas.width = Wpx;
@@ -144,10 +158,12 @@ export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW, extra = {}
   const scale = niceScale((mPerPx * pxPerMm) * 1000);
   const barM = niceLength(mPerPx * Wpx * 0.2);
   const barPx = barM / mPerPx;
-  drawScaleBar(ctx, barPx, formatMeters(barM), s, Hpx);
-  drawNorth(ctx, Wpx, s);
-  if (extra.legend && extra.legend.length) drawLegend(ctx, extra.legend, s, Wpx, Hpx, extra.utm);
-  return { canvas, scale, missing, tiles: list.length };
+  if (!extra.bare) {
+    drawScaleBar(ctx, barPx, formatMeters(barM), s, Hpx);
+    drawNorth(ctx, Wpx, s);
+    if (extra.legend && extra.legend.length) drawLegend(ctx, extra.legend, s, Wpx, Hpx, extra.utm);
+  }
+  return { canvas, scale, missing, tiles: list.length, box };
 }
 
 function drawScaleBar(ctx, barPx, label, s, H) {
@@ -297,27 +313,41 @@ function infoPage(doc, project, grid, W, H, top) {
   }
 }
 
-// opts: { format, orient, overview, view, details, k, info, title, dpi }
-export async function buildPdf(project, grid, opts, layer, viewBounds, onProgress) {
-  const { jsPDF } = window.jspdf;
-  const [W, H] = pageSize(opts.format, opts.orient);
-  const area = mapArea(opts.format, opts.orient);
-  const dpi = opts.dpi || 150;
-  const Wpx = Math.round((area.w / 25.4) * dpi);
-  const Hpx = Math.round((area.h / 25.4) * dpi);
-  const sheets = planSheets(grid, opts, viewBounds);
-  if (!sheets.length) throw new Error('Keine Blätter ausgewählt.');
-
-  const fills = resolveFills(project);
+// Was auf die Karte gezeichnet wird (für PDF und Garmin-Karte)
+export function renderState(project, grid) {
   const fillLabels = {};
   for (const [k, id] of Object.entries(project.fills)) {
     const m = project.marks.find((mm) => mm.id === id);
     if (m && m.kind === 'team') fillLabels[k] = m.label;
   }
-  const rstate = { grid, fills, fillLabels, items: project.items, meet: project.meet };
+  return { grid, fills: resolveFills(project), fillLabels, items: project.items, meet: project.meet };
+}
+
+// opts: { format, orient, overview, view, details, k, info, title, dpi }
+export async function buildPdf(project, grid, opts, layer, viewBounds, onProgress) {
+  const { jsPDF } = window.jspdf;
+  const sheets = planSheets(grid, opts, viewBounds);
+  if (!sheets.length) throw new Error('Keine Blätter ausgewählt.');
+  const orient = resolveOrient(opts.orient, sheets);
+  const [W, H] = pageSize(opts.format, orient);
+  const doc = new jsPDF({ orientation: orient, unit: 'mm', format: opts.format.toLowerCase() });
+
+  // Beschriftung unter der Überschrift; die Karte rückt dafür nach unten
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  const caption = (project.caption || '').trim();
+  const captionLines = caption ? doc.splitTextToSize(caption, W - 2 * MARGIN).slice(0, 4) : [];
+  const captionH = captionLines.length ? captionLines.length * 4.3 + 2 : 0;
+  const area = mapArea(opts.format, orient);
+  area.y += captionH;
+  area.h -= captionH;
+  const dpi = opts.dpi || 150;
+  const Wpx = Math.round((area.w / 25.4) * dpi);
+  const Hpx = Math.round((area.h / 25.4) * dpi);
+
+  const rstate = renderState(project, grid);
   const legend = assignments(project).filter((a) => a.count).map((a) => ({ color: a.mark.color, label: markLabel(a.mark) }));
 
-  const doc = new jsPDF({ orientation: opts.orient, unit: 'mm', format: opts.format.toLowerCase() });
   const date = new Date().toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
   const right1 = project.leader ? `${project.leader} · ${date}` : date;
   let missing = 0;
@@ -344,6 +374,11 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
 
     const r = await renderSheet(rstate, sh, layer, Wpx, Hpx, area.w, { utm: project.showUtm, legend });
     missing += r.missing;
+    if (captionLines.length) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.text(captionLines, MARGIN, MARGIN + HEADER + 1.5);
+    }
     doc.addImage(r.canvas.toDataURL('image/jpeg', 0.85), 'JPEG', area.x, area.y, area.w, area.h);
     doc.setDrawColor(0);
     doc.setLineWidth(0.3);
@@ -357,7 +392,9 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
     }
     if (project.showUtm) info.push(`UTM-Gitter blau, Zone ${utmZone((sh.bounds.north + sh.bounds.south) / 2, (sh.bounds.west + sh.bounds.east) / 2)}`);
     doc.setFontSize(8.5);
-    doc.text(doc.splitTextToSize(info.join('   ·   '), W - 2 * MARGIN)[0], MARGIN, H - MARGIN - 5);
+    // Hochformat: Fußzeile bei Bedarf zweizeilig statt abgeschnitten
+    const infoLines = doc.splitTextToSize(info.join('   ·   '), W - 2 * MARGIN).slice(0, 2);
+    doc.text(infoLines, MARGIN, H - MARGIN - 5 - (infoLines.length - 1) * 3.6);
     doc.setFontSize(7.5);
     doc.setTextColor(90);
     doc.text(`Kartengrundlage: ${layer.attribution}`, MARGIN, H - MARGIN - 1);

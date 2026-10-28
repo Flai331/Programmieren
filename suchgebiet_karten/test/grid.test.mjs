@@ -4,7 +4,7 @@ import {
   colName, colIndex, cellLabel, parseCell, makeGrid, cellAt, cellBounds, gridBounds,
   blocks, rangeBounds, fitBox, mercX, mercY, mercLat, mercLon, niceScale, niceLength,
 } from '../web/grid.js';
-import { planSheets, pageSize, mapArea } from '../web/pdf.js';
+import { planSheets, pageSize, mapArea, resolveOrient } from '../web/pdf.js';
 
 const AREA = { north: 50.12, south: 50.1, west: 8.6, east: 8.64 };
 
@@ -111,4 +111,14 @@ test('PDF-Blattplanung', () => {
   assert.equal(planSheets(g, { overview: false, details: true, k: 3 }, AREA)[0].title, 'Blatt 1 – Felder A1–C3');
   assert.deepEqual(pageSize('A4', 'portrait'), [210, 297]);
   assert.ok(mapArea('A3', 'landscape').w > mapArea('A4', 'landscape').w);
+});
+
+test('Standard-PDF: ganzes Suchgebiet auf genau einer Seite, passende Ausrichtung', () => {
+  const g = makeGrid(AREA, 100); // ca. 2,9 km breit, 2,2 km hoch
+  const sheets = planSheets(g, { overview: true, details: false, info: false, view: false }, AREA);
+  assert.equal(sheets.length, 1);
+  assert.equal(resolveOrient('auto', sheets), 'landscape');
+  const tall = makeGrid({ north: 50.2, south: 50.1, west: 8.6, east: 8.65 }, 250);
+  assert.equal(resolveOrient('auto', planSheets(tall, { overview: true }, AREA)), 'portrait');
+  assert.equal(resolveOrient('portrait', sheets), 'portrait');
 });

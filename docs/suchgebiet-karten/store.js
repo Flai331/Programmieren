@@ -24,6 +24,7 @@ export function newProject(title = '') {
     title,
     leader: '',
     notes: '',
+    caption: '', // Beschriftung auf dem PDF-Blatt
     created: now,
     updated: now,
     layerId: 'osm',

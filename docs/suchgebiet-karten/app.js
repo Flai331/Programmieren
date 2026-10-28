@@ -5,6 +5,9 @@ import { drawOverlay, hitItem } from './render.js';
 import { LAYERS, layerById, tileUrl } from './layers.js';
 import { buildPdf, planSheets } from './pdf.js';
 import { formatMgrs } from './utm.js';
+import { buildGpx, trackLength, formatLength } from './gpx.js';
+import { buildCustomMap, planCustomMap } from './kmz.js';
+import { parseQuery, searchAddress } from './search.js';
 import {
   newProject, normalizeProject, migrateV1, resolveFills, assignments, markLabel, cellOwner,
   exportProject, importProject, uid, TEAM_COLORS,
@@ -144,6 +147,7 @@ function makeTiles(l, cors) {
 const canvas = $('overlay');
 const ctx = canvas.getContext('2d');
 let current = null; // Strich, der gerade gezeichnet wird
+let draftTrack = null; // Track, der gerade Punkt für Punkt gesetzt wird
 let dragRect = null; // Vorschau beim Aufziehen des Suchgebiets
 
 function toPx(lat, lon) {
@@ -178,7 +182,9 @@ function redraw() {
   ctx.clearRect(0, 0, W, H);
   const b = map.getBounds();
   const view = { north: b.getNorth(), south: b.getSouth(), west: b.getWest(), east: b.getEast() };
-  const items = current ? [...P.items, current] : P.items;
+  const items = [...P.items];
+  if (current) items.push(current);
+  if (draftTrack && draftTrack.pts.length) items.push(draftTrack);
   drawOverlay(ctx, toPx, {
     grid, fills: resolveFills(P), fillLabels: fillLabels(), items, meet: P.meet,
   }, { s: 1, width: W, height: H, view, utm: P.showUtm });
@@ -206,12 +212,14 @@ const HINTS = {
   pen: 'Mit dem Finger auf die Karte zeichnen. Zum Verschieben „Bewegen“ wählen.',
   text: 'Auf die Karte tippen, um einen Punkt mit Text zu setzen.',
   fill: 'Team/Markierung wählen, dann Felder antippen oder darüberwischen. Nochmal tippen entfernt.',
-  erase: 'Auf eine Zeichnung oder einen Text tippen, um sie zu löschen.',
+  erase: 'Antippen oder darüberwischen löscht Zeichnungen, Tracks, Texte, Treffpunkt und Feldfarben.',
   grid: 'Suchgebiet als Rechteck mit dem Finger aufziehen.',
   meet: 'Auf die Karte tippen, um den Treffpunkt zu setzen.',
+  track: 'Track: Punkte antippen. Karte mit dem Finger verschieben, Zoom mit +/−.',
 };
 
 function setTool(t) {
+  if (tool === 'track' && t !== 'track') finishTrack(true);
   if ((t === 'fill') && !grid) {
     toast('Bitte zuerst ein Raster anlegen');
     t = 'pan';
@@ -219,7 +227,10 @@ function setTool(t) {
   tool = t;
   document.querySelectorAll('.toolbar [data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === t));
   canvas.classList.toggle('active', t !== 'pan');
-  $('palette').hidden = !['pen', 'text', 'fill'].includes(t);
+  $('palette').hidden = !['pen', 'text', 'fill', 'track'].includes(t);
+  $('trackbar').hidden = t !== 'track';
+  if (t === 'track' && !draftTrack) draftTrack = { kind: 'track', name: '', color: db.color, w: 4, pts: [] };
+  updateTrackbar();
   $('palette').querySelector('.widths').hidden = t !== 'pen';
   $('palette').querySelector('.colors').hidden = t === 'fill';
   $('palette').querySelector('.marks').hidden = t !== 'fill';
@@ -239,6 +250,7 @@ let activePointer = null;
 let lastPt = null;
 let erased = false;
 let fillStroke = null; // beim Wischen über Felder: {mode: 'set'|'clear', seen}
+let panning = false;
 
 function activeMark() {
   return P.marks.find((m) => m.id === db.activeMark) || P.marks[0] || null;
@@ -280,6 +292,8 @@ canvas.addEventListener('pointerdown', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill') {
     fillAt(ll, true);
+  } else if (tool === 'track') {
+    panning = false;
   }
 });
 
@@ -298,6 +312,12 @@ canvas.addEventListener('pointermove', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill' && fillStroke) {
     fillAt(ll, false);
+  } else if (tool === 'track') {
+    // Im Track-Modus verschiebt Ziehen die Karte, Tippen setzt Punkte
+    if (!panning && Math.hypot(x - lastPt.x, y - lastPt.y) < 8) return;
+    panning = true;
+    map.panBy([lastPt.x - x, lastPt.y - y], { animate: false });
+    lastPt = { x, y };
   }
 });
 
@@ -321,6 +341,13 @@ function finishPointer(e, cancelled) {
   } else if (tool === 'fill') {
     if (fillStroke) changed();
     fillStroke = null;
+  } else if (tool === 'track') {
+    if (!cancelled && !panning && draftTrack) {
+      draftTrack.pts.push([ll.lat, ll.lng]);
+      updateTrackbar();
+      redraw();
+    }
+    panning = false;
   } else if (cancelled) {
     return;
   } else if (tool === 'text' && Math.hypot(x - lastPt.x, y - lastPt.y) < 10) {
@@ -345,17 +372,80 @@ function finishPointer(e, cancelled) {
 canvas.addEventListener('pointerup', (e) => finishPointer(e, false));
 canvas.addEventListener('pointercancel', (e) => finishPointer(e, true));
 
+// Radierer: zuerst Zeichnungen/Tracks/Texte, dann Treffpunkt, dann Feldfarbe/Zuteilung.
+// Das Raster selbst bleibt (Raster → „Raster entfernen“).
 function eraseAt(x, y) {
+  const before = () => {
+    if (!erased) snapshot();
+    erased = true;
+  };
   const i = hitItem(P.items, toPx, x, y, 12);
-  if (i < 0) return;
-  if (!erased) snapshot();
-  erased = true;
-  P.items.splice(i, 1);
+  if (i >= 0) {
+    before();
+    P.items.splice(i, 1);
+  } else if (P.meet && Math.hypot(toPx(P.meet.lat, P.meet.lon)[0] - x, toPx(P.meet.lat, P.meet.lon)[1] - y) <= 16) {
+    before();
+    P.meet = null;
+  } else {
+    const ll = map.containerPointToLatLng([x, y]);
+    const cell = grid && cellAt(grid, ll.lat, ll.lng);
+    const key = cell && `${cell.c},${cell.r}`;
+    if (!key || !P.fills[key]) return;
+    before();
+    delete P.fills[key];
+  }
   redraw();
 }
 
 document.querySelectorAll('.toolbar [data-tool]').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.tool)));
 $('undo').addEventListener('click', undo);
+
+// ---------- Track ----------
+function updateTrackbar() {
+  if (!draftTrack) return;
+  const n = draftTrack.pts.length;
+  $('track-info').textContent = n
+    ? `Track: ${n} Punkt${n > 1 ? 'e' : ''} · ${formatLength(trackLength(draftTrack.pts))}`
+    : 'Track: ersten Punkt auf die Karte tippen';
+  $('track-back').disabled = !n;
+  $('track-done').disabled = n < 2;
+}
+
+// auto = beim Wechsel des Werkzeugs: ohne Nachfrage mit Standardnamen speichern
+function finishTrack(auto) {
+  const d = draftTrack;
+  draftTrack = null;
+  if (!d || d.pts.length < 2) { redraw(); return; }
+  const n = P.items.filter((it) => it.kind === 'track').length + 1;
+  let name = `Track ${n}`;
+  if (!auto) {
+    const t = prompt('Name des Tracks (erscheint so auf dem Garmin):', name);
+    if (t === null) { draftTrack = d; return; }
+    name = t.trim() || name;
+  }
+  snapshot();
+  d.name = name;
+  P.items.push(d);
+  changed();
+  toast(`„${name}“ gespeichert (${formatLength(trackLength(d.pts))})`);
+}
+
+$('track-back').addEventListener('click', () => {
+  if (!draftTrack) return;
+  draftTrack.pts.pop();
+  updateTrackbar();
+  redraw();
+});
+$('track-done').addEventListener('click', () => {
+  finishTrack(false);
+  if (!draftTrack) setTool('pan');
+});
+$('track-cancel').addEventListener('click', () => {
+  if (draftTrack && draftTrack.pts.length > 1 && !confirm('Track verwerfen?')) return;
+  draftTrack = null;
+  setTool('pan');
+  redraw();
+});
 
 // Palette
 const colorBox = $('palette').querySelector('.colors');
@@ -363,7 +453,12 @@ COLORS.forEach((c) => {
   const b = document.createElement('button');
   b.style.background = c;
   b.title = c;
-  b.addEventListener('click', () => { db.color = c; renderPalette(); save(); });
+  b.addEventListener('click', () => {
+    db.color = c;
+    if (draftTrack) { draftTrack.color = c; redraw(); }
+    renderPalette();
+    save();
+  });
   colorBox.appendChild(b);
 });
 $('palette').querySelectorAll('.widths button').forEach((b) => b.addEventListener('click', () => {
@@ -712,8 +807,9 @@ $('proj-new').addEventListener('click', () => {
   renderProjects();
 });
 
-$('leader').addEventListener('input', () => { P.leader = $('leader').value; save(); });
-$('notes').addEventListener('input', () => { P.notes = $('notes').value; save(); });
+$('leader').addEventListener('input', () => { P.leader = $('leader').value; P.updated = Date.now(); save(); });
+$('pdf-caption').addEventListener('input', () => { P.caption = $('pdf-caption').value; P.updated = Date.now(); save(); });
+$('notes').addEventListener('input', () => { P.notes = $('notes').value; P.updated = Date.now(); save(); });
 $('meet-set').addEventListener('click', () => { closePanels(); setTool('meet'); });
 $('meet-remove').addEventListener('click', () => {
   if (!P.meet) return;
@@ -738,7 +834,7 @@ $('proj-share').addEventListener('click', async () => {
   const title = P.title || 'Suchgebiet';
   const msg = `Suchgebiet „${title}“ – in der App Suchgebiet-Karten unter „Gebiete → Datei öffnen“ laden.`;
   const json = new Blob([text], { type: 'application/json' });
-  await shareFile(json, safeName('.suchgebiet.json'), title, msg, true);
+  await shareFile(json, safeName('.suchgebiet.json'), title, msg, null, true);
 });
 
 $('proj-import').addEventListener('click', () => $('import-file').click());
@@ -774,11 +870,50 @@ $('btn-projects').addEventListener('click', () => { fillProjectForm(); renderPro
 $('btn-grid').addEventListener('click', () => { updateGridInfo(); openPanel('panel-grid'); });
 $('btn-teams').addEventListener('click', () => { renderMarks(); openPanel('panel-teams'); });
 $('btn-layers').addEventListener('click', () => openPanel('panel-layers'));
-$('btn-pdf').addEventListener('click', () => { updatePdfPlan(); $('pdf-result').hidden = true; openPanel('panel-pdf'); });
+$('btn-pdf').addEventListener('click', () => {
+  $('pdf-caption').value = P.caption || '';
+  updatePdfPlan();
+  updateKmzPlan();
+  $('pdf-msg').textContent = '';
+  $('kmz-msg').textContent = '';
+  openPanel('panel-pdf');
+});
+
+// ---------- Export (PDF, GPX, Garmin-Karte): Teilen oder Speichern ----------
+// Fertige Dateien werden kurz zwischengespeichert: Der Browser erlaubt das Teilen nur
+// direkt nach einem Tipp – dauert das Erstellen zu lange, reicht dann ein zweiter Tipp.
+const exportCache = {};
+
+function exportKey(extra) {
+  return JSON.stringify([P.id, P.updated, P.layerId, P.showUtm, viewBounds(), extra]);
+}
+
+async function runExport(kind, btn, key, build, action) {
+  const btns = [...btn.parentElement.querySelectorAll('button')];
+  const label = btn.textContent;
+  btns.forEach((b) => { b.disabled = true; });
+  try {
+    let f = exportCache[kind];
+    if (!f || f.key !== key) {
+      f = await build((text) => { btn.textContent = text; });
+      if (!f) return;
+      f.key = key;
+      exportCache[kind] = f;
+    }
+    if (action === 'save') await saveFile(f.blob, f.name);
+    else if (action === 'mail') await mailFile(f);
+    else await shareFile(f.blob, f.name, f.title, f.text, f);
+  } catch (err) {
+    console.error(err);
+    toast('Fehler: ' + err.message);
+  } finally {
+    btns.forEach((b) => { b.disabled = false; });
+    btn.textContent = label;
+    updatePdfPlan();
+  }
+}
 
 // ---------- PDF ----------
-let lastPdf = null;
-
 function pdfOpts() {
   return {
     format: $('pdf-format').value,
@@ -806,31 +941,38 @@ function updatePdfPlan() {
   $('pdf-plan').textContent = sheets.length
     ? `${sheets.length} Seite${sheets.length > 1 ? 'n' : ''}: ${sheets.map((s) => s.title.replace(/^Blatt \d+ – /, '')).join(' · ')}`
     : 'Bitte mindestens eine Karte wählen.';
-  $('pdf-make').disabled = !sheets.length;
+  $('pdf-share').disabled = !sheets.length;
+  $('pdf-mail').disabled = !sheets.length;
+  $('pdf-save').disabled = !sheets.length;
 }
 ['pdf-format', 'pdf-orient', 'pdf-overview', 'pdf-details', 'pdf-k', 'pdf-info', 'pdf-view'].forEach((id) => $(id).addEventListener('change', updatePdfPlan));
 
-$('pdf-make').addEventListener('click', async () => {
-  const btn = $('pdf-make');
-  btn.disabled = true;
-  $('pdf-result').hidden = true;
-  try {
-    const opts = pdfOpts();
-    const res = await buildPdf(P, grid, opts, layerById(P.layerId), viewBounds(), (i, n) => {
-      btn.textContent = `Seite ${i} von ${n} wird erstellt …`;
-    });
-    lastPdf = { blob: res.blob, name: safeName('.pdf'), title: opts.title };
-    $('pdf-msg').textContent = `✔ ${res.pages} Seite${res.pages > 1 ? 'n' : ''} erstellt (${Math.round(res.blob.size / 1024)} KB)`
-      + (res.missing ? ` – ${res.missing} Kartenkacheln fehlen (keine Verbindung oder Karte nicht exportierbar)` : '');
-    $('pdf-result').hidden = false;
-  } catch (err) {
-    console.error(err);
-    toast('PDF-Fehler: ' + err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'PDF erstellen';
-  }
-});
+function mailText(title) {
+  return `Anbei die Karte zum Suchgebiet „${title}“.`
+    + (grid ? `\nRaster: ${formatMeters(grid.cellM)}-Felder, A1 = Nordwest-Ecke, Felder A1 bis ${cellLabel(grid.cols - 1, grid.rows - 1)}.` : '')
+    + '\nDas PDF lässt sich in der App Suchgebiet-Karten öffnen, um weiterzuarbeiten.';
+}
+
+async function buildPdfFile(progress) {
+  const opts = pdfOpts();
+  const res = await buildPdf(P, grid, opts, layerById(P.layerId), viewBounds(), (i, n) => progress(`Seite ${i} von ${n} …`));
+  $('pdf-msg').textContent = `✔ ${res.pages} Seite${res.pages > 1 ? 'n' : ''} (${Math.round(res.blob.size / 1024)} KB)`
+    + (res.missing ? ` – ${res.missing} Kartenkacheln fehlen (keine Verbindung oder Karte nicht exportierbar)` : '');
+  return {
+    blob: res.blob,
+    name: safeName('.pdf'),
+    title: opts.title,
+    text: mailText(opts.title),
+    // Kein Teilen möglich (z. B. PC-Browser): herunterladen und E-Mail-Programm öffnen
+    fallback(f) {
+      const body = `${f.text}\n\n(Bitte die heruntergeladene Datei ${f.name} anhängen.)`;
+      location.href = `mailto:?subject=${encodeURIComponent('Karte: ' + f.title)}&body=${encodeURIComponent(body)}`;
+    },
+  };
+}
+$('pdf-mail').addEventListener('click', () => runExport('pdf', $('pdf-mail'), exportKey(pdfOpts()), buildPdfFile, 'mail'));
+$('pdf-share').addEventListener('click', () => runExport('pdf', $('pdf-share'), exportKey(pdfOpts()), buildPdfFile, 'share'));
+$('pdf-save').addEventListener('click', () => runExport('pdf', $('pdf-save'), exportKey(pdfOpts()), buildPdfFile, 'save'));
 
 function download(blob, name) {
   const url = URL.createObjectURL(blob);
@@ -852,14 +994,34 @@ function blobToBase64(blob) {
   });
 }
 
-// Teilen: Android-App -> nativer Teilen-Dialog; Browser -> Web Share; sonst Download
-async function shareFile(blob, name, title, text, allowTxt = false) {
+// Speichern: Android-App -> Ordner wählen; Browser -> Download-Ordner
+async function saveFile(blob, name) {
+  if (bridge && bridge.saveFile) {
+    bridge.saveFile(await blobToBase64(blob), name, blob.type);
+    return;
+  }
+  download(blob, name);
+  toast(`${name} wird im Download-Ordner gespeichert.`);
+}
+
+// E-Mail mit Anhang: Android-App -> nur Mail-Apps, PDF hängt an. Browser können keine
+// Anhänge an mailto: geben -> Teilen-Menü (Handy, Windows: Outlook/Mail), sonst Download + mailto
+async function mailFile(f) {
+  if (bridge && bridge.emailFile) {
+    bridge.emailFile(await blobToBase64(f.blob), f.name, f.blob.type, `Karte: ${f.title}`, f.text);
+    return;
+  }
+  await shareFile(f.blob, f.name, `Karte: ${f.title}`, f.text, f);
+}
+
+// Teilen: Android-App -> Teilen-Dialog; Browser -> Web Share; sonst Download (+ f.fallback)
+async function shareFile(blob, name, title, text, f = null, allowTxt = false) {
   if (bridge) {
     bridge.shareFile(await blobToBase64(blob), name, blob.type, title, text);
     return true;
   }
   const tries = [new File([blob], name, { type: blob.type })];
-  // Chrome teilt keine .json-Dateien, wohl aber Text – der Import erkennt beides
+  // Chrome teilt keine .json/.gpx/.kmz-Dateien direkt, wohl aber Text – nur für Suchgebiet-Dateien sinnvoll
   if (allowTxt) tries.push(new File([blob], name.replace(/\.json$/, '.txt'), { type: 'text/plain' }));
   for (const file of tries) {
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -868,37 +1030,166 @@ async function shareFile(blob, name, title, text, allowTxt = false) {
         return true;
       } catch (err) {
         if (err.name === 'AbortError') return false;
+        if (err.name === 'NotAllowedError') {
+          toast('Datei ist fertig – bitte nochmal auf „Teilen“ tippen.');
+          return false;
+        }
       }
     }
   }
-  toast('Direktes Teilen geht hier nicht – die Datei wird heruntergeladen.');
+  toast('Teilen geht in diesem Browser nicht – die Datei wird heruntergeladen.');
   download(blob, name);
+  if (f && f.fallback) f.fallback(f);
   return false;
 }
 
-function mailText() {
-  return `Anbei die Karte zum Suchgebiet „${lastPdf.title}“.`
-    + (grid ? `\nRaster: ${formatMeters(grid.cellM)}-Felder, A1 = Nordwest-Ecke, Felder A1 bis ${cellLabel(grid.cols - 1, grid.rows - 1)}.` : '')
-    + '\nDas PDF lässt sich in der App Suchgebiet-Karten öffnen, um weiterzuarbeiten.';
+// ---------- Garmin: GPX ----------
+function gpxOpts() {
+  return {
+    tracks: $('gpx-tracks').checked,
+    teams: $('gpx-teams').checked,
+    grid: $('gpx-grid').value,
+    points: $('gpx-points').checked,
+    cells: $('gpx-cells').checked,
+    drawings: $('gpx-drawings').checked,
+  };
 }
 
-$('pdf-share').addEventListener('click', async () => {
-  if (!lastPdf) return;
-  const shared = await shareFile(lastPdf.blob, lastPdf.name, lastPdf.title, mailText());
-  if (!shared && !bridge) openMail();
+async function buildGpxFile() {
+  const gpx = buildGpx(P, grid, gpxOpts());
+  if (!/<(trk|wpt)[ >]/.test(gpx)) {
+    toast('Nichts zum Exportieren – erst einen Track zeichnen oder ein Raster anlegen.');
+    return null;
+  }
+  return {
+    blob: new Blob([gpx], { type: 'application/gpx+xml' }),
+    name: safeName('.gpx'),
+    title: P.title || 'Suchgebiet',
+    text: 'GPX für Garmin: in BaseCamp öffnen (Datei → Importieren) und an das Gerät senden.',
+  };
+}
+$('gpx-share').addEventListener('click', () => runExport('gpx', $('gpx-share'), exportKey(gpxOpts()), buildGpxFile, 'share'));
+$('gpx-save').addEventListener('click', () => runExport('gpx', $('gpx-save'), exportKey(gpxOpts()), buildGpxFile, 'save'));
+
+// ---------- Garmin: Custom Map (KMZ) ----------
+function kmzBounds() {
+  if ($('kmz-area').value === 'grid' && grid) {
+    const pad = 0.5;
+    return {
+      north: grid.originLat + grid.dLat * pad,
+      south: grid.originLat - grid.rows * grid.dLat - grid.dLat * pad,
+      west: grid.originLon - grid.dLon * pad,
+      east: grid.originLon + grid.cols * grid.dLon + grid.dLon * pad,
+    };
+  }
+  return viewBounds();
+}
+
+function updateKmzPlan() {
+  if (!grid) $('kmz-area').value = 'view';
+  $('kmz-area').querySelector('[value=grid]').disabled = !grid;
+  const plan = planCustomMap(kmzBounds(), Number($('kmz-res').value));
+  $('kmz-plan').textContent = `${plan.tiles} Kachel${plan.tiles > 1 ? 'n' : ''} · ${plan.W} × ${plan.H} Bildpunkte · `
+    + `${plan.mPerPx.toLocaleString('de-DE', { maximumFractionDigits: 1 })} m pro Bildpunkt`
+    + (plan.mPerPx > Number($('kmz-res').value) + 0.01 ? ' (für Garmin-Grenze vergröbert)' : '');
+}
+['kmz-area', 'kmz-res'].forEach((id) => $(id).addEventListener('change', updateKmzPlan));
+
+async function buildKmzFile(progress) {
+  const res = await buildCustomMap(P, grid, layerById(P.layerId), kmzBounds(), Number($('kmz-res').value),
+    (i, n) => progress(`Kachel ${i} von ${n} …`));
+  $('kmz-msg').textContent = `✔ ${res.tiles} Kachel${res.tiles > 1 ? 'n' : ''} (${Math.round(res.blob.size / 1024)} KB)`
+    + (res.missing ? ` – ${res.missing} Kartenkacheln fehlen (keine Verbindung oder Karte nicht exportierbar)` : '');
+  return {
+    blob: res.blob,
+    name: safeName('.kmz'),
+    title: P.title || 'Suchgebiet',
+    text: 'Garmin-Karte: per USB in den Ordner Garmin/CustomMaps auf dem GPS-Gerät kopieren.',
+  };
+}
+const kmzKey = () => exportKey([$('kmz-area').value, $('kmz-res').value]);
+$('kmz-share').addEventListener('click', () => runExport('kmz', $('kmz-share'), kmzKey(), buildKmzFile, 'share'));
+$('kmz-save').addEventListener('click', () => runExport('kmz', $('kmz-save'), kmzKey(), buildKmzFile, 'save'));
+
+// ---------- Suche (Adresse, Feld, Koordinaten) ----------
+let searchPin = null;
+
+function showSearchPin(lat, lon, label) {
+  if (searchPin) map.removeLayer(searchPin);
+  searchPin = L.marker([lat, lon], {
+    icon: L.divIcon({ className: 'search-pin', html: '📍', iconSize: [30, 30], iconAnchor: [15, 28] }),
+  }).addTo(map).bindTooltip(label, { direction: 'top', offset: [0, -24] }).openTooltip();
+  searchPin.on('click', () => { map.removeLayer(searchPin); searchPin = null; });
+}
+
+function closeSearch() {
+  $('searchbar').hidden = true;
+}
+
+function searchResult(text) {
+  const box = $('search-results');
+  box.innerHTML = '';
+  const p = document.createElement('p');
+  p.textContent = text;
+  box.appendChild(p);
+}
+
+async function runSearch() {
+  const q = parseQuery($('search-input').value);
+  if (!q) return;
+  if (q.type === 'cell' && grid) {
+    if (q.c >= grid.cols || q.r >= grid.rows) return searchResult('Dieses Feld gibt es im Raster nicht.');
+    const b = cellBounds(grid, q.c, q.r);
+    map.fitBounds([[b.south, b.west], [b.north, b.east]], { padding: [60, 60] });
+    closeSearch();
+    return;
+  }
+  if (q.type === 'coords') {
+    map.setView([q.lat, q.lon], Math.max(map.getZoom(), 16));
+    showSearchPin(q.lat, q.lon, `${q.lat.toFixed(5)}, ${q.lon.toFixed(5)}`);
+    closeSearch();
+    return;
+  }
+  searchResult('Suche läuft …');
+  try {
+    const list = await searchAddress(q.q || $('search-input').value.trim(), viewBounds());
+    const box = $('search-results');
+    box.innerHTML = '';
+    if (!list.length) return searchResult('Nichts gefunden. Tipp: Ort mit angeben, z. B. „Waldweg 5, Musterstadt“.');
+    for (const r of list) {
+      const b = document.createElement('button');
+      b.textContent = r.name;
+      b.addEventListener('click', () => {
+        if (r.bounds) map.fitBounds([[r.bounds[0], r.bounds[2]], [r.bounds[1], r.bounds[3]]], { maxZoom: 17 });
+        else map.setView([r.lat, r.lon], 17);
+        showSearchPin(r.lat, r.lon, r.name.split(',').slice(0, 2).join(','));
+        closeSearch();
+      });
+      box.appendChild(b);
+    }
+    const credit = document.createElement('p');
+    credit.className = 'credit';
+    credit.textContent = 'Suche: © OpenStreetMap-Mitwirkende (Nominatim)';
+    box.appendChild(credit);
+  } catch (err) {
+    searchResult(navigator.onLine === false ? 'Keine Internetverbindung – Adresssuche nicht möglich.' : `Suche fehlgeschlagen: ${err.message}`);
+  }
+}
+
+$('btn-search').addEventListener('click', () => {
+  const bar = $('searchbar');
+  bar.hidden = !bar.hidden;
+  if (!bar.hidden) {
+    closePanels();
+    $('search-input').focus();
+    $('search-input').select();
+  }
 });
-$('pdf-download').addEventListener('click', () => lastPdf && download(lastPdf.blob, lastPdf.name));
-
-function openMail() {
-  const body = `${mailText()}\n\n(Bitte die heruntergeladene Datei ${lastPdf.name} anhängen.)`;
-  location.href = `mailto:?subject=${encodeURIComponent('Karte: ' + lastPdf.title)}&body=${encodeURIComponent(body)}`;
-}
-$('pdf-mail').addEventListener('click', () => lastPdf && openMail());
-if (bridge) {
-  // In der App öffnet „Senden“ den Android-Teilen-Dialog, Download/Mailto sind überflüssig
-  $('pdf-download').hidden = true;
-  $('pdf-mail').hidden = true;
-}
+$('search-close').addEventListener('click', closeSearch);
+$('search-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  runSearch();
+});
 
 // ---------- Sonstiges ----------
 let toastTimer = null;

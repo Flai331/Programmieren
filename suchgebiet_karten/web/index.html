@@ -14,7 +14,17 @@
   <header class="topbar">
     <input id="title" class="title" type="text" placeholder="Einsatz / Suchgebiet" aria-label="Titel">
     <div id="status" class="status"></div>
+    <button id="btn-search" class="searchbtn" title="Adresse, Ort, Feld oder Koordinaten suchen" aria-label="Suchen">🔍</button>
   </header>
+
+  <div id="searchbar" class="searchbar" hidden>
+    <form id="search-form" class="searchrow">
+      <input id="search-input" type="search" placeholder="Adresse, Ort, Feld (C4) oder 50.12, 8.61" autocomplete="off" enterkeyhint="search">
+      <button type="submit" class="primary">Suchen</button>
+      <button type="button" id="search-close" aria-label="Schließen">✕</button>
+    </form>
+    <div id="search-results"></div>
+  </div>
 
   <div id="map"></div>
   <canvas id="overlay"></canvas>
@@ -26,6 +36,7 @@
     <button data-tool="pen" title="Freihand zeichnen"><span>✏️</span>Stift</button>
     <button data-tool="text" title="Text / Punkt setzen"><span>📍</span>Text</button>
     <button data-tool="fill" title="Feld einfärben / Team zuteilen"><span>▦</span>Feld</button>
+    <button data-tool="track" title="Track Punkt für Punkt setzen (für Garmin)"><span>〰️</span>Track</button>
     <button data-tool="erase" title="Zeichnung löschen"><span>🧽</span>Radierer</button>
     <button id="undo" title="Rückgängig"><span>↶</span>Zurück</button>
   </nav>
@@ -36,7 +47,14 @@
     <button id="btn-teams" title="Teams &amp; Legende"><span>👥</span>Teams</button>
     <button id="btn-layers" title="Kartenart"><span>🗺️</span>Karte</button>
     <button id="btn-gps" title="Mein Standort"><span>◎</span>GPS</button>
-    <button id="btn-pdf" class="primary" title="PDF erstellen &amp; senden"><span>📄</span>PDF</button>
+    <button id="btn-pdf" class="primary" title="PDF, GPX und Garmin-Karte"><span>📤</span>Export</button>
+  </div>
+
+  <div id="trackbar" class="trackbar" hidden>
+    <span id="track-info">Track: auf die Karte tippen</span>
+    <button id="track-back">↶ Punkt</button>
+    <button id="track-done" class="primary">Fertig</button>
+    <button id="track-cancel">Abbrechen</button>
   </div>
 
   <div id="palette" class="palette" hidden>
@@ -133,17 +151,19 @@
 
   <!-- PDF -->
   <section id="panel-pdf" class="panel" hidden>
-    <h2>PDF erstellen</h2>
+    <h2>Exportieren</h2>
+    <p class="small">„Teilen“ öffnet das Teilen-Menü des Handys (WhatsApp, Mail, Signal …). „Speichern“ legt die Datei ab – im Browser im Download-Ordner, in der App an einem Ort deiner Wahl.</p>
+    <h2 class="sub first">📄 PDF</h2>
     <div class="row">
       <label>Format
         <select id="pdf-format"><option>A4</option><option>A3</option></select>
       </label>
       <label>Ausrichtung
-        <select id="pdf-orient"><option value="landscape">Quer</option><option value="portrait">Hoch</option></select>
+        <select id="pdf-orient"><option value="auto" selected>Automatisch</option><option value="landscape">Quer</option><option value="portrait">Hoch</option></select>
       </label>
     </div>
-    <label class="check"><input type="checkbox" id="pdf-overview" checked> Übersicht (ganzes Raster)</label>
-    <label class="check"><input type="checkbox" id="pdf-details" checked> Detailblätter mit
+    <label class="check"><input type="checkbox" id="pdf-overview" checked> Ganzes Suchgebiet auf einer Seite</label>
+    <label class="check"><input type="checkbox" id="pdf-details"> Zusätzlich Detailblätter mit
       <select id="pdf-k">
         <option value="2">2×2</option>
         <option value="3" selected>3×3</option>
@@ -151,20 +171,59 @@
         <option value="5">5×5</option>
       </select> Feldern
     </label>
-    <label class="check"><input type="checkbox" id="pdf-info" checked> Einsatzinfo-Seite (Teams, Legende, Treffpunkt, Notizen)</label>
+    <label class="check"><input type="checkbox" id="pdf-info"> Zusätzlich Einsatzinfo-Seite (Teams, Legende, Treffpunkt, Notizen)</label>
     <label class="check"><input type="checkbox" id="pdf-view"> Aktueller Kartenausschnitt</label>
+    <label>Beschriftung (steht über der Karte, max. 4 Zeilen)
+      <textarea id="pdf-caption" rows="2" placeholder="z. B. Auftrag: Flächensuche Team 1–3, Funkkanal 3"></textarea>
+    </label>
     <p id="pdf-plan" class="info"></p>
     <div class="row">
-      <button id="pdf-make" class="primary">PDF erstellen</button>
+      <button id="pdf-mail" class="primary">✉️ E-Mail</button>
+      <button id="pdf-share" class="primary">📤 Teilen (WhatsApp …)</button>
+      <button id="pdf-save">💾 Speichern</button>
     </div>
-    <div id="pdf-result" hidden>
-      <p id="pdf-msg" class="info"></p>
-      <div class="row">
-        <button id="pdf-share" class="primary">Senden / Teilen (E-Mail …)</button>
-        <button id="pdf-download">Herunterladen</button>
-        <button id="pdf-mail">E-Mail-Programm öffnen</button>
-      </div>
+    <p id="pdf-msg" class="info"></p>
+
+    <h2 class="sub">🧭 Garmin: GPX für BaseCamp</h2>
+    <p class="small">Tracks und Wegpunkte, die du in BaseCamp öffnest und von dort an das GPS-Gerät sendest. Sie liegen über jeder Karte auf dem Gerät.</p>
+    <label class="check"><input type="checkbox" id="gpx-tracks" checked> Eigene Tracks</label>
+    <label class="check"><input type="checkbox" id="gpx-teams" checked> Team-Bereiche und Markierungen (Umrisse)</label>
+    <label>Suchgebiet / Raster
+      <select id="gpx-grid">
+        <option value="outline" selected>Nur Umrandung des Suchgebiets</option>
+        <option value="all">Umrandung und alle Rasterlinien</option>
+        <option value="none">Nichts</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" id="gpx-points" checked> Treffpunkt und Textpunkte als Wegpunkte</label>
+    <label class="check"><input type="checkbox" id="gpx-cells"> Feldnamen als Wegpunkte (A1, B1 …)</label>
+    <label class="check"><input type="checkbox" id="gpx-drawings"> Freihand-Zeichnungen</label>
+    <div class="row">
+      <button id="gpx-share" class="primary">📤 Teilen</button>
+      <button id="gpx-save">💾 Speichern</button>
     </div>
+
+    <h2 class="sub">🗺️ Garmin: Karte (Custom Map)</h2>
+    <p class="small">Das Kartenbild mit Raster, Teams und Tracks als KMZ-Datei. Auf das Gerät per USB in den Ordner <b>Garmin/CustomMaps</b> kopieren (Ordner ggf. anlegen) – die Karte liegt dann über deiner Wanderkarte. Funktioniert z. B. bei GPSMAP, eTrex 22x/32x, Oregon, Montana.</p>
+    <label>Bereich
+      <select id="kmz-area">
+        <option value="grid">Raster (mit Rand)</option>
+        <option value="view">Aktueller Kartenausschnitt</option>
+      </select>
+    </label>
+    <label>Detail
+      <select id="kmz-res">
+        <option value="1">Hoch (1 m pro Bildpunkt)</option>
+        <option value="2" selected>Normal (2 m pro Bildpunkt)</option>
+        <option value="4">Grob (4 m pro Bildpunkt, großes Gebiet)</option>
+      </select>
+    </label>
+    <p id="kmz-plan" class="info"></p>
+    <div class="row">
+      <button id="kmz-share" class="primary">📤 Teilen</button>
+      <button id="kmz-save">💾 Speichern</button>
+    </div>
+    <p id="kmz-msg" class="info"></p>
     <button class="close">Schließen</button>
   </section>
 
