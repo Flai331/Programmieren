@@ -27,7 +27,7 @@ von der einen in die andere übernehmen.
 | **Gebiete** | Name des Einsatzes, mehrere Suchgebiete speichern, wechseln, kopieren, löschen · Einsatzleitung, Notizen, Treffpunkt · Suchgebiet als Datei senden / Datei öffnen |
 | **Raster** | Feldgröße (25 m – 1 km), Suchgebiet aufziehen oder Ausschnitt nehmen, Feld suchen („C4“), **UTM-Schalter** |
 | **Teams** | Teams (Name, Hund, Farbe) und Status („abgesucht“, „nicht begehbar“ …) anlegen. Ein Feld behält sein Team; der Status liegt zusätzlich schraffiert darüber |
-| **Karte** | OpenStreetMap, OpenTopoMap, basemap.de, Luftbild Niedersachsen (LGLN), Luftbild NRW (Geobasis NRW), Luftbild Esri |
+| **Karte** | TopPlusOpen (topografisch, mit Waldwegen), basemap.de farbig/grau, Luftbild Niedersachsen (LGLN), Luftbild NRW – über Luftbildern zuschaltbar: Wege, Straßen, Ortsnamen |
 | **GPS** | Eigener Standort, oben steht das aktuelle Feld (mit UTM-Schalter auch UTMREF) |
 | **Export** | PDF, GPX für Garmin/BaseCamp, Garmin-Karte (KMZ) – jeweils **📤 Teilen** (WhatsApp, Mail, Signal …) oder **💾 Speichern** |
 | Stift / Text / Feld / Track / Radierer | Freihand zeichnen, Punkt mit Text, Felder einem Team zuteilen (antippen oder drüberwischen), Track Punkt für Punkt setzen, löschen |
@@ -97,6 +97,24 @@ Karteninformationen* ein- und ausschalten. Wer die eigene Wanderkarte sehen will
   schlechtem Empfang verfügbar.
 - Google Maps ist nicht enthalten: Die Nutzungsbedingungen verbieten das
   Abfotografieren/Exportieren der Karten. Luftbilder kommen stattdessen von Esri.
+
+## Lizenzen (auch bei Verkauf der App kostenlos)
+
+| Dienst | Wofür | Lizenz / Bedingung |
+|---|---|---|
+| TopPlusOpen (BKG) | Topografische Karte, Wege-Ebene über Luftbildern | dl-de/by-2-0 – frei, auch kommerziell, mit Namensnennung |
+| basemap.de (BKG/Länder) | Karte farbig und grau | CC BY 4.0 – frei, auch kommerziell, mit Namensnennung |
+| LGLN Niedersachsen | Luftbild Niedersachsen | CC BY 4.0 – frei, auch kommerziell, mit Namensnennung |
+| Geobasis NRW | Luftbild NRW | dl-de/zero-2-0 – frei, ohne Bedingungen |
+| Photon (komoot) / Nominatim | Adresssuche | Daten ODbL (Namensnennung); öffentliche Server kostenlos bei fairer Nutzung, ohne Garantie. Bei vielen Nutzern eigenen Photon-Server betreiben (freie Software) |
+| Leaflet, jsPDF | Programmbibliotheken | BSD-2 / MIT – frei, auch kommerziell |
+
+Die Namensnennung steht unten rechts auf der Karte und in der Fußzeile jedes PDFs.
+Bewusst **nicht** verwendet: Google Maps (Export verboten), die Kachelserver von
+OpenStreetMap und OpenTopoMap (Nutzungsregeln verbieten Massenabruf, wie ihn PDF
+und Garmin-Karte brauchen) und Esri (Konto bzw. Lizenz nötig).
+
+Keine Rechtsberatung – vor einem Verkauf die Lizenztexte der Anbieter einmal selbst lesen.
 
 ## Entwicklung
 

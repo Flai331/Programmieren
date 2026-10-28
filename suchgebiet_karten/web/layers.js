@@ -1,29 +1,33 @@
-// Kartengrundlagen. Alle Dienste liefern Kacheln mit CORS-Freigabe, sonst
-// könnten sie nicht ins PDF übernommen werden. (Google Maps erlaubt das
-// Abfotografieren/Exportieren seiner Karten nicht und ist deshalb nicht dabei.)
+// Kartengrundlagen – nur Dienste, die auch bei kommerzieller Nutzung (Verkauf der App)
+// kostenlos sind: amtliche Geodaten von BKG und Ländern (Lizenzen CC BY 4.0,
+// dl-de/by-2-0, dl-de/zero-2-0). Namensnennung steht auf dem Bildschirm und im PDF.
+// Alle liefern Kacheln mit CORS-Freigabe, sonst kämen sie nicht ins PDF.
+// Nicht verwendet: Google Maps (Export verboten), OSM-/OpenTopoMap-Kachelserver
+// (Nutzungsregeln verbieten Massenabruf, z. B. für PDF), Esri (Konto/Lizenz nötig).
 
 const YEAR = new Date().getFullYear();
+const TOPPLUS = 'https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0';
+const TOPPLUS_ATTR = `TopPlusOpen © BKG (${YEAR}) dl-de/by-2-0, Datenquellen: sgx.geodatenzentrum.de/web_public/Datenquellen_TopPlus_Open.pdf`;
 
 export const LAYERS = [
   {
-    id: 'osm',
-    name: 'OpenStreetMap',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    maxNative: 19,
-    attribution: '© OpenStreetMap-Mitwirkende (ODbL)',
-  },
-  {
-    id: 'topo',
-    name: 'Topografisch (OpenTopoMap)',
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    subdomains: 'abc',
-    maxNative: 17,
-    attribution: '© OpenStreetMap-Mitwirkende, SRTM | Darstellung © OpenTopoMap (CC-BY-SA)',
+    id: 'topplus',
+    name: 'Topografisch (TopPlusOpen, mit Waldwegen)',
+    url: `${TOPPLUS}/web/default/WEBMERCATOR/{z}/{y}/{x}.png`,
+    maxNative: 18,
+    attribution: TOPPLUS_ATTR,
   },
   {
     id: 'basemapde',
-    name: 'basemap.de (amtlich, nur DE)',
+    name: 'basemap.de farbig (nur DE)',
     url: 'https://sgx.geodatenzentrum.de/wmts_basemapde/tile/1.0.0/de_basemapde_web_raster_farbe/default/GLOBAL_WEBMERCATOR/{z}/{y}/{x}.png',
+    maxNative: 18,
+    attribution: `© GeoBasis-DE / BKG (${YEAR}) CC BY 4.0`,
+  },
+  {
+    id: 'basemapde-grau',
+    name: 'basemap.de grau (gut zum Einzeichnen)',
+    url: 'https://sgx.geodatenzentrum.de/wmts_basemapde/tile/1.0.0/de_basemapde_web_raster_grau/default/GLOBAL_WEBMERCATOR/{z}/{y}/{x}.png',
     maxNative: 18,
     attribution: `© GeoBasis-DE / BKG (${YEAR}) CC BY 4.0`,
   },
@@ -45,42 +49,23 @@ export const LAYERS = [
     maxNative: 19,
     attribution: `Luftbild © Geobasis NRW (${YEAR}) dl-de/zero-2-0`,
   },
-  {
-    id: 'sat',
-    aerial: true,
-    name: 'Luftbild (Esri)',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    maxNative: 19,
-    attribution: 'Luftbild © Esri, Maxar, Earthstar Geographics',
-  },
 ];
 
-// Durchsichtige Ebenen über Luftbildern
+// Ebenen über Luftbildern: TopPlusOpen hell, „multipliziert“ – Weiß wird durchsichtig,
+// Wege, Straßen und Namen liegen dann auf dem Luftbild.
 export const OVERLAYS = [
   {
-    id: 'roads',
-    name: 'Straßen',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-    maxNative: 19,
-    attribution: 'Straßen © Esri',
-  },
-  {
-    id: 'places',
-    name: 'Ortsnamen und Grenzen',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-    maxNative: 19,
-    attribution: 'Namen © Esri',
-  },
-  {
-    id: 'hiking',
-    name: 'Wanderwege (markierte Routen)',
-    url: 'https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png',
+    id: 'paths',
+    name: 'Wege, Straßen und Ortsnamen',
+    url: `${TOPPLUS}/web_light/default/WEBMERCATOR/{z}/{y}/{x}.png`,
     maxNative: 18,
-    attribution: 'Wanderwege © waymarkedtrails.org, OpenStreetMap-Mitwirkende (CC BY-SA)',
+    blend: 'multiply',
+    opacity: 0.85,
+    attribution: TOPPLUS_ATTR,
   },
 ];
 
-export const DEFAULT_OVERLAYS = ['roads', 'places', 'hiking'];
+export const DEFAULT_OVERLAYS = ['paths'];
 
 // Grundkarte + gewählte Overlays (nur bei Luftbildern) als ein Objekt für PDF/KMZ
 export function layerStack(id, overlayIds = DEFAULT_OVERLAYS) {

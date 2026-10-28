@@ -128,6 +128,10 @@ async function drawLayerTiles(ctx, def, box, Wpx, zWanted, maxTiles) {
   }
   const imgs = await loadAll(list.map((t) => t.url), 8);
   let missing = 0;
+  // Ebenen wie „Wege über Luftbild“ werden multipliziert (Weiß wird durchsichtig)
+  ctx.save();
+  ctx.globalAlpha = def.opacity ?? 1;
+  ctx.globalCompositeOperation = def.blend || 'source-over';
   list.forEach((t, i) => {
     const img = imgs[i];
     const x = (t.tx * 256 - box.x0 * 2 ** z) * k;
@@ -135,6 +139,7 @@ async function drawLayerTiles(ctx, def, box, Wpx, zWanted, maxTiles) {
     if (img) ctx.drawImage(img, Math.floor(x), Math.floor(y), Math.ceil(256 * k) + 1, Math.ceil(256 * k) + 1);
     else missing++;
   });
+  ctx.restore();
   return { missing, tiles: list.length };
 }
 

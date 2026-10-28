@@ -9,7 +9,7 @@ import { buildPdf, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
 import { buildGpx, trackLength, formatLength } from './gpx.js';
 import { buildCustomMap, planCustomMap } from './kmz.js';
-import { parseQuery, searchAddress } from './search.js';
+import { parseQuery, searchAddress, suggestPlaces } from './search.js';
 import {
   newProject, normalizeProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
   exportProject, importProject, uid, TEAM_COLORS,
@@ -123,7 +123,9 @@ function setLayer(id) {
 }
 
 function activeOverlays() {
-  return P.overlays || DEFAULT_OVERLAYS;
+  // ältere Auswahl (z. B. Esri-Ebenen, die es nicht mehr gibt) -> Standard
+  const known = (P.overlays || []).filter((id) => OVERLAYS.some((o) => o.id === id));
+  return P.overlays && (known.length || !P.overlays.length) ? known : DEFAULT_OVERLAYS;
 }
 
 // Straßen/Wanderwege über Luftbildern. Auf dem Bildschirm ohne CORS-Anfrage, damit sie
@@ -141,6 +143,8 @@ function makeTiles(l, cors, zIndex = 1) {
   const layer = new AppTiles('', {
     def: l,
     zIndex,
+    opacity: l.opacity ?? 1,
+    className: l.blend ? `blend-${l.blend}` : '',
     maxNativeZoom: l.maxNative,
     maxZoom: 20,
     attribution: l.attribution,
@@ -1161,63 +1165,122 @@ function closeSearch() {
   $('searchbar').hidden = true;
 }
 
-function searchResult(text) {
+function goToPlace(r) {
+  if (r.bounds && r.bounds[0] !== r.bounds[1]) {
+    map.fitBounds([[r.bounds[0], r.bounds[2]], [r.bounds[1], r.bounds[3]]], { maxZoom: 17 });
+  } else map.setView([r.lat, r.lon], 17);
+  showSearchPin(r.lat, r.lon, r.name);
+  closeSearch();
+}
+
+// Trefferliste: [{name, sub, go()}]
+let shownResults = [];
+function showResults(list, credit) {
+  shownResults = list;
   const box = $('search-results');
   box.innerHTML = '';
-  const p = document.createElement('p');
-  p.textContent = text;
-  box.appendChild(p);
+  for (const r of list) {
+    const b = document.createElement('button');
+    b.innerHTML = '<b></b><small></small>';
+    b.querySelector('b').textContent = r.name;
+    b.querySelector('small').textContent = r.sub || '';
+    // pointerdown statt click: kommt vor dem Schließen der Handy-Tastatur
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); $('search-input').blur(); r.go(); });
+    box.appendChild(b);
+  }
+  if (credit) {
+    const p = document.createElement('p');
+    p.className = 'credit';
+    p.textContent = credit;
+    box.appendChild(p);
+  }
+  $('searchbar').hidden = !list.length && !credit;
 }
 
-async function runSearch() {
-  const q = parseQuery($('search-input').value);
-  if (!q) return;
-  if (q.type === 'cell' && grid) {
-    if (q.c >= grid.cols || q.r >= grid.rows) return toast('Dieses Feld gibt es im Raster nicht.');
-    const b = cellBounds(grid, q.c, q.r);
-    map.fitBounds([[b.south, b.west], [b.north, b.east]], { padding: [60, 60] });
-    closeSearch();
-    return;
+// Sofort-Vorschläge für Feldnamen und Koordinaten (ohne Internet)
+function localResult(q) {
+  if (q.type === 'cell' && grid && q.c < grid.cols && q.r < grid.rows) {
+    const label = cellLabel(q.c, q.r);
+    return {
+      name: `Feld ${label}`,
+      sub: 'im Raster anzeigen',
+      go() {
+        const b = cellBounds(grid, q.c, q.r);
+        map.fitBounds([[b.south, b.west], [b.north, b.east]], { padding: [60, 60] });
+        closeSearch();
+      },
+    };
   }
   if (q.type === 'coords') {
-    map.setView([q.lat, q.lon], Math.max(map.getZoom(), 16));
-    showSearchPin(q.lat, q.lon, `${q.lat.toFixed(5)}, ${q.lon.toFixed(5)}`);
-    closeSearch();
-    return;
-  }
-  $('searchbar').hidden = false;
-  searchResult('Suche läuft …');
-  try {
-    const list = await searchAddress(q.q || $('search-input').value.trim(), viewBounds());
-    const box = $('search-results');
-    box.innerHTML = '';
-    if (!list.length) return searchResult('Nichts gefunden. Tipp: Ort mit angeben, z. B. „Waldweg 5, Musterstadt“.');
-    for (const r of list) {
-      const b = document.createElement('button');
-      b.textContent = r.name;
-      b.addEventListener('click', () => {
-        if (r.bounds) map.fitBounds([[r.bounds[0], r.bounds[2]], [r.bounds[1], r.bounds[3]]], { maxZoom: 17 });
-        else map.setView([r.lat, r.lon], 17);
-        showSearchPin(r.lat, r.lon, r.name.split(',').slice(0, 2).join(','));
+    return {
+      name: `${q.lat.toFixed(5)}, ${q.lon.toFixed(5)}`,
+      sub: 'Koordinaten anzeigen',
+      go() {
+        map.setView([q.lat, q.lon], Math.max(map.getZoom(), 16));
+        showSearchPin(q.lat, q.lon, `${q.lat.toFixed(5)}, ${q.lon.toFixed(5)}`);
         closeSearch();
-      });
-      box.appendChild(b);
-    }
-    const credit = document.createElement('p');
-    credit.className = 'credit';
-    credit.textContent = 'Suche: © OpenStreetMap-Mitwirkende (Nominatim)';
-    box.appendChild(credit);
-  } catch (err) {
-    searchResult(navigator.onLine === false ? 'Keine Internetverbindung – Adresssuche nicht möglich.' : `Suche fehlgeschlagen: ${err.message}`);
+      },
+    };
   }
+  return null;
 }
 
+const asResult = (r) => ({ ...r, go: () => goToPlace(r) });
+let suggestTimer = null;
+let suggestAbort = null;
+
+async function updateSuggestions(immediate = false) {
+  clearTimeout(suggestTimer);
+  if (suggestAbort) suggestAbort.abort();
+  const text = $('search-input').value.trim();
+  const q = parseQuery(text);
+  if (!q) { closeSearch(); return; }
+  const local = localResult(q);
+  if (local) { showResults([local]); return; }
+  if (q.type !== 'address' || text.length < 3) { closeSearch(); return; }
+  const run = async () => {
+    suggestAbort = new AbortController();
+    const c = map.getCenter();
+    try {
+      const list = await suggestPlaces(text, { lat: c.lat, lon: c.lng }, suggestAbort.signal);
+      if ($('search-input').value.trim() !== text) return; // inzwischen weitergetippt
+      if (list.length) showResults(list.map(asResult), 'Vorschläge: © OpenStreetMap-Mitwirkende (Photon)');
+      else showResults([], 'Nichts gefunden. Tipp: Ort mit angeben, z. B. „Waldweg 5, Musterstadt“.');
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      if (!immediate) return; // beim Tippen still bleiben, Enter versucht es nochmal
+      try {
+        // Ersatz: Nominatim (nur auf Knopfdruck erlaubt)
+        const list = await searchAddress(text, viewBounds());
+        showResults(list.map(asResult), list.length ? 'Suche: © OpenStreetMap-Mitwirkende (Nominatim)' : 'Nichts gefunden.');
+      } catch (err2) {
+        showResults([], navigator.onLine === false ? 'Keine Internetverbindung – Adresssuche nicht möglich.' : `Suche fehlgeschlagen: ${err2.message}`);
+      }
+    }
+  };
+  if (immediate) await run();
+  else suggestTimer = setTimeout(run, 250);
+}
+
+$('search-input').addEventListener('input', () => updateSuggestions(false));
+$('search-input').addEventListener('focus', () => { if (shownResults.length) $('searchbar').hidden = false; });
 $('search-close').addEventListener('click', closeSearch);
-$('search-form').addEventListener('submit', (e) => {
+$('search-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  $('search-input').blur(); // Tastatur am Handy schließen
   closePanels();
-  runSearch();
+  const q = parseQuery($('search-input').value);
+  if (!q) return;
+  const local = localResult(q);
+  if (local) { $('search-input').blur(); local.go(); return; }
+  if (q.type === 'cell' && grid) { toast('Dieses Feld gibt es im Raster nicht.'); return; }
+  // Enter: ersten Vorschlag nehmen, sonst sofort suchen
+  if (shownResults.length && !$('searchbar').hidden) {
+    $('search-input').blur();
+    shownResults[0].go();
+    return;
+  }
+  showResults([], 'Suche läuft …');
+  await updateSuggestions(true);
 });
 
 // ---------- Sonstiges ----------

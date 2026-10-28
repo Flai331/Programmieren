@@ -1,6 +1,6 @@
 // Service Worker: App offline verfügbar machen und angesehene Kartenkacheln
 // zwischenspeichern (hilft bei schlechtem Empfang im Gelände).
-const VERSION = 'v7';
+const VERSION = 'v9';
 const APP_CACHE = `suchgebiet-app-${VERSION}`;
 const TILE_CACHE = 'suchgebiet-tiles';
 const MAX_TILES = 4000;
@@ -23,7 +23,7 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-const TILE_HOSTS = ['tile.openstreetmap.org', 'tile.opentopomap.org', 'geodatenzentrum.de', 'arcgisonline.com', 'lgln.niedersachsen.de', 'wms.nrw.de', 'waymarkedtrails.org'];
+const TILE_HOSTS = ['geodatenzentrum.de', 'lgln.niedersachsen.de', 'wms.nrw.de'];
 
 async function trimTiles() {
   const cache = await caches.open(TILE_CACHE);

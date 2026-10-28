@@ -186,6 +186,11 @@ button, input, select { font: inherit; }
   background: #fff; padding: 10px 4px; font-size: 14px; cursor: pointer;
 }
 #search-results button:hover { background: #f6f6f8; }
+#search-results button b { display: block; font-weight: 600; }
+#search-results button small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
 #search-results p { margin: 10px 4px; color: var(--muted); font-size: 14px; }
 #search-results .credit { font-size: 11px; margin-top: 6px; }
 .search-pin { font-size: 30px; line-height: 30px; text-align: center; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
+
+/* Wege-Ebene über Luftbildern: Weiß wird durchsichtig */
+.blend-multiply { mix-blend-mode: multiply; }
