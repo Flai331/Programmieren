@@ -211,7 +211,7 @@ const HINTS = {
   pen: 'Mit dem Finger auf die Karte zeichnen. Zum Verschieben „Bewegen“ wählen.',
   text: 'Auf die Karte tippen, um einen Punkt mit Text zu setzen.',
   fill: 'Team/Markierung wählen, dann Felder antippen oder darüberwischen. Nochmal tippen entfernt.',
-  erase: 'Auf eine Zeichnung oder einen Text tippen, um sie zu löschen.',
+  erase: 'Antippen oder darüberwischen löscht Zeichnungen, Tracks, Texte, Treffpunkt und Feldfarben.',
   grid: 'Suchgebiet als Rechteck mit dem Finger aufziehen.',
   meet: 'Auf die Karte tippen, um den Treffpunkt zu setzen.',
   track: 'Track: Punkte antippen. Karte mit dem Finger verschieben, Zoom mit +/−.',
@@ -371,12 +371,28 @@ function finishPointer(e, cancelled) {
 canvas.addEventListener('pointerup', (e) => finishPointer(e, false));
 canvas.addEventListener('pointercancel', (e) => finishPointer(e, true));
 
+// Radierer: zuerst Zeichnungen/Tracks/Texte, dann Treffpunkt, dann Feldfarbe/Zuteilung.
+// Das Raster selbst bleibt (Raster → „Raster entfernen“).
 function eraseAt(x, y) {
+  const before = () => {
+    if (!erased) snapshot();
+    erased = true;
+  };
   const i = hitItem(P.items, toPx, x, y, 12);
-  if (i < 0) return;
-  if (!erased) snapshot();
-  erased = true;
-  P.items.splice(i, 1);
+  if (i >= 0) {
+    before();
+    P.items.splice(i, 1);
+  } else if (P.meet && Math.hypot(toPx(P.meet.lat, P.meet.lon)[0] - x, toPx(P.meet.lat, P.meet.lon)[1] - y) <= 16) {
+    before();
+    P.meet = null;
+  } else {
+    const ll = map.containerPointToLatLng([x, y]);
+    const cell = grid && cellAt(grid, ll.lat, ll.lng);
+    const key = cell && `${cell.c},${cell.r}`;
+    if (!key || !P.fills[key]) return;
+    before();
+    delete P.fills[key];
+  }
   redraw();
 }
 
