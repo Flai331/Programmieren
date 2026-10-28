@@ -18,6 +18,11 @@ const KNOWN = {
   '#558b2f': 'DarkGreen', '#616161': 'DarkGray', '#00c853': 'Green',
 };
 
+const COLOR_DE = {
+  Red: 'rot', Blue: 'blau', Green: 'grün', DarkGreen: 'grün', DarkYellow: 'orange', DarkMagenta: 'lila', Black: 'schwarz',
+  Yellow: 'gelb', DarkCyan: 'türkis', Magenta: 'pink', DarkRed: 'braun', DarkGray: 'grau', DarkBlue: 'blau',
+};
+
 export function garminColor(hex) {
   if (KNOWN[String(hex).toLowerCase()]) return KNOWN[String(hex).toLowerCase()];
   const n = parseInt(String(hex || '#000000').slice(1), 16);
@@ -145,7 +150,9 @@ export function buildGpx(project, grid, opts) {
   if (opts.drawings) {
     let n = 1;
     for (const it of project.items) {
-      if (it.kind === 'stroke') trks += trk(`Zeichnung ${n++}`, it.color, [it.pts]);
+      if (it.kind !== 'stroke' || it.pts.length < 2) continue;
+      const color = COLOR_DE[garminColor(it.color)] || '';
+      trks += trk(`Stift ${n++}${color ? ` (${color})` : ''}`, it.color, [it.pts], formatLength(trackLength(it.pts)));
     }
   }
   if (opts.teams && grid) {
