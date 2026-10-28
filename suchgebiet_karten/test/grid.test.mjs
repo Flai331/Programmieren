@@ -133,12 +133,15 @@ test('remapCells: 200 m -> 100 m, jedes große Feld wird zu 2×2 kleinen', () =>
   assert.deepEqual(Object.keys(out).filter((k) => out[k] === 's').sort(), ['4,2', '4,3', '5,2', '5,3']);
 });
 
-test('remapCells: 100 m -> 200 m, Mehrheit entscheidet', () => {
+test('remapCells: 100 m -> 200 m, Teilmarkierung bleibt, häufigste gewinnt', () => {
   const small = makeGrid(area, 100);
   const big = makeGrid(area, 200);
-  const out = remapCells(small, big, { '0,0': 'a', '1,0': 'a', '0,1': 'a', '2,0': 'b' });
+  const out = remapCells(small, big, { '0,0': 'a', '1,0': 'a', '0,1': 'b', '2,0': 'b', '5,3': 'c' });
   assert.equal(out['0,0'], 'a');
-  assert.equal(out['1,0'], undefined); // nur ein Viertel markiert
+  assert.equal(out['1,0'], 'b'); // nur ein Viertel markiert – bleibt trotzdem
+  assert.equal(out['2,1'], 'c');
+  // 100 m -> 1 km: einzelnes Feld geht nicht verloren
+  assert.equal(Object.values(remapCells(small, makeGrid(area, 1000), { '7,5': 'x' }))[0], 'x');
 });
 
 test('remapCells: verschobenes Gebiet behält die Lage', () => {
