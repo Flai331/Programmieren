@@ -77,7 +77,7 @@ function labelCell(keys) {
 }
 
 // Karte ohne Raster (Abschlussbericht): Flächen mit einem Umriss statt Feldkästchen,
-// eine Beschriftung je Fläche – auf der Fläche (areaLabels 'on') oder als Nummer mit Liste ('edge')
+// eine Beschriftung je Fläche – auf der Fläche (areaLabels 'on') oder als Schild mit Namen plus Liste ('edge')
 function drawAreas(ctx, toPx, state, grid, opt, s) {
   const corner = ([c, r]) => toPx(gridLat(grid, r), gridLon(grid, c));
   const rect = (key) => {
@@ -170,18 +170,21 @@ function drawAreas(ctx, toPx, state, grid, opt, s) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     if (opt.areaLabels === 'edge') {
-      // Nummer im Kreis, Erklärung in der Liste am Rand
-      const rr = 10 * s;
+      // Name auf weißem Schild mit Rand in der Farbe der Markierung (auf Luftbildern lesbar);
+      // die Liste am Rand nennt zusätzlich die Felder
+      ctx.font = `bold ${12 * s}px sans-serif`;
+      const w = ctx.measureText(g.label).width + 12 * s;
+      const h = 19 * s;
       ctx.beginPath();
-      ctx.arc(x, y, rr, 0, Math.PI * 2);
-      ctx.fillStyle = '#fff';
+      if (ctx.roundRect) ctx.roundRect(x - w / 2, y - h / 2, w, h, 5 * s);
+      else ctx.rect(x - w / 2, y - h / 2, w, h);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
       ctx.fill();
       ctx.lineWidth = 2.5 * s;
       ctx.strokeStyle = g.color;
       ctx.stroke();
-      ctx.font = `bold ${12 * s}px sans-serif`;
       ctx.fillStyle = '#111';
-      ctx.fillText(String(n), x, y + 0.5 * s);
+      ctx.fillText(g.label, x, y + 0.5 * s);
     } else {
       ctx.font = `bold ${14 * s}px sans-serif`;
       halo(ctx, g.label, x, y, '#111', s);
@@ -192,11 +195,11 @@ function drawAreas(ctx, toPx, state, grid, opt, s) {
   return areas;
 }
 
-// Liste der nummerierten Flächen unten links im Kartenbild
+// Liste der Flächen mit Feldern unten links im Kartenbild
 function drawAreaList(ctx, areas, opt, s) {
   ctx.font = `${11 * s}px sans-serif`;
   const lineH = 16 * s;
-  const texts = areas.map((a) => `${a.n}  ${a.label} (${a.cells})`);
+  const texts = areas.map((a) => `${a.label} (${a.cells})`);
   const cols = Math.max(1, Math.min(3, Math.floor((opt.width * 0.62) / (Math.max(...texts.map((t) => ctx.measureText(t).width)) + 40 * s))));
   const rows = Math.ceil(texts.length / cols);
   const colW = Math.max(...texts.map((t) => ctx.measureText(t).width)) + 32 * s;
@@ -214,17 +217,15 @@ function drawAreaList(ctx, areas, opt, s) {
   areas.forEach((a, i) => {
     const cx = x + 5 * s + Math.floor(i / rows) * colW;
     const cy = y + 5 * s + lineH * ((i % rows) + 0.5);
-    ctx.beginPath();
-    ctx.arc(cx + 8 * s, cy, 6.5 * s, 0, Math.PI * 2);
-    ctx.fillStyle = '#fff';
-    ctx.fill();
+    // Farbkästchen wie auf der Karte
+    ctx.fillStyle = a.color;
+    ctx.globalAlpha = 0.45;
+    ctx.fillRect(cx + 2 * s, cy - 6 * s, 13 * s, 12 * s);
+    ctx.globalAlpha = 1;
     ctx.lineWidth = 2 * s;
     ctx.strokeStyle = a.color;
-    ctx.stroke();
+    ctx.strokeRect(cx + 2 * s, cy - 6 * s, 13 * s, 12 * s);
     ctx.fillStyle = '#111';
-    ctx.font = `bold ${9 * s}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText(String(a.n), cx + 8 * s, cy + 0.5 * s);
     ctx.textAlign = 'left';
     ctx.font = `${11 * s}px sans-serif`;
     ctx.fillText(`${a.label} (${a.cells})`, cx + 20 * s, cy);

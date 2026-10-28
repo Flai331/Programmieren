@@ -21,7 +21,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v29';
+const APP_VERSION = 'v30';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -1710,7 +1710,7 @@ padCanvas.addEventListener('pointercancel', padEnd);
 window.addEventListener('resize', () => { if (!$('notepad').hidden) { padSize(); padDraw(); } });
 
 // Abschlussbericht der App (ohne Karte) mit den angekreuzten Inhalten
-// Karte nur, wenn angekreuzt: ohne Raster, Flächen nummeriert mit Liste am Rand
+// Karte nur, wenn angekreuzt: ohne Raster, Flächen beschriftet, Liste am Rand
 async function reportPdf(sec, progress) {
   const withMap = !!sec.map;
   const parts = { ...sec, legend: withMap };
