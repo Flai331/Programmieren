@@ -11,7 +11,7 @@ export function uid() {
 
 export function defaultMarks() {
   return [
-    { id: uid(), kind: 'status', label: 'abgesucht', color: '#2e7d32' },
+    { id: uid(), kind: 'status', label: 'abgesucht', color: '#00c853' },
     { id: uid(), kind: 'status', label: 'teilweise abgesucht', color: '#fdd835' },
     { id: uid(), kind: 'status', label: 'nicht begehbar', color: '#616161' },
   ];
@@ -30,7 +30,8 @@ export function newProject(title = '') {
     layerId: 'osm',
     cellM: 100,
     area: null,
-    fills: {}, // "c,r" -> Markierungs-ID
+    fills: {}, // "c,r" -> Team-ID (bleibt, auch wenn das Feld abgesucht ist)
+    status: {}, // "c,r" -> Status-ID (abgesucht, teilweise …), zusätzlich zum Team
     marks: defaultMarks(),
     items: [],
     meet: null, // {lat, lon, text}
@@ -46,9 +47,16 @@ export function normalizeProject(p) {
   if (!Array.isArray(out.marks)) out.marks = base.marks;
   if (!Array.isArray(out.items)) out.items = [];
   if (!out.fills || typeof out.fills !== 'object') out.fills = {};
-  // Feldfarben ohne passende Markierung entfernen
-  const ids = new Set(out.marks.map((m) => m.id));
-  for (const k of Object.keys(out.fills)) if (!ids.has(out.fills[k])) delete out.fills[k];
+  if (!out.status || typeof out.status !== 'object') out.status = {};
+  out.fills = { ...out.fills };
+  out.status = { ...out.status };
+  const kind = Object.fromEntries(out.marks.map((m) => [m.id, m.kind]));
+  // Ältere Stände hatten Team und Status in einem Feld: Status-Einträge umziehen
+  for (const k of Object.keys(out.fills)) {
+    if (kind[out.fills[k]] === 'status' && !out.status[k]) out.status[k] = out.fills[k];
+    if (kind[out.fills[k]] !== 'team') delete out.fills[k];
+  }
+  for (const k of Object.keys(out.status)) if (kind[out.status[k]] !== 'status') delete out.status[k];
   return out;
 }
 
@@ -70,7 +78,7 @@ export function migrateV1(old) {
       p.marks.push(m);
       byColor[color] = m.id;
     }
-    p.fills[key] = byColor[color];
+    p.status[key] = byColor[color];
   }
   return p;
 }
@@ -80,11 +88,16 @@ export function markLabel(m) {
   return m.label;
 }
 
-// "c,r" -> Farbe (für die Darstellung)
-export function resolveFills(p) {
+// Feldzuordnung, in der eine Markierung steht: Teams in fills, alles andere in status
+export function mapFor(p, m) {
+  return m.kind === 'team' ? p.fills : p.status;
+}
+
+// "c,r" -> Farbe (für die Darstellung); which = 'fills' (Teams) oder 'status'
+export function resolveFills(p, which = 'fills') {
   const color = Object.fromEntries(p.marks.map((m) => [m.id, m.color]));
   const out = {};
-  for (const [k, id] of Object.entries(p.fills)) if (color[id]) out[k] = color[id];
+  for (const [k, id] of Object.entries(p[which] || {})) if (color[id]) out[k] = color[id];
   return out;
 }
 
@@ -116,13 +129,30 @@ export function cellsText(keys) {
 // Pro Markierung: zugeteilte Felder
 export function assignments(p) {
   return p.marks.map((m) => {
-    const keys = Object.keys(p.fills).filter((k) => p.fills[k] === m.id);
+    const map = mapFor(p, m);
+    const keys = Object.keys(map).filter((k) => map[k] === m.id);
     return { mark: m, count: keys.length, text: cellsText(keys) };
   });
 }
 
+// Status innerhalb der Felder eines Teams, z. B. [{mark: abgesucht, count: 2, text: 'A3–B3'}]
+export function teamStatus(p, team) {
+  const own = Object.keys(p.fills).filter((k) => p.fills[k] === team.id);
+  return p.marks.filter((m) => m.kind !== 'team').map((m) => {
+    const keys = own.filter((k) => p.status[k] === m.id);
+    return { mark: m, count: keys.length, text: cellsText(keys) };
+  }).filter((x) => x.count);
+}
+
+// Team eines Feldes
 export function cellOwner(p, c, r) {
   const id = p.fills[`${c},${r}`];
+  return id ? p.marks.find((m) => m.id === id) || null : null;
+}
+
+// Status eines Feldes (abgesucht …)
+export function cellStatus(p, c, r) {
+  const id = p.status[`${c},${r}`];
   return id ? p.marks.find((m) => m.id === id) || null : null;
 }
 
