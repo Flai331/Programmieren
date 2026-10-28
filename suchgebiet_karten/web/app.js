@@ -16,7 +16,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v16';
+const APP_VERSION = 'v17';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -925,6 +925,7 @@ $('import-file').addEventListener('change', async () => {
 // ---------- Panels ----------
 function openPanel(id) {
   closePanels();
+  closeSearch();
   $(id).hidden = false;
 }
 function closePanels() {
@@ -1363,6 +1364,9 @@ async function updateSuggestions(immediate = false) {
 $('search-input').addEventListener('input', () => updateSuggestions(false));
 $('search-input').addEventListener('focus', () => { if (shownResults.length) $('searchbar').hidden = false; });
 $('search-close').addEventListener('click', closeSearch);
+// Vorschläge schließen, sobald man mit der Karte arbeitet
+map.on('movestart click', closeSearch);
+canvas.addEventListener('pointerdown', closeSearch);
 $('search-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   closePanels();
