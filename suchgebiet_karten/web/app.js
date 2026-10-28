@@ -22,7 +22,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v39';
+const APP_VERSION = 'v40';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -1225,6 +1225,18 @@ function closePanels() {
   if ($('notepad').hidden) dropOverlay();
 }
 document.querySelectorAll('.panel .close').forEach((b) => b.addEventListener('click', closePanels));
+// Seitenknopf nochmal antippen, während sein Fenster offen ist: Fenster schließen
+const SIDE_PANELS = {
+  'btn-projects': 'panel-projects', 'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',
+  'btn-layers': 'panel-layers', 'btn-pdf': 'panel-pdf', 'btn-mission': 'panel-mission',
+};
+for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
+  $(btn).addEventListener('click', (e) => {
+    if ($(panel).hidden) return;
+    e.stopImmediatePropagation();
+    closePanels();
+  }, { capture: true });
+}
 $('btn-projects').addEventListener('click', () => { fillProjectForm(); renderProjects(); openPanel('panel-projects'); });
 $('btn-grid').addEventListener('click', () => { updateGridInfo(); openPanel('panel-grid'); });
 $('btn-teams').addEventListener('click', () => { renderMarks(); renderAlpha(); openPanel('panel-teams'); });
