@@ -11,7 +11,7 @@ import { buildGpx, trackLength, formatLength } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
-  MAIL_PARTS, REPORT_SECTIONS, EXTRA_PARTS, hasReportText, newMailTo, mailAddresses,
+  MAIL_PARTS, REPORT_SECTIONS, MAP_PARTS, EXTRA_PARTS, hasReportText, newMailTo, mailAddresses,
 } from './mission.js';
 import { buildCustomMap, planCustomMap } from './kmz.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
@@ -21,7 +21,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v30';
+const APP_VERSION = 'v31';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -216,7 +216,10 @@ function redraw() {
   const items = [...P.items];
   if (current) items.push(current);
   if (draftTrack && draftTrack.pts.length) items.push(draftTrack);
-  drawOverlay(ctx, toPx, { ...renderState(P, grid), items }, { s: 1, width: W, height: H, view, utm: P.showUtm });
+  // Raster ausgeblendet (zum Zeichnen): Markierungen als Flächen, Namen darauf
+  drawOverlay(ctx, toPx, { ...renderState(P, grid), items }, {
+    s: 1, width: W, height: H, view, utm: P.showUtm, noGrid: !!P.hideGrid, areaLabels: 'on',
+  });
   if (dragRect) {
     const [x0, y0] = toPx(dragRect.a.lat, dragRect.a.lng);
     const [x1, y1] = toPx(dragRect.b.lat, dragRect.b.lng);
@@ -669,6 +672,7 @@ function setArea(area, cellM = P.cellM) {
 function updateGridInfo() {
   $('cell-size').value = String(P.cellM);
   $('show-utm').checked = !!P.showUtm;
+  $('hide-grid').checked = !!P.hideGrid;
   if (!grid) {
     $('grid-info').textContent = 'Noch kein Raster. „Suchgebiet aufziehen“ oder „Aktuellen Ausschnitt nehmen“.';
     return;
@@ -687,6 +691,7 @@ $('cell-size').addEventListener('change', () => {
   if (!setArea(P.area, m)) $('cell-size').value = String(P.cellM);
 });
 $('show-utm').addEventListener('change', () => { P.showUtm = $('show-utm').checked; changed(); });
+$('hide-grid').addEventListener('change', () => { P.hideGrid = $('hide-grid').checked; changed(); });
 $('grid-draw').addEventListener('click', () => { closePanels(); setTool('grid'); });
 $('grid-view').addEventListener('click', () => {
   const b = map.getBounds().pad(-0.08);
@@ -1726,13 +1731,15 @@ async function reportPdf(sec, progress) {
     info: false,
     view: !grid,
     noMap: !withMap,
+    mapTeams: sec.mapTeams !== false,
+    mapStatus: sec.mapStatus !== false,
     noGrid: true,
     areaLabels: 'edge',
     report: parts,
     title: `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}`,
   };
   const res = await buildPdf(P, grid, opts, layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => progress(`Karte ${i} von ${n} …`));
-  return { blob: res.blob, name: safeName(hasReportText(parts) ? '_Abschlussbericht.pdf' : '_Notizen.pdf'), title: opts.title, pages: res.pages };
+  return { blob: res.blob, name: safeName(hasReportText(parts) ? '_Abschlussbericht.pdf' : hasPad || hasPhotos ? '_Notizen.pdf' : '_Karte.pdf'), title: opts.title, pages: res.pages };
 }
 
 async function buildReportFile(progress) {
@@ -1790,7 +1797,15 @@ function renderMailTo() {
       el.querySelector('.groups').appendChild(g);
     };
     group('Abschlussbericht:', REPORT_SECTIONS);
+    group('Karte zeigt:', MAP_PARTS);
     group('Zusätzlich:', EXTRA_PARTS);
+    // „Karte zeigt“ nur, wenn die Karte angekreuzt ist
+    const mapGroup = el.querySelectorAll('.groups .parts')[1];
+    const syncMap = () => { mapGroup.hidden = !row.map; };
+    syncMap();
+    el.querySelectorAll('.groups .parts')[0].querySelectorAll('input').forEach((inp, idx) => {
+      if (REPORT_SECTIONS[idx][0] === 'map') inp.addEventListener('change', syncMap);
+    });
     el.querySelector('.del').addEventListener('click', () => {
       if (row.to.trim() && !confirm(`Empfänger „${row.to}“ entfernen?`)) return;
       M().mailTo.splice(i, 1);

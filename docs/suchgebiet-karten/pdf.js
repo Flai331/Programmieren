@@ -410,8 +410,12 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
   const Wpx = Math.round((area.w / 25.4) * dpi);
   const Hpx = Math.round((area.h / 25.4) * dpi);
 
+  // opts.mapTeams / opts.mapStatus === false: Teams bzw. Status (abgesucht …) auf der Karte weglassen
   const rstate = renderState(project, grid);
+  if (opts.mapTeams === false) Object.assign(rstate, { fills: {}, fillLabels: {} });
+  if (opts.mapStatus === false) Object.assign(rstate, { status: {}, statusLabels: {} });
   const legend = [...assignments(project).filter((a) => a.count)
+    .filter((a) => (a.mark.kind === 'team' ? opts.mapTeams !== false : opts.mapStatus !== false))
     .map((a) => ({ color: a.mark.color, label: markLabel(a.mark), hatch: a.mark.kind !== 'team' })), ...lineLegend(project)];
 
   // Abschlussbericht: Berichtsseiten vor der Karte
