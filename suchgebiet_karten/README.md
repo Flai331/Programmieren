@@ -25,7 +25,7 @@ von der einen in die andere übernehmen.
 |---|---|
 | **Suchfeld (oben)** | Adresse, Ort, Straße suchen (OpenStreetMap), **Kreuzungen** („Hauptstraße Ecke Bahnhofstraße, Celle“ oder „Hauptstr./Bahnhofstr.“), außerdem Feldnamen („C4“) und Koordinaten („50.12, 8.61“) |
 | **Gebiete** | Name des Einsatzes, mehrere Suchgebiete speichern, wechseln, kopieren, löschen · Einsatzleitung, Notizen, Treffpunkt · Suchgebiet als Datei senden / Datei öffnen |
-| **Raster** | Feldgröße (25 m – 1 km), Suchgebiet aufziehen oder Ausschnitt nehmen, Feld suchen („C4“), **Raster ausblenden** (zum Zeichnen; Markierungen bleiben), **UTM-Schalter** |
+| **Raster** | Feldgröße (25 m – 1 km), Suchgebiet aufziehen oder Ausschnitt nehmen, Feld suchen („C4“), **Auf der Karte zeigen**: Raster, Randbeschriftung, Teams/Markierungen, Zeichnungen, Treffpunkt einzeln ausblendbar, „Karte nackt“ blendet alles aus, **UTM-Schalter** |
 | **Teams** | Teams (Name, Hund, Farbe) und Status („abgesucht“, „nicht begehbar“ …) anlegen. Ein Feld behält sein Team; der Status liegt zusätzlich schraffiert darüber |
 | **Karte** | TopPlusOpen (topografisch, mit Waldwegen), basemap.de farbig/grau, Luftbild Niedersachsen (LGLN), Luftbild NRW – über Luftbildern zuschaltbar: Wege, Straßen, Ortsnamen |
 | **GPS** | Eigener Standort, oben steht das aktuelle Feld (mit UTM-Schalter auch UTMREF) |

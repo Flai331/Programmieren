@@ -21,7 +21,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v31';
+const APP_VERSION = 'v32';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -216,9 +216,15 @@ function redraw() {
   const items = [...P.items];
   if (current) items.push(current);
   if (draftTrack && draftTrack.pts.length) items.push(draftTrack);
-  // Raster ausgeblendet (zum Zeichnen): Markierungen als Flächen, Namen darauf
-  drawOverlay(ctx, toPx, { ...renderState(P, grid), items }, {
-    s: 1, width: W, height: H, view, utm: P.showUtm, noGrid: !!P.hideGrid, areaLabels: 'on',
+  // Ausgeblendetes (Raster-Fenster → „Auf der Karte zeigen“); gilt nur für die Arbeitskarte.
+  // Was gerade gezeichnet wird, bleibt sichtbar.
+  const hide = P.hide || {};
+  const st = { ...renderState(P, grid), items: hide.items ? items.filter((it) => it === current || it === draftTrack) : items };
+  if (hide.marks) Object.assign(st, { fills: {}, status: {}, fillLabels: {}, statusLabels: {} });
+  if (hide.meet) st.meet = null;
+  // Raster aus: Markierungen als Flächen mit Namen darauf
+  drawOverlay(ctx, toPx, st, {
+    s: 1, width: W, height: H, view, utm: P.showUtm, noGrid: !!hide.grid, noEdge: !!hide.edge, areaLabels: 'on',
   });
   if (dragRect) {
     const [x0, y0] = toPx(dragRect.a.lat, dragRect.a.lng);
@@ -672,7 +678,7 @@ function setArea(area, cellM = P.cellM) {
 function updateGridInfo() {
   $('cell-size').value = String(P.cellM);
   $('show-utm').checked = !!P.showUtm;
-  $('hide-grid').checked = !!P.hideGrid;
+  renderViewToggles();
   if (!grid) {
     $('grid-info').textContent = 'Noch kein Raster. „Suchgebiet aufziehen“ oder „Aktuellen Ausschnitt nehmen“.';
     return;
@@ -691,7 +697,25 @@ $('cell-size').addEventListener('change', () => {
   if (!setArea(P.area, m)) $('cell-size').value = String(P.cellM);
 });
 $('show-utm').addEventListener('change', () => { P.showUtm = $('show-utm').checked; changed(); });
-$('hide-grid').addEventListener('change', () => { P.hideGrid = $('hide-grid').checked; changed(); });
+// Was auf der Arbeitskarte zu sehen ist
+const VIEW_KEYS = ['grid', 'edge', 'marks', 'items', 'meet'];
+function renderViewToggles() {
+  const hide = P.hide || {};
+  document.querySelectorAll('#view-toggles input').forEach((inp) => { inp.checked = !hide[inp.dataset.show]; });
+  const bare = VIEW_KEYS.every((k) => hide[k]);
+  $('view-bare').textContent = bare ? 'Alles wieder einblenden' : 'Karte nackt (alles ausblenden)';
+}
+document.querySelectorAll('#view-toggles input').forEach((inp) => inp.addEventListener('change', () => {
+  P.hide = { ...(P.hide || {}), [inp.dataset.show]: !inp.checked };
+  renderViewToggles();
+  changed();
+}));
+$('view-bare').addEventListener('click', () => {
+  const bare = VIEW_KEYS.every((k) => (P.hide || {})[k]);
+  P.hide = Object.fromEntries(VIEW_KEYS.map((k) => [k, !bare]));
+  renderViewToggles();
+  changed();
+});
 $('grid-draw').addEventListener('click', () => { closePanels(); setTool('grid'); });
 $('grid-view').addEventListener('click', () => {
   const b = map.getBounds().pad(-0.08);

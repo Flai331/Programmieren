@@ -47,7 +47,7 @@ export function drawOverlay(ctx, toPx, state, opt) {
   else if (grid) drawGrid(ctx, toPx, state, grid, opt, s);
   drawItems(ctx, toPx, state.items || [], s);
   if (state.meet) drawMeet(ctx, toPx, state.meet, s);
-  if (grid && !opt.noGrid) drawEdgeLabels(ctx, toPx, grid, opt, s);
+  if (grid && !opt.noGrid && !opt.noEdge) drawEdgeLabels(ctx, toPx, grid, opt, s);
   if (areas && opt.areaLabels === 'edge' && areas.length) drawAreaList(ctx, areas, opt, s);
   return areas;
 }
