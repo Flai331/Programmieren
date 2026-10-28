@@ -94,7 +94,7 @@
     <p id="grid-info" class="info"></p>
     <label>Auf der Karte zeigen</label>
     <div id="view-toggles" class="viewlist"></div>
-    <div class="row"><button id="view-none">Karte nackt (alles ausblenden)</button><button id="view-all">Alles einblenden</button></div>
+    <div class="row"><button id="view-none">Alles ausblenden</button><button id="view-all">Alles einblenden</button></div>
     <label class="check"><input type="checkbox" id="show-utm"> UTM-Koordinaten anzeigen (Gitter, UTMREF bei GPS und im PDF)</label>
     <label>Feld suchen
       <span class="row"><input id="cell-search" type="text" placeholder="z. B. C4"><button id="cell-go">Zeigen</button></span>
@@ -127,8 +127,8 @@
     <p class="small">Zum Weitergeben an die Staffel. Jedes PDF aus dieser App enthält das Suchgebiet ebenfalls und kann hier wieder geöffnet werden.</p>
     <div class="row">
       <button id="proj-share" class="primary">Suchgebiet als Datei senden</button>
-      <button id="proj-import">Datei öffnen (Suchgebiet oder PDF)</button>
-      <input id="import-file" type="file" accept=".json,.txt,.pdf,application/json,text/plain,application/pdf" hidden>
+      <button id="proj-import">Datei öffnen (Suchgebiet, PDF oder GPX)</button>
+      <input id="import-file" type="file" accept=".json,.txt,.pdf,.gpx,application/json,text/plain,application/pdf,application/gpx+xml" hidden>
     </div>
 
     <h2 class="sub">Gespeicherte Suchgebiete</h2>

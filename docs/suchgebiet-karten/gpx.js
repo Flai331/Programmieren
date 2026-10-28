@@ -72,10 +72,15 @@ export function formatArea(m2) {
   return `${ha.toLocaleString('de-DE', { maximumFractionDigits: ha < 10 ? 2 : 1 })} ha`;
 }
 
-// Beschreibung eines Umrisses: Länge, ab 3 Punkten auch die Fläche
-export function trackDesc(pts) {
+// Fläche nur bei Umrissen ab 3 Punkten; importierte offene Tracks (Wege) haben keine
+export function hasArea(it) {
+  return it.kind === 'track' && it.pts.length > 2 && !it.open;
+}
+
+// Beschreibung eines Umrisses: Länge, ggf. auch die Fläche
+export function trackDesc(pts, open = false) {
   const len = formatLength(trackLength(pts));
-  return pts.length > 2 ? `${len} · ${formatArea(polygonArea(pts))}` : len;
+  return pts.length > 2 && !open ? `${len} · ${formatArea(polygonArea(pts))}` : len;
 }
 
 export function formatLength(m) {
@@ -281,7 +286,7 @@ export function buildGpx(project, grid, opts, part = '') {
   }
   if (opts.tracks) {
     for (const it of project.items) {
-      if (it.kind === 'track') trks += trk(it.name || 'Umriss', it.color, [it.pts], trackDesc(it.pts));
+      if (it.kind === 'track') trks += trk(it.name || 'Umriss', it.color, [it.pts], trackDesc(it.pts, it.open));
     }
   }
   if (opts.drawings) {
@@ -343,4 +348,58 @@ export function buildGpx(project, grid, opts, part = '') {
     + ' http://www.garmin.com/xmlschemas/GpxExtensions/v3 http://www8.garmin.com/xmlschemas/GpxExtensionsv3.xsd">\n'
     + ` <metadata>\n  <name>${esc(docName)}</name>\n  <time>${new Date().toISOString()}</time>\n </metadata>\n`
     + wpts + trks + '</gpx>\n';
+}
+
+// ---------- Import (z. B. aus BaseCamp) ----------
+const COLOR_HEX = {
+  Red: '#d50000', Blue: '#1565c0', Green: '#2e7d32', DarkYellow: '#ef6c00', DarkMagenta: '#6a1b9a', Black: '#000000',
+  Yellow: '#fdd835', DarkCyan: '#00838f', Magenta: '#ad1457', DarkRed: '#4e342e', DarkGreen: '#558b2f', DarkGray: '#616161',
+  DarkBlue: '#1565c0', Cyan: '#00838f', LightGray: '#616161', White: '#616161', Transparent: '#616161',
+};
+
+function unesc(s) {
+  return String(s).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&amp;/g, '&').trim();
+}
+const tag = (xml, name) => { const m = xml.match(new RegExp(`<(?:\\w+:)?${name}\\b[^>]*>([\\s\\S]*?)</(?:\\w+:)?${name}>`)); return m ? unesc(m[1]) : ''; };
+const blocks = (xml, name) => xml.match(new RegExp(`<${name}\\b[\\s\\S]*?</${name}>|<${name}\\b[^>]*/>`, 'g')) || [];
+function point(el) {
+  const lat = parseFloat((el.match(/\blat\s*=\s*["']([^"']+)/) || [])[1]);
+  const lon = parseFloat((el.match(/\blon\s*=\s*["']([^"']+)/) || [])[1]);
+  return Number.isFinite(lat) && Number.isFinite(lon) ? [lat, lon] : null;
+}
+
+// Liest Tracks, Routen und Wegpunkte. Raster und Feldnamen aus unserem eigenen Export
+// („Raster …“, Wegpunkte „A1“, „B12“ …) werden übersprungen.
+// -> { tracks: [{name, color, pts}], waypoints: [{name, lat, lon}], skipped }
+export function parseGpx(xml) {
+  if (!/<gpx\b/i.test(xml)) throw new Error('keine GPX-Datei');
+  xml = xml.replace(/<!--[\s\S]*?-->/g, '');
+  const tracks = [];
+  const waypoints = [];
+  let skipped = 0;
+  const add = (el, segTag, ptTag) => {
+    const name = tag(el.replace(new RegExp(`<${segTag || ptTag}\\b[\\s\\S]*`), ''), 'name');
+    if (/^Raster\b/.test(name)) { skipped++; return; }
+    const c = tag(el, 'DisplayColor');
+    const color = COLOR_HEX[c] || null;
+    const segs = segTag ? blocks(el, segTag) : [el];
+    segs.forEach((seg, i) => {
+      const pts = blocks(seg, ptTag).map(point).filter(Boolean);
+      if (pts.length > 1) tracks.push({ name: segs.length > 1 && i ? `${name} (${i + 1})` : name, color, pts });
+    });
+  };
+  for (const t of blocks(xml, 'trk')) add(t, 'trkseg', 'trkpt');
+  for (const r of blocks(xml, 'rte')) add(r, '', 'rtept');
+  for (const w of blocks(xml, 'wpt')) {
+    const p = point(w);
+    if (!p) continue;
+    const name = tag(w, 'name') || tag(w, 'desc') || 'Wegpunkt';
+    if (/^[A-Z]{1,3}\d{1,4}$/.test(name)) { skipped++; continue; }
+    waypoints.push({ name, lat: p[0], lon: p[1] });
+  }
+  return { tracks, waypoints, skipped };
 }

@@ -7,7 +7,7 @@ import {
 } from './layers.js';
 import { buildPdf, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { buildGpx, trackDesc } from './gpx.js';
+import { buildGpx, parseGpx, trackDesc, trackLength } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -21,7 +21,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v36';
+const APP_VERSION = 'v37';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
@@ -448,7 +448,10 @@ function eraseAt(x, y) {
   redraw();
 }
 
-document.querySelectorAll('.toolbar [data-tool]').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.tool)));
+// Nochmal auf das aktive Werkzeug tippen: zurück zu „Bewegen“
+document.querySelectorAll('.toolbar [data-tool]').forEach((b) => b.addEventListener('click', () => {
+  setTool(b.dataset.tool === tool ? 'pan' : b.dataset.tool);
+}));
 $('undo').addEventListener('click', undo);
 
 // Zeichnung, Track oder Textpunkt benennen (Name steht auf der Karte, im PDF und im GPX)
@@ -704,7 +707,7 @@ $('show-utm').addEventListener('change', () => { P.showUtm = $('show-utm').check
 // Was auf der Arbeitskarte zu sehen ist – alles einzeln (nur Anzeige, PDF/Export unverändert)
 function itemName(it, n) {
   if (it.kind === 'text') return `Text: ${it.text}`;
-  if (it.kind === 'track') return `Umriss: ${it.name || 'ohne Namen'} (${trackDesc(it.pts)})`;
+  if (it.kind === 'track') return `${it.open ? 'Track' : 'Umriss'}: ${it.name || 'ohne Namen'} (${trackDesc(it.pts, it.open)})`;
   return it.name ? `Zeichnung: ${it.name}` : `Stift ${n} (${COLOR_NAMES[it.color] || it.color})`;
 }
 function renderViewToggles() {
@@ -1009,6 +1012,10 @@ $('import-file').addEventListener('change', async () => {
   try {
     const buf = await f.arrayBuffer();
     const text = new TextDecoder('latin1').decode(buf);
+    if (/\.gpx$/i.test(f.name) || /^\s*(<\?xml[^>]*>\s*)?<gpx\b/i.test(text)) {
+      importGpx(new TextDecoder().decode(buf), f.name);
+      return;
+    }
     // JSON-Dateien sind UTF-8, PDFs werden nur nach dem eingebetteten Block durchsucht
     const p = importProject(text.trimStart().startsWith('{') ? new TextDecoder().decode(buf) : text);
     p.updated = Date.now();
@@ -1020,6 +1027,34 @@ $('import-file').addEventListener('change', async () => {
     toast('Datei konnte nicht geladen werden: ' + err.message);
   }
 });
+
+// GPX (z. B. aus BaseCamp) ins aktuelle Suchgebiet: Tracks/Routen als Umrisse, Wegpunkte als Text
+function importGpx(xml, fileName) {
+  const g = parseGpx(xml);
+  const base = fileName.replace(/\.gpx$/i, '');
+  const added = [];
+  for (const t of g.tracks) {
+    const [a, z] = [t.pts[0], t.pts[t.pts.length - 1]];
+    // geschlossen (Ende am Anfang, < 30 m): Fläche anzeigen, sonst offener Weg
+    const open = trackLength([a, z]) > 30;
+    added.push({ kind: 'track', name: t.name || base, color: t.color || db.color, w: 4, pts: t.pts, ...(open ? { open: true } : {}) });
+  }
+  for (const w of g.waypoints) added.push({ kind: 'text', color: db.color, lat: w.lat, lon: w.lon, text: w.name });
+  if (!added.length) {
+    toast(g.skipped ? 'Nur Raster/Feldnamen in der Datei – nichts übernommen' : 'Keine Tracks oder Wegpunkte in der Datei');
+    return;
+  }
+  P.items.push(...added);
+  save();
+  redraw();
+  closePanels();
+  const pts = added.flatMap((it) => (it.pts ? it.pts : [[it.lat, it.lon]]));
+  map.fitBounds(pts, { padding: [40, 40], maxZoom: 17 });
+  const parts = [];
+  if (g.tracks.length) parts.push(`${g.tracks.length} Track${g.tracks.length > 1 ? 's' : ''}`);
+  if (g.waypoints.length) parts.push(`${g.waypoints.length} Wegpunkt${g.waypoints.length > 1 ? 'e' : ''}`);
+  toast(`${parts.join(' und ')} übernommen${g.skipped ? ` (${g.skipped} Raster-Einträge übersprungen)` : ''}`);
+}
 
 // ---------- Panels ----------
 // Zurück-Taste/-Geste im Browser: schließt Notizblock bzw. Fenster statt die Seite zu verlassen.

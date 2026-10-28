@@ -4,7 +4,7 @@
 
 import { colName, cellLabel, cellBounds, gridBounds } from './grid.js';
 import { toUtm, fromUtm, utmZone } from './utm.js';
-import { cellComponents, cellOutlines, formatArea, polygonArea } from './gpx.js';
+import { cellComponents, cellOutlines, formatArea, hasArea, polygonArea } from './gpx.js';
 import { cellsText } from './store.js';
 
 const GRID_COLOR = 'rgba(200, 0, 0, 0.85)';
@@ -536,7 +536,7 @@ function drawTrack(ctx, toPx, it, s) {
   line(it.w * s, it.color);
   // ab 3 Punkten gestrichelt zurück zum Start: so wird die Fläche berechnet
   const [a, z] = [pts[0], pts[pts.length - 1]];
-  if (pts.length > 2 && Math.hypot(a[0] - z[0], a[1] - z[1]) > 1) {
+  if (hasArea(it) && Math.hypot(a[0] - z[0], a[1] - z[1]) > 1) {
     ctx.save();
     ctx.setLineDash([6 * s, 5 * s]);
     ctx.strokeStyle = it.color;
@@ -550,14 +550,18 @@ function drawTrack(ctx, toPx, it, s) {
   ctx.fillStyle = '#fff';
   ctx.strokeStyle = it.color;
   ctx.lineWidth = 2 * s;
+  // aufgezeichnete Wege (viele Punkte): nur Anfang und Ende markieren
+  const many = pts.length > 150;
   pts.forEach(([x, y], i) => {
+    const end = i === 0 || i === pts.length - 1;
+    if (many && !end) return;
     ctx.beginPath();
-    ctx.arc(x, y, (i === 0 || i === pts.length - 1 ? 5 : 3) * s, 0, Math.PI * 2);
+    ctx.arc(x, y, (end ? 5 : 3) * s, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
   });
   // Name und Fläche (ab 3 Punkten) am Startpunkt
-  const label = [it.name, it.pts.length > 2 ? formatArea(polygonArea(it.pts)) : ''].filter(Boolean).join(' · ');
+  const label = [it.name, hasArea(it) ? formatArea(polygonArea(it.pts)) : ''].filter(Boolean).join(' · ');
   if (label) {
     ctx.font = `bold ${13 * s}px sans-serif`;
     ctx.textAlign = 'left';
