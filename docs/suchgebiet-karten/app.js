@@ -791,6 +791,7 @@ $('proj-new').addEventListener('click', () => {
 });
 
 $('leader').addEventListener('input', () => { P.leader = $('leader').value; P.updated = Date.now(); save(); });
+$('pdf-caption').addEventListener('input', () => { P.caption = $('pdf-caption').value; P.updated = Date.now(); save(); });
 $('notes').addEventListener('input', () => { P.notes = $('notes').value; P.updated = Date.now(); save(); });
 $('meet-set').addEventListener('click', () => { closePanels(); setTool('meet'); });
 $('meet-remove').addEventListener('click', () => {
@@ -853,6 +854,7 @@ $('btn-grid').addEventListener('click', () => { updateGridInfo(); openPanel('pan
 $('btn-teams').addEventListener('click', () => { renderMarks(); openPanel('panel-teams'); });
 $('btn-layers').addEventListener('click', () => openPanel('panel-layers'));
 $('btn-pdf').addEventListener('click', () => {
+  $('pdf-caption').value = P.caption || '';
   updatePdfPlan();
   updateKmzPlan();
   $('pdf-msg').textContent = '';
