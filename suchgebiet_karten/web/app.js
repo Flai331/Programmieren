@@ -1173,7 +1173,7 @@ async function runSearch() {
   const q = parseQuery($('search-input').value);
   if (!q) return;
   if (q.type === 'cell' && grid) {
-    if (q.c >= grid.cols || q.r >= grid.rows) return searchResult('Dieses Feld gibt es im Raster nicht.');
+    if (q.c >= grid.cols || q.r >= grid.rows) return toast('Dieses Feld gibt es im Raster nicht.');
     const b = cellBounds(grid, q.c, q.r);
     map.fitBounds([[b.south, b.west], [b.north, b.east]], { padding: [60, 60] });
     closeSearch();
@@ -1185,6 +1185,7 @@ async function runSearch() {
     closeSearch();
     return;
   }
+  $('searchbar').hidden = false;
   searchResult('Suche läuft …');
   try {
     const list = await searchAddress(q.q || $('search-input').value.trim(), viewBounds());
@@ -1211,18 +1212,11 @@ async function runSearch() {
   }
 }
 
-$('btn-search').addEventListener('click', () => {
-  const bar = $('searchbar');
-  bar.hidden = !bar.hidden;
-  if (!bar.hidden) {
-    closePanels();
-    $('search-input').focus();
-    $('search-input').select();
-  }
-});
 $('search-close').addEventListener('click', closeSearch);
 $('search-form').addEventListener('submit', (e) => {
   e.preventDefault();
+  $('search-input').blur(); // Tastatur am Handy schließen
+  closePanels();
   runSearch();
 });
 
