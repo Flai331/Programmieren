@@ -221,6 +221,17 @@ class MainActivity : ComponentActivity() {
         // Mehrere Dateien in einem Teilen-Dialog senden
         @JavascriptInterface
         fun shareFiles(json: String, title: String, text: String) {
+            sendMultiple(json, title, text, emptyArray())
+        }
+
+        // Mail mit mehreren Anhängen an bestimmte Empfänger (Komma-getrennt), nur Mail-Apps
+        @JavascriptInterface
+        fun emailFilesTo(json: String, subject: String, text: String, to: String) {
+            val list = to.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toTypedArray()
+            sendMultiple(json, subject, text, list, emailOnly = true)
+        }
+
+        private fun sendMultiple(json: String, title: String, text: String, to: Array<String>, emailOnly: Boolean = false) {
             try {
                 val dir = File(cacheDir, "shared").apply { mkdirs() }
                 dir.listFiles()?.forEach { it.delete() }
@@ -235,9 +246,17 @@ class MainActivity : ComponentActivity() {
                     putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
                     putExtra(Intent.EXTRA_SUBJECT, title)
                     putExtra(Intent.EXTRA_TEXT, text)
+                    if (to.isNotEmpty()) putExtra(Intent.EXTRA_EMAIL, to)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    if (emailOnly) selector = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"))
                 }
-                runOnUiThread { startActivity(Intent.createChooser(send, "Senden an …")) }
+                runOnUiThread {
+                    try {
+                        startActivity(Intent.createChooser(send, if (emailOnly) "E-Mail senden mit …" else "Senden an …"))
+                    } catch (e: ActivityNotFoundException) {
+                        toast(if (emailOnly) "Keine E-Mail-App gefunden" else "Keine App zum Teilen gefunden")
+                    }
+                }
             } catch (e: Exception) {
                 Log.e("Suchgebiet", "Teilen fehlgeschlagen", e)
                 toast("Teilen fehlgeschlagen: ${e.message}")

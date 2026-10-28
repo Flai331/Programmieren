@@ -311,12 +311,17 @@
       <label>Verfasser
         <input id="ms-author" type="text" placeholder="Name">
       </label>
-      <label>E-Mail-Empfänger (mehrere mit Komma trennen)
-        <input id="ms-to" type="text" inputmode="email" placeholder="z. B. staffel@example.org, leitung@example.org">
-      </label>
-      <p class="small">Abschluss-PDF: Bericht (vermisste Person, Kräfte, Zusammenfassung, Notizen, Legende), Notizblock-Seiten, Fotos und die Karte. Format wie im Export eingestellt.</p>
+      <label>E-Mail-Empfänger – je Zeile ankreuzen, was dorthin geht</label>
+      <div id="ms-mailto" class="mailto"></div>
+      <div class="row"><button id="ms-mailto-add">+ Empfänger</button></div>
+      <p class="small">„Senden“ öffnet das Mailprogramm mit den Anhängen dieser Zeile. Mehrere Adressen in einer Zeile mit Komma trennen. Die Karte im Bericht zeigt die Flächen ohne Raster, nummeriert mit Liste.</p>
+      <label>JUH-Einsatzbericht (Vorlage, vorausgefüllt – alle Felder bleiben ausfüllbar)</label>
       <div class="row">
-        <button id="ms-mail" class="primary">📧 Per Mail senden</button>
+        <button id="ms-juh-share">📤 Teilen</button>
+        <button id="ms-juh-save">💾 Speichern</button>
+      </div>
+      <label>Alles als ein PDF (Bericht, Notizblock, Fotos, Karte)</label>
+      <div class="row">
         <button id="ms-share">📤 Teilen</button>
         <button id="ms-save">💾 Speichern</button>
       </div>

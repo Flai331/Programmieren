@@ -38,3 +38,13 @@ test('Mailtext und Kartenlegende', () => {
     assert.ok(t.includes(part), part);
   }
 });
+
+test('Empfänger: alte Liste wird zu einer Zeile, Adressen werden getrennt', async () => {
+  const { mailAddresses } = await import('../web/mission.js');
+  const m = normalizeMission({ recipients: 'a@b.de; c@d.de' });
+  assert.equal(m.mailTo.length, 1);
+  assert.deepEqual({ ...m.mailTo[0], to: undefined }, { to: undefined, report: true, map: true, notes: true, juh: false, gpx: false });
+  assert.deepEqual(mailAddresses(m.mailTo[0]), ['a@b.de', 'c@d.de']);
+  assert.equal(m.recipients, '');
+  assert.deepEqual(normalizeMission({}).mailTo, []);
+});
