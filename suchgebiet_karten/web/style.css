@@ -234,6 +234,9 @@ button, input, select { font: inherit; }
 .viewbox { border: 1px solid #ccc; border-radius: 8px; background: #f6f6f8; max-height: 60vh; overflow: auto; margin-top: 6px; min-height: 120px; }
 .viewbox img { width: 100%; display: block; max-width: none; }
 .viewbox { touch-action: pan-x pan-y; }
+.viewbox.zoomed img { cursor: grab; }
+.viewbox.dragging img { cursor: grabbing; }
+.viewbox.dragging { user-select: none; }
 .zoombar { justify-content: center; margin-top: 4px; }
 .zoombar button { min-width: 44px; }
 /* Vollbild-Ansicht der Notizen/Fotos */
