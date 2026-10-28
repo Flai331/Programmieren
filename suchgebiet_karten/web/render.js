@@ -4,7 +4,7 @@
 
 import { colName, cellLabel, cellBounds, gridBounds } from './grid.js';
 import { toUtm, fromUtm, utmZone } from './utm.js';
-import { cellComponents, cellOutlines } from './gpx.js';
+import { cellComponents, cellOutlines, formatArea, polygonArea } from './gpx.js';
 import { cellsText } from './store.js';
 
 const GRID_COLOR = 'rgba(200, 0, 0, 0.85)';
@@ -534,6 +534,19 @@ function drawTrack(ctx, toPx, it, s) {
   };
   line((it.w + 3) * s, 'rgba(255,255,255,0.9)');
   line(it.w * s, it.color);
+  // ab 3 Punkten gestrichelt zurück zum Start: so wird die Fläche berechnet
+  const [a, z] = [pts[0], pts[pts.length - 1]];
+  if (pts.length > 2 && Math.hypot(a[0] - z[0], a[1] - z[1]) > 1) {
+    ctx.save();
+    ctx.setLineDash([6 * s, 5 * s]);
+    ctx.strokeStyle = it.color;
+    ctx.lineWidth = Math.max(1.5, it.w * 0.6) * s;
+    ctx.beginPath();
+    ctx.moveTo(z[0], z[1]);
+    ctx.lineTo(a[0], a[1]);
+    ctx.stroke();
+    ctx.restore();
+  }
   ctx.fillStyle = '#fff';
   ctx.strokeStyle = it.color;
   ctx.lineWidth = 2 * s;
@@ -543,11 +556,13 @@ function drawTrack(ctx, toPx, it, s) {
     ctx.fill();
     ctx.stroke();
   });
-  if (it.name) {
+  // Name und Fläche (ab 3 Punkten) am Startpunkt
+  const label = [it.name, it.pts.length > 2 ? formatArea(polygonArea(it.pts)) : ''].filter(Boolean).join(' · ');
+  if (label) {
     ctx.font = `bold ${13 * s}px sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
-    halo(ctx, it.name, pts[0][0] + 7 * s, pts[0][1] - 5 * s, it.color, s);
+    halo(ctx, label, pts[0][0] + 7 * s, pts[0][1] - 5 * s, it.color, s);
   }
 }
 

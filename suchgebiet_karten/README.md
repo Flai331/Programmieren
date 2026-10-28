@@ -74,7 +74,7 @@ mit dem PDF als Anhang. Am PC wird es heruntergeladen und das E-Mail-Programm ge
 ### Garmin (BaseCamp und GPS-Gerät)
 
 **Umriss zeichnen:** Werkzeug „📐 Umriss“ → Punkte auf die Karte tippen (Ziehen verschiebt die Karte) →
-„Fertig“ → Namen eingeben. Länge wird angezeigt; Umrisse erscheinen im PDF und als Track im GPX.
+„Fertig“ → Namen eingeben. Länge und ab 3 Punkten die **Fläche in ha** werden angezeigt (der Umriss gilt als geschlossen, die Verbindung zurück zum Start ist gestrichelt); die Fläche steht auch am Namen auf Karte/PDF und in der GPX-Beschreibung. Umrisse erscheinen im PDF und als Track im GPX.
 
 **GPX (Export → Garmin: GPX):** zwei Dateien, BaseCamp macht aus jeder eine eigene Liste:
 1. **…_Raster.gpx** – alle Rasterlinien (als eine durchgehende Linie, ohne Schrägen) und die
