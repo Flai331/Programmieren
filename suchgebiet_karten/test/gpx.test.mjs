@@ -118,3 +118,14 @@ test('Team-Bereich aus zwei Stücken -> zwei Tracks, keine Teilstücke', () => {
   assert.match(gpx, /<name>Team 1: A1<\/name>/);
   assert.match(gpx, /<name>Team 1: D4<\/name>/);
 });
+
+test('Rasterbeschriftung am Rand: nur Spalten + Zeilen als Wegpunkte', () => {
+  const p = newProject('R');
+  const g = makeGrid({ north: 50.12, south: 50.11, west: 8.6, east: 8.62 }, 200);
+  const edge = buildGpx(p, g, { cells: 'edge' });
+  assert.equal((edge.match(/<wpt /g) || []).length, g.cols + g.rows);
+  assert.match(edge, /<name>A<\/name>/);
+  assert.match(edge, /<name>1<\/name>/);
+  assert.equal((buildGpx(p, g, { cells: 'all' }).match(/<wpt /g) || []).length, g.cols * g.rows);
+  assert.equal(buildGpx(p, g, { cells: 'none', grid: 'all' }).includes('<wpt '), false);
+});

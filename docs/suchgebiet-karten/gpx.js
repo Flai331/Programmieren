@@ -1,7 +1,7 @@
 // GPX-Export für Garmin-Geräte und BaseCamp: Tracks, Team-Bereiche, Raster, Wegpunkte.
 // Farben über die Garmin-Erweiterung (gpxx:DisplayColor), die BaseCamp und die Geräte anzeigen.
 
-import { cellLabel, gridBounds } from './grid.js';
+import { cellLabel, colName, gridBounds } from './grid.js';
 import { markLabel, mapFor, cellsText } from './store.js';
 
 const GARMIN_COLORS = {
@@ -184,7 +184,18 @@ export function buildGpx(project, grid, opts, part = '') {
       if (it.kind === 'text') wpts += wpt(it.lat, it.lon, it.text, 'Pin, Red');
     }
   }
-  if (opts.cells && grid) {
+  // opts.cells: 'edge' = Buchstaben oben, Zahlen links (wenige Punkte, wie am Kartenrand),
+  // 'all' (oder true) = ein Wegpunkt je Feld, sonst keine
+  if (opts.cells === 'edge' && grid) {
+    const above = grid.originLat + grid.dLat * 0.3;
+    const left = grid.originLon - grid.dLon * 0.3;
+    for (let c = 0; c < grid.cols; c++) {
+      wpts += wpt(above, grid.originLon + (c + 0.5) * grid.dLon, colName(c), 'Navaid, Red', `Rasterspalte ${colName(c)}`);
+    }
+    for (let r = 0; r < grid.rows; r++) {
+      wpts += wpt(grid.originLat - (r + 0.5) * grid.dLat, left, String(r + 1), 'Navaid, Red', `Rasterzeile ${r + 1}`);
+    }
+  } else if (opts.cells && opts.cells !== 'none' && grid) {
     for (let r = 0; r < grid.rows; r++) {
       for (let c = 0; c < grid.cols; c++) {
         wpts += wpt(grid.originLat - (r + 0.5) * grid.dLat, grid.originLon + (c + 0.5) * grid.dLon, cellLabel(c, r), 'Waypoint', `Feld ${cellLabel(c, r)}`);

@@ -73,8 +73,9 @@ mit dem PDF als Anhang. Am PC wird es heruntergeladen und das E-Mail-Programm ge
 „Fertig“ → Namen eingeben. Länge wird angezeigt; Tracks erscheinen auch im PDF.
 
 **GPX (Export → Garmin: GPX):** zwei Dateien, BaseCamp macht aus jeder eine eigene Liste:
-1. **…_Raster.gpx** – alle Rasterlinien (als eine durchgehende Linie, ohne Schrägen) und
-   Feldnamen als Wegpunkte (A1, B1 …)
+1. **…_Raster.gpx** – alle Rasterlinien (als eine durchgehende Linie, ohne Schrägen) und die
+   Beschriftung als Wegpunkte: am Rand (A, B … oben, 1, 2 … links – Voreinstellung, wenige
+   Listeneinträge), in jedem Feld (A1, B1 …) oder keine
 2. **…_Markierungen.gpx** – eigene Tracks, Stift-Markierungen, Team-/Status-Umrisse,
    Treffpunkt und Textpunkte
 

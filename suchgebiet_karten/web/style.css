@@ -180,7 +180,11 @@ button, input, select { font: inherit; }
   position: fixed; top: 52px; left: 0; right: 0; z-index: 1500; background: #fff;
   box-shadow: 0 4px 12px rgba(0,0,0,0.25); padding: 8px 10px; max-height: 60%; overflow: auto;
 }
-@media (min-width: 700px) { .searchbar { left: auto; right: 80px; width: 460px; border-radius: 0 0 12px 12px; } }
+/* PC/Tablet: Suchfeld begrenzt, Vorschläge direkt darunter */
+@media (min-width: 700px) {
+  .topsearch { flex: 0 1 560px; }
+  .searchbar { left: 10px; right: auto; width: 560px; max-width: calc(100% - 100px); border-radius: 0 0 12px 12px; }
+}
 #search-results button {
   display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line);
   background: #fff; padding: 10px 4px; font-size: 14px; cursor: pointer;
