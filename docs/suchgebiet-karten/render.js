@@ -87,27 +87,41 @@ function drawAreas(ctx, toPx, state, grid, opt, s) {
     const [x1, y1] = toPx(b.south, b.east);
     return [x0, y0, x1 - x0, y1 - y0];
   };
-  const outline = (keys, color, dash) => {
+  // Umriss einer Fläche als Pfad
+  const areaPath = (keys) => {
     ctx.beginPath();
     for (const loop of cellOutlines(keys)) {
       loop.forEach((pt, i) => { const [x, y] = corner(pt); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
       ctx.closePath();
     }
-    ctx.setLineDash(dash ? [9 * s, 5 * s] : []);
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = 6 * s;
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  };
+  // Rand nur innen bzw. nur außen an der Fläche: Team außen, Status innen –
+  // so bleiben beide sichtbar, auch wenn sie dieselbe Grenze haben
+  const band = (keys, color, width, inside) => {
+    ctx.save();
+    if (inside) {
+      areaPath(keys);
+      ctx.clip();
+    } else {
+      areaPath(keys);
+      ctx.rect(opt.width * 2, -opt.height, -opt.width * 4, opt.height * 3);
+      ctx.clip('evenodd');
+    }
+    areaPath(keys);
+    ctx.lineJoin = 'miter';
+    ctx.lineWidth = 2 * (width + 1.5 * s);
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)';
     ctx.stroke();
-    ctx.lineWidth = 3.5 * s;
+    ctx.lineWidth = 2 * width;
     ctx.strokeStyle = color;
     ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.restore();
   };
   const a = state.markAlpha ?? 0.4;
   const teams = areaGroups(state.fills, state.fillLabels);
   const stats = areaGroups(state.status, state.statusLabels);
   for (const t of teams) {
-    ctx.globalAlpha = 0.5 * a;
+    ctx.globalAlpha = Math.max(0.3, 0.5 * a);
     ctx.fillStyle = t.color;
     for (const k of t.keys) ctx.fillRect(...rect(k));
     ctx.globalAlpha = 1;
@@ -123,21 +137,22 @@ function drawAreas(ctx, toPx, state, grid, opt, s) {
     const minY = Math.min(...xs.map((r) => r[1]));
     const maxX = Math.max(...xs.map((r) => r[0] + r[2]));
     const maxY = Math.max(...xs.map((r) => r[1] + r[3]));
-    const step = Math.max(6, 16 * s);
+    // kräftiger als auf dem Bildschirm: im Druck auf Luftbildern sonst kaum zu sehen
+    const step = Math.max(6, 13 * s);
     ctx.beginPath();
     for (let d = minX - (maxY - minY); d < maxX; d += step) { ctx.moveTo(d, maxY); ctx.lineTo(d + (maxY - minY), minY); }
-    ctx.globalAlpha = Math.min(1, 0.2 + 0.6 * a);
+    ctx.globalAlpha = 0.9;
     ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 3.2 * s;
+    ctx.lineWidth = 4.4 * s;
     ctx.stroke();
-    ctx.globalAlpha = Math.min(1, 0.3 + a);
+    ctx.globalAlpha = 1;
     ctx.strokeStyle = st.color;
-    ctx.lineWidth = 1.8 * s;
+    ctx.lineWidth = 2.4 * s;
     ctx.stroke();
     ctx.restore();
   }
-  for (const t of teams) outline(t.keys, t.color, false);
-  for (const st of stats) outline(st.keys, st.color, true);
+  for (const t of teams) band(t.keys, t.color, 4 * s, false);
+  for (const st of stats) band(st.keys, st.color, 4 * s, true);
 
   // Beschriftung: eine je Fläche
   const areas = [];
