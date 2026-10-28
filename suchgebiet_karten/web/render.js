@@ -564,6 +564,7 @@ export function distToSegment(px, py, ax, ay, bx, by) {
 export function hitItem(items, toPx, x, y, tol) {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
+    if (it.hidden) continue; // ausgeblendet: nicht radieren/benennen
     if (it.kind === 'text') {
       const [px, py] = toPx(it.lat, it.lon);
       if (Math.hypot(px - x, py - y) <= tol + 6) return i;

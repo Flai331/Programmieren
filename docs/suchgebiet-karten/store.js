@@ -51,6 +51,8 @@ export function normalizeProject(p) {
   out.mission = normalizeMission(out.mission);
   // v31: nur „Raster ausblenden“ -> allgemeine Anzeige-Schalter
   if (!out.hide || typeof out.hide !== 'object') out.hide = out.hideGrid ? { grid: true } : {};
+  delete out.hide.marks; // v32: Gruppen-Schalter, jetzt je Team/Zeichnung (m.hidden / it.hidden)
+  delete out.hide.items;
   delete out.hideGrid;
   if (!out.fills || typeof out.fills !== 'object') out.fills = {};
   if (!out.status || typeof out.status !== 'object') out.status = {};
