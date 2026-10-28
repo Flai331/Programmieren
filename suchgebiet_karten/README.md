@@ -28,8 +28,8 @@ von der einen in die andere übernehmen.
 | **Teams** | Teams (Name, Hund, Farbe) und Markierungen („abgesucht“, „nicht begehbar“ …) anlegen |
 | **Karte** | OpenStreetMap, OpenTopoMap, basemap.de, Luftbild Niedersachsen (LGLN), Luftbild NRW (Geobasis NRW), Luftbild Esri |
 | **GPS** | Eigener Standort, oben steht das aktuelle Feld (mit UTM-Schalter auch UTMREF) |
-| **PDF** | Übersicht, Einsatzinfo-Seite, Detailblätter (2×2 … 5×5 Felder), aktueller Ausschnitt · A4/A3, hoch/quer |
-| Stift / Text / Feld / Radierer | Freihand zeichnen, Punkt mit Text, Felder einem Team/einer Markierung zuteilen (antippen oder drüberwischen), löschen |
+| **Export** | PDF, GPX für Garmin/BaseCamp, Garmin-Karte (KMZ) – jeweils **📤 Teilen** (WhatsApp, Mail, Signal …) oder **💾 Speichern** |
+| Stift / Text / Feld / Track / Radierer | Freihand zeichnen, Punkt mit Text, Felder einem Team zuteilen (antippen oder drüberwischen), Track Punkt für Punkt setzen, löschen |
 
 Antippen der Karte im Modus „Bewegen“ zeigt Feld, zugeteiltes Team und ggf. UTMREF.
 
@@ -59,6 +59,29 @@ UTM/UTMREF für Treffpunkt und A1 im PDF. Ohne Schalter bleibt alles bei A1-Feld
 „Senden / Teilen“ öffnet das Teilen-Menü (Gmail, Outlook, WhatsApp, Signal …)
 mit dem PDF als Anhang. Am PC wird es heruntergeladen und das E-Mail-Programm geöffnet.
 
+### Wohin wird gespeichert?
+
+- **Browser:** „Speichern“ legt die Datei im **Download-Ordner** ab.
+- **Android-App:** „Speichern“ fragt nach Ordner und Dateinamen.
+- **Teilen** öffnet immer das Teilen-Menü des Handys (WhatsApp, Gmail, Outlook, Signal, Threema …).
+  Am PC gibt es kein Teilen-Menü – dort wird heruntergeladen und das E-Mail-Programm geöffnet.
+
+### Garmin (BaseCamp und GPS-Gerät)
+
+**Track zeichnen:** Werkzeug „Track“ → Punkte auf die Karte tippen (Ziehen verschiebt die Karte) →
+„Fertig“ → Namen eingeben. Länge wird angezeigt; Tracks erscheinen auch im PDF.
+
+**GPX (Export → Garmin: GPX):** Tracks, Team-Bereiche als farbige Umrisse, Raster-Linien,
+Treffpunkt/Textpunkte und optional Feldnamen als Wegpunkte. In BaseCamp über *Datei → Importieren*
+öffnen und an das Gerät senden. GPX-Linien liegen **über deiner Karte auf dem Gerät** (z. B. der Wanderkarte).
+
+**Garmin-Karte (Export → Garmin: Karte):** Das Kartenbild mit Raster, Teams und Tracks als
+KMZ-Datei („Custom Map“). Per USB in den Ordner **Garmin/CustomMaps** auf dem Gerät kopieren
+(Ordner anlegen, falls er fehlt). Läuft auf GPSMAP, eTrex 22x/32x, Oregon, Montana u. a.;
+BaseCamp selbst zeigt KMZ-Karten nicht an. Die Custom Map ist ein Bild und **verdeckt** in ihrem
+Bereich die Gerätekarte – auf dem Gerät lässt sie sich unter *Einrichten → Karte → Kartenoptionen/
+Karteninformationen* ein- und ausschalten. Wer die eigene Wanderkarte sehen will, nimmt das GPX.
+
 ### Suchgebiet an die Staffel weitergeben
 
 - „Gebiete → Suchgebiet als Datei senden“ verschickt eine kleine Datei.
@@ -77,7 +100,7 @@ mit dem PDF als Anhang. Am PC wird es heruntergeladen und das E-Mail-Programm ge
 ## Entwicklung
 
 ```bash
-npm test          # Tests: Raster, UTM (gegen pyproj-Referenzwerte), Teams, Import/Export, PDF-Planung
+npm test          # Tests: Raster, UTM (gegen pyproj-Referenzwerte), Teams, Import/Export, PDF-Planung, GPX, KMZ
 ./deploy.sh       # web/ nach docs/suchgebiet-karten kopieren (GitHub Pages)
 ```
 

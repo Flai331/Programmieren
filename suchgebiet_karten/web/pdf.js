@@ -104,7 +104,8 @@ export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW, extra = {}
     };
   };
   let tr = tileRange(z);
-  while (z > 0 && (tr.tx1 - tr.tx0 + 1) * (tr.ty1 - tr.ty0 + 1) > MAX_TILES) tr = tileRange(--z);
+  const maxTiles = extra.maxTiles || MAX_TILES;
+  while (z > 0 && (tr.tx1 - tr.tx0 + 1) * (tr.ty1 - tr.ty0 + 1) > maxTiles) tr = tileRange(--z);
 
   const canvas = document.createElement('canvas');
   canvas.width = Wpx;
@@ -144,10 +145,12 @@ export async function renderSheet(state, sheet, layer, Wpx, Hpx, mmW, extra = {}
   const scale = niceScale((mPerPx * pxPerMm) * 1000);
   const barM = niceLength(mPerPx * Wpx * 0.2);
   const barPx = barM / mPerPx;
-  drawScaleBar(ctx, barPx, formatMeters(barM), s, Hpx);
-  drawNorth(ctx, Wpx, s);
-  if (extra.legend && extra.legend.length) drawLegend(ctx, extra.legend, s, Wpx, Hpx, extra.utm);
-  return { canvas, scale, missing, tiles: list.length };
+  if (!extra.bare) {
+    drawScaleBar(ctx, barPx, formatMeters(barM), s, Hpx);
+    drawNorth(ctx, Wpx, s);
+    if (extra.legend && extra.legend.length) drawLegend(ctx, extra.legend, s, Wpx, Hpx, extra.utm);
+  }
+  return { canvas, scale, missing, tiles: list.length, box };
 }
 
 function drawScaleBar(ctx, barPx, label, s, H) {
@@ -297,6 +300,16 @@ function infoPage(doc, project, grid, W, H, top) {
   }
 }
 
+// Was auf die Karte gezeichnet wird (für PDF und Garmin-Karte)
+export function renderState(project, grid) {
+  const fillLabels = {};
+  for (const [k, id] of Object.entries(project.fills)) {
+    const m = project.marks.find((mm) => mm.id === id);
+    if (m && m.kind === 'team') fillLabels[k] = m.label;
+  }
+  return { grid, fills: resolveFills(project), fillLabels, items: project.items, meet: project.meet };
+}
+
 // opts: { format, orient, overview, view, details, k, info, title, dpi }
 export async function buildPdf(project, grid, opts, layer, viewBounds, onProgress) {
   const { jsPDF } = window.jspdf;
@@ -308,13 +321,7 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
   const sheets = planSheets(grid, opts, viewBounds);
   if (!sheets.length) throw new Error('Keine Blätter ausgewählt.');
 
-  const fills = resolveFills(project);
-  const fillLabels = {};
-  for (const [k, id] of Object.entries(project.fills)) {
-    const m = project.marks.find((mm) => mm.id === id);
-    if (m && m.kind === 'team') fillLabels[k] = m.label;
-  }
-  const rstate = { grid, fills, fillLabels, items: project.items, meet: project.meet };
+  const rstate = renderState(project, grid);
   const legend = assignments(project).filter((a) => a.count).map((a) => ({ color: a.mark.color, label: markLabel(a.mark) }));
 
   const doc = new jsPDF({ orientation: opts.orient, unit: 'mm', format: opts.format.toLowerCase() });

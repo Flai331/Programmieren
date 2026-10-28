@@ -52,6 +52,27 @@ class MainActivity : ComponentActivity() {
         fileCallback = null
     }
 
+    // „Speichern“: Android fragt nach Ordner und Dateiname, dann wird die Datei geschrieben
+    private class CreateDoc : ActivityResultContracts.CreateDocument("*/*") {
+        var mime = "*/*"
+        override fun createIntent(context: android.content.Context, input: String): Intent =
+            super.createIntent(context, input).setType(mime)
+    }
+    private val createDoc = CreateDoc()
+    private var pendingSave: ByteArray? = null
+    private val saveDoc = registerForActivityResult(createDoc) { uri ->
+        val bytes = pendingSave
+        pendingSave = null
+        if (uri == null || bytes == null) return@registerForActivityResult
+        try {
+            contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+            toast("Gespeichert")
+        } catch (e: Exception) {
+            Log.e("Suchgebiet", "Speichern fehlgeschlagen", e)
+            toast("Speichern fehlgeschlagen: ${e.message}")
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -156,6 +177,22 @@ class MainActivity : ComponentActivity() {
     }
 
     inner class Bridge {
+        // Wird aus app.js aufgerufen: Datei (Base64) an einem frei wählbaren Ort speichern
+        @JavascriptInterface
+        fun saveFile(base64: String, name: String, mime: String) {
+            val bytes = try {
+                Base64.decode(base64, Base64.DEFAULT)
+            } catch (e: IllegalArgumentException) {
+                toast("Speichern fehlgeschlagen")
+                return
+            }
+            runOnUiThread {
+                pendingSave = bytes
+                createDoc.mime = mime.ifEmpty { "application/octet-stream" }
+                saveDoc.launch(name)
+            }
+        }
+
         // Wird aus app.js aufgerufen: Datei (Base64) über den Android-Teilen-Dialog senden
         @JavascriptInterface
         fun shareFile(base64: String, name: String, mime: String, title: String, text: String) {
