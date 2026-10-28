@@ -7,6 +7,7 @@ import { buildPdf, planSheets } from './pdf.js';
 import { formatMgrs } from './utm.js';
 import { buildGpx, trackLength, formatLength } from './gpx.js';
 import { buildCustomMap, planCustomMap } from './kmz.js';
+import { parseQuery, searchAddress } from './search.js';
 import {
   newProject, normalizeProject, migrateV1, resolveFills, assignments, markLabel, cellOwner,
   exportProject, importProject, uid, TEAM_COLORS,
@@ -1109,6 +1110,86 @@ async function buildKmzFile(progress) {
 const kmzKey = () => exportKey([$('kmz-area').value, $('kmz-res').value]);
 $('kmz-share').addEventListener('click', () => runExport('kmz', $('kmz-share'), kmzKey(), buildKmzFile, 'share'));
 $('kmz-save').addEventListener('click', () => runExport('kmz', $('kmz-save'), kmzKey(), buildKmzFile, 'save'));
+
+// ---------- Suche (Adresse, Feld, Koordinaten) ----------
+let searchPin = null;
+
+function showSearchPin(lat, lon, label) {
+  if (searchPin) map.removeLayer(searchPin);
+  searchPin = L.marker([lat, lon], {
+    icon: L.divIcon({ className: 'search-pin', html: '📍', iconSize: [30, 30], iconAnchor: [15, 28] }),
+  }).addTo(map).bindTooltip(label, { direction: 'top', offset: [0, -24] }).openTooltip();
+  searchPin.on('click', () => { map.removeLayer(searchPin); searchPin = null; });
+}
+
+function closeSearch() {
+  $('searchbar').hidden = true;
+}
+
+function searchResult(text) {
+  const box = $('search-results');
+  box.innerHTML = '';
+  const p = document.createElement('p');
+  p.textContent = text;
+  box.appendChild(p);
+}
+
+async function runSearch() {
+  const q = parseQuery($('search-input').value);
+  if (!q) return;
+  if (q.type === 'cell' && grid) {
+    if (q.c >= grid.cols || q.r >= grid.rows) return searchResult('Dieses Feld gibt es im Raster nicht.');
+    const b = cellBounds(grid, q.c, q.r);
+    map.fitBounds([[b.south, b.west], [b.north, b.east]], { padding: [60, 60] });
+    closeSearch();
+    return;
+  }
+  if (q.type === 'coords') {
+    map.setView([q.lat, q.lon], Math.max(map.getZoom(), 16));
+    showSearchPin(q.lat, q.lon, `${q.lat.toFixed(5)}, ${q.lon.toFixed(5)}`);
+    closeSearch();
+    return;
+  }
+  searchResult('Suche läuft …');
+  try {
+    const list = await searchAddress(q.q || $('search-input').value.trim(), viewBounds());
+    const box = $('search-results');
+    box.innerHTML = '';
+    if (!list.length) return searchResult('Nichts gefunden. Tipp: Ort mit angeben, z. B. „Waldweg 5, Musterstadt“.');
+    for (const r of list) {
+      const b = document.createElement('button');
+      b.textContent = r.name;
+      b.addEventListener('click', () => {
+        if (r.bounds) map.fitBounds([[r.bounds[0], r.bounds[2]], [r.bounds[1], r.bounds[3]]], { maxZoom: 17 });
+        else map.setView([r.lat, r.lon], 17);
+        showSearchPin(r.lat, r.lon, r.name.split(',').slice(0, 2).join(','));
+        closeSearch();
+      });
+      box.appendChild(b);
+    }
+    const credit = document.createElement('p');
+    credit.className = 'credit';
+    credit.textContent = 'Suche: © OpenStreetMap-Mitwirkende (Nominatim)';
+    box.appendChild(credit);
+  } catch (err) {
+    searchResult(navigator.onLine === false ? 'Keine Internetverbindung – Adresssuche nicht möglich.' : `Suche fehlgeschlagen: ${err.message}`);
+  }
+}
+
+$('btn-search').addEventListener('click', () => {
+  const bar = $('searchbar');
+  bar.hidden = !bar.hidden;
+  if (!bar.hidden) {
+    closePanels();
+    $('search-input').focus();
+    $('search-input').select();
+  }
+});
+$('search-close').addEventListener('click', closeSearch);
+$('search-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  runSearch();
+});
 
 // ---------- Sonstiges ----------
 let toastTimer = null;

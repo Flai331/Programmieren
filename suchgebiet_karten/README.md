@@ -23,6 +23,7 @@ von der einen in die andere übernehmen.
 
 | Knopf | Funktion |
 |---|---|
+| **🔍 (oben)** | Adresse, Ort, Straße suchen (OpenStreetMap), außerdem Feldnamen („C4“) und Koordinaten („50.12, 8.61“) |
 | **Gebiete** | Mehrere Suchgebiete speichern, wechseln, kopieren, löschen · Einsatzleitung, Notizen, Treffpunkt · Suchgebiet als Datei senden / Datei öffnen |
 | **Raster** | Feldgröße (25 m – 1 km), Suchgebiet aufziehen oder Ausschnitt nehmen, Feld suchen („C4“), **UTM-Schalter** |
 | **Teams** | Teams (Name, Hund, Farbe) und Markierungen („abgesucht“, „nicht begehbar“ …) anlegen |
