@@ -232,7 +232,13 @@ button, input, select { font: inherit; }
 .viewbar { display: flex; align-items: center; gap: 6px; }
 .viewbar span { flex: 1; text-align: center; font-size: 13px; font-weight: 600; }
 .viewbox { border: 1px solid #ccc; border-radius: 8px; background: #f6f6f8; max-height: 60vh; overflow: auto; margin-top: 6px; min-height: 120px; }
-.viewbox img { width: 100%; display: block; }
+.viewbox img { width: 100%; display: block; max-width: none; }
+.viewbox { touch-action: pan-x pan-y; }
+.zoombar { justify-content: center; margin-top: 4px; }
+.zoombar button { min-width: 44px; }
+/* Vollbild-Ansicht der Notizen/Fotos */
+.viewer.full { position: fixed; inset: 0; z-index: 4000; background: #fff; padding: 8px; display: flex; flex-direction: column; }
+.viewer.full .viewbox { flex: 1; max-height: none; }
 .viewbox pre { white-space: pre-wrap; font: inherit; padding: 8px; margin: 0; }
 .legrow { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
 .legrow i { width: 28px; height: 6px; border-radius: 3px; flex: none; }
