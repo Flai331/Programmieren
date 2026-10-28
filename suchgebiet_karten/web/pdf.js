@@ -6,10 +6,12 @@ import {
   blocks, gridBounds, rangeBounds, rangeLabel, fitBox,
   mercLat, mercLon, mercX, mercY, metersPerUnit, niceScale, niceLength, formatMeters,
 } from './grid.js';
-import { drawOverlay } from './render.js';
+import { drawOverlay, hatchRect } from './render.js';
 import { tileUrl } from './layers.js';
 import { formatMgrs, formatUtm, utmZone } from './utm.js';
-import { assignments, embedMarker, markLabel, resolveFills } from './store.js';
+import {
+  assignments, embedMarker, markLabel, resolveFills, teamStatus,
+} from './store.js';
 
 export const PAGES = { A4: [297, 210], A3: [420, 297] };
 const MARGIN = 8;
@@ -237,10 +239,16 @@ function drawLegend(ctx, entries, s, W, H, utm) {
   ctx.textBaseline = 'middle';
   entries.forEach((e, i) => {
     const cy = y + 5 * s + lineH * (i + 0.5);
-    ctx.globalAlpha = 0.6;
-    ctx.fillStyle = e.color;
-    ctx.fillRect(x + 7 * s, cy - 6 * s, 16 * s, 12 * s);
-    ctx.globalAlpha = 1;
+    if (e.hatch) {
+      hatchRect(ctx, x + 7 * s, cy - 6 * s, 16 * s, 12 * s, e.color, s * 0.6, true);
+    } else {
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = e.color;
+      ctx.fillRect(x + 7 * s, cy - 6 * s, 16 * s, 12 * s);
+      ctx.globalAlpha = 1;
+    }
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1 * s;
     ctx.strokeRect(x + 7 * s, cy - 6 * s, 16 * s, 12 * s);
     ctx.fillStyle = '#111';
     ctx.fillText(e.label, x + 28 * s, cy);
@@ -304,7 +312,10 @@ function infoPage(doc, project, grid, W, H, top) {
     heading(title);
     for (const a of list) {
       const name = team ? markLabel(a.mark) : a.mark.label;
-      const cells = a.count ? `${a.text}  (${a.count} Feld${a.count > 1 ? 'er' : ''})` : 'keine Felder zugeteilt';
+      let cells = a.count ? `${a.text}  (${a.count} Feld${a.count > 1 ? 'er' : ''})` : 'keine Felder zugeteilt';
+      if (team) {
+        for (const st of teamStatus(project, a.mark)) cells += `\n${st.mark.label}: ${st.text} (${st.count} von ${a.count})`;
+      }
       const lines = doc.splitTextToSize(cells, maxW - 75);
       need(lines.length * 4.6 + 2);
       doc.setFillColor(...hexRgb(a.mark.color));
@@ -331,12 +342,23 @@ function infoPage(doc, project, grid, W, H, top) {
 
 // Was auf die Karte gezeichnet wird (für PDF und Garmin-Karte)
 export function renderState(project, grid) {
-  const fillLabels = {};
-  for (const [k, id] of Object.entries(project.fills)) {
-    const m = project.marks.find((mm) => mm.id === id);
-    if (m && m.kind === 'team') fillLabels[k] = m.label;
-  }
-  return { grid, fills: resolveFills(project), fillLabels, items: project.items, meet: project.meet };
+  const label = (map) => {
+    const out = {};
+    for (const [k, id] of Object.entries(map)) {
+      const m = project.marks.find((mm) => mm.id === id);
+      if (m && m.label) out[k] = m.label;
+    }
+    return out;
+  };
+  return {
+    grid,
+    fills: resolveFills(project),
+    status: resolveFills(project, 'status'),
+    fillLabels: label(project.fills),
+    statusLabels: label(project.status),
+    items: project.items,
+    meet: project.meet,
+  };
 }
 
 // opts: { format, orient, overview, view, details, k, info, title, dpi }
@@ -362,7 +384,8 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
   const Hpx = Math.round((area.h / 25.4) * dpi);
 
   const rstate = renderState(project, grid);
-  const legend = assignments(project).filter((a) => a.count).map((a) => ({ color: a.mark.color, label: markLabel(a.mark) }));
+  const legend = assignments(project).filter((a) => a.count)
+    .map((a) => ({ color: a.mark.color, label: markLabel(a.mark), hatch: a.mark.kind !== 'team' }));
 
   const date = new Date().toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
   const right1 = project.leader ? `${project.leader} · ${date}` : date;

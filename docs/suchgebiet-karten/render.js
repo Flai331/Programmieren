@@ -33,7 +33,8 @@ function pill(ctx, text, cx, cy, s) {
 // opt: { s: Skalierung für Linien/Schrift, width, height, view: Bounds für Culling,
 //        allEdges: Randbeschriftung auch unten/rechts, sheets: Blattumrisse,
 //        focus: Bereich des Detailblatts (Rest wird aufgehellt), utm: UTM-Gitter zeigen }
-// state: { grid, fills: "c,r" -> Farbe, fillLabels: "c,r" -> Text, items, meet }
+// state: { grid, fills: "c,r" -> Teamfarbe, status: "c,r" -> Statusfarbe (schraffiert),
+//          fillLabels: "c,r" -> Text, items, meet }
 export function drawOverlay(ctx, toPx, state, opt) {
   const s = opt.s || 1;
   const grid = state.grid;
@@ -54,6 +55,48 @@ function dimOutside(ctx, toPx, b, W, H) {
   ctx.rect(0, 0, W, H);
   ctx.rect(x0, y0, x1 - x0, y1 - y0);
   ctx.fill('evenodd');
+}
+
+// Rand innen im Feld, mit weißer Kontur (auf Luftbildern gut sichtbar)
+export function outlineRect(ctx, x, y, w, h, color, s, width = 3) {
+  const inset = (width / 2 + 1.5) * s;
+  ctx.lineWidth = (width + 2.5) * s;
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.strokeRect(x + inset, y + inset, w - 2 * inset, h - 2 * inset);
+  ctx.lineWidth = width * s;
+  ctx.strokeStyle = color;
+  ctx.strokeRect(x + inset, y + inset, w - 2 * inset, h - 2 * inset);
+}
+
+// Schraffur (diagonal) mit weißer Kontur und Rand; ohne Team zusätzlich leicht flächig gefüllt
+export function hatchRect(ctx, x, y, w, h, color, s, tint) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  if (tint) {
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = 1;
+  }
+  const step = Math.max(6, 11 * s);
+  const lines = () => {
+    ctx.beginPath();
+    for (let d = -h; d < w; d += step) {
+      ctx.moveTo(x + d, y + h);
+      ctx.lineTo(x + d + h, y);
+    }
+    ctx.stroke();
+  };
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 4.5 * s;
+  lines();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5 * s;
+  lines();
+  outlineRect(ctx, x, y, w, h, color, s, 3.5);
+  ctx.restore();
 }
 
 function visibleRange(grid, view) {
@@ -78,33 +121,46 @@ function drawGrid(ctx, toPx, state, grid, opt, s) {
     const b = cellBounds(grid, c, r);
     const [x0, y0] = toPx(b.north, b.west);
     const [x1, y1] = toPx(b.south, b.east);
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = 0.45;
     ctx.fillStyle = color;
     ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
     ctx.globalAlpha = 1;
+    // kräftiger Rand mit weißer Kontur, damit das Feld auch auf Luftbildern auffällt
+    outlineRect(ctx, x0, y0, x1 - x0, y1 - y0, color, s, 2.5);
   }
 
-  // Team-/Markierungsname in der Feldmitte, wenn genug Platz
-  if (state.fillLabels) {
-    const [ax] = toPx(grid.originLat, gridLon(grid, 0));
-    const [bx] = toPx(grid.originLat, gridLon(grid, 1));
-    const cw = Math.abs(bx - ax);
-    if (cw >= 60 * s) {
-      ctx.font = `bold ${Math.min(14, cw / (7 * s)) * s}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (const [key, text] of Object.entries(state.fillLabels)) {
-        const [c, r] = key.split(',').map(Number);
-        if (c < v.c0 || c > v.c1 || r < v.r0 || r > v.r1) continue;
-        const b = cellBounds(grid, c, r);
-        const [x0, y0] = toPx(b.north, b.west);
-        const [x1, y1] = toPx(b.south, b.east);
-        let t = text;
-        while (t.length > 3 && ctx.measureText(t).width > cw - 8 * s) t = t.slice(0, -2) + '…';
-        halo(ctx, t, (x0 + x1) / 2, (y0 + y1) / 2 + 6 * s, '#111', s);
-      }
-    }
+  // Status (abgesucht …) schraffiert darüber – die Teamfarbe bleibt sichtbar
+  for (const [key, color] of Object.entries(state.status || {})) {
+    const [c, r] = key.split(',').map(Number);
+    if (c < v.c0 || c > v.c1 || r < v.r0 || r > v.r1) continue;
+    const b = cellBounds(grid, c, r);
+    const [x0, y0] = toPx(b.north, b.west);
+    const [x1, y1] = toPx(b.south, b.east);
+    hatchRect(ctx, x0, y0, x1 - x0, y1 - y0, color, s, !(state.fills && state.fills[key]));
   }
+
+  // Team-Name in der Feldmitte, Status darunter – wenn genug Platz
+  const [ax] = toPx(grid.originLat, gridLon(grid, 0));
+  const [bx] = toPx(grid.originLat, gridLon(grid, 1));
+  const cw = Math.abs(bx - ax);
+  const cellLabels = (labels, dy, bold, colorOf) => {
+    if (!labels || cw < 60 * s) return;
+    ctx.font = `${bold ? 'bold ' : ''}${Math.min(14, cw / (7 * s)) * s}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const [key, text] of Object.entries(labels)) {
+      const [c, r] = key.split(',').map(Number);
+      if (c < v.c0 || c > v.c1 || r < v.r0 || r > v.r1) continue;
+      const b = cellBounds(grid, c, r);
+      const [x0, y0] = toPx(b.north, b.west);
+      const [x1, y1] = toPx(b.south, b.east);
+      let t = text;
+      while (t.length > 3 && ctx.measureText(t).width > cw - 8 * s) t = t.slice(0, -2) + '…';
+      halo(ctx, t, (x0 + x1) / 2, (y0 + y1) / 2 + dy * (y1 - y0), colorOf(key), s);
+    }
+  };
+  cellLabels(state.fillLabels, 0.04, true, () => '#111');
+  cellLabels(state.statusLabels, 0.3, true, (key) => state.status[key] || '#111');
 
   // Linien
   const top = gridLat(grid, v.r0);

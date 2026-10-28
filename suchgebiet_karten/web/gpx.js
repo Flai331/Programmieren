@@ -2,7 +2,7 @@
 // Farben über die Garmin-Erweiterung (gpxx:DisplayColor), die BaseCamp und die Geräte anzeigen.
 
 import { cellLabel, gridBounds } from './grid.js';
-import { markLabel } from './store.js';
+import { markLabel, mapFor } from './store.js';
 
 const GARMIN_COLORS = {
   Black: [0, 0, 0], DarkRed: [139, 0, 0], DarkGreen: [0, 100, 0], DarkYellow: [139, 139, 0],
@@ -15,7 +15,7 @@ const GARMIN_COLORS = {
 const KNOWN = {
   '#d50000': 'Red', '#1565c0': 'Blue', '#2e7d32': 'Green', '#ef6c00': 'DarkYellow', '#6a1b9a': 'DarkMagenta',
   '#000000': 'Black', '#fdd835': 'Yellow', '#00838f': 'DarkCyan', '#ad1457': 'Magenta', '#4e342e': 'DarkRed',
-  '#558b2f': 'DarkGreen', '#616161': 'DarkGray',
+  '#558b2f': 'DarkGreen', '#616161': 'DarkGray', '#00c853': 'Green',
 };
 
 export function garminColor(hex) {
@@ -150,7 +150,8 @@ export function buildGpx(project, grid, opts) {
   }
   if (opts.teams && grid) {
     for (const m of project.marks) {
-      const keys = Object.keys(project.fills).filter((k) => project.fills[k] === m.id);
+      const map = mapFor(project, m);
+      const keys = Object.keys(map).filter((k) => map[k] === m.id);
       if (!keys.length) continue;
       trks += trk(markLabel(m), m.color, cellOutlines(keys).map((loop) => loop.map(corner)));
     }

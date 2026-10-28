@@ -5,23 +5,23 @@ import { drawOverlay, hitItem } from './render.js';
 import {
   LAYERS, OVERLAYS, DEFAULT_OVERLAYS, layerById, layerStack, tileUrl,
 } from './layers.js';
-import { buildPdf, planSheets } from './pdf.js';
+import { buildPdf, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
 import { buildGpx, trackLength, formatLength } from './gpx.js';
 import { buildCustomMap, planCustomMap } from './kmz.js';
 import { parseQuery, searchAddress } from './search.js';
 import {
-  newProject, normalizeProject, migrateV1, resolveFills, assignments, markLabel, cellOwner,
+  newProject, normalizeProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
   exportProject, importProject, uid, TEAM_COLORS,
 } from './store.js';
 
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#000000', '#fdd835'];
-const MARK_COLORS = [...new Set([...TEAM_COLORS, '#2e7d32', '#fdd835', '#616161', '#000000'])];
+const MARK_COLORS = [...new Set([...TEAM_COLORS, '#00c853', '#2e7d32', '#fdd835', '#616161', '#000000'])];
 const COLOR_NAMES = {
   '#d50000': 'Rot', '#1565c0': 'Blau', '#ef6c00': 'Orange', '#6a1b9a': 'Lila', '#00838f': 'Türkis', '#ad1457': 'Pink',
-  '#4e342e': 'Braun', '#558b2f': 'Olivgrün', '#2e7d32': 'Grün', '#fdd835': 'Gelb', '#616161': 'Grau', '#000000': 'Schwarz',
+  '#4e342e': 'Braun', '#558b2f': 'Olivgrün', '#2e7d32': 'Dunkelgrün', '#00c853': 'Hellgrün', '#fdd835': 'Gelb', '#616161': 'Grau', '#000000': 'Schwarz',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -76,7 +76,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveN
 
 function snapshot() {
   undoStack.push(JSON.stringify({
-    area: P.area, cellM: P.cellM, fills: P.fills, items: P.items, marks: P.marks, meet: P.meet,
+    area: P.area, cellM: P.cellM, fills: P.fills, status: P.status, items: P.items, marks: P.marks, meet: P.meet,
   }));
   if (undoStack.length > 60) undoStack.shift();
 }
@@ -185,14 +185,6 @@ function resizeCanvas() {
   redraw();
 }
 
-function fillLabels() {
-  const out = {};
-  for (const [k, id] of Object.entries(P.fills)) {
-    const m = P.marks.find((mm) => mm.id === id);
-    if (m && m.kind === 'team') out[k] = m.label;
-  }
-  return out;
-}
 
 function redraw() {
   const dpr = window.devicePixelRatio || 1;
@@ -205,9 +197,7 @@ function redraw() {
   const items = [...P.items];
   if (current) items.push(current);
   if (draftTrack && draftTrack.pts.length) items.push(draftTrack);
-  drawOverlay(ctx, toPx, {
-    grid, fills: resolveFills(P), fillLabels: fillLabels(), items, meet: P.meet,
-  }, { s: 1, width: W, height: H, view, utm: P.showUtm });
+  drawOverlay(ctx, toPx, { ...renderState(P, grid), items }, { s: 1, width: W, height: H, view, utm: P.showUtm });
   if (dragRect) {
     const [x0, y0] = toPx(dragRect.a.lat, dragRect.a.lng);
     const [x1, y1] = toPx(dragRect.b.lat, dragRect.b.lng);
@@ -287,12 +277,13 @@ function fillAt(ll, first) {
   const key = `${cell.c},${cell.r}`;
   if (first) {
     snapshot();
-    fillStroke = { mode: P.fills[key] === m.id ? 'clear' : 'set', seen: new Set() };
+    // Teams und Status liegen getrennt: „abgesucht“ überschreibt nicht das Team
+    fillStroke = { map: mapFor(P, m), mode: mapFor(P, m)[key] === m.id ? 'clear' : 'set', seen: new Set() };
   }
   if (fillStroke.seen.has(key)) return;
   fillStroke.seen.add(key);
-  if (fillStroke.mode === 'clear') delete P.fills[key];
-  else P.fills[key] = m.id;
+  if (fillStroke.mode === 'clear') delete fillStroke.map[key];
+  else fillStroke.map[key] = m.id;
   redraw();
 }
 
@@ -410,9 +401,10 @@ function eraseAt(x, y) {
     const ll = map.containerPointToLatLng([x, y]);
     const cell = grid && cellAt(grid, ll.lat, ll.lng);
     const key = cell && `${cell.c},${cell.r}`;
-    if (!key || !P.fills[key]) return;
+    if (!key || (!P.fills[key] && !P.status[key])) return;
     before();
     delete P.fills[key];
+    delete P.status[key];
   }
   redraw();
 }
@@ -575,7 +567,8 @@ function renderMarks() {
       if (!confirm(`„${markLabel(m) || 'Eintrag'}“ löschen?${cnt ? ` ${cnt} zugeteilte Felder werden freigegeben.` : ''}`)) return;
       snapshot();
       P.marks = P.marks.filter((x) => x.id !== m.id);
-      for (const k of Object.keys(P.fills)) if (P.fills[k] === m.id) delete P.fills[k];
+      const map = mapFor(P, m);
+      for (const k of Object.keys(map)) if (map[k] === m.id) delete map[k];
       changed();
       renderMarks();
     });
@@ -601,7 +594,7 @@ function setArea(area, cellM = P.cellM) {
   P.area = area;
   P.cellM = cellM;
   grid = g;
-  if (sizeChanged) P.fills = {};
+  if (sizeChanged) { P.fills = {}; P.status = {}; }
   changed();
   return true;
 }
@@ -620,7 +613,7 @@ function updateGridInfo() {
 $('cell-size').addEventListener('change', () => {
   const m = Number($('cell-size').value);
   if (!P.area) { P.cellM = m; save(); return; }
-  if (Object.keys(P.fills).length && !confirm('Bei neuer Feldgröße ändern sich die Felder – die Feldzuteilungen werden gelöscht. Fortfahren?')) {
+  if ((Object.keys(P.fills).length || Object.keys(P.status).length) && !confirm('Bei neuer Feldgröße ändern sich die Felder – die Feldzuteilungen werden gelöscht. Fortfahren?')) {
     $('cell-size').value = String(P.cellM);
     return;
   }
@@ -638,12 +631,14 @@ $('grid-remove').addEventListener('click', () => {
   P.area = null;
   grid = null;
   P.fills = {};
+  P.status = {};
   changed();
 });
 $('clear-fills').addEventListener('click', () => {
-  if (!Object.keys(P.fills).length || !confirm('Alle Feldfarben und Zuteilungen löschen?')) return;
+  if ((!Object.keys(P.fills).length && !Object.keys(P.status).length) || !confirm('Alle Feldfarben und Zuteilungen löschen?')) return;
   snapshot();
   P.fills = {};
+  P.status = {};
   changed();
 });
 $('clear-drawings').addEventListener('click', () => {
@@ -670,7 +665,8 @@ map.on('click', (e) => {
     const c = cellAt(grid, e.latlng.lat, e.latlng.lng);
     if (c) {
       const m = cellOwner(P, c.c, c.r);
-      parts.push(`Feld ${cellLabel(c.c, c.r)}${m ? ` – ${markLabel(m)}` : ''}`);
+      const st = cellStatus(P, c.c, c.r);
+      parts.push(`Feld ${cellLabel(c.c, c.r)}${m ? ` – ${markLabel(m)}` : ''}${st ? ` (${st.label})` : ''}`);
     } else parts.push('Außerhalb des Rasters');
   }
   if (P.showUtm) parts.push(formatMgrs(e.latlng.lat, e.latlng.lng));
