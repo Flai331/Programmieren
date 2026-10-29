@@ -306,7 +306,7 @@ export function buildGpx(project, grid, opts, part = '') {
   if (opts.tracks) {
     for (const it of project.items) {
       // geschlossener Umriss: zurück zum ersten Punkt, damit BaseCamp/Garmin ihn rundum zeigen
-      if (it.kind === 'track') trks += trk(it.name || 'Umriss', it.color, [hasArea(it) ? [...it.pts, it.pts[0]] : it.pts], trackDesc(it.pts, it.open));
+      if (it.kind === 'track') trks += trk(it.name || 'Umriss', it.color, [hasArea(it) ? [...it.pts, it.pts[0]] : it.pts], [it.note, trackDesc(it.pts, it.open)].filter(Boolean).join(' · '));
     }
   }
   if (opts.drawings) {

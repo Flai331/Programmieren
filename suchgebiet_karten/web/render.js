@@ -627,6 +627,13 @@ function drawTrack(ctx, toPx, it, s) {
     ctx.textBaseline = 'bottom';
     halo(ctx, label, pts[0][0] + 7 * s, pts[0][1] - 5 * s, it.color, s);
   }
+  // Notiz (z. B. vom Hundeführer zum umkreisten Bereich) klein darunter
+  if (it.note) {
+    ctx.font = `${12 * s}px sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    halo(ctx, it.note.length > 60 ? `${it.note.slice(0, 59)}…` : it.note, pts[0][0] + 7 * s, pts[0][1] - 3 * s, it.color, s);
+  }
 }
 
 // Abstand Punkt–Strecke in Pixeln (für den Radierer)

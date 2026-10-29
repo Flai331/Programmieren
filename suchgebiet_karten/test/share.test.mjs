@@ -103,11 +103,12 @@ test('Rückmeldung: umkreister Bereich des Hundeführers kommt als geschlossener
   el.sent = [{ id: a.id, teamId: 'T2', grids: a.g.map((g) => g.i) }];
   const hf = projectFromAssignment(await unpack(await pack(a)));
   const ring = Array.from({ length: 24 }, (_, i) => [52.29 + 0.002 * Math.sin(i / 4), 8.01 + 0.003 * Math.cos(i / 4)]);
-  hf.items.push({ kind: 'track', name: 'Bereich 1', color: '#1565c0', w: 4, pts: ring, t: 7 });
+  hf.items.push({ kind: 'track', name: 'Bereich 1', color: '#1565c0', w: 4, pts: ring, t: 7, note: 'Hund zeigt Interesse' });
   const sum = applyResult(el, await unpack(await pack(buildResult(hf))));
   assert.equal(sum.marks, 1);
   const t = el.items.find((it) => it.name === 'Bereich 1');
   assert.ok(t && t.kind === 'track' && !t.open && t.pts.length > 3);
+  assert.equal(t.note, 'Hund zeigt Interesse');
 });
 
 test('Auftrag ohne Raster: nur Umriss', async () => {
