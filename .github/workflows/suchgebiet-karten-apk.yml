@@ -65,6 +65,8 @@ jobs:
         working-directory: suchgebiet_karten/android
         env:
           MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
+          # Notion-Token für die Fehlermeldung in der APK (fehlt er, meldet die App per Mail)
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
         # Fortlaufende Versionsnummer, damit Android jede neue APK als Update sieht.
         run: gradle assembleRelease -PversionCode=${{ github.run_number }} --no-daemon
 
@@ -122,17 +124,26 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+      # Live-APK nur aus main; die Testversion (Beta) aus claude/suchgebiet-beta;
+      # alle anderen Zweige (z. B. Fehlerbehebungen vor dem Zusammenführen) nur bauen und testen.
       - name: Create or update GitHub release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/suchgebiet-beta'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            TAG=suchgebiet-karten; TITLE="Suchgebiet-Karten"
+            NOTES="Karten mit festem Raster für Rettungshunde-Einsätze. Automatisch gebaut. APK herunterladen und auf dem Handy installieren."
+          else
+            TAG=suchgebiet-karten-beta; TITLE="Suchgebiet-Karten (Testversion)"
+            NOTES="Testversion mit neuen Funktionen, noch nicht freigegeben. Installiert sich über die normale App; zurück mit der normalen APK."
+          fi
           cp suchgebiet_karten/android/app/build/outputs/apk/release/app-release.apk Suchgebiet-Karten.apk
           # zusätzlich als ZIP (manche Mailprogramme/Messenger blockieren .apk-Anhänge)
           zip -q Suchgebiet-Karten-APK.zip Suchgebiet-Karten.apk
-          if gh release view suchgebiet-karten > /dev/null 2>&1; then
-            gh release upload suchgebiet-karten Suchgebiet-Karten.apk Suchgebiet-Karten-APK.zip --clobber
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" Suchgebiet-Karten.apk Suchgebiet-Karten-APK.zip --clobber
           else
-            gh release create suchgebiet-karten Suchgebiet-Karten.apk Suchgebiet-Karten-APK.zip --target "${{ github.sha }}" \
-              --title "Suchgebiet-Karten" \
-              --notes "Karten mit festem Raster für Rettungshunde-Einsätze. Automatisch gebaut. APK herunterladen und auf dem Handy installieren."
+            gh release create "$TAG" Suchgebiet-Karten.apk Suchgebiet-Karten-APK.zip --target "${{ github.sha }}" \
+              --title "$TITLE" --notes "$NOTES" $([ "$TAG" = suchgebiet-karten-beta ] && echo --prerelease)
           fi
