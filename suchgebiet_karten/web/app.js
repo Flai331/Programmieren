@@ -330,12 +330,35 @@ function redraw() {
   drawWindArrow(ctx);
 }
 
-// Wind als großer Pfeil auf der Karte (am Windpunkt, sonst Mitte des Suchgebiets), zeigt wohin er weht
-function drawWindArrow(c) {
-  if (!db.wxOn || !db.wxLast || !db.wxLast.current) return;
+// Wind als großer Pfeil auf der Karte, zeigt wohin er weht. Einsatzleitung: DWD am Windpunkt
+// (sonst Mitte des Suchgebiets). Hundeführer: über dem erhaltenen Suchgebiet, selbst
+// gemessener Wind (grün) hat Vorrang vor dem DWD-Wert (blau).
+function windArrowSource() {
+  const meas = db.mode === 'hf' ? lastMeasured() : null;
+  if (meas) {
+    const t = new Date(meas.t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    return { from: meas.from, kmh: ({ light: 8, medium: 20, strong: 35 })[meas.strength] || 15, color: '#2e7d32', text: `Wind aus ${dirName(meas.from)} – ${STRENGTHS[meas.strength].label} (gemessen ${t})` };
+  }
+  if (!db.wxOn || !db.wxLast || !db.wxLast.current) return null;
   const w = db.wxLast.current;
-  if (w.from == null || w.kmh == null) return;
-  const pt = wxPoint();
+  if (w.from == null || w.kmh == null) return null;
+  return { from: w.from, kmh: w.kmh, color: '#1565c0', text: `Wind aus ${dirName(w.from)} ${Math.round(w.kmh)} km/h${w.gust ? `, Böen ${Math.round(w.gust)}` : ''} (DWD)` };
+}
+function windArrowPoint() {
+  if (db.mode === 'hf') {
+    const gs = allGrids(P);
+    if (gs.length) {
+      const ns = gs.flatMap((g) => [g.area.north, g.area.south]);
+      const ws = gs.flatMap((g) => [g.area.west, g.area.east]);
+      return { lat: (Math.max(...ns) + Math.min(...ns)) / 2, lon: (Math.max(...ws) + Math.min(...ws)) / 2 };
+    }
+  }
+  return wxPoint();
+}
+function drawWindArrow(c) {
+  const w = windArrowSource();
+  if (!w) return;
+  const pt = windArrowPoint();
   const [x, y] = toPx(pt.lat, pt.lon);
   const ang = ((w.from + 180) * Math.PI) / 180; // Kartenwinkel: 0 = Norden, im Uhrzeigersinn
   const len = 46 + Math.min(40, w.kmh); // stärkerer Wind = längerer Pfeil
@@ -343,13 +366,13 @@ function drawWindArrow(c) {
   c.translate(x, y);
   // Punkt
   c.fillStyle = '#fff';
-  c.strokeStyle = '#1565c0';
+  c.strokeStyle = w.color;
   c.lineWidth = 3;
   c.beginPath(); c.arc(0, 0, 7, 0, Math.PI * 2); c.fill(); c.stroke();
   // Pfeil
   c.rotate(ang);
   c.lineCap = 'round';
-  for (const [col, wd] of [['rgba(255,255,255,0.95)', 11], ['#1565c0', 6]]) {
+  for (const [col, wd] of [['rgba(255,255,255,0.95)', 11], [w.color, 6]]) {
     c.strokeStyle = col;
     c.lineWidth = wd;
     c.beginPath(); c.moveTo(0, -10); c.lineTo(0, -len); c.stroke();
@@ -357,14 +380,14 @@ function drawWindArrow(c) {
   }
   c.restore();
   // Beschriftung
-  const text = `Wind aus ${dirName(w.from)} ${Math.round(w.kmh)} km/h${w.gust ? `, Böen ${Math.round(w.gust)}` : ''}`;
+  const text = w.text;
   c.font = 'bold 13px sans-serif';
   c.textAlign = 'center';
   c.textBaseline = 'top';
   c.lineWidth = 4;
   c.strokeStyle = 'rgba(255,255,255,0.95)';
   c.strokeText(text, x, y + 12);
-  c.fillStyle = '#0d47a1';
+  c.fillStyle = w.color;
   c.fillText(text, x, y + 12);
   c.textAlign = 'left';
   c.textBaseline = 'alphabetic';
@@ -1844,6 +1867,7 @@ document.querySelectorAll('.wm-str button').forEach((b) => b.addEventListener('c
   db.wxOn = true;
   saveNow();
   renderWx();
+  redraw();
   toast(`Wind gemessen: aus ${dirName(wmFrom)}, ${STRENGTHS[s].label}. ${approach(wmFrom)}.`, 9000);
 }));
 $('wx-measure').addEventListener('click', openWindMeter);
