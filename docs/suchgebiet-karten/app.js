@@ -7,7 +7,7 @@ import {
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { buildGpx, mergeGpx, parseGpx, trackDesc, trackLength } from './gpx.js';
+import { buildGpx, mergeGpx, parseGpx, trackDesc, trackLength, outlineName } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v61';
+const APP_VERSION = 'v62';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -885,8 +885,8 @@ function finishTrack(auto) {
   const d = draftTrack;
   draftTrack = null;
   if (!d || d.pts.length < 2) { redraw(); return; }
-  const n = P.items.filter((it) => it.kind === 'track').length + 1;
-  let name = `Umriss ${n}`;
+  // Vorschlag: Himmelsrichtung vom B-Ort + fortlaufende Nummer („Nordwest 2“)
+  let name = outlineName(P.items, P.meet, d.pts);
   if (!auto) {
     const t = prompt('Name des Umrisses (erscheint so auf dem Garmin):', name);
     if (t === null) { draftTrack = d; return; }

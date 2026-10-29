@@ -287,3 +287,19 @@ test('buildGpx: Zeichnung aus mehreren Strichen – je Strich ein Track, Teil 2 
   const names = (buildGpx(p, null, { drawings: true }).match(/<trk>\s*<name>[^<]*/g) || []).map((x) => x.replace(/<trk>\s*<name>/, ''));
   assert.deepEqual(names, ['Bach', 'Bach (Teil 2)', 'Stift 2 (rot)', 'Stift 3 (rot)', 'Stift 3 (rot) (Teil 2)']);
 });
+
+test('Umriss-Name: Himmelsrichtung vom B-Ort + fortlaufende Nummer', async () => {
+  const { outlineName } = await import('../web/gpx.js');
+  const meet = { lat: 52.0, lon: 8.0 };
+  const sq = (lat, lon) => [[lat - 0.002, lon - 0.003], [lat + 0.002, lon - 0.003], [lat + 0.002, lon + 0.003], [lat - 0.002, lon + 0.003]];
+  assert.equal(outlineName([], meet, sq(52.02, 8.0)), 'Nord 1');
+  const items = [{ kind: 'track', name: 'Nord 1' }, { kind: 'text', text: 'x' }];
+  assert.equal(outlineName(items, meet, sq(52.02, 7.97)), 'Nordwest 2');
+  items.push({ kind: 'track', name: 'Nordwest 2' });
+  assert.equal(outlineName(items, meet, sq(52.02, 8.0)), 'Nord 3');
+  assert.equal(outlineName(items, meet, sq(51.98, 8.0)), 'Süd 3');
+  // gelöschter Umriss: Nummer läuft trotzdem weiter
+  assert.equal(outlineName([{ kind: 'track', name: 'Ost 5' }], meet, sq(52.0, 8.03)), 'Ost 6');
+  assert.equal(outlineName([], null, sq(52.02, 8.0)), 'Umriss 1');
+  assert.equal(outlineName([], meet, sq(52.0, 8.0)), 'Umriss 1');
+});

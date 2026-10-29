@@ -4,6 +4,7 @@
 import { cellLabel, gridBounds } from './grid.js';
 import { markLabel, mapFor, cellsText } from './store.js';
 import { CAP, textPath } from './font.js';
+import { bearing, distance } from './rescue.js';
 
 const GARMIN_COLORS = {
   Black: [0, 0, 0], DarkRed: [139, 0, 0], DarkGreen: [0, 100, 0], DarkYellow: [139, 139, 0],
@@ -78,6 +79,23 @@ export function hasArea(it) {
 }
 
 // Beschreibung eines Umrisses: Länge, ggf. auch die Fläche
+// Name für einen neuen Umriss: Himmelsrichtung vom B-Ort zur Mitte des Umrisses und
+// fortlaufende Nummer über alle Umrisse („Nord 1“, „Nordwest 2“, „Nord 3“).
+// Ohne B-Ort (oder Umriss direkt am B-Ort): „Umriss 3“.
+const DIR8 = ['Nord', 'Nordost', 'Ost', 'Südost', 'Süd', 'Südwest', 'West', 'Nordwest'];
+export function outlineName(items, meet, pts) {
+  const tracks = items.filter((it) => it.kind === 'track');
+  const nums = tracks.map((it) => Number((String(it.name || '').match(/(\d+)\s*$/) || [])[1]) || 0);
+  const n = Math.max(tracks.length, ...nums) + 1;
+  if (!meet || !pts.length) return `Umriss ${n}`;
+  const la = pts.map((q) => q[0]);
+  const lo = pts.map((q) => q[1]);
+  const lat = (Math.max(...la) + Math.min(...la)) / 2;
+  const lon = (Math.max(...lo) + Math.min(...lo)) / 2;
+  if (distance(meet.lat, meet.lon, lat, lon) < 30) return `Umriss ${n}`;
+  return `${DIR8[Math.round(bearing(meet.lat, meet.lon, lat, lon) / 45) % 8]} ${n}`;
+}
+
 export function trackDesc(pts, open = false) {
   const len = formatLength(trackLength(pts));
   return pts.length > 2 && !open ? `${len} · ${formatArea(polygonArea(pts))}` : len;
