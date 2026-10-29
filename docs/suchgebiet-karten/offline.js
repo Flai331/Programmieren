@@ -175,3 +175,36 @@ export async function storageInfo() {
 export async function persistStorage() {
   try { return await navigator.storage.persist(); } catch { return false; }
 }
+
+// ---------- Android-App: Download im Hintergrund (nativer Dienst) ----------
+// Die App lädt selbst (läuft weiter bei ausgeschaltetem Bildschirm, speichert als Dateien –
+// auch auf der SD-Karte, ohne Browser-Speichergrenze) und liefert die Bilder beim Anzeigen
+// direkt aus. Damit dieselben Adressen entstehen wie hier, bekommt sie je Karte eine
+// Vorlage plus Stichproben, die sie vor dem Start mit ihren eigenen Adressen vergleicht.
+export function nativeLayer(def) {
+  const off = zoomOffset(def);
+  const layer = { zoomOffset: off, maxZoom: maxZoom(def) };
+  if (def.wms) {
+    const u = tileUrl(def, 0, 0, 0);
+    layer.wmsPrefix = u.slice(0, u.indexOf('BBOX=') + 5);
+  } else {
+    layer.template = def.url;
+    layer.subdomains = def.subdomains ? def.subdomains.join('') : '';
+  }
+  // Stichproben aus verschiedenen Zoomstufen und Kachelnummern
+  layer.samples = [[3, 4, 2], [10, 531, 340], [15, 17030, 10870], [17, 68123, 43500]]
+    .map(([z, x, y]) => ({ z, x, y, url: tileUrl(def, z, x, y) }));
+  return layer;
+}
+
+export function nativeJob(region, defs, wifiOnly) {
+  return {
+    id: region.id,
+    name: region.name,
+    bounds: region.bounds,
+    zMin: region.zMin,
+    zMax: region.zMax,
+    wifiOnly: !!wifiOnly,
+    layers: defs.map(nativeLayer),
+  };
+}
