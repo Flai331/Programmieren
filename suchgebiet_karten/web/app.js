@@ -22,7 +22,7 @@ import {
   FIELDS as CT_FIELDS, normalizeContact, sortContacts, matches as ctMatches, telHref, toVcf, parseContacts, mergeContacts,
 } from './contacts.js';
 import {
-  parseRescue, mergeRescue, nearest as nearestRescue, compass, inBounds, loadRescue, storeRescue,
+  parseRescue, mergeRescue, nearest as nearestRescue, compass, inBounds, loadRescue, storeRescue, rescueNear,
   distance, bearing as bearingDeg,
 } from './rescue.js';
 import {
@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v59';
+const APP_VERSION = 'v60';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -1727,7 +1727,8 @@ function renderRescueInfo() {
   $('rp-clear').disabled = !rescuePts.length;
   $('quick-rp').hidden = !rescuePts.length;
 }
-loadRescue().then((pts) => { rescuePts = pts; renderRescueInfo(); redraw(); });
+// gespeicherte Punkte laden – nicht überschreiben, was ein Auftrag-Link inzwischen mitgebracht hat
+loadRescue().then((pts) => { rescuePts = mergeRescue(pts, rescuePts); renderRescueInfo(); redraw(); });
 
 let rpMarker = null;
 function showNearestRescue() {
@@ -2340,14 +2341,15 @@ function sendSelection() {
     // ganze Zeichnung (alle Striche einer Gruppe)
     if (it.group) P.items.forEach((x, j) => { if (x.group === it.group) idx.push(j); }); else idx.push(Number(inp.value));
   }
-  const areas = allGrids(P).filter((g) => gridIds.includes(g.id)).map((g) => g.area);
+  // Rettungspunkte: im Umkreis von 3 km um die Mitte jedes Rastergebiets bzw. Umrisses
   let rescue = [];
-  if ($('send-rescue').checked && areas.length && rescuePts.length) {
-    const pad = 0.01;
-    rescue = inBounds(rescuePts, {
-      north: Math.max(...areas.map((a) => Math.max(a.north, a.south))) + pad, south: Math.min(...areas.map((a) => Math.min(a.north, a.south))) - pad,
-      west: Math.min(...areas.map((a) => Math.min(a.west, a.east))) - pad, east: Math.max(...areas.map((a) => Math.max(a.west, a.east))) + pad,
-    }).slice(0, 60);
+  if ($('send-rescue').checked && rescuePts.length) {
+    const shapes = allGrids(P).filter((g) => gridIds.includes(g.id)).map((g) => ({ rect: g.area }));
+    for (const j of idx) {
+      const it = P.items[j];
+      if (it.pts && it.pts.length) shapes.push({ pts: it.pts });
+    }
+    rescue = rescueNear(rescuePts, shapes, 3, 80);
   }
   return {
     teamId: $('send-team').value, gridIds, fields: sendFields(),
@@ -2366,7 +2368,7 @@ async function currentAssignment() {
 async function updateSendSize() {
   const { a, link } = await currentAssignment();
   const nf = a.g.reduce((x, g) => x + g.f.length, 0);
-  $('send-size').textContent = `${a.g.length ? `${a.g.length} Rastergebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ` : ''}Umrisse/Zeichnungen: ${a.i.length} · `
+  $('send-size').textContent = `${a.g.length ? `${a.g.length} Rastergebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ` : ''}Umrisse/Zeichnungen: ${a.i.length} · ${a.rp ? `Rettungspunkte: ${a.rp.length} · ` : ''}`
     + (link.length <= QR_MAX ? `passt in einen QR-Code (${link.length} Zeichen)` : `zu groß für einen QR-Code (${link.length} Zeichen) – per WhatsApp senden oder weniger auswählen`);
 }
 ['send-team', 'send-meet', 'send-rescue', 'send-person', 'send-hint'].forEach((id) => $(id).addEventListener(id === 'send-hint' ? 'input' : 'change', () => {

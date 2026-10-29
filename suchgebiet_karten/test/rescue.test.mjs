@@ -39,3 +39,17 @@ test('Zusammenführen, nächster Punkt, Richtung, Ausschnitt', () => {
   assert.equal(inBounds(m, { north: 52.5, south: 51.9, west: 7.9, east: 8.1 }).length, 2);
   assert.ok(Math.abs(distance(52, 8, 53, 8) - 111195) < 100);
 });
+
+test('Rettungspunkte im Umkreis von 3 km um die Mitte von Raster und Umriss', async () => {
+  const { rescueNear } = await import('../web/rescue.js');
+  const pts = [
+    { n: 'mitte', lat: 52.29, lon: 8.02 },
+    { n: '2,5km', lat: 52.3125, lon: 8.02 },
+    { n: '3,5km', lat: 52.3215, lon: 8.02 },
+    { n: 'umriss', lat: 52.41, lon: 8.21 },
+    { n: 'weit', lat: 53, lon: 9 },
+  ];
+  const r = rescueNear(pts, [{ rect: { north: 52.30, south: 52.28, west: 8.00, east: 8.04 } }, { pts: [[52.40, 8.20], [52.42, 8.21], [52.40, 8.22]] }], 3);
+  assert.deepEqual(r.map((p) => p.n), ['mitte', 'umriss', '2,5km']);
+  assert.deepEqual(rescueNear(pts, [], 3), []);
+});

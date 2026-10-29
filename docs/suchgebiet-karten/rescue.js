@@ -118,6 +118,25 @@ export function nearest(points, lat, lon) {
   return best && { p: best.p, m: best.m, deg: bearing(lat, lon, best.p.lat, best.p.lon) };
 }
 
+// Rettungspunkte für einen Auftrag: im Umkreis (km) um den Mittelpunkt jedes übertragenen
+// Rastergebiets bzw. Umrisses (Mitte des umschließenden Rechtecks), nächste zuerst.
+// shapes: [{ rect: {north, south, west, east} } | { pts: [[lat, lon]…] }]
+export function rescueNear(points, shapes, km = 3, max = 80) {
+  const centers = shapes.map((s) => {
+    if (s.rect) return [(s.rect.north + s.rect.south) / 2, (s.rect.west + s.rect.east) / 2];
+    const la = s.pts.map((q) => q[0]);
+    const lo = s.pts.map((q) => q[1]);
+    return [(Math.max(...la) + Math.min(...la)) / 2, (Math.max(...lo) + Math.min(...lo)) / 2];
+  });
+  if (!centers.length) return [];
+  const out = [];
+  for (const pt of points) {
+    const d = Math.min(...centers.map(([la, lo]) => distance(la, lo, pt.lat, pt.lon)));
+    if (d <= km * 1000) out.push({ pt, d });
+  }
+  return out.sort((a, b) => a.d - b.d).slice(0, max).map((x) => x.pt);
+}
+
 export const inBounds = (points, b) => points.filter((p) => p.lat <= b.north && p.lat >= b.south && p.lon >= b.west && p.lon <= b.east);
 
 // ---------- Speicher (IndexedDB – auch für zehntausende Punkte) ----------
