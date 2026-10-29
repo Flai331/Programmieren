@@ -31,6 +31,7 @@ import {
 import {
   PUBLIC_URL, pack, unpack, parseShared, shareLink, buildAssignment, projectFromAssignment, buildResult, applyResult,
 } from './share.js';
+import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
   newProject, normalizeProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
@@ -39,7 +40,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v67';
+const APP_VERSION = 'v68';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -157,6 +158,7 @@ function undo() {
 
 function changed() {
   P.updated = Date.now();
+  renderHanded();
   updateGridInfo();
   renderPalette();
   if (!$('panel-teams').hidden) renderMarks();
@@ -2108,6 +2110,7 @@ function applyMode() {
   $('hfbar').hidden = !hf;
   if (hf && !['pan', 'hffield'].includes(tool)) setTool('pan');
   renderHfInfo();
+  renderHanded();
   map.invalidateSize();
   resizeCanvas();
 }
@@ -2381,18 +2384,33 @@ function loadScript(src) {
   });
 }
 const QR_MAX = 1800; // Zeichen, die eine Handy-Kamera vom Bildschirm noch sicher liest
-async function showQr(link, title, text) {
+let qrCycle = null;
+function qrSvg(data) {
+  const q = window.qrcode(0, data.length < 2000 ? 'M' : 'L');
+  q.addData(data, 'Byte');
+  q.make();
+  return q.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+}
+// parts: mehrere QR-Inhalte, die im Wechsel angezeigt werden (Scanner in der App sammelt sie)
+async function showQr(link, title, text, parts = null) {
   await loadScript('lib/qrcode.js');
   $('qr-title').textContent = title;
   $('qr-text').textContent = text;
   const box = $('qr-code');
-  if (link.length > QR_MAX) {
+  clearInterval(qrCycle);
+  if (parts && parts.length > 1) {
+    const svgs = parts.map(qrSvg);
+    let i = 0;
+    const show = () => {
+      box.innerHTML = `${svgs[i]}<b class="qr-part">Teil ${i + 1} von ${svgs.length}</b>`;
+      i = (i + 1) % svgs.length;
+    };
+    show();
+    qrCycle = setInterval(show, 900);
+  } else if (link.length > QR_MAX) {
     box.innerHTML = '<p class="small">Zu viele Daten für einen QR-Code – bitte über „Teilen“ (WhatsApp, SMS …) senden.</p>';
   } else {
-    const q = window.qrcode(0, link.length < 2000 ? 'M' : 'L');
-    q.addData(link, 'Byte');
-    q.make();
-    box.innerHTML = q.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+    box.innerHTML = qrSvg(link);
   }
   $('qrbox').dataset.link = link;
   $('qrbox').hidden = false;
@@ -2408,7 +2426,12 @@ async function shareLinkText(link, title, text) {
 async function copyText(t) {
   try { await navigator.clipboard.writeText(t); toast('Link kopiert – z. B. in WhatsApp einfügen'); } catch { prompt('Link kopieren:', t); }
 }
-$('qr-close').addEventListener('click', () => { $('qrbox').hidden = true; });
+const qrDone = [];
+$('qr-close').addEventListener('click', () => {
+  clearInterval(qrCycle);
+  $('qrbox').hidden = true;
+  while (qrDone.length) qrDone.shift()();
+});
 $('qr-copy').addEventListener('click', () => copyText($('qrbox').dataset.link));
 $('qr-share').addEventListener('click', () => shareLinkText($('qrbox').dataset.link, $('qr-title').textContent, $('qr-text').textContent));
 
@@ -2641,10 +2664,12 @@ $('btn-teams').addEventListener('click', renderSentList);
 async function handleShared(text) {
   const sh = parseShared(text);
   if (!sh) return toast('Kein Auftrag und keine Rückmeldung erkannt');
+  if (sh.kind === 'm') return toast('Teil eines mehrteiligen QR-Codes – bitte in der App über „Gebiete → 📷 Einsatz übernehmen“ scannen', 8000);
   let data;
   try { data = await unpack(sh.data); } catch { return toast('Code beschädigt oder unvollständig'); }
   if (data.k === 'a') return takeAssignment(data);
-  if (data.k === 'e' || data.k === 'i') return toast('Dieser Link braucht eine neuere Version der App – bitte aktualisieren');
+  if (data.k === 'e') return takeHandover(data);
+  if (data.k === 'i') return toast('Dieser Link braucht eine neuere Version der App – bitte aktualisieren');
   if (data.k !== 'r') return toast('Unbekannter Inhalt');
   // Rückmeldungen gehören zur Einsatzleitung: Modus umschalten (vom Hundeführer-Modus nur mit PIN)
   if (db.mode === 'hf' && !(await toElMode())) return;
@@ -2716,7 +2741,9 @@ $('recv-paste').addEventListener('click', () => openDlg((box, close) => {
 // Kamera-Scanner: BarcodeDetector (falls vorhanden), sonst jsQR
 let scanStream = null;
 let scanRun = false;
+let scanParts = {};
 async function startScan() {
+  scanParts = {};
   $('scanbox').hidden = false;
   $('scan-text').textContent = 'Kamera wird gestartet …';
   try {
@@ -2749,7 +2776,13 @@ async function startScan() {
         const r = window.jsQR(cx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' });
         if (r) text = r.data;
       }
-      if (text) { stopScan(); handleShared(text); return; }
+      const sh = text && parseShared(text);
+      if (sh && sh.kind === 'm') {
+        // mehrteiliger Code: Teile sammeln, bis alle da sind
+        const r = addPart(scanParts, sh.data);
+        if (r.done) { stopScan(); handleShared(shareLink('e', r.done)); return; }
+        if (r.n) $('scan-text').textContent = `Mehrteiliger Code: ${r.have} von ${r.n} Teilen gelesen – Kamera ruhig auf den Code halten …`;
+      } else if (text) { stopScan(); handleShared(text); return; }
     }
     setTimeout(tick, 200);
   };
@@ -2763,6 +2796,83 @@ function stopScan() {
 }
 $('recv-scan').addEventListener('click', startScan);
 $('scan-close').addEventListener('click', stopScan);
+
+// ---- Einsatz an ein weiteres Gerät der Einsatzleitung übergeben (Handy -> Tablet/PC) ----
+const PART_MAX = 16; // mehr Teile dauern beim Scannen zu lange
+function renderHanded() {
+  const h = P && P.handedOver;
+  $('handed').hidden = !h || db.mode !== 'el';
+  if (h) $('handed').textContent = `📲 an weiteres Gerät übergeben (${new Date(h).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}) – dort weiterarbeiten`;
+}
+$('handed').addEventListener('click', async () => {
+  const ok = await openDlg((box, close) => {
+    dlgHead(box, '📲 Übergeben', `Dieser Einsatz wurde um ${hhmm(P.handedOver)} an ein weiteres Gerät übergeben. Dort laufen jetzt die Rückmeldungen ein. Hier geht alles weiter, wird aber nicht mehr abgeglichen.`);
+    dlgButton(box, 'Hinweis ausblenden', '', () => close(true));
+    dlgButton(box, 'OK', 'primary', () => close(false));
+  });
+  if (ok) { delete P.handedOver; changed(); }
+});
+$('ho-send').addEventListener('click', async () => {
+  saveNow();
+  // erst ein QR-Code mit wenig Vereinfachung, sonst mehrere im Wechsel
+  let link = '';
+  let parts = null;
+  let e = null;
+  for (const opt of [{ tol: 1 }, { tol: 3 }, { tol: 6 }]) {
+    e = buildHandover(P, opt);
+    link = shareLink('e', await pack(e), PUBLIC_URL);
+    if (link.length <= QR_MAX) break;
+  }
+  if (link.length > QR_MAX) {
+    for (const opt of [{ tol: 1 }, { tol: 3 }, { tol: 6 }, { tol: 6, pages: false }, { tol: 15, pages: false }]) {
+      e = buildHandover(P, opt);
+      const data = await pack(e);
+      link = shareLink('e', data, PUBLIC_URL);
+      parts = splitParts(data, 800).map((x) => shareLink('m', x, PUBLIC_URL));
+      if (parts.length <= PART_MAX) break;
+    }
+  }
+  const miss = [e.np && `${e.np} Foto${e.np === 1 ? '' : 's'}`, e.nn && `Notizblock (${e.nn} Seite${e.nn === 1 ? '' : 'n'})`].filter(Boolean);
+  const how = parts
+    ? `${parts.length} QR-Codes wechseln sich ab. Auf dem anderen Gerät „Gebiete → 📷 Einsatz übernehmen“ antippen und die Kamera ruhig auf diesen Bildschirm halten, bis alle Teile gelesen sind (die Handy-Kamera-App reicht dafür nicht).`
+    : 'Auf dem anderen Gerät „Gebiete → 📷 Einsatz übernehmen“ antippen oder den Code mit der Kamera scannen.';
+  const pc = ' Zum PC: „Teilen“ oder „Link kopieren“ (z. B. WhatsApp Web, Mail).';
+  const lost = miss.length ? ` Nicht dabei: ${miss.join(', ')} – dafür „Suchgebiet als Datei senden“.` : '';
+  qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
+  showQr(link, `📲 Einsatz „${P.title || 'Suchgebiet'}“ übergeben`, how + pc + lost, parts);
+});
+$('ho-scan').addEventListener('click', () => { closePanels(); startScan(); });
+
+async function takeHandover(e) {
+  if (db.mode === 'hf' && !(await toElMode())) return;
+  if (db.mode !== 'el') { db.mode = 'el'; applyMode(); }
+  let inc;
+  try { inc = projectFromHandover(e); } catch { return toast('Einsatz konnte nicht gelesen werden'); }
+  const old = Object.values(db.projects).find((p) => p.eid === inc.eid);
+  let how = 'new';
+  if (old) {
+    how = await openDlg((box, close) => {
+      dlgHead(box, '📥 Einsatz übernehmen', `„${old.title || 'Suchgebiet'}“ ist hier schon vorhanden (zuletzt geändert ${hhmm(old.updated)}, übergeben wurde der Stand von ${hhmm(e.at)}).`);
+      dlgButton(box, 'Ersetzen', 'primary', () => close('replace'));
+      dlgButton(box, 'Als Kopie', '', () => close('copy'));
+      dlgButton(box, 'Abbrechen', '', () => close(null));
+    });
+    if (!how) return;
+  }
+  let p = inc;
+  if (how === 'replace') p = replaceWithHandover(old, inc, e);
+  if (how === 'copy') { p.eid = p.id; p.title = `${p.title || 'Suchgebiet'} (Kopie)`; }
+  // leeres Start-Suchgebiet eines frischen Geräts nicht stehen lassen
+  const empty = P && !P.area && !P.items.length && !(P.otherGrids || []).length && !P.title && P.id !== p.id;
+  if (empty) delete db.projects[P.id];
+  p.updated = Date.now();
+  db.projects[p.id] = p;
+  switchProject(p.id);
+  saveNow();
+  renderProjects();
+  applyMode();
+  toast(`📥 Einsatz „${p.title || 'Suchgebiet'}“ übernommen – Rückmeldungen jetzt hier scannen${e.np ? ` (ohne ${e.np} Foto${e.np === 1 ? '' : 's'})` : ''}`, 8000);
+}
 
 // Link mit Auftrag/Rückmeldung (Kamera-App, WhatsApp …) – beim Start und wenn er sich ändert
 async function handleHash() {
@@ -2861,8 +2971,10 @@ async function chooseModeIfNeeded() {
     box.appendChild(list);
     dlgButton(list, '🧭 Einsatzleitung<small>Alles: Raster, Teams, Aufträge, Berichte</small>', 'primary', () => close('el'));
     dlgButton(list, '🐕 Hundeführer<small>Vereinfacht: Auftrag, Weg, Markieren, Zurückgeben</small>', '', () => close('hf'));
+    dlgButton(list, '📷 Einsatz übernehmen<small>Weiteres Gerät der Einsatzleitung: QR-Code vom anderen Gerät scannen</small>', '', () => close('scan'));
   });
   if (m === 'hf') await toHfMode(); else { db.mode = 'el'; saveNow(); }
+  if (m === 'scan') startScan();
 }
 
 // ---------- Nachtmodus ----------
@@ -3242,6 +3354,7 @@ function renderProjects() {
     btn('Kopie', () => {
       const c = normalizeProject(JSON.parse(JSON.stringify(p)));
       c.id = uid();
+      c.eid = c.id;
       c.title = `${p.title || 'Suchgebiet'} (Kopie)`;
       c.created = c.updated = Date.now();
       db.projects[c.id] = c;

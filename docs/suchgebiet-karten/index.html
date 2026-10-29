@@ -32,6 +32,7 @@
   <canvas id="overlay"></canvas>
 
   <div id="hint" class="hint" hidden></div>
+  <div id="handed" class="handed" hidden></div>
 
   <!-- Wetter-Overlay (zuschaltbar): DWD-Wind + gemessener Wind, Ansatz, Vorhersage -->
   <div id="wx" class="wx" hidden>
@@ -78,7 +79,7 @@
     <div class="qr-inner">
       <h2>📷 QR-Code scannen</h2>
       <video id="scan-video" playsinline muted></video>
-      <p id="scan-text" class="small">Kamera auf den QR-Code auf dem Handy des Hundeführers richten.</p>
+      <p id="scan-text" class="small">Kamera auf den QR-Code richten.</p>
       <button id="scan-close">Abbrechen</button>
     </div>
   </div>
@@ -258,6 +259,13 @@
       <input id="import-file" type="file" accept=".json,.txt,.pdf,.gpx,application/json,text/plain,application/pdf,application/gpx+xml" hidden>
     </div>
 
+    <h2 class="sub">📲 Weiteres Gerät der Einsatzleitung (Tablet/PC)</h2>
+    <p class="small">Überträgt den ganzen Einsatz mit Raster, Teams, Aufträgen und Rückmeldungen auf ein weiteres Gerät der Einsatzleitung. Fotos gehen nur über „Suchgebiet als Datei senden“.</p>
+    <div class="row">
+      <button id="ho-send" class="primary">📲 Einsatz übergeben (QR-Code)</button>
+      <button id="ho-scan">📷 Einsatz übernehmen (scannen)</button>
+    </div>
+
     <h2 class="sub">Gespeicherte Suchgebiete</h2>
     <div class="row"><button id="proj-new">+ Neues Suchgebiet</button></div>
     <div id="project-list" class="plist"></div>
@@ -265,6 +273,11 @@
     <p class="small">Einsatzleitung: alles. Hundeführer: stark vereinfacht (große Knöpfe, nur der eigene Auftrag). Zurück zur Einsatzleitung nur mit der PIN der Einsatzleitung.</p>
     <div class="row">
       <button id="mode-hf">🐕 Hundeführer-Modus</button>
+    </div>
+    <h2 class="sub">📥 Android-App</h2>
+    <p class="small">Immer die neueste Version. Nach dem Download die Datei öffnen und „Aktualisieren“ bzw. „Installieren“ wählen; die Daten in der App bleiben erhalten.</p>
+    <div class="row">
+      <a id="apk-link" class="btnlink" href="https://github.com/Flai331/Programmieren/releases/download/suchgebiet-karten/Suchgebiet-Karten.apk" target="_blank" rel="noopener">📥 Neueste APK herunterladen</a>
     </div>
     <button class="close">Schließen</button>
   </section>
