@@ -31,9 +31,9 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Auftrags- und Rückmelde-Links mit der App öffnen (Android fragt bzw. in den App-Einstellungen
-                 unter „Standardmäßig öffnen“ freischalten) -->
-            <intent-filter>
+            <!-- Auftrags- und Rückmelde-Links direkt mit der App öffnen. autoVerify prüft dafür
+                 https://flai331.github.io/.well-known/assetlinks.json (Repo Flai331.github.io) -->
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />

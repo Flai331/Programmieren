@@ -2119,7 +2119,7 @@ document.querySelectorAll('.wm-str button').forEach((b) => b.addEventListener('c
   (M().wind ||= []).push({ t: Date.now(), from: Math.round(wmFrom), strength: s, src: 'gemessen', lat: pos.lat, lon: pos.lng });
   touch();
   $('windmeter').hidden = true;
-  db.wxOn = true;
+  // Wetterspalte bleibt, wie sie ist – die Messung erscheint als grüner Pfeil auf der Karte
   showWindArrows();
   saveNow();
   renderWx();
@@ -2221,7 +2221,7 @@ function renderHfInfo() {
   const rec = h ? h.track.reduce((a, sg) => a + pathLen(sg.pts), 0) : 0;
   $('hfi-text').textContent = h
     ? [h.hint && `⚠️ ${h.hint}`, `Auftrag ${hhmm(h.received)}`, rec ? `gelaufen ${fmtKm(rec)}` : ''].filter(Boolean).join(' · ')
-    : 'QR-Code der Einsatzleitung mit der Handy-Kamera scannen.';
+    : 'QR-Code der Einsatzleitung scannen: Menü → „📷 Auftrag scannen“.';
   $('hfinfo').classList.toggle('min', !!db.hfInfoMin);
   const m = $('hfm-info');
   m.textContent = '';
@@ -2234,7 +2234,7 @@ function renderHfInfo() {
     if (el) lines.push(`Einsatzleitung: ${[el.name, el.call && `📻 ${el.call}`, el.phone && `📞 ${el.phone}`].filter(Boolean).join(' · ')}`);
     m.textContent = lines.join('\n');
     m.style.whiteSpace = 'pre-line';
-  } else m.textContent = 'Noch kein Auftrag. QR-Code der Einsatzleitung mit der Handy-Kamera scannen.';
+  } else m.textContent = 'Noch kein Auftrag. QR-Code der Einsatzleitung scannen: Menü → „📷 Auftrag scannen“.';
   $('hfm-meet').disabled = !P.meet;
   $('hfm-contacts').hidden = !P.contacts.length;
   $('hfm-contacts').textContent = `📞 Kontakte (${P.contacts.length})`;
@@ -2879,6 +2879,7 @@ function stopScan() {
 }
 $('recv-scan').addEventListener('click', startScan);
 $('scan-close').addEventListener('click', stopScan);
+$('hfm-scan').addEventListener('click', () => { closePanels(); startScan(); });
 
 // ---- Einsatz an ein weiteres Gerät der Einsatzleitung übergeben (Handy -> Tablet/PC) ----
 const PART_MAX = 16; // mehr Teile dauern beim Scannen zu lange
