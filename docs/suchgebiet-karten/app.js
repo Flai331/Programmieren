@@ -21,6 +21,9 @@ import {
 import {
   FIELDS as CT_FIELDS, normalizeContact, sortContacts, matches as ctMatches, telHref, toVcf, parseContacts, mergeContacts,
 } from './contacts.js';
+import {
+  parseRescue, mergeRescue, nearest as nearestRescue, compass, inBounds, loadRescue, storeRescue,
+} from './rescue.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
   newProject, normalizeProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
@@ -29,7 +32,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v50';
+const APP_VERSION = 'v51';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -251,6 +254,7 @@ const ctx = canvas.getContext('2d');
 let current = null; // Strich, der gerade gezeichnet wird
 let dragRect = null; // Vorschau beim Aufziehen des Suchgebiets
 let offSel = new Set(); // angetippte Quadrate für Offline-Karten
+let rescuePts = []; // Rettungspunkte (aus IndexedDB, siehe unten)
 
 function toPx(lat, lon) {
   const p = map.latLngToContainerPoint([lat, lon]);
@@ -296,6 +300,7 @@ function redraw() {
     items: items.filter((it) => !it.hidden || it === current || it === draftTrack || drafts.includes(it)),
   };
   if (hide.meet) st.meet = null;
+  st.rescue = rescueInView();
   // Raster aus: Markierungen als Flächen mit Namen darauf
   drawOverlay(ctx, toPx, st, {
     s: 1, width: W, height: H, view, utm: P.showUtm, noGrid: !!hide.grid, noEdge: !!hide.edge, areaLabels: 'on',
@@ -1108,8 +1113,10 @@ map.on('click', (e) => {
       parts.push(`Feld ${c.label}${cellLabel(c.c, c.r)}${m ? ` – ${markLabel(m)}` : ''}${st ? ` (${st.label})` : ''}`);
     } else parts.push('Außerhalb des Rasters');
   }
+  const rp = rescueAt(e.containerPoint);
+  if (rp) parts.unshift(`🚑 Rettungspunkt ${rp.n} (${rp.lat.toFixed(5)}, ${rp.lon.toFixed(5)})`);
   if (P.showUtm) parts.push(formatMgrs(e.latlng.lat, e.latlng.lng));
-  if (parts.length) toast(parts.join(' · '));
+  if (parts.length) toast(parts.join(' · '), rp ? 8000 : 3500);
 });
 
 // ---------- Offline-Karten ----------
@@ -1446,6 +1453,115 @@ $('off-preview').addEventListener('click', () => {
   map.setZoom(z);
   toast(`Stufe ${z} (${ZOOMS[z]}) – so scharf wird die Offline-Karte. Stufe steht links am Zoom-Regler.`);
 });
+
+// ---------- Rettungspunkte ----------
+// Für alle Einsätze gemeinsam, in IndexedDB (können zehntausende sein); db.rescueOn = anzeigen
+if (db.rescueOn === undefined) db.rescueOn = true;
+function rescueInView() {
+  if (!db.rescueOn || !rescuePts.length || !map || map.getZoom() < 11) return null;
+  const b = map.getBounds();
+  const pts = inBounds(rescuePts, { north: b.getNorth(), south: b.getSouth(), west: b.getWest(), east: b.getEast() });
+  return pts.length > 3000 ? null : pts;
+}
+function rescueAt(pt) {
+  const pts = rescueInView();
+  if (!pts) return null;
+  let best = null;
+  for (const p of pts) {
+    const q = map.latLngToContainerPoint([p.lat, p.lon]);
+    const d = Math.hypot(q.x - pt.x, q.y - pt.y);
+    if (d < 22 && (!best || d < best.d)) best = { p, d };
+  }
+  return best && best.p;
+}
+// Für das PDF: Punkte rund um alle Rastergebiete und den Ausschnitt
+function rescueForExport() {
+  if (!db.rescueOn || !rescuePts.length) return null;
+  const bs = allGrids(P).map((g) => ({
+    north: Math.max(g.area.north, g.area.south), south: Math.min(g.area.north, g.area.south),
+    west: Math.min(g.area.west, g.area.east), east: Math.max(g.area.west, g.area.east),
+  }));
+  bs.push(viewBounds());
+  const pad = 0.05;
+  return inBounds(rescuePts, {
+    north: Math.max(...bs.map((b) => b.north)) + pad, south: Math.min(...bs.map((b) => b.south)) - pad,
+    west: Math.min(...bs.map((b) => b.west)) - pad, east: Math.max(...bs.map((b) => b.east)) + pad,
+  });
+}
+function renderRescueInfo() {
+  $('rp-info').textContent = rescuePts.length
+    ? `${rescuePts.length.toLocaleString('de-DE')} Rettungspunkte gespeichert${db.rescueOn ? ' – sichtbar ab Zoomstufe 11' : ''}.`
+    : 'Noch keine Rettungspunkte importiert.';
+  $('rp-show').checked = !!db.rescueOn;
+  $('rp-nearest').disabled = !rescuePts.length;
+  $('rp-clear').disabled = !rescuePts.length;
+  $('quick-rp').hidden = !rescuePts.length;
+}
+loadRescue().then((pts) => { rescuePts = pts; renderRescueInfo(); redraw(); });
+
+let rpMarker = null;
+function showNearestRescue() {
+  if (!rescuePts.length) return toast('Noch keine Rettungspunkte importiert (Karte → Rettungspunkte)');
+  const fromGps = !!gpsMarker;
+  const o = fromGps ? gpsMarker.getLatLng() : map.getCenter();
+  const r = nearestRescue(rescuePts, o.lat, o.lng);
+  if (!r) return;
+  closePanels();
+  if (rpMarker) map.removeLayer(rpMarker);
+  rpMarker = L.circleMarker([r.p.lat, r.p.lon], { radius: 18, color: '#1b7f3b', weight: 4, fill: false, className: 'rp-pulse' }).addTo(map);
+  setTimeout(() => { if (rpMarker) { map.removeLayer(rpMarker); rpMarker = null; } }, 15000);
+  map.setView([r.p.lat, r.p.lon], Math.max(map.getZoom(), 15));
+  const dist = r.m >= 1000 ? `${(r.m / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km` : `${Math.round(r.m)} m`;
+  toast(`🚑 Nächster Rettungspunkt: ${r.p.n} – ${dist} Richtung ${compass(r.deg)} (${Math.round(r.deg)}°) vom ${fromGps ? 'GPS-Standort' : 'Kartenmittelpunkt'} · ${r.p.lat.toFixed(5)}, ${r.p.lon.toFixed(5)} · ${formatMgrs(r.p.lat, r.p.lon)}`, 15000);
+}
+$('rp-nearest').addEventListener('click', showNearestRescue);
+$('quick-rp').addEventListener('click', showNearestRescue);
+$('rp-show').addEventListener('change', () => { db.rescueOn = $('rp-show').checked; saveNow(); renderRescueInfo(); redraw(); });
+$('rp-import').addEventListener('click', () => $('rp-file').click());
+$('rp-file').addEventListener('change', async (e) => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  let added = [];
+  for (const f of files) {
+    try { added = added.concat(parseRescue(await f.text())); } catch { /* unten gemeldet */ }
+  }
+  if (!added.length) return toast('Keine Rettungspunkte in der Datei gefunden (GPX-Wegpunkte, KML-Punkte oder CSV mit Koordinaten)', 6000);
+  rescuePts = mergeRescue(rescuePts, added);
+  try {
+    await storeRescue(rescuePts);
+  } catch {
+    return toast('Speichern fehlgeschlagen (Speicher voll?)');
+  }
+  db.rescueOn = true;
+  saveNow();
+  renderRescueInfo();
+  redraw();
+  toast(`${added.length.toLocaleString('de-DE')} Rettungspunkte übernommen – insgesamt ${rescuePts.length.toLocaleString('de-DE')}`, 5000);
+});
+$('rp-clear').addEventListener('click', async () => {
+  if (!confirm(`Alle ${rescuePts.length} Rettungspunkte löschen?`)) return;
+  rescuePts = [];
+  await storeRescue([]).catch(() => {});
+  renderRescueInfo();
+  redraw();
+});
+
+// ---------- Nachtmodus ----------
+// aus → dunkel → rot (schont die Nachtsicht) → aus; gilt fürs Gerät (db.night)
+function applyNight() {
+  const n = db.night || '';
+  document.documentElement.classList.toggle('night', !!n);
+  document.documentElement.classList.toggle('red', n === 'red');
+  $('quick-night').classList.toggle('on', !!n);
+  $('quick-night').lastChild.textContent = n === 'red' ? 'Rot' : n ? 'Dunkel' : 'Nacht';
+}
+$('quick-night').addEventListener('click', () => {
+  db.night = !db.night ? 'dark' : db.night === 'dark' ? 'red' : '';
+  applyNight();
+  saveNow();
+  toast(db.night === 'red' ? 'Nachtmodus rot – schont die Nachtsicht' : db.night ? 'Nachtmodus dunkel' : 'Tagmodus');
+});
+applyNight();
 
 // ---------- Adressbuch ----------
 // Kontakte für alle Suchgebiete gemeinsam in db.contacts
@@ -2001,7 +2117,7 @@ function mailText(title) {
 
 async function buildPdfFile(progress) {
   const opts = { ...pdfOpts(), views: exportViews() };
-  const res = await buildPdf(P, grid, opts, layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => progress(`Seite ${i} von ${n} …`));
+  const res = await buildPdf(P, grid, { ...opts, rescue: rescueForExport() }, layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => progress(`Seite ${i} von ${n} …`));
   $('pdf-msg').textContent = `✔ ${res.pages} Seite${res.pages > 1 ? 'n' : ''} (${Math.round(res.blob.size / 1024)} KB)`
     + (res.missing ? ` – ${res.missing} Kartenkacheln fehlen (keine Verbindung oder Karte nicht exportierbar)` : '');
   return {
@@ -2772,7 +2888,7 @@ async function reportPdf(sec, progress) {
     report: parts,
     title: `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}`,
   };
-  const res = await buildPdf(P, grid, opts, layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => progress(`Karte ${i} von ${n} …`));
+  const res = await buildPdf(P, grid, { ...opts, rescue: rescueForExport() }, layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => progress(`Karte ${i} von ${n} …`));
   return { blob: res.blob, name: safeName(hasReportText(parts) ? '_Abschlussbericht.pdf' : hasPad || hasPhotos ? '_Notizen.pdf' : '_Karte.pdf'), title: opts.title, pages: res.pages };
 }
 
@@ -3131,12 +3247,12 @@ $('search-form').addEventListener('submit', async (e) => {
 
 // ---------- Sonstiges ----------
 let toastTimer = null;
-function toast(msg) {
+function toast(msg, ms = 3500) {
   const t = $('toast');
   t.textContent = msg;
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
+  toastTimer = setTimeout(() => { t.hidden = true; }, ms);
 }
 
 $('title').addEventListener('input', () => { P.title = $('title').value; P.updated = Date.now(); save(); });

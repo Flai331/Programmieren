@@ -169,7 +169,7 @@ class MainActivity : ComponentActivity() {
                 fileCallback?.onReceiveValue(null)
                 fileCallback = callback
                 return try {
-                    pickFile.launch(arrayOf("application/pdf", "application/json", "text/plain", "application/octet-stream", "application/gpx+xml", "application/xml", "text/xml", "text/vcard", "text/x-vcard", "text/directory"))
+                    pickFile.launch(arrayOf("application/pdf", "application/json", "text/plain", "application/octet-stream", "application/gpx+xml", "application/xml", "text/xml", "text/vcard", "text/x-vcard", "text/directory", "application/vnd.google-earth.kml+xml", "text/csv", "text/comma-separated-values"))
                     true
                 } catch (e: ActivityNotFoundException) {
                     fileCallback = null

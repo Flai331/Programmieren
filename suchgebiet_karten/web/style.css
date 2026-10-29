@@ -396,3 +396,22 @@ button, input, select { font: inherit; }
 .ctform label { display: block; margin: 4px 0; }
 .ctform input, .ctform textarea { width: 100%; box-sizing: border-box; padding: 7px; border: 1px solid #bbb; border-radius: 8px; font: inherit; }
 .mailto .mrow .top select { max-width: 44px; }
+
+.leftbar > button.plain span { text-decoration: none; }
+.rp-pulse { animation: rp-pulse 1s ease-in-out infinite alternate; }
+@keyframes rp-pulse { from { opacity: 1; } to { opacity: 0.25; } }
+
+/* Nachtmodus: Bedienelemente dunkel (umgekehrt), Karte abgedunkelt; „rot“ schont die Nachtsicht */
+html.night body { background: #000; }
+html.night .topbar, html.night .toolbar, html.night .sidebuttons, html.night .leftbar, html.night .panel,
+html.night .bottomstack, html.night .notepad, html.night .searchbar,
+html.night .leaflet-control-container { filter: invert(1) hue-rotate(180deg); }
+html.night .panel img, html.night .notepad img { filter: invert(1) hue-rotate(180deg); }
+html.night .leaflet-tile-pane { filter: brightness(0.5) contrast(1.1) saturate(0.8); }
+html.night #overlay { filter: brightness(0.85); }
+html.night.red .topbar, html.night.red .toolbar, html.night.red .sidebuttons, html.night.red .leftbar, html.night.red .panel,
+html.night.red .bottomstack, html.night.red .notepad, html.night.red .searchbar,
+html.night.red .leaflet-control-container { filter: invert(1) grayscale(1) sepia(1) saturate(6) hue-rotate(-50deg) brightness(0.75); }
+html.night.red .leaflet-tile-pane { filter: brightness(0.45) grayscale(1) sepia(1) saturate(5) hue-rotate(-50deg); }
+html.night.red #overlay, html.night.red .leaflet-marker-pane, html.night.red .toast, html.night.red .hint { filter: grayscale(1) sepia(1) saturate(6) hue-rotate(-50deg) brightness(0.8); }
+html.night .leaflet-container { background: #111; }

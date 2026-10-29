@@ -54,6 +54,7 @@ export function drawOverlay(ctx, toPx, state, opt) {
     } else drawGrid(ctx, toPx, st, g.grid, opt, s);
   }
   drawItems(ctx, toPx, state.items || [], s);
+  if (state.rescue && state.rescue.length) drawRescue(ctx, toPx, state.rescue, s);
   if (state.meet) drawMeet(ctx, toPx, state.meet, s);
   for (const g of layers) {
     if (!opt.noGrid && !opt.noEdge) drawEdgeLabels(ctx, toPx, g.grid, opt, s);
@@ -63,6 +64,33 @@ export function drawOverlay(ctx, toPx, state, opt) {
   else areas.forEach((a, i) => { a.n = i + 1; });
   if (areas && opt.areaLabels === 'edge' && areas.length) drawAreaList(ctx, areas, opt, s);
   return areas;
+}
+
+// Rettungspunkte: grünes Schild mit weißem Kreuz (wie im Wald), Nummer daneben
+function drawRescue(ctx, toPx, pts, s) {
+  const size = 11 * s;
+  const labels = pts.length <= 400;
+  ctx.font = `bold ${10 * s}px sans-serif`;
+  ctx.textBaseline = 'middle';
+  for (const p of pts) {
+    const [x, y] = toPx(p.lat, p.lon);
+    ctx.fillStyle = '#1b7f3b';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5 * s;
+    ctx.fillRect(x - size / 2, y - size / 2, size, size);
+    ctx.strokeRect(x - size / 2, y - size / 2, size, size);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x - size * 0.32, y - size * 0.1, size * 0.64, size * 0.2);
+    ctx.fillRect(x - size * 0.1, y - size * 0.32, size * 0.2, size * 0.64);
+    if (labels && p.n) {
+      ctx.lineWidth = 3 * s;
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.strokeText(p.n, x + size * 0.7, y);
+      ctx.fillStyle = '#1b5e20';
+      ctx.fillText(p.n, x + size * 0.7, y);
+    }
+  }
+  ctx.textBaseline = 'alphabetic';
 }
 
 // Name eines Rastergebiets als Schild über der linken oberen Ecke

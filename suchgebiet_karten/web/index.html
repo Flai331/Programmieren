@@ -60,6 +60,8 @@
   <div class="leftbar">
     <button id="quick-grid" class="on" title="Raster ein-/ausblenden"><span>#</span>Raster</button>
     <button id="quick-marks" class="on" title="Teams und Markierungen ein-/ausblenden"><span>▦</span>Felder</button>
+    <button id="quick-rp" class="on plain" title="Nächster Rettungspunkt (von GPS-Standort oder Kartenmitte)" hidden><span>🚑</span>RP</button>
+    <button id="quick-night" class="plain" title="Nachtmodus: aus → dunkel → rot"><span>🌙</span>Nacht</button>
     <div class="zoomslider">
       <button id="zs-in" title="Hineinzoomen">+</button>
       <div id="zs-track" class="zs-track" title="Zoom: ziehen oder tippen"><div id="zs-fill" class="zs-fill"></div><div id="zs-thumb" class="zs-thumb"></div></div>
@@ -189,6 +191,16 @@
     <div id="layer-list" class="list"></div>
     <h2 class="sub">Über Luftbildern einblenden</h2>
     <div id="overlay-list"></div>
+    <h2 class="sub">🚑 Rettungspunkte</h2>
+    <p id="rp-info" class="info"></p>
+    <label class="check"><input type="checkbox" id="rp-show" checked> Auf der Karte und im PDF zeigen</label>
+    <div class="row">
+      <button id="rp-import">⬇ Datei importieren (GPX, KML, CSV)</button>
+      <button id="rp-nearest">🚑 Nächster Rettungspunkt</button>
+      <button id="rp-clear" class="danger">🗑️ Löschen</button>
+    </div>
+    <p class="small">Die Forst-Rettungspunkte gibt es kostenlos beim KWF (rettungspunkte-forst.de) bzw. bei den Landesforsten als GPX-, KML- oder CSV-Datei je Bundesland. Einmal importieren – danach offline, für alle Einsätze. Mehrere Dateien nacheinander importieren ergänzt die Liste.</p>
+    <input id="rp-file" type="file" accept=".gpx,.kml,.csv,.txt,application/gpx+xml,application/vnd.google-earth.kml+xml,text/csv,text/plain,application/xml,text/xml" hidden>
     <p class="small">Legt Wege (auch Waldwege), Straßen und Ortsnamen aus der amtlichen Karte TopPlusOpen auf das Luftbild.</p>
     <p class="small">Alle Karten sind amtliche, frei nutzbare Daten (auch kommerziell) von BKG, LGLN und Geobasis NRW.</p>
     <button class="close">Schließen</button>
