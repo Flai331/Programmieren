@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v66';
+const APP_VERSION = 'v67';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -2155,16 +2155,27 @@ function renderHfInfo() {
     if (h.hint) lines.push(`Hinweis: ${h.hint}`);
     if (P.mission.person) lines.push(`Vermisste Person: ${P.mission.person}`);
     if (P.meet) lines.push(`B-Ort: ${P.meet.text || 'gesetzt'}`);
+    const el = P.contacts.find((c) => c.role === 'Einsatzleitung');
+    if (el) lines.push(`Einsatzleitung: ${[el.name, el.call && `📻 ${el.call}`, el.phone && `📞 ${el.phone}`].filter(Boolean).join(' · ')}`);
     m.textContent = lines.join('\n');
     m.style.whiteSpace = 'pre-line';
   } else m.textContent = 'Noch kein Auftrag. QR-Code der Einsatzleitung mit der Handy-Kamera scannen.';
   $('hfm-meet').disabled = !P.meet;
+  $('hfm-contacts').hidden = !P.contacts.length;
+  $('hfm-contacts').textContent = `📞 Kontakte (${P.contacts.length})`;
 }
 $('hfinfo').addEventListener('click', () => { db.hfInfoMin = !db.hfInfoMin; save(); renderHfInfo(); });
 $('btn-hfmenu').addEventListener('click', () => { renderHfInfo(); openPanel('panel-hfmenu'); });
 $('hfm-rp').addEventListener('click', showNearestRescue);
-$('hfm-notes').addEventListener('click', () => { closePanels(); $('btn-notes').click(); });
-$('hfm-projects').addEventListener('click', () => { closePanels(); $('btn-projects').click(); });
+$('hfm-contacts').addEventListener('click', () => {
+  const box = $('hfc-list');
+  box.innerHTML = '';
+  for (const c of P.contacts) { const row = document.createElement('div'); row.className = 'ctrow'; row.appendChild(contactInfo(c)); box.appendChild(row); }
+  openPanel('panel-hfcontacts');
+});
+// direkt öffnen (openPanel schließt das Menü; closePanels davor ginge im Verlauf zurück und schlösse das neue Fenster gleich wieder)
+$('hfm-notes').addEventListener('click', () => $('btn-notes').click());
+$('hfm-projects').addEventListener('click', () => $('btn-projects').click());
 $('hfm-meet').addEventListener('click', () => {
   if (!P.meet) return;
   closePanels();
@@ -2462,11 +2473,30 @@ function renderSend() {
   if (!ib.children.length) ib.textContent = 'Keine.';
   $('send-meet').parentElement.hidden = !P.meet;
   $('send-person').parentElement.hidden = !P.mission.person.trim();
+  // Kontakte: alle vorausgewählt, einzeln abwählbar; Einsatzleitung immer dabei
+  const cts = sendContactsAll();
+  const cb = $('send-ct-list');
+  const off = new Set([...cb.querySelectorAll('input:not(:checked)')].map((i) => i.value));
+  cb.innerHTML = '';
+  for (const c of cts) {
+    const l = document.createElement('label');
+    l.className = 'check';
+    l.innerHTML = '<input type="checkbox"><span></span>';
+    l.firstChild.value = c.id;
+    l.firstChild.checked = !off.has(c.id);
+    l.firstChild.disabled = c.id === 'lead';
+    l.lastChild.textContent = [c.name, c.role, c.phone].filter(Boolean).join(' · ');
+    cb.appendChild(l);
+  }
+  $('send-contacts').parentElement.hidden = !cts.length;
+  $('send-contacts-label').textContent = `Kontakte mitgeben (${cts.length})`;
+  cb.hidden = !cts.length || !$('send-contacts').checked;
   const picked = Object.values(sendPicked).reduce((a, x) => a + x.size, 0);
   $('send-pickinfo').textContent = sendFields() === 'pick' ? `${picked} Felder angetippt.` : '';
   sendCache = null;
   updateSendSize();
 }
+const sendContactsAll = () => [leadContact(), ...P.contacts].filter(Boolean);
 const sendFields = () => (document.querySelector('input[name=send-fields]:checked') || {}).value || 'team';
 function sendSelection() {
   const gridIds = [...$('send-grids').querySelectorAll('input:checked')].map((i) => i.value);
@@ -2491,6 +2521,8 @@ function sendSelection() {
     teamId: $('send-team').value, gridIds, fields: sendFields(),
     picked: Object.fromEntries(Object.entries(sendPicked).map(([k, v]) => [k, [...v]])),
     itemIdx: idx, meet: $('send-meet').checked && !!P.meet, rescue, hint: $('send-hint').value.trim(), person: $('send-person').checked,
+    contacts: $('send-contacts').checked
+      ? sendContactsAll().filter((c) => c.id === 'lead' || !$('send-ct-list').querySelector(`input[value="${c.id}"]:not(:checked)`)) : [],
   };
 }
 async function currentAssignment() {
@@ -2504,7 +2536,7 @@ async function currentAssignment() {
 async function updateSendSize() {
   const { a, link } = await currentAssignment();
   const nf = a.g.reduce((x, g) => x + g.f.length, 0);
-  $('send-size').textContent = `${a.g.length ? `${a.g.length} Rastergebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ` : ''}Umrisse/Zeichnungen: ${a.i.length} · ${a.rp ? `Rettungspunkte: ${a.rp.length} · ` : ''}`
+  $('send-size').textContent = `${a.g.length ? `${a.g.length} Rastergebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ` : ''}Umrisse/Zeichnungen: ${a.i.length} · ${a.rp ? `Rettungspunkte: ${a.rp.length} · ` : ''}${a.ct ? `Kontakte: ${a.ct.length} · ` : ''}`
     + (link.length <= QR_MAX ? `passt in einen QR-Code (${link.length} Zeichen)` : `zu groß für einen QR-Code (${link.length} Zeichen) – per WhatsApp senden oder weniger auswählen`);
 }
 ['send-team', 'send-meet', 'send-rescue', 'send-person', 'send-hint'].forEach((id) => $(id).addEventListener(id === 'send-hint' ? 'input' : 'change', () => {
@@ -2513,6 +2545,8 @@ async function updateSendSize() {
 }));
 $('send-grids').addEventListener('change', () => { sendCache = null; updateSendSize(); });
 $('send-items').addEventListener('change', () => { sendCache = null; updateSendSize(); });
+$('send-ct-list').addEventListener('change', () => { sendCache = null; updateSendSize(); });
+$('send-contacts').addEventListener('change', () => { $('send-ct-list').hidden = !$('send-contacts').checked; sendCache = null; updateSendSize(); });
 document.querySelectorAll('input[name=send-fields]').forEach((r) => r.addEventListener('change', () => {
   sendCache = null;
   if (sendFields() === 'pick') { closePanels(); setTool('sendpick'); updatePickBar(); redraw(); } else renderSend();
@@ -2610,6 +2644,7 @@ async function handleShared(text) {
   let data;
   try { data = await unpack(sh.data); } catch { return toast('Code beschädigt oder unvollständig'); }
   if (data.k === 'a') return takeAssignment(data);
+  if (data.k === 'e' || data.k === 'i') return toast('Dieser Link braucht eine neuere Version der App – bitte aktualisieren');
   if (data.k !== 'r') return toast('Unbekannter Inhalt');
   // Rückmeldungen gehören zur Einsatzleitung: Modus umschalten (vom Hundeführer-Modus nur mit PIN)
   if (db.mode === 'hf' && !(await toElMode())) return;
@@ -2736,7 +2771,7 @@ async function handleHash() {
   const h = location.hash;
   history.replaceState(null, '', location.pathname + location.search);
   // Rückmeldung: ist die App schon in einem anderen Fenster/Tab offen, dort übernehmen (sonst überschreiben sich die Fenster)
-  if (sh.kind === 'r' && await handOff(h)) return;
+  if (['r', 'e', 'i'].includes(sh.kind) && await handOff(h)) return;
   await handleShared(h);
 }
 
@@ -2863,18 +2898,7 @@ function renderContacts() {
   for (const c of list) {
     const row = document.createElement('div');
     row.className = 'ctrow';
-    const info = document.createElement('div');
-    info.className = 'ctinfo';
-    const b = document.createElement('b');
-    b.textContent = c.name;
-    info.appendChild(b);
-    const sub = [c.role, c.org, c.call && `📻 ${c.call}`].filter(Boolean).join(' · ');
-    if (sub) { const sm = document.createElement('small'); sm.textContent = sub; info.appendChild(sm); }
-    const link = (href, text) => { const a = document.createElement('a'); a.href = href; a.textContent = text; info.appendChild(a); };
-    if (c.phone) link(telHref(c.phone), `📞 ${c.phone}`);
-    if (c.phone2) link(telHref(c.phone2), `📞 ${c.phone2}`);
-    if (c.email) link(`mailto:${c.email}`, `✉️ ${c.email}`);
-    if (c.note) { const sm = document.createElement('small'); sm.textContent = c.note; info.appendChild(sm); }
+    const info = contactInfo(c, true);
     const edit = document.createElement('button');
     edit.textContent = '✏️';
     edit.title = 'Bearbeiten';
@@ -2883,6 +2907,111 @@ function renderContacts() {
     box.appendChild(row);
   }
 }
+
+// Name, Funktion, Funkrufname und Nummern (antippen = anrufen); full: auch Organisation, E-Mail, Notiz
+function contactInfo(c, full) {
+  const info = document.createElement('div');
+  info.className = 'ctinfo';
+  const b = document.createElement('b');
+  b.textContent = c.name || c.phone;
+  info.appendChild(b);
+  const sub = [c.role, full && c.org, c.call && `📻 ${c.call}`].filter(Boolean).join(' · ');
+  if (sub) { const sm = document.createElement('small'); sm.textContent = sub; info.appendChild(sm); }
+  const link = (href, text) => { const a = document.createElement('a'); a.href = href; a.textContent = text; info.appendChild(a); };
+  if (c.phone) link(telHref(c.phone), `📞 ${c.phone}`);
+  if (c.phone2) link(telHref(c.phone2), `📞 ${c.phone2}`);
+  if (full && c.email) link(`mailto:${c.email}`, `✉️ ${c.email}`);
+  if (full && c.note) { const sm = document.createElement('small'); sm.textContent = c.note; info.appendChild(sm); }
+  return info;
+}
+
+// ---------- Kontakte dieses Einsatzes (P.contacts) ----------
+// Die Einsatzleitung (P.lead) steht immer als erster Kontakt dabei, wird aber nicht doppelt gespeichert
+function leadContact() {
+  const l = P.lead || {};
+  if (!(l.name || P.leader || l.phone)) return null;
+  return normalizeContact({ id: 'lead', name: l.name || P.leader, role: 'Einsatzleitung', call: l.call, phone: l.phone });
+}
+function renderProjectContacts() {
+  const box = $('pc-list');
+  box.innerHTML = '';
+  const lead = leadContact();
+  if (lead) { const row = document.createElement('div'); row.className = 'ctrow'; row.appendChild(contactInfo(lead)); box.appendChild(row); }
+  for (const c of P.contacts) {
+    const row = document.createElement('div');
+    row.className = 'ctrow';
+    const del = document.createElement('button');
+    del.textContent = '✕';
+    del.title = 'Aus dem Einsatz entfernen (bleibt im Adressbuch)';
+    del.addEventListener('click', () => { P.contacts = P.contacts.filter((x) => x !== c); touch(); renderProjectContacts(); });
+    row.append(contactInfo(c), del);
+    box.appendChild(row);
+  }
+  if (!lead && !P.contacts.length) box.innerHTML = '<p class="small">Noch keine – Name/Handy der Einsatzleitung eintragen oder Kontakte hinzufügen.</p>';
+}
+$('pc-add').addEventListener('click', () => openDlg((box, close) => {
+  dlgHead(box, '📇 Kontakte für diesen Einsatz', 'Aus dem Adressbuch anhaken.');
+  const q = document.createElement('input');
+  q.type = 'search';
+  q.placeholder = 'Suchen …';
+  const list = document.createElement('div');
+  list.className = 'checklist';
+  list.style.maxHeight = '50vh';
+  list.style.overflow = 'auto';
+  const have = new Set(P.contacts.map((c) => `${c.name}|${c.phone}`));
+  const picked = new Set();
+  const draw = () => {
+    list.innerHTML = '';
+    const found = sortContacts(db.contacts).filter((c) => ctMatches(c, q.value) && !have.has(`${c.name}|${c.phone}`));
+    if (!db.contacts.length) list.innerHTML = '<p class="small">Das Adressbuch ist leer.</p>';
+    for (const c of found) {
+      const l = document.createElement('label');
+      l.className = 'check';
+      l.innerHTML = '<input type="checkbox"><span></span>';
+      l.firstChild.checked = picked.has(c.id);
+      l.firstChild.addEventListener('change', (e) => { if (e.target.checked) picked.add(c.id); else picked.delete(c.id); });
+      l.lastChild.textContent = [c.name, c.role, c.phone].filter(Boolean).join(' · ');
+      list.appendChild(l);
+    }
+  };
+  q.addEventListener('input', draw);
+  box.append(q, list);
+  draw();
+  dlgButton(box, 'Übernehmen', 'primary', () => {
+    for (const c of db.contacts) if (picked.has(c.id)) P.contacts.push(normalizeContact({ ...c, id: uid() }));
+    touch();
+    renderProjectContacts();
+    close(true);
+  });
+  dlgButton(box, 'Abbrechen', '', () => close(false));
+}));
+$('pc-new').addEventListener('click', () => openDlg((box, close) => {
+  dlgHead(box, '📇 Neuer Kontakt für diesen Einsatz', '');
+  const f = {};
+  for (const [k, label] of [['name', 'Name'], ['role', 'Funktion'], ['call', 'Funkrufname'], ['phone', 'Telefon']]) {
+    const l = document.createElement('label');
+    l.textContent = label;
+    f[k] = document.createElement('input');
+    if (k === 'phone') { f[k].type = 'tel'; f[k].inputMode = 'tel'; }
+    l.appendChild(f[k]);
+    box.appendChild(l);
+  }
+  const keep = document.createElement('label');
+  keep.className = 'check';
+  keep.innerHTML = '<input type="checkbox"> auch ins Adressbuch';
+  box.appendChild(keep);
+  dlgButton(box, 'Speichern', 'primary', () => {
+    const c = normalizeContact(Object.fromEntries(Object.entries(f).map(([k, inp]) => [k, inp.value])));
+    if (!c.name && !c.phone) return toast('Bitte Name oder Telefon eintragen');
+    P.contacts.push(c);
+    if (keep.firstChild.checked) { db.contacts.push(normalizeContact({ ...c, id: uid() })); renderContacts(); }
+    touch();
+    renderProjectContacts();
+    close(true);
+  });
+  dlgButton(box, 'Abbrechen', '', () => close(false));
+  setTimeout(() => f.name.focus(), 50);
+}));
 
 function openContactForm(id) {
   ctEditing = id;
@@ -3074,7 +3203,11 @@ function switchProject(id) {
 
 function fillProjectForm() {
   $('title').value = P.title;
-  $('leader').value = P.leader || '';
+  $('leader').value = P.leader || P.lead.name || '';
+  $('lead-phone').value = P.lead.phone || '';
+  $('lead-call').value = P.lead.call || '';
+  $('lead-elw').value = P.lead.elw || '';
+  renderProjectContacts();
   $('notes').value = P.notes || '';
   renderMeet();
 }
@@ -3146,7 +3279,10 @@ $('proj-new').addEventListener('click', () => {
   renderProjects();
 });
 
-$('leader').addEventListener('input', () => { P.leader = $('leader').value; P.updated = Date.now(); save(); });
+$('leader').addEventListener('input', () => { P.leader = $('leader').value; P.lead.name = P.leader; P.updated = Date.now(); save(); renderProjectContacts(); });
+for (const [id, k] of [['lead-phone', 'phone'], ['lead-call', 'call'], ['lead-elw', 'elw']]) {
+  $(id).addEventListener('input', () => { P.lead[k] = $(id).value; P.updated = Date.now(); save(); renderProjectContacts(); });
+}
 $('pdf-caption').addEventListener('input', () => { P.caption = $('pdf-caption').value; P.updated = Date.now(); save(); });
 $('notes').addEventListener('input', () => { P.notes = $('notes').value; $('nt-text').value = P.notes; P.updated = Date.now(); save(); });
 $('meet-set').addEventListener('click', () => { closePanels(); setTool('meet'); });

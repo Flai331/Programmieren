@@ -2,6 +2,7 @@
 // Reine Logik ohne DOM, damit sie testbar ist.
 
 import { newMission, normalizeMission } from './mission.js';
+import { normalizeContact } from './contacts.js';
 import { rangeLabel } from './grid.js';
 
 export const TEAM_COLORS = ['#d50000', '#1565c0', '#ef6c00', '#6a1b9a', '#00838f', '#ad1457', '#4e342e', '#558b2f'];
@@ -41,6 +42,11 @@ export function newProject(title = '') {
     marks: defaultMarks(),
     items: [],
     meet: null, // {lat, lon, text}
+    lead: { name: '', phone: '', call: '', elw: '' }, // Einsatzleitung: Name, Handy, Funkrufname EL, Funkrufname ELW
+    radio: [], // weitere Funkrufnamen [{ call, who }]
+    contacts: [], // Kontakte dieses Einsatzes (Kopien aus dem Adressbuch), gehen auf Wunsch mit dem Auftrag
+    pois: [], // Lage-Orte (ELW-Infos)
+    eid: '', // Einsatz-ID über Geräte hinweg (Übergabe Handy -> Tablet)
     showUtm: false,
     view: null,
     mission: newMission(), // Einsatzprotokoll
@@ -54,6 +60,11 @@ export function normalizeProject(p) {
   if (!Array.isArray(out.marks)) out.marks = base.marks;
   if (!Array.isArray(out.items)) out.items = [];
   out.mission = normalizeMission(out.mission);
+  out.lead = { ...base.lead, ...(out.lead && typeof out.lead === 'object' ? out.lead : {}) };
+  if (!out.lead.name && out.leader) out.lead.name = out.leader;
+  for (const k of ['radio', 'contacts', 'pois']) if (!Array.isArray(out[k])) out[k] = [];
+  out.contacts = out.contacts.map(normalizeContact);
+  if (!out.eid) out.eid = out.id;
   // v61: „Treffpunkt“ heißt jetzt „B-Ort“
   if (out.meet && out.meet.text === 'Treffpunkt') out.meet = { ...out.meet, text: 'B-Ort' };
   // v31: nur „Raster ausblenden“ -> allgemeine Anzeige-Schalter
