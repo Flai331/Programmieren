@@ -562,3 +562,5 @@ body.hf #panel-layers .el-only { display: none !important; }
 }
 #panel-wizard label > input, #panel-wizard label > textarea { display: block; width: 100%; margin-top: 4px; box-sizing: border-box; }
 #panel-wizard .wz-radio input { padding: 8px; border: 1px solid #bbb; border-radius: 8px; }
+.wm-box select { width: 100%; padding: 10px; border: 1px solid #bbb; border-radius: 8px; font-size: 16px; background: #fff; }
+.wm-box > label:not(.check) { display: block; font-size: 14px; font-weight: 600; margin-top: 4px; }

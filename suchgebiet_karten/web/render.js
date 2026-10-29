@@ -53,7 +53,7 @@ export function drawOverlay(ctx, toPx, state, opt) {
       if (a) areas.push(...a);
     } else drawGrid(ctx, toPx, st, g.grid, opt, s);
   }
-  drawItems(ctx, toPx, state.items || [], s);
+  drawItems(ctx, toPx, state.items || [], s, state.teamNames);
   if (state.rescue && state.rescue.length) drawRescue(ctx, toPx, state.rescue, s);
   if (state.meet) drawMeet(ctx, toPx, state.meet, s);
   for (const g of layers) {
@@ -550,7 +550,7 @@ function gridLon(grid, c) {
   return grid.originLon + c * grid.dLon;
 }
 
-function drawItems(ctx, toPx, items, s) {
+function drawItems(ctx, toPx, items, s, teamNames = {}) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   const named = new Set(); // Zeichnung aus mehreren Strichen: Name nur am ersten
@@ -579,7 +579,7 @@ function drawItems(ctx, toPx, items, s) {
         halo(ctx, it.name, x + (it.w / 2 + 5) * s, y - (it.w / 2 + 3) * s, it.color, s);
       }
     } else if (it.kind === 'track' && it.pts.length) {
-      drawTrack(ctx, toPx, it, s);
+      drawTrack(ctx, toPx, it, s, it.to ? (it.to.startsWith('u:') ? it.to.slice(2) : (teamNames || {})[it.to] || '') : '');
     } else if (it.kind === 'text') {
       const [x, y] = toPx(it.lat, it.lon);
       ctx.fillStyle = it.color;
@@ -598,7 +598,7 @@ function drawItems(ctx, toPx, items, s) {
 }
 
 // Track (Punkt für Punkt gesetzt): Linie mit weißem Rand, Knotenpunkte, Name am Start
-function drawTrack(ctx, toPx, it, s) {
+function drawTrack(ctx, toPx, it, s, who = '') {
   const pts = it.pts.map(([lat, lon]) => toPx(lat, lon));
   const line = (w, color) => {
     ctx.strokeStyle = color;
@@ -636,7 +636,7 @@ function drawTrack(ctx, toPx, it, s) {
     ctx.stroke();
   });
   // Name und Fläche (ab 3 Punkten) am Startpunkt
-  const label = [it.name, hasArea(it) ? formatArea(polygonArea(it.pts)) : ''].filter(Boolean).join(' · ');
+  const label = [`${it.name || ''}${who ? ` → ${who}` : ''}`.trim(), hasArea(it) ? formatArea(polygonArea(it.pts)) : ''].filter(Boolean).join(' · ');
   if (label) {
     ctx.font = `bold ${13 * s}px sans-serif`;
     ctx.textAlign = 'left';
@@ -673,7 +673,8 @@ export function hitItem(items, toPx, x, y, tol) {
       const pts = it.pts.map(([lat, lon]) => toPx(lat, lon));
       for (let k = 0; k < pts.length; k++) {
         const a = pts[k];
-        const b = pts[Math.min(k + 1, pts.length - 1)];
+        // geschlossener Umriss: auch die Kante zurück zum ersten Punkt
+        const b = it.kind === 'track' && hasArea(it) ? pts[(k + 1) % pts.length] : pts[Math.min(k + 1, pts.length - 1)];
         if (distToSegment(x, y, a[0], a[1], b[0], b[1]) <= tol + it.w / 2) return i;
       }
     }

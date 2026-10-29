@@ -36,12 +36,12 @@ import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, ad
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
   newProject, normalizeProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
-  exportProject, importProject, uid, TEAM_COLORS,
+  exportProject, importProject, uid, TEAM_COLORS, assignTargets, assigneeName,
   allGrids, activateGrid, startNewGrid, removeActiveGrid, gridView, gridLabel,
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v69';
+const APP_VERSION = 'v70';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -866,7 +866,17 @@ function renameItem(i) {
     changed();
     return;
   }
-  const what = it.kind === 'track' ? 'des Umrisses' : 'der Zeichnung';
+  if (it.kind === 'track') {
+    outlineDialog(it, '📐 Umriss').then((r) => {
+      if (!r) return;
+      snapshot();
+      applyOutline(it, { ...r, name: r.name || it.name });
+      changed();
+      if (!$('panel-teams').hidden) renderMarks();
+    });
+    return;
+  }
+  const what = 'der Zeichnung';
   const t = prompt(`Name ${what} (steht so auf der Karte und im GPX für Garmin):`, it.name || '');
   if (t === null || t.trim() === (it.name || '')) return;
   snapshot();
@@ -874,6 +884,43 @@ function renameItem(i) {
   for (const x of it.group ? P.items.filter((y) => y.group === it.group) : [it]) x.name = t.trim();
   changed();
   toast(it.name ? `Name „${it.name}“ gespeichert` : 'Name entfernt');
+}
+
+// Umriss: Name, Zuteilung (Team oder Einheit aus „Einsatz → Kräfte“) und Notiz
+function outlineDialog(it, title) {
+  return openDlg((box, close) => {
+    dlgHead(box, title, 'Name und Notiz stehen so auf der Karte, im PDF und auf dem Garmin.');
+    const field = (label, el) => {
+      const l = document.createElement('label');
+      l.textContent = label;
+      l.appendChild(el);
+      box.appendChild(l);
+      return el;
+    };
+    const name = field('Name', Object.assign(document.createElement('input'), { type: 'text', value: it.name || '' }));
+    const sel = field('Zugeteilt an', document.createElement('select'));
+    sel.add(new Option('– niemand –', ''));
+    for (const t of assignTargets(P)) sel.add(new Option(`${t.to.startsWith('u:') ? '🚒' : '🐕'} ${t.label}`, t.to));
+    if (it.to && ![...sel.options].some((o) => o.value === it.to)) sel.add(new Option(assigneeName(P, it.to) || '(gelöscht)', it.to));
+    sel.value = it.to || '';
+    const note = field('Notiz', Object.assign(document.createElement('textarea'), { rows: 2, value: it.note || '' }));
+    const p = document.createElement('p');
+    p.className = 'small';
+    p.textContent = 'Teams unter „Teams“, weitere Einheiten (Feuerwehr, Polizei …) unter „Einsatz → Kräfte“.';
+    box.appendChild(p);
+    dlgButton(box, 'Speichern', 'primary', () => close({ name: name.value.trim(), to: sel.value, note: note.value.trim() }));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+    setTimeout(() => { name.focus(); name.select(); }, 50);
+  });
+}
+function applyOutline(it, r) {
+  if (r.name) it.name = r.name;
+  if (r.to) {
+    // einem Team zugeteilt: Umriss in der Teamfarbe
+    if (r.to !== it.to) { const m = P.marks.find((x) => x.id === r.to); if (m) it.color = m.color; }
+    it.to = r.to;
+  } else delete it.to;
+  if (r.note) it.note = r.note; else delete it.note;
 }
 
 // ---------- Stift-Zeichnung ----------
@@ -938,19 +985,21 @@ function updateTrackbar() {
 }
 
 // auto = beim Wechsel des Werkzeugs: ohne Nachfrage mit Standardnamen speichern
-function finishTrack(auto) {
+async function finishTrack(auto) {
   const d = draftTrack;
-  draftTrack = null;
-  if (!d || d.pts.length < 2) { redraw(); return; }
+  if (!d || d.pts.length < 2) { draftTrack = null; redraw(); return; }
   // Vorschlag: Himmelsrichtung vom B-Ort + fortlaufende Nummer („Nordwest 2“)
   let name = outlineName(P.items, P.meet, d.pts);
+  let r = null;
   if (!auto) {
-    const t = prompt('Name des Umrisses (erscheint so auf dem Garmin):', name);
-    if (t === null) { draftTrack = d; return; }
-    name = t.trim() || name;
+    r = await outlineDialog({ ...d, name }, '📐 Umriss speichern');
+    if (!r || draftTrack !== d) return;
+    name = r.name || name;
   }
+  draftTrack = null;
   snapshot();
   d.name = name;
+  if (r) applyOutline(d, r);
   P.items.push(d);
   changed();
   toast(`„${name}“ gespeichert (${trackDesc(d.pts)})`);
@@ -962,8 +1011,8 @@ $('track-back').addEventListener('click', () => {
   updateTrackbar();
   redraw();
 });
-$('track-done').addEventListener('click', () => {
-  finishTrack(false);
+$('track-done').addEventListener('click', async () => {
+  await finishTrack(false);
   if (!draftTrack) setTool('pan');
 });
 $('track-cancel').addEventListener('click', () => {
@@ -1061,7 +1110,9 @@ function renderMarks() {
     el.querySelector('.swatch').style.background = m.color;
     el.querySelector('.name').value = m.label;
     if (m.kind === 'team') { el.querySelector('.dog').value = m.dog || ''; el.querySelector('.helpers').value = m.helpers || ''; }
-    el.querySelector('.cells').textContent = a && a.count ? `${a.count} Feld${a.count > 1 ? 'er' : ''}: ${a.text}` : 'keine Felder';
+    const outl = m.kind === 'team' ? P.items.filter((it) => it.kind === 'track' && it.to === m.id).map((it) => it.name || 'Umriss') : [];
+    el.querySelector('.cells').textContent = (a && a.count ? `${a.count} Feld${a.count > 1 ? 'er' : ''}: ${a.text}` : 'keine Felder')
+      + (outl.length ? ` · Umriss${outl.length > 1 ? 'e' : ''}: ${outl.join(', ')}` : '');
     const sel = el.querySelector('.color');
     for (const c of MARK_COLORS) {
       const o = document.createElement('option');
@@ -1364,6 +1415,11 @@ $('cell-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') goT
 
 // Antippen im Bewegen-Modus zeigt Feld, Zuteilung und ggf. UTMREF
 map.on('click', (e) => {
+  // Linie eines Umrisses angetippt (Einsatzleitung): Name, Zuteilung, Notiz bearbeiten
+  if (db.mode === 'el' && tool === 'pan') {
+    const i = hitItem(P.items, toPx, e.containerPoint.x, e.containerPoint.y, 12);
+    if (i >= 0 && P.items[i].kind === 'track') { renameItem(i); return; }
+  }
   const parts = [];
   if (allGrids(P).length) {
     const c = hitGrid(e.latlng.lat, e.latlng.lng);
@@ -1977,6 +2033,14 @@ $('quick-arrows').addEventListener('click', () => {
   }
 });
 $('quick-arrows').classList.toggle('on', !!db.windArrows);
+// gemessener Wind soll sofort als Pfeil zu sehen sein
+function showWindArrows() {
+  if (db.windArrows) return;
+  db.windArrows = true;
+  $('quick-arrows').classList.add('on');
+  saveNow();
+  redraw();
+}
 window.addEventListener('online', () => loadWeather(false));
 renderWx();
 if ((db.wxOn || db.windArrows) && (!db.wxLast || Date.now() - db.wxLast.fetched > 10 * 60e3)) loadWeather(false);
@@ -2054,6 +2118,7 @@ document.querySelectorAll('.wm-str button').forEach((b) => b.addEventListener('c
   touch();
   $('windmeter').hidden = true;
   db.wxOn = true;
+  showWindArrows();
   saveNow();
   renderWx();
   redraw();
@@ -2462,7 +2527,7 @@ let sendCache = null;
 function renderSend() {
   const teams = P.marks.filter((m) => m.kind === 'team');
   const sel = $('send-team');
-  const prev = sel.value;
+  const prev = sel.options.length ? sel.value : null; // beim ersten Öffnen: erstes Team
   sel.innerHTML = '';
   for (const t of teams) sel.add(new Option(`${t.label}${t.dog ? ` – ${t.dog}` : ''}`, t.id));
   sel.add(new Option('ohne Team (nur Gebiet)', ''));
@@ -2494,7 +2559,9 @@ function renderSend() {
     l.className = 'check';
     l.innerHTML = '<input type="checkbox"><span></span>';
     l.firstChild.value = String(i);
-    l.firstChild.checked = ichecked.has(String(i)) || (it.kind === 'track' && !it.open);
+    // zugeteilte Umrisse nur an ihr Team, übrige geschlossene Umrisse an alle
+    const team = $('send-team').value;
+    l.firstChild.checked = ichecked.has(String(i)) || (it.kind === 'track' && (it.to ? it.to === team : !it.open));
     l.lastChild.textContent = label;
     ib.appendChild(l);
   });
@@ -2568,7 +2635,7 @@ async function updateSendSize() {
     + (link.length <= QR_MAX ? `passt in einen QR-Code (${link.length} Zeichen)` : `zu groß für einen QR-Code (${link.length} Zeichen) – per WhatsApp senden oder weniger auswählen`);
 }
 ['send-team', 'send-meet', 'send-rescue', 'send-person', 'send-hint'].forEach((id) => $(id).addEventListener(id === 'send-hint' ? 'input' : 'change', () => {
-  if (id === 'send-team') { $('send-grids').innerHTML = ''; return renderSend(); }
+  if (id === 'send-team') { $('send-grids').innerHTML = ''; $('send-items').innerHTML = ''; return renderSend(); }
   sendCache = null; updateSendSize();
 }));
 $('send-grids').addEventListener('change', () => { sendCache = null; updateSendSize(); });
@@ -2582,6 +2649,7 @@ document.querySelectorAll('input[name=send-fields]').forEach((r) => r.addEventLi
 $('send-open').addEventListener('click', () => {
   if (!allGrids(P).length && !P.items.some((it) => !it.resultKey)) return toast('Nichts zu verschicken – zuerst ein Raster oder einen Umriss anlegen');
   $('send-grids').innerHTML = '';
+  $('send-items').innerHTML = '';
   renderSend();
   openPanel('panel-send');
 });
@@ -2694,6 +2762,7 @@ async function handleShared(text) {
   const res = applyResult(P, data);
   const sent = (P.sent || []).find((x) => x.id === data.a);
   if (sent) sent.last = Date.now();
+  if (res.winds) showWindArrows();
   changed();
   renderSentList();
   toast(`📥 Rückmeldung ${res.who}: ${res.ways} Weg${res.ways === 1 ? '' : 'e'}, ${res.marks} Markierung${res.marks === 1 ? '' : 'en'}, ${res.fields} Feld${res.fields === 1 ? '' : 'er'}${res.winds ? `, ${res.winds} Wind-Messung${res.winds === 1 ? '' : 'en'}` : ''}${res.known ? '' : ' (Auftrag hier unbekannt – ins aktuelle Suchgebiet übernommen)'}${res.ways + res.marks + res.fields + res.winds ? '' : ' – nichts Neues'}`, 9000);

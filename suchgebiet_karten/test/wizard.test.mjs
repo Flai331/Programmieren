@@ -33,3 +33,16 @@ test('Team mit Suchhelfern', () => {
   assert.equal(markLabel({ kind: 'team', label: 'Team 3', dog: '' }), 'Team 3');
   assert.equal(markLabel({ kind: 'status', label: 'abgesucht' }), 'abgesucht');
 });
+
+test('Umriss-Zuteilung: Teams und Einheiten aus den Kräften', async () => {
+  const { assignTargets, assigneeName, newProject } = await import('../web/store.js');
+  const p = newProject('x');
+  p.marks.push({ id: 'T2', kind: 'team', label: 'Team 2', color: '#1565c0', dog: 'Kira' });
+  p.mission.forces = [{ org: 'FF Celle' }, { org: ' FF Celle ' }, { org: '' }, { org: 'Polizei' }];
+  const t = assignTargets(p);
+  assert.deepEqual(t.map((x) => x.to), ['T2', 'u:FF Celle', 'u:Polizei']);
+  assert.equal(assigneeName(p, 'T2'), 'Team 2');
+  assert.equal(assigneeName(p, 'u:Polizei'), 'Polizei');
+  assert.equal(assigneeName(p, 'weg'), '');
+  assert.equal(assigneeName(p, undefined), '');
+});

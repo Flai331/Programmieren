@@ -8,11 +8,12 @@ import {
   mercLat, mercLon, mercX, mercY, metersPerUnit, niceScale, niceLength, formatMeters,
 } from './grid.js';
 import { drawOverlay, hatchRect } from './render.js';
+import { formatArea, hasArea, polygonArea } from './gpx.js';
 import { tileUrl } from './layers.js';
 import { cachedTileUrl } from './offline.js';
 import { formatMgrs, formatUtm, utmZone } from './utm.js';
 import {
-  allGrids, assignments, embedMarker, gridLabel, markLabel, resolveFills, teamStatus,
+  allGrids, assignments, embedMarker, gridLabel, markLabel, resolveFills, teamStatus, assigneeName,
 } from './store.js';
 
 export const PAGES = { A4: [297, 210], A3: [420, 297] };
@@ -362,6 +363,12 @@ function infoPage(doc, project, grid, W, H, top) {
     }
   };
   table('Teams', as.filter((a) => a.mark.kind === 'team'), true);
+  // Umrisse mit Zuteilung (Team oder Einheit)
+  const outl = project.items.filter((it) => it.kind === 'track' && !it.resultKey && it.to && assigneeName(project, it.to));
+  if (outl.length) {
+    heading('Umrisse');
+    for (const it of outl) row(`${(it.name || 'Umriss').slice(0, 26)}:`, `${assigneeName(project, it.to)}${hasArea(it) ? ` · ${formatArea(polygonArea(it.pts))}` : ''}${it.note ? `\n${it.note}` : ''}`);
+  }
   table('Legende', as.filter((a) => a.mark.kind !== 'team' && a.count), false);
 
   if (project.notes && project.notes.trim()) {
@@ -404,6 +411,7 @@ export function renderState(project, grid) {
     statusLabels: label(project.status),
     items: project.items,
     meet: project.meet,
+    teamNames: Object.fromEntries(project.marks.filter((m) => m.kind === 'team').map((m) => [m.id, m.label])),
   };
 }
 
