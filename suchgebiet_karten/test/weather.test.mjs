@@ -52,3 +52,15 @@ test('Windprotokoll: Zeilen und deutliche Änderung', () => {
   assert.equal(windChanged({ from: 350, kmh: 10 }, { from: 60, kmh: 12 }), true);
   assert.equal(windChanged({ from: 200, kmh: 5 }, { from: 200, kmh: 25 }), true);
 });
+
+test('DWD-Stationen: nur aktuelle Messungen, jede Station einmal, nächste zuerst', async () => {
+  const { parseStations } = await import('../web/weather.js');
+  const list = parseStations({ sources: [
+    { dwd_station_id: '01766', station_name: 'Münster/Osnabrück', observation_type: 'synop', lat: 52.13, lon: 7.69, distance: 25000 },
+    { dwd_station_id: '03791', station_name: 'Osnabrück', observation_type: 'current', lat: 52.25, lon: 8.05, distance: 4000 },
+    { dwd_station_id: '03791', station_name: 'Osnabrück', observation_type: 'synop', lat: 52.25, lon: 8.05, distance: 4000 },
+    { dwd_station_id: 'X', station_name: 'Vorhersage', observation_type: 'forecast', lat: 52, lon: 8, distance: 1000 },
+  ] });
+  assert.deepEqual(list.map((s) => s.name), ['Osnabrück', 'Münster/Osnabrück']);
+  assert.equal(list[0].km, 4);
+});

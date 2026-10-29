@@ -26,7 +26,7 @@ import {
   distance, bearing as bearingDeg,
 } from './rescue.js';
 import {
-  fetchWeather, dirName, beaufort, approach, circularMean, sunTimes, windChanged, STRENGTHS, ICONS as WX_ICONS,
+  fetchWeather, fetchStations, dirName, beaufort, approach, circularMean, sunTimes, windChanged, STRENGTHS, ICONS as WX_ICONS,
 } from './weather.js';
 import {
   PUBLIC_URL, pack, unpack, parseShared, shareLink, buildAssignment, projectFromAssignment, buildResult, applyResult,
@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v55';
+const APP_VERSION = 'v56';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -330,67 +330,79 @@ function redraw() {
   drawWindArrow(ctx);
 }
 
-// Wind als großer Pfeil auf der Karte, zeigt wohin er weht. Einsatzleitung: DWD am Windpunkt
-// (sonst Mitte des Suchgebiets). Hundeführer: über dem erhaltenen Suchgebiet, selbst
-// gemessener Wind (grün) hat Vorrang vor dem DWD-Wert (blau).
-function windArrowSource() {
-  const meas = db.mode === 'hf' ? lastMeasured() : null;
-  if (meas) {
-    const t = new Date(meas.t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    return { from: meas.from, kmh: ({ light: 8, medium: 20, strong: 35 })[meas.strength] || 15, color: '#2e7d32', text: `Wind aus ${dirName(meas.from)} – ${STRENGTHS[meas.strength].label} (gemessen ${t})` };
-  }
-  if (!db.wxOn || !db.wxLast || !db.wxLast.current) return null;
-  const w = db.wxLast.current;
-  if (w.from == null || w.kmh == null) return null;
-  return { from: w.from, kmh: w.kmh, color: '#1565c0', text: `Wind aus ${dirName(w.from)} ${Math.round(w.kmh)} km/h${w.gust ? `, Böen ${Math.round(w.gust)}` : ''} (DWD)` };
-}
+// Windpfeile (Overlay, ein-/ausschaltbar: db.windArrows). Jeder Pfeil zeigt, wohin der Wind weht.
+// Blau: DWD am Windpunkt bzw. über dem Suchgebiet und an den DWD-Messstationen ringsum.
+// Grün: selbst gemessener Wind an der Messstelle (auch von Hundeführern zurückgemeldet).
 function windArrowPoint() {
-  if (db.mode === 'hf') {
-    const gs = allGrids(P);
-    if (gs.length) {
-      const ns = gs.flatMap((g) => [g.area.north, g.area.south]);
-      const ws = gs.flatMap((g) => [g.area.west, g.area.east]);
-      return { lat: (Math.max(...ns) + Math.min(...ns)) / 2, lon: (Math.max(...ws) + Math.min(...ws)) / 2 };
-    }
+  const gs = allGrids(P);
+  if (db.mode === 'hf' && gs.length) {
+    const ns = gs.flatMap((g) => [g.area.north, g.area.south]);
+    const ws = gs.flatMap((g) => [g.area.west, g.area.east]);
+    return { lat: (Math.max(...ns) + Math.min(...ns)) / 2, lon: (Math.max(...ws) + Math.min(...ws)) / 2 };
   }
   return wxPoint();
 }
+function windArrows() {
+  const out = [];
+  const w = db.wxLast && db.wxLast.current;
+  if (w && w.from != null && w.kmh != null) {
+    const pt = windArrowPoint();
+    out.push({ ...pt, from: w.from, kmh: w.kmh, color: '#1565c0', big: true,
+      text: `Wind aus ${dirName(w.from)} ${Math.round(w.kmh)} km/h${w.gust ? `, Böen ${Math.round(w.gust)}` : ''} (DWD)` });
+  }
+  for (const st of (db.wxStations && db.wxStations.list) || []) {
+    if (st.from == null || st.kmh == null) continue;
+    out.push({ lat: st.lat, lon: st.lon, from: st.from, kmh: st.kmh, color: '#1565c0', station: true,
+      text: `DWD ${st.name}: ${dirName(st.from)} ${Math.round(st.kmh)} km/h` });
+  }
+  const KMH = { light: 8, medium: 20, strong: 35 };
+  for (const m of P.mission.wind || []) {
+    if (m.src !== 'gemessen' || m.lat == null) continue;
+    const t = new Date(m.t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    out.push({ lat: m.lat, lon: m.lon, from: m.from, kmh: KMH[m.strength] || 15, color: '#2e7d32', old: Date.now() - m.t > 2 * 3600e3,
+      text: `${t}${m.by ? ` ${m.by}` : ''}: aus ${dirName(m.from)}, ${STRENGTHS[m.strength] ? STRENGTHS[m.strength].label : ''}` });
+  }
+  return out;
+}
 function drawWindArrow(c) {
-  const w = windArrowSource();
-  if (!w) return;
-  const pt = windArrowPoint();
-  const [x, y] = toPx(pt.lat, pt.lon);
-  const ang = ((w.from + 180) * Math.PI) / 180; // Kartenwinkel: 0 = Norden, im Uhrzeigersinn
-  const len = 46 + Math.min(40, w.kmh); // stärkerer Wind = längerer Pfeil
+  if (!db.windArrows) return;
+  for (const a of windArrows()) drawArrowAt(c, a);
+}
+function drawArrowAt(c, w) {
+  const [x, y] = toPx(w.lat, w.lon);
+  const k = w.big ? 1 : 0.75;
+  const ang = ((w.from + 180) * Math.PI) / 180; // 0 = Norden, im Uhrzeigersinn
+  const len = (46 + Math.min(40, w.kmh)) * k; // stärkerer Wind = längerer Pfeil
   c.save();
+  c.globalAlpha = w.old ? 0.5 : 1;
   c.translate(x, y);
-  // Punkt
   c.fillStyle = '#fff';
   c.strokeStyle = w.color;
   c.lineWidth = 3;
-  c.beginPath(); c.arc(0, 0, 7, 0, Math.PI * 2); c.fill(); c.stroke();
-  // Pfeil
+  c.beginPath();
+  if (w.station) c.rect(-6, -6, 12, 12); else c.arc(0, 0, 7 * k, 0, Math.PI * 2);
+  c.fill();
+  c.stroke();
   c.rotate(ang);
   c.lineCap = 'round';
-  for (const [col, wd] of [['rgba(255,255,255,0.95)', 11], [w.color, 6]]) {
+  for (const [col, wd] of [['rgba(255,255,255,0.95)', 11 * k], [w.color, 6 * k]]) {
     c.strokeStyle = col;
     c.lineWidth = wd;
     c.beginPath(); c.moveTo(0, -10); c.lineTo(0, -len); c.stroke();
-    c.beginPath(); c.moveTo(-12, -len + 14); c.lineTo(0, -len - 2); c.lineTo(12, -len + 14); c.stroke();
+    c.beginPath(); c.moveTo(-12 * k, -len + 14 * k); c.lineTo(0, -len - 2); c.lineTo(12 * k, -len + 14 * k); c.stroke();
   }
   c.restore();
-  // Beschriftung
-  const text = w.text;
-  c.font = 'bold 13px sans-serif';
+  c.save();
+  c.globalAlpha = w.old ? 0.5 : 1;
+  c.font = `bold ${w.big ? 13 : 11}px sans-serif`;
   c.textAlign = 'center';
   c.textBaseline = 'top';
   c.lineWidth = 4;
   c.strokeStyle = 'rgba(255,255,255,0.95)';
-  c.strokeText(text, x, y + 12);
+  c.strokeText(w.text, x, y + 12);
   c.fillStyle = w.color;
-  c.fillText(text, x, y + 12);
-  c.textAlign = 'left';
-  c.textBaseline = 'alphabetic';
+  c.fillText(w.text, x, y + 12);
+  c.restore();
 }
 
 // Quadrate für Offline-Karten: blau = gewählt, grün = gespeichert, orange = angefangen
@@ -608,6 +620,7 @@ function finishPointer(e, cancelled) {
   } else if (tool === 'windpt') {
     if (!cancelled) {
       P.windPt = { lat: Math.round(ll.lat * 1e5) / 1e5, lon: Math.round(ll.lng * 1e5) / 1e5 };
+      if (!db.windArrows) { db.windArrows = true; $('quick-arrows').classList.add('on'); }
       setTool('pan');
       changed();
       loadWeather(true);
@@ -1752,13 +1765,15 @@ function renderWx() {
 }
 let wxLoading = false;
 async function loadWeather(manual) {
-  if (!db.wxOn || wxLoading) return;
+  if (!(db.wxOn || db.windArrows) || wxLoading) return;
   wxLoading = true;
   $('wx-refresh').disabled = true;
   try {
     const pt = wxPoint();
     const wx = await fetchWeather(pt.lat, pt.lon);
     db.wxLast = wx;
+    // Messstationen ringsum (für die Windpfeile)
+    if (db.windArrows) db.wxStations = await fetchStations(pt.lat, pt.lon).catch(() => db.wxStations || null);
     const c = wx.current;
     // deutliche Änderung (Drehung ≥ 45° oder ±2 Bft) kommt ins Windprotokoll des Einsatzes
     if (c.from != null && c.kmh != null) {
@@ -1787,10 +1802,22 @@ $('quick-wx').addEventListener('click', () => {
 });
 $('wx-refresh').addEventListener('click', () => loadWeather(true));
 $('wx-min').addEventListener('click', () => { db.wxMin = !db.wxMin; saveNow(); renderWx(); });
-setInterval(() => { if (db.wxOn && navigator.onLine) loadWeather(false); else renderWx(); }, 15 * 60e3);
+setInterval(() => { if ((db.wxOn || db.windArrows) && navigator.onLine) loadWeather(false); else renderWx(); }, 15 * 60e3);
+$('quick-arrows').addEventListener('click', () => {
+  db.windArrows = !db.windArrows;
+  saveNow();
+  $('quick-arrows').classList.toggle('on', !!db.windArrows);
+  redraw();
+  if (db.windArrows) {
+    const stale = !db.wxLast || Date.now() - db.wxLast.fetched > 10 * 60e3 || !db.wxStations;
+    if (stale) loadWeather(true);
+    toast('Windpfeile: blau = DWD (Punkt/Suchgebiet und Messstationen), grün = selbst gemessen');
+  }
+});
+$('quick-arrows').classList.toggle('on', !!db.windArrows);
 window.addEventListener('online', () => loadWeather(false));
 renderWx();
-if (db.wxOn && (!db.wxLast || Date.now() - db.wxLast.fetched > 10 * 60e3)) loadWeather(false);
+if ((db.wxOn || db.windArrows) && (!db.wxLast || Date.now() - db.wxLast.fetched > 10 * 60e3)) loadWeather(false);
 
 // Wind messen: Kompass des Handys (Oberkante zeigt, wohin das Puder fliegt)
 let wmBuf = [];
@@ -2389,7 +2416,7 @@ async function handleShared(text) {
   if (sent) sent.last = Date.now();
   changed();
   renderSentList();
-  toast(`📥 Rückmeldung ${res.who}: ${res.ways} Weg${res.ways === 1 ? '' : 'e'}, ${res.marks} Markierung${res.marks === 1 ? '' : 'en'}, ${res.fields} Feld${res.fields === 1 ? '' : 'er'}${res.known ? '' : ' (Auftrag hier unbekannt – ins aktuelle Suchgebiet übernommen)'}${res.ways + res.marks + res.fields ? '' : ' – nichts Neues'}`, 9000);
+  toast(`📥 Rückmeldung ${res.who}: ${res.ways} Weg${res.ways === 1 ? '' : 'e'}, ${res.marks} Markierung${res.marks === 1 ? '' : 'en'}, ${res.fields} Feld${res.fields === 1 ? '' : 'er'}${res.winds ? `, ${res.winds} Wind-Messung${res.winds === 1 ? '' : 'en'}` : ''}${res.known ? '' : ' (Auftrag hier unbekannt – ins aktuelle Suchgebiet übernommen)'}${res.ways + res.marks + res.fields + res.winds ? '' : ' – nichts Neues'}`, 9000);
 }
 async function takeAssignment(a) {
   const known = Object.values(db.projects).find((p) => p.hf && p.hf.id === a.id);

@@ -172,7 +172,10 @@ export function buildResult(p, tol = 5) {
   }
   const tr = p.hf.track.filter((s) => s.pts.length > 1).map((s) => ({ t: s.t0, p: encodePts(simplify(s.pts, tol)) }));
   const items = p.items.filter((it) => !it.fromEl && !it.rec).map((it) => ({ ...packItem(it, 3), t: it.t || 0 })).filter((x) => x.p);
-  return { v: 1, k: 'r', a: p.hf.id, tm: p.hf.team, at: Date.now(), tr, i: items, d };
+  // Wind-Messungen des Hundeführers: [Zeit, aus °, Stärke, Breite, Länge]
+  const w = (p.mission.wind || []).filter((x) => x.src === 'gemessen' && x.t >= (p.hf.received || 0) && !x.by)
+    .map((x) => [x.t, Math.round(x.from), x.strength, r6(x.lat ?? 0), r6(x.lon ?? 0)]);
+  return { v: 1, k: 'r', a: p.hf.id, tm: p.hf.team, at: Date.now(), tr, i: items, d, w };
 }
 
 // Rückmeldung ins Suchgebiet der Einsatzleitung übernehmen. sent: Liste gesendeter Aufträge
@@ -215,6 +218,16 @@ export function applyResult(p, r) {
     if (!g || !id) continue;
     if (g.status[cell] !== id) { g.status[cell] = id; fields++; }
   }
+  let winds = 0;
+  p.mission.wind = p.mission.wind || [];
+  for (const [t, from, strength, lat, lon] of r.w || []) {
+    const k = key(`w${t}`);
+    if (imp[k]) continue;
+    p.mission.wind.push({ t, from, strength, src: 'gemessen', lat, lon, by: who });
+    imp[k] = 1;
+    winds++;
+  }
+  p.mission.wind.sort((a, b) => a.t - b.t);
   p.updated = Date.now();
-  return { who, ways, marks, fields, known: !!sent };
+  return { who, ways, marks, fields, winds, known: !!sent };
 }

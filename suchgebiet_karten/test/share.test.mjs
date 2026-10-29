@@ -74,8 +74,12 @@ test('Rückmeldung: Weg, Markierung, Feldstatus kommen beim richtigen Team an, d
   hf.items.push({ kind: 'text', color: '#1565c0', lat: 52.291, lon: 8.011, text: '⚠️ Anzeige 14:32', t: 5 });
   const partly = hf.marks.find((m) => m.label === 'teilweise abgesucht');
   hf.status['2,1'] = partly.id;
+  hf.mission.wind.push({ t: Date.now(), from: 270, strength: 'medium', src: 'gemessen', lat: 52.29, lon: 8.01 });
   const r = await unpack(await pack(buildResult(hf)));
   const sum = applyResult(el, r);
+  assert.equal(sum.winds, 1);
+  assert.equal(el.mission.wind[0].by, 'Team 2');
+  assert.equal(el.mission.wind[0].from, 270);
   assert.equal(sum.known, true);
   assert.equal(sum.ways, 1);
   assert.equal(sum.marks, 1);
