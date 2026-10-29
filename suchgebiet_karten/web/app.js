@@ -9,6 +9,7 @@ import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
 import { buildGpx, mergeGpx, parseGpx, parseKml, trackDesc, trackLength, outlineName } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
+import { buildReport, describeTarget, makeDedup, makeLog } from './report.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
   MAIL_PARTS, REPORT_SECTIONS, MAP_PARTS, EXTRA_PARTS, hasReportText, newMailTo, mailAddresses,
@@ -41,7 +42,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v75';
+const APP_VERSION = 'v76';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -55,6 +56,10 @@ const COLOR_NAMES = {
 
 const $ = (id) => document.getElementById(id);
 const bridge = window.AndroidBridge || null; // gesetzt in der Android-App
+// Fehlerberichte nur in der Android-App (Token liegt dort, nie in der Web-Version)
+const canReport = !!(bridge && bridge.reportError);
+const repLog = makeLog();
+const repDedup = makeDedup();
 
 // ---------- Zustand ----------
 // db: alle Suchgebiete; P: das aktuelle; grid wird aus P.area + P.cellM berechnet
@@ -502,6 +507,7 @@ const HINTS = {
 
 let hintTimer = null;
 function setTool(t) {
+  if (t !== tool) repLog.add(`Werkzeug ${t}`);
   // Offene Zeichnung/Umriss bleibt beim Werkzeugwechsel erhalten (bis „Fertig“ oder „Abbrechen“)
   if (tool === 'track' && t !== 'track') {
     if (draftTrack && !draftTrack.pts.length) draftTrack = null;
@@ -3918,6 +3924,7 @@ function dropOverlay() {
   if (history.state && history.state.overlay) history.back();
 }
 function openPanel(id) {
+  repLog.add(`Fenster ${id}`);
   document.querySelectorAll('.panel').forEach((p) => { p.hidden = true; });
   closeSearch();
   $(id).hidden = false;
@@ -5255,6 +5262,50 @@ $('search-form').addEventListener('submit', async (e) => {
   showResults([], 'Suche läuft …');
   await updateSuggestions(true);
 });
+
+// ---------- Fehler melden (Android-App) ----------
+function reportPage() {
+  const open = [...document.querySelectorAll('.panel')].find((x) => !x.hidden);
+  return [open ? `Fenster ${open.id}` : 'Karte', `Werkzeug ${tool}`, !$('dlg').hidden ? 'Dialog offen' : ''].filter(Boolean).join(', ');
+}
+function sendReport(r) {
+  try { return bridge.reportError(JSON.stringify(r)); } catch { return 'none'; }
+}
+function autoReport(error, stack) {
+  if (!canReport) return;
+  const r = buildReport({ kind: 'Auto-Fehler', error, stack, version: APP_VERSION, mode: db.mode, page: reportPage(), log: repLog.text() });
+  if (!repDedup(r.fingerprint)) return;
+  repLog.add(`Fehler gemeldet ${r.fingerprint}`);
+  if (sendReport(r) === 'sent') toast('⚠️ Ein Fehler ist aufgetreten und wurde automatisch gemeldet.');
+}
+if (canReport) {
+  window.addEventListener('error', (e) => autoReport(e.message || String(e.error), (e.error && e.error.stack) || `${e.filename}:${e.lineno}`));
+  window.addEventListener('unhandledrejection', (e) => {
+    const r = e.reason;
+    autoReport(r && r.message ? r.message : String(r), (r && r.stack) || '');
+  });
+  // Bedienprotokoll: nur Kennungen der angetippten Knöpfe
+  document.addEventListener('click', (e) => { const d = describeTarget(e.target); if (d) repLog.add(`Tippen ${d}`); }, true);
+  document.querySelectorAll('.report-only').forEach((el) => { el.hidden = false; });
+}
+async function openReport() {
+  const desc = await openDlg((box, close) => {
+    dlgHead(box, '🐛 Fehler melden', 'Was ist passiert, was hast du erwartet? Mitgeschickt werden nur Version, Gerät, geöffnetes Fenster und die letzten Bedienschritte – keine Einsatzdaten.');
+    const ta = document.createElement('textarea');
+    ta.rows = 5;
+    ta.placeholder = 'z. B. „Beim Antippen von PDF speichern passiert nichts“';
+    box.appendChild(ta);
+    dlgButton(box, 'Senden', 'primary', () => close(ta.value.trim()));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+    setTimeout(() => ta.focus(), 50);
+  });
+  if (desc === null) return;
+  if (!desc) return toast('Bitte kurz beschreiben, was nicht geklappt hat.');
+  const res = sendReport(buildReport({ kind: 'Manuelle Meldung', desc, version: APP_VERSION, mode: db.mode, page: reportPage(), log: repLog.text() }));
+  toast(res === 'sent' ? '🐛 Danke – Meldung wird gesendet.' : res === 'mail' ? 'Mail-App geöffnet – bitte dort absenden.' : 'Meldung konnte nicht gesendet werden.');
+}
+$('report-open').addEventListener('click', () => { closePanels(); openReport(); });
+$('hfm-report').addEventListener('click', () => { closePanels(); openReport(); });
 
 // ---------- Sonstiges ----------
 let toastTimer = null;

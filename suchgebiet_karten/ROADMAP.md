@@ -1,7 +1,7 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v75**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v76**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
@@ -10,7 +10,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
 
 - [x] **v75 – GPX/KML aus WhatsApp & Co.** „Teilen“ bzw. „Öffnen mit“ → nach Nachfrage in den laufenden Einsatz (direkt mit Klaas gebaut).
 
-- [ ] **v76 – 🐛 Fehler melden (nur Android-APK)**
+- [x] **v76 – 🐛 Fehler melden (nur Android-APK)** (direkt mit Klaas gebaut)
   - Kachel „⚙️ Mehr“ → „🐛 Fehler melden“: Beschreibung eintippen, senden. Nur in der APK
     sichtbar (Web-Version bekommt keine Meldefunktion).
   - Automatische Meldung bei JavaScript-Fehlern (`window.onerror`, `unhandledrejection`) und
