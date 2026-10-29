@@ -169,7 +169,7 @@ class MainActivity : ComponentActivity() {
                 fileCallback?.onReceiveValue(null)
                 fileCallback = callback
                 return try {
-                    pickFile.launch(arrayOf("application/pdf", "application/json", "text/plain", "application/octet-stream", "application/gpx+xml", "application/xml", "text/xml"))
+                    pickFile.launch(arrayOf("application/pdf", "application/json", "text/plain", "application/octet-stream", "application/gpx+xml", "application/xml", "text/xml", "text/vcard", "text/x-vcard", "text/directory"))
                     true
                 } catch (e: ActivityNotFoundException) {
                     fileCallback = null

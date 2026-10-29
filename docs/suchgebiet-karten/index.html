@@ -50,6 +50,7 @@
     <button id="btn-mission" title="Einsatzprotokoll"><span>📋</span>Einsatz</button>
     <button id="btn-notes" title="Notizen: getippt und handschriftlich"><span>📝</span>Notizen</button>
     <button id="btn-layers" title="Kartenart"><span>🗺️</span>Karte</button>
+    <button id="btn-contacts" title="Adressbuch: Kontakte für alle Einsätze"><span>📇</span>Kontakte</button>
     <button id="btn-offline" title="Offline-Karten: Karte, Stufen und Bereich wählen"><span>📥</span>Offline</button>
     <button id="btn-gps" title="Mein Standort"><span>◎</span>GPS</button>
     <button id="btn-pdf" class="primary" title="PDF, GPX und Garmin-Karte"><span>📤</span>Export</button>
@@ -190,6 +191,23 @@
     <div id="overlay-list"></div>
     <p class="small">Legt Wege (auch Waldwege), Straßen und Ortsnamen aus der amtlichen Karte TopPlusOpen auf das Luftbild.</p>
     <p class="small">Alle Karten sind amtliche, frei nutzbare Daten (auch kommerziell) von BKG, LGLN und Geobasis NRW.</p>
+    <button class="close">Schließen</button>
+  </section>
+
+  <!-- Adressbuch -->
+  <section id="panel-contacts" class="panel" hidden>
+    <h2>📇 Kontakte</h2>
+    <p class="small">Gilt für alle Einsätze. Nummer oder Adresse antippen ruft an bzw. schreibt eine Mail. Handy-Kontakte als vCard-Datei (.vcf) importieren; „Teilen“ schickt das Adressbuch z. B. per WhatsApp an andere Handys.</p>
+    <input id="ct-search" type="search" placeholder="Suchen: Name, Funktion, Funkrufname, Nummer …">
+    <div id="ct-list" class="ctlist"></div>
+    <div id="ct-form" class="ctform" hidden></div>
+    <div class="row">
+      <button id="ct-add" class="primary">+ Neuer Kontakt</button>
+      <button id="ct-import">⬇ Importieren</button>
+      <button id="ct-share">📤 Teilen</button>
+      <button id="ct-save">💾 Speichern</button>
+    </div>
+    <input id="ct-file" type="file" accept=".vcf,.vcard,.json,text/vcard,text/x-vcard,text/directory,application/json" hidden>
     <button class="close">Schließen</button>
   </section>
 
