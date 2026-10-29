@@ -272,7 +272,7 @@ class MainActivity : ComponentActivity() {
     private fun sharedHash(i: Intent?): String? {
         val frag = i?.data?.fragment ?: return null
         // a = Auftrag, r = Rückmeldung, e = Einsatz-Übergabe, i = Lage-Infos
-        return if (Regex("^[arei]=.+").matches(frag)) "#$frag" else null
+        return if (Regex("^[areim]=.+").matches(frag)) "#$frag" else null
     }
 
     override fun onNewIntent(intent: Intent) {
