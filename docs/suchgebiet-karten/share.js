@@ -3,6 +3,7 @@
 // (#a=… / #r=…) oder im QR-Code. Reine Logik ohne DOM, damit sie testbar ist.
 
 import { newProject, normalizeProject, uid, allGrids, gridLabel } from './store.js';
+import { compactContact, fromCompact } from './contacts.js';
 
 export const PUBLIC_URL = 'https://flai331.github.io/Programmieren/suchgebiet-karten/';
 
@@ -28,7 +29,8 @@ export async function unpack(str) {
 }
 // Link oder nackter Inhalt (aus QR-Code, eingefügtem Text …) -> { kind: 'a'|'r', data }
 export function parseShared(text) {
-  const m = String(text).match(/#([ar])=([A-Za-z0-9_-]+)/);
+  // a = Auftrag, r = Rückmeldung, e = Einsatz-Übergabe, i = Lage-Infos (ELW <-> EL)
+  const m = String(text).match(/#([arei])=([A-Za-z0-9_-]+)/);
   return m ? { kind: m[1], data: m[2] } : null;
 }
 export const shareLink = (kind, data, base = PUBLIC_URL) => `${base}#${kind}=${data}`;
@@ -129,6 +131,7 @@ export function buildAssignment(p, sel) {
   if (sel.meet && p.meet) out.mp = [r6(p.meet.lat), r6(p.meet.lon), p.meet.text || ''];
   if (sel.rescue && sel.rescue.length) out.rp = sel.rescue.map((r) => [r.n, r6(r.lat), r6(r.lon)]);
   if (sel.person && p.mission && p.mission.person) out.vp = p.mission.person.trim().slice(0, 400);
+  if (sel.contacts && sel.contacts.length) out.ct = sel.contacts.map(compactContact);
   return out;
 }
 
@@ -150,6 +153,7 @@ export function projectFromAssignment(a) {
     Object.assign(p, { gridId: first.id, gridName: first.name, area: first.area, cellM: first.cellM, fills: first.fills, status: first.status, otherGrids: rest });
   }
   p.items = (a.i || []).map((x) => unpackItem(x, { fromEl: true }));
+  p.contacts = (a.ct || []).map(fromCompact).filter((c) => c.name || c.phone);
   if (a.mp) p.meet = { lat: a.mp[0], lon: a.mp[1], text: a.mp[2] };
   if (a.vp) p.mission.person = a.vp;
   p.hf = {

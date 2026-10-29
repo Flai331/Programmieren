@@ -528,3 +528,10 @@ body:not(.hf) #wx-measure, body.hf #wx-point { display: none; }
 
 /* Hundeführer: im Karte-Fenster nur Kartenart und Wege-Ebene (Rettungspunkte-Import usw. ausgeblendet) */
 body.hf #panel-layers .el-only { display: none !important; }
+
+/* Einsatz: zwei Felder nebeneinander; Kontakte im Auftrag eingerückt; Hundeführer-Kontakte groß */
+.panel .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.panel .sub-list { margin-left: 26px; }
+#hfc-list .ctrow { padding: 10px 12px; }
+#hfc-list .ctrow b { font-size: 17px; }
+#hfc-list .ctrow a { font-size: 18px; padding: 6px 0; }

@@ -231,6 +231,18 @@
     <label>Einsatzleitung / Ersteller
       <input id="leader" type="text" placeholder="Name">
     </label>
+    <div class="row2">
+      <label>Handy EL <input id="lead-phone" type="tel" inputmode="tel" placeholder="0170 …"></label>
+      <label>Funkrufname EL <input id="lead-call" type="text" placeholder="z. B. Rettungshund 1"></label>
+    </div>
+    <label>Funkrufname ELW <input id="lead-elw" type="text" placeholder="z. B. Rotkreuz Celle 11-1"></label>
+    <label>📇 Kontakte für diesen Einsatz</label>
+    <p class="small">Gehen auf Wunsch mit dem Auftrag an die Hundeführer (nur Name, Funktion, Funkrufname, Telefon). Die Einsatzleitung ist immer dabei.</p>
+    <div id="pc-list" class="ctlist"></div>
+    <div class="row">
+      <button id="pc-add">+ aus Adressbuch</button>
+      <button id="pc-new">+ neuer Kontakt</button>
+    </div>
     <label>B-Ort</label>
     <p id="meet-info" class="info"></p>
     <div class="row">
@@ -301,7 +313,9 @@
       <label class="check"><input type="checkbox" id="send-meet" checked> B-Ort</label>
       <label class="check"><input type="checkbox" id="send-rescue" checked> Forst-Rettungspunkte im Raster/Umriss und im Umkreis von 2 km um dessen Mitte</label>
       <label class="check"><input type="checkbox" id="send-person"> Vermisste Person mitsenden (Datenschutz beachten)</label>
+      <label class="check"><input type="checkbox" id="send-contacts" checked> <span id="send-contacts-label">Kontakte mitgeben</span></label>
     </div>
+    <div id="send-ct-list" class="checklist sub-list"></div>
     <label>Hinweis an den Hundeführer <textarea id="send-hint" rows="2" placeholder="z. B. Achtung Bahnlinie im Osten, Rückmeldung 15:30"></textarea></label>
     <p id="send-size" class="info"></p>
     <h2 class="sub">3. Übergeben</h2>
@@ -313,6 +327,14 @@
     <button class="close">Schließen</button>
   </section>
 
+  <!-- Hundeführer: Kontakte aus dem Auftrag (nur anrufen) -->
+  <section id="panel-hfcontacts" class="panel" hidden>
+    <h2>📞 Kontakte</h2>
+    <p class="small">Von der Einsatzleitung mit dem Auftrag mitgegeben. Nummer antippen ruft an.</p>
+    <div id="hfc-list" class="ctlist"></div>
+    <button class="close">Schließen</button>
+  </section>
+
   <!-- Hundeführer: Menü -->
   <section id="panel-hfmenu" class="panel" hidden>
     <h2>☰ Mein Auftrag</h2>
@@ -320,6 +342,7 @@
     <div class="list hfm-list">
       <button id="hfm-rp">🚑 Nächster Rettungspunkt</button>
       <button id="hfm-meet">🎯 Zum B-Ort</button>
+      <button id="hfm-contacts" hidden>📞 Kontakte</button>
       <button id="hfm-notes">📝 Notizen</button>
       <button id="hfm-projects">📁 Frühere Aufträge</button>
       <button id="hfm-el">🔒 Zur Einsatzleitung wechseln (PIN)</button>

@@ -19,6 +19,17 @@ export function normalizeContact(c) {
   return o;
 }
 
+// Kurzform für Auftrags-Links: [Name, Funktion, Funkrufname, Telefon, weitere Nummer], leere Felder hinten weg
+const COMPACT = ['name', 'role', 'call', 'phone', 'phone2'];
+export function compactContact(c) {
+  const a = COMPACT.map((k) => String(c[k] || '').trim().slice(0, 60));
+  while (a.length > 1 && !a[a.length - 1]) a.pop();
+  return a;
+}
+export function fromCompact(a) {
+  return normalizeContact(Object.fromEntries(COMPACT.map((k, i) => [k, (Array.isArray(a) && a[i]) || ''])));
+}
+
 export function sortContacts(list) {
   return [...list].sort((a, b) => a.name.localeCompare(b.name, 'de', { sensitivity: 'base' }));
 }

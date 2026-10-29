@@ -110,3 +110,16 @@ test('mehrere Rastergebiete: anlegen, wechseln, löschen, Zuteilungen je Gebiet'
   assert.equal(p.gridName, 'Gebiet 2');
   assert.deepEqual(p.fills, { '2,3': 'tm', '3,3': 'tm' });
 });
+
+test('Ältere Projekte bekommen Einsatzleitung, Kontakte, Lage-Orte und Einsatz-ID', () => {
+  const p = normalizeProject({ id: 'abc', title: 'Alt', leader: 'Klaas', marks: [], items: [] });
+  assert.equal(p.lead.name, 'Klaas');
+  assert.equal(p.lead.phone, '');
+  assert.deepEqual(p.contacts, []);
+  assert.deepEqual(p.pois, []);
+  assert.deepEqual(p.radio, []);
+  assert.equal(p.eid, 'abc');
+  const q = normalizeProject({ ...p, contacts: [{ name: 'X', phone: '1' }] });
+  assert.equal(q.contacts[0].role, '');
+  assert.ok(q.contacts[0].id);
+});
