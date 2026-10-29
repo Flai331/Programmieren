@@ -156,11 +156,18 @@ object OfflineTiles {
         return Range(zu, px(b.getDouble("west")), px(b.getDouble("east")), py(b.getDouble("north")), py(b.getDouble("south")))
     }
 
+    // Ein Bereich: ein Rechteck („bounds“) oder mehrere Quadrate („areas“)
+    fun areas(o: JSONObject): List<JSONObject> {
+        val a = o.optJSONArray("areas")
+        if (a == null || a.length() == 0) return listOf(o.getJSONObject("bounds"))
+        return (0 until a.length()).map { a.getJSONObject(it) }
+    }
+
     fun total(job: JSONObject, layers: List<Layer>): Long {
         var t = 0L
-        val b = job.getJSONObject("bounds")
+        val list = areas(job)
         for (l in layers) for (z in job.getInt("zMin")..min(job.getInt("zMax"), l.maxZoom)) {
-            range(l, b, z)?.let { t += it.count }
+            for (b in list) range(l, b, z)?.let { t += it.count }
         }
         return t
     }
@@ -223,11 +230,10 @@ object OfflineTiles {
                 val job = o.getJSONObject("region")
                 val layers = (0 until job.getJSONArray("layers").length()).map { Layer(job.getJSONArray("layers").getJSONObject(it)) }
                 val others = o.optJSONArray("others") ?: JSONArray()
-                val b = job.getJSONObject("bounds")
                 var freed = 0L
                 for ((li, l) in layers.withIndex()) {
                     val ids = job.getJSONArray("layerIds")
-                    for (z in job.getInt("zMin")..min(job.getInt("zMax"), l.maxZoom)) {
+                    for (z in job.getInt("zMin")..min(job.getInt("zMax"), l.maxZoom)) for (b in areas(job)) {
                         val r = range(l, b, z) ?: continue
                         // Bereiche anderer Downloads mit derselben Karte in dieser Stufe
                         val keep = ArrayList<Range>()
@@ -236,7 +242,7 @@ object OfflineTiles {
                             val oIds = other.getJSONArray("layerIds")
                             if ((0 until oIds.length()).none { oIds.getString(it) == ids.getString(li) }) continue
                             if (z < other.getInt("zMin") || z > other.getInt("zMax")) continue
-                            range(l, other.getJSONObject("bounds"), z)?.let { keep.add(it) }
+                            for (ob in areas(other)) range(l, ob, z)?.let { keep.add(it) }
                         }
                         for (y in r.y0..r.y1) for (x in r.x0..r.x1) {
                             if (keep.any { it.contains(x, y) }) continue

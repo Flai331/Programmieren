@@ -51,3 +51,21 @@ test('nativeJob: Vorlagen für die Android-App ergeben dieselben Adressen', asyn
     assert.equal(s.url, ld.wmsPrefix + [minx, maxy - size, minx + size, maxy].map((v) => v.toFixed(2)).join(','));
   }
 });
+
+test('Quadrate: Schlüssel, Grenzen, Schätzung über mehrere Quadrate', async () => {
+  const { squareKey, squareBounds, unionBounds, areasOf, estimate: est, nativeJob } = await import('../web/offline.js');
+  const k = squareKey(52.2, 8.05);
+  const sb = squareBounds(k);
+  assert.ok(sb.south <= 52.2 && sb.north > 52.2 && sb.west <= 8.05 && sb.east > 8.05);
+  const k2 = squareKey(52.2, 8.15);
+  const areas = [sb, squareBounds(k2)];
+  const one = est([dop], [sb], 15, 18);
+  const two = est([dop], areas, 15, 18);
+  assert.ok(two.tiles > one.tiles * 1.8);
+  // ~5,5 km Quadrat, Stufe 15–18 Luftbild: grob 100–300 MB
+  assert.ok(one.mb > 60 && one.mb < 400, String(one.mb));
+  const u = unionBounds(areas);
+  assert.equal(u.west, sb.west);
+  assert.equal(areasOf({ bounds: u }).length, 1);
+  assert.equal(nativeJob({ id: 'a', bounds: u, areas, zMin: 15, zMax: 18 }, [dop]).areas.length, 2);
+});

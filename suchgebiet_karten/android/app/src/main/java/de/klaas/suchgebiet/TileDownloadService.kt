@@ -139,9 +139,9 @@ class TileDownloadService : Service() {
             publish(false)
 
             // alle Kacheln der Reihe nach – Stufe für Stufe, damit grobe Übersichten zuerst da sind
-            val b = job.getJSONObject("bounds")
+            val areas = OfflineTiles.areas(job)
             val queue = sequence {
-                for (z in job.getInt("zMin")..job.getInt("zMax")) for (l in layers) {
+                for (z in job.getInt("zMin")..job.getInt("zMax")) for (l in layers) for (b in areas) {
                     if (z > l.maxZoom) continue
                     val r = OfflineTiles.range(l, b, z) ?: continue
                     for (y in r.y0..r.y1) for (x in r.x0..r.x1) yield(l.url(r.zu, x, y))

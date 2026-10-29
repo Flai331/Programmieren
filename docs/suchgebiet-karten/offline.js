@@ -60,13 +60,36 @@ export function tileKB(def) {
   return 18;
 }
 
-// Schätzung für einen Bereich: { tiles, mb, minutes }
+// Ein Bereich besteht aus einem Rechteck (bounds) oder mehreren Quadraten (areas)
+export const areasOf = (r) => (r.areas && r.areas.length ? r.areas : [r.bounds]);
+
+// Quadrate zum Antippen: feste Einteilung ca. 5,5 × 5,5 km (0,05° Breite × 0,08° Länge)
+export const SQ_LAT = 0.05;
+export const SQ_LON = 0.08;
+export function squareKey(lat, lon) {
+  return `${Math.floor(lat / SQ_LAT)}_${Math.floor(lon / SQ_LON)}`;
+}
+export function squareBounds(key) {
+  const [i, j] = key.split('_').map(Number);
+  const r = (v) => Math.round(v * 1e6) / 1e6;
+  return { north: r((i + 1) * SQ_LAT), south: r(i * SQ_LAT), west: r(j * SQ_LON), east: r((j + 1) * SQ_LON) };
+}
+// umschließendes Rechteck mehrerer Bereiche
+export function unionBounds(list) {
+  return {
+    north: Math.max(...list.map((b) => b.north)), south: Math.min(...list.map((b) => b.south)),
+    west: Math.min(...list.map((b) => b.west)), east: Math.max(...list.map((b) => b.east)),
+  };
+}
+
+// Schätzung für einen Bereich (Rechteck oder Liste von Rechtecken): { tiles, mb, minutes }
 export function estimate(defs, b, zMin, zMax) {
+  const list = Array.isArray(b) ? b : [b];
   let tiles = 0;
   let kb = 0;
   let sec = 0;
   for (const d of defs) {
-    const t = countTiles(d, b, zMin, zMax);
+    const t = list.reduce((a, x) => a + countTiles(d, x, zMin, zMax), 0);
     tiles += t;
     kb += t * tileKB(d);
     // 4 gleichzeitig; WMS rechnet jede Kachel (~1 s), fertige Kacheln gehen schneller
@@ -96,10 +119,11 @@ export async function cachedTileUrl(url) {
 export async function downloadRegion(region, defs, onProgress, signal, concurrency = 4) {
   if (!supported()) throw new Error('Dieser Browser kann keine Karten offline speichern.');
   const cache = await caches.open(TILE_CACHE);
-  const total = defs.reduce((a, d) => a + countTiles(d, region.bounds, region.zMin, region.zMax), 0);
+  const areas = areasOf(region);
+  const total = estimate(defs, areas, region.zMin, region.zMax).tiles;
   const st = { done: 0, total, failed: 0, bytes: 0 };
   const queue = (function* all() {
-    for (const d of defs) yield* tileUrls(d, region.bounds, region.zMin, region.zMax);
+    for (const d of defs) for (const a of areas) yield* tileUrls(d, a, region.zMin, region.zMax);
   }());
   let lastReport = 0;
   const report = (force) => {
@@ -151,12 +175,14 @@ export async function deleteRegion(region, defs, others, defOf) {
     for (const id of o.layerIds) {
       const d = defOf(id);
       if (!d || !region.layerIds.includes(id)) continue;
-      for (const u of tileUrls(d, o.bounds, o.zMin, o.zMax)) keep.add(u);
+      for (const a of areasOf(o)) for (const u of tileUrls(d, a, o.zMin, o.zMax)) keep.add(u);
     }
   }
   for (const d of defs) {
-    for (const u of tileUrls(d, region.bounds, region.zMin, region.zMax)) {
-      if (!keep.has(u)) await cache.delete(u);
+    for (const a of areasOf(region)) {
+      for (const u of tileUrls(d, a, region.zMin, region.zMax)) {
+        if (!keep.has(u)) await cache.delete(u);
+      }
     }
   }
 }
@@ -202,6 +228,7 @@ export function nativeJob(region, defs, wifiOnly) {
     id: region.id,
     name: region.name,
     bounds: region.bounds,
+    areas: areasOf(region),
     zMin: region.zMin,
     zMax: region.zMax,
     wifiOnly: !!wifiOnly,

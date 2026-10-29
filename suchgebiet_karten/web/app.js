@@ -16,6 +16,7 @@ import {
 import { buildCustomMap, planCustomMap } from './kmz.js';
 import {
   STATES, estimate, downloadRegion, deleteRegion, storageInfo, persistStorage, setHasOffline, cachedTileUrl, maxZoom, nativeJob,
+  SQ_LAT, SQ_LON, squareKey, squareBounds, unionBounds,
 } from './offline.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
@@ -25,7 +26,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v48';
+const APP_VERSION = 'v49';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -246,6 +247,7 @@ const canvas = $('overlay');
 const ctx = canvas.getContext('2d');
 let current = null; // Strich, der gerade gezeichnet wird
 let dragRect = null; // Vorschau beim Aufziehen des Suchgebiets
+let offSel = new Set(); // angetippte Quadrate für Offline-Karten
 
 function toPx(lat, lon) {
   const p = map.latLngToContainerPoint([lat, lon]);
@@ -306,6 +308,34 @@ function redraw() {
     ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
     ctx.setLineDash([]);
   }
+  drawOffSquares(ctx);
+}
+
+// Quadrate für Offline-Karten: blau = gewählt, grün = gespeichert, orange = angefangen
+function drawOffSquares(ctx) {
+  if (tool !== 'offsquares' || map.getZoom() < 9) return;
+  const b = map.getBounds();
+  const i0 = Math.floor(b.getSouth() / SQ_LAT);
+  const i1 = Math.floor(b.getNorth() / SQ_LAT);
+  const j0 = Math.floor(b.getWest() / SQ_LON);
+  const j1 = Math.floor(b.getEast() / SQ_LON);
+  if ((i1 - i0 + 1) * (j1 - j0 + 1) > 4000) return;
+  const stored = new Map();
+  for (const r of db.offline) for (const k of r.squares || []) stored.set(k, stored.get(k) || r.finished);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(21,101,192,0.75)';
+  for (let i = i0; i <= i1; i++) {
+    for (let j = j0; j <= j1; j++) {
+      const key = `${i}_${j}`;
+      const sb = squareBounds(key);
+      const [x0, y0] = toPx(sb.north, sb.west);
+      const [x1, y1] = toPx(sb.south, sb.east);
+      const fill = offSel.has(key) ? 'rgba(21,101,192,0.4)'
+        : stored.has(key) ? (stored.get(key) ? 'rgba(46,125,50,0.35)' : 'rgba(239,108,0,0.35)') : null;
+      if (fill) { ctx.fillStyle = fill; ctx.fillRect(x0, y0, x1 - x0, y1 - y0); }
+      ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    }
+  }
 }
 
 map.on('move resize viewreset', redraw);
@@ -322,6 +352,7 @@ const HINTS = {
   erase: 'Antippen oder darüberwischen löscht Zeichnungen, Umrisse, Texte, Treffpunkt und Feldfarben.',
   grid: 'Suchgebiet als Rechteck mit dem Finger aufziehen.',
   offrect: 'Bereich für die Offline-Karte als Rechteck aufziehen.',
+  offsquares: 'Quadrate antippen (blau = gewählt, grün = schon gespeichert). Ziehen verschiebt die Karte.',
   meet: 'Auf die Karte tippen, um den Treffpunkt zu setzen.',
   track: 'Umriss: Punkte antippen. Karte mit dem Finger verschieben, Zoom mit +/−.',
 };
@@ -344,6 +375,8 @@ function setTool(t) {
   $('palette').hidden = !['pen', 'text', 'fill', 'track'].includes(t);
   $('trackbar').hidden = t !== 'track';
   $('penbar').hidden = t !== 'pen';
+  $('offsqbar').hidden = t !== 'offsquares';
+  if (t === 'offsquares') updateOffSqBar();
   updatePenbar();
   if (t === 'track' && !draftTrack) draftTrack = { kind: 'track', name: '', color: db.color, w: 4, pts: [] };
   updateTrackbar();
@@ -417,7 +450,7 @@ canvas.addEventListener('pointerdown', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill') {
     fillAt(ll, true);
-  } else if (tool === 'track') {
+  } else if (tool === 'track' || tool === 'offsquares') {
     panning = false;
   }
 });
@@ -437,7 +470,7 @@ canvas.addEventListener('pointermove', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill' && fillStroke) {
     fillAt(ll, false);
-  } else if (tool === 'track') {
+  } else if (tool === 'track' || tool === 'offsquares') {
     // Im Track-Modus verschiebt Ziehen die Karte, Tippen setzt Punkte
     if (!panning && Math.hypot(x - lastPt.x, y - lastPt.y) < 8) return;
     panning = true;
@@ -482,9 +515,20 @@ function finishPointer(e, cancelled) {
         west: Math.min(a.lng, ll.lng), east: Math.max(a.lng, ll.lng),
       };
       $('off-area').value = 'rect';
-      openPanel('panel-layers');
+      openPanel('panel-offline');
       updateOffEstimate();
     }
+  } else if (tool === 'offsquares') {
+    if (!cancelled && !panning) {
+      if (map.getZoom() < 9) toast('Bitte näher heranzoomen, dann Quadrate antippen');
+      else {
+        const k = squareKey(ll.lat, ll.lng);
+        if (offSel.has(k)) offSel.delete(k); else offSel.add(k);
+        updateOffSqBar();
+        redraw();
+      }
+    }
+    panning = false;
   } else if (tool === 'fill') {
     if (fillStroke) changed();
     fillStroke = null;
@@ -1083,8 +1127,14 @@ const ZOOMS = {
   16: 'gut', 17: 'scharf', 18: 'sehr scharf', 19: 'volle Luftbild-Schärfe',
 };
 
-function offBounds() {
+// gewählter Bereich als Liste von Rechtecken (Quadrate) oder null
+function offAreas() {
   const v = $('off-area').value;
+  if (v === 'squares') return offSel.size ? [...offSel].map(squareBounds) : null;
+  const b = offBounds(v);
+  return b ? [b] : null;
+}
+function offBounds(v) {
   if (STATES[v]) return STATES[v].bounds;
   if (v === 'rect') return offRect;
   if (v === 'grid') {
@@ -1110,20 +1160,58 @@ function offLayerIds() {
 const offDef = (id) => LAYERS.find((l) => l.id === id) || OVERLAYS.find((o) => o.id === id);
 function offDefaultName() {
   const v = $('off-area').value;
-  const area = STATES[v] ? STATES[v].name.replace(/ \(.*/, '') : v === 'grid' ? (P.title || 'Suchgebiet') : v === 'rect' ? 'Bereich' : 'Kartenausschnitt';
-  return `${area} – ${layerById($('off-layer').value).name.replace(/ \(.*/, '')} bis Stufe ${$('off-zmax').value}`;
+  const area = STATES[v] ? STATES[v].name.replace(/ \(.*/, '')
+    : v === 'squares' ? `${offSel.size} Quadrat${offSel.size === 1 ? '' : 'e'}`
+      : v === 'grid' ? (P.title || 'Suchgebiet') : v === 'rect' ? 'Bereich' : 'Kartenausschnitt';
+  const [a, b] = offZooms();
+  return `${area} – ${layerById($('off-layer').value).name.replace(/ \(.*/, '')}, Stufe ${a === b ? a : `${a}–${b}`}`;
 }
+// gewählte Stufen [von, bis]
+function offZooms() {
+  const a = Number($('off-zmin').value);
+  const b = Number($('off-zmax').value);
+  return [Math.min(a, b), Math.max(a, b)];
+}
+// Vorgaben je Bereich: ganzes Land grob, Quadrate scharf
+function offPresetZooms() {
+  const v = $('off-area').value;
+  if (STATES[v]) { $('off-zmin').value = '12'; $('off-zmax').value = '15'; }
+  else if (v === 'squares') { $('off-zmin').value = '15'; $('off-zmax').value = '18'; }
+}
+function updateOffSqBar() {
+  const n = offSel.size;
+  let text = n ? `${n} Quadrat${n === 1 ? '' : 'e'} gewählt` : 'Quadrate antippen';
+  if (n) {
+    const [a, b] = offZooms();
+    text += ` · Stufe ${a}–${b} ≈ ${fmtMB(estimate(offLayerIds().map(offDef), [...offSel].map(squareBounds), a, b).mb)}`;
+  }
+  $('offsq-info').textContent = text;
+  $('offsq-done').disabled = !n;
+}
+$('offsq-clear').addEventListener('click', () => { offSel.clear(); updateOffSqBar(); redraw(); });
+const backToOffline = () => { setTool('pan'); redraw(); renderOfflineForm(); openPanel('panel-offline'); };
+$('offsq-done').addEventListener('click', () => { $('off-area').value = 'squares'; backToOffline(); });
+$('offsq-cancel').addEventListener('click', backToOffline);
+$('off-squares').addEventListener('click', () => {
+  if ($('off-area').value !== 'squares') { $('off-area').value = 'squares'; offPresetZooms(); }
+  closePanels();
+  if (map.getZoom() < 10) toast('Zum gewünschten Ort zoomen, dann Quadrate antippen');
+  setTool('offsquares');
+  redraw();
+});
 
 function renderOfflineForm() {
   const sel = $('off-layer');
   $('off-wifi').parentElement.hidden = !NATIVE_OFF;
   $('off-help').textContent = NATIVE_OFF
-    ? 'Vor dem Einsatz laden. Die App lädt im Hintergrund weiter – auch bei ausgeschaltetem Bildschirm oder geschlossener App (Fortschritt in der Benachrichtigung) – und speichert auf der SD-Karte, falls vorhanden. Gespeicherte Kartenbilder nimmt die App immer zuerst – sofort, auch ohne oder mit schlechtem Netz; nur Fehlendes kommt aus dem Internet. Gilt auch für PDF und Garmin-Karte.'
+    ? 'Vor dem Einsatz laden. Lädt im Hintergrund weiter, auch bei ausgeschaltetem Bildschirm (Fortschritt in der Benachrichtigung), und speichert auf der SD-Karte, falls vorhanden. Gespeicherte Bilder nimmt die App immer zuerst, auch für PDF und Garmin-Karte; Fehlendes kommt aus dem Internet.'
     : 'Vor dem Einsatz im WLAN laden. Gespeicherte Kartenbilder nimmt die App immer zuerst – sofort, auch ohne oder mit schlechtem Netz; nur Fehlendes kommt aus dem Internet. Gilt auch für PDF und Garmin-Karte. Beim Laden App geöffnet lassen; angehaltene Downloads laufen mit ▶ weiter.';
   if (!sel.options.length) {
     for (const l of LAYERS) sel.add(new Option(l.name, l.id));
-    for (let z = 12; z <= 19; z++) $('off-zmax').add(new Option(`${z} – ${ZOOMS[z]}`, String(z)));
-    $('off-zmax').value = '16';
+    for (let z = 6; z <= 19; z++) {
+      for (const id of ['off-zmin', 'off-zmax']) $(id).add(new Option(ZOOMS[z] ? `${z} – ${ZOOMS[z]}` : String(z), String(z)));
+    }
+    offPresetZooms();
   }
   if (!sel.dataset.touched) sel.value = P.layerId;
   $('off-area').querySelector('[value=grid]').disabled = !allGrids(P).length;
@@ -1144,18 +1232,26 @@ async function offStorage() {
 }
 
 async function updateOffEstimate() {
-  const b = offBounds();
+  const b = offAreas();
   $('off-paths').parentElement.hidden = !layerById($('off-layer').value).aerial;
   $('off-name').placeholder = offDefaultName();
   if (!b) {
-    $('off-est').textContent = $('off-area').value === 'rect' ? 'Noch kein Rechteck – „Herunterladen“ tippen und dann auf der Karte aufziehen.' : 'Kein Bereich.';
+    const v = $('off-area').value;
+    $('off-est').textContent = v === 'rect' ? 'Noch kein Rechteck – „Rechteck aufziehen“ tippen.'
+      : v === 'squares' ? 'Noch keine Quadrate – „Quadrate wählen“ tippen.' : 'Kein Bereich.';
     return;
   }
-  const z = Number($('off-zmax').value);
+  const [zMin, z] = offZooms();
   const defs = offLayerIds().map(offDef);
-  const e = estimate(defs, b, Math.min(6, z), z);
+  const e = estimate(defs, b, zMin, z);
   const capped = defs.some((d) => z > maxZoom(d));
   let text = `≈ ${e.tiles.toLocaleString('de-DE')} Kartenbilder · ≈ ${fmtMB(e.mb)} · Dauer ${fmtMin(e.minutes)} (je nach Netz)`;
+  // je Stufe, damit man sieht, welche Stufe wie viel kostet
+  if (z > zMin) {
+    const per = [];
+    for (let k = zMin; k <= z; k++) per.push(`St. ${k}: ${fmtMB(estimate(defs, b, k, k).mb)}`);
+    text += ` · ${per.join(' · ')}`;
+  }
   if (capped) text += ' · Karte hat höchstens Stufe ' + Math.min(...defs.map(maxZoom));
   const s = await offStorage();
   if (s && s.freeMB) {
@@ -1164,8 +1260,9 @@ async function updateOffEstimate() {
   }
   $('off-est').textContent = text;
 }
-['off-area', 'off-layer', 'off-paths', 'off-zmax'].forEach((id) => $(id).addEventListener('change', () => {
+['off-area', 'off-layer', 'off-paths', 'off-zmin', 'off-zmax'].forEach((id) => $(id).addEventListener('change', () => {
   if (id === 'off-layer') $('off-layer').dataset.touched = '1';
+  if (id === 'off-area') offPresetZooms();
   updateOffEstimate();
 }));
 
@@ -1220,7 +1317,7 @@ async function renderOfflineList() {
         // löscht im Hintergrund; Bilder, die ein anderer Bereich braucht, bleiben
         bridge.offlineDelete(JSON.stringify({
           region: { ...nativeJob(r, defs), layerIds: r.layerIds },
-          others: others.map((o) => ({ bounds: o.bounds, zMin: o.zMin, zMax: o.zMax, layerIds: o.layerIds })),
+          others: others.map((o) => ({ bounds: o.bounds, areas: o.areas, zMin: o.zMin, zMax: o.zMax, layerIds: o.layerIds })),
         }));
       }
       // ältere Bereiche (oder Browser) liegen im Cache-Speicher
@@ -1256,7 +1353,7 @@ function syncNativeOffline() {
     else if (r) toast(r.finished ? `Offline-Karte „${r.name}“ fertig` : `„${r.name}“ angehalten – ▶ lädt weiter`);
     saveNow();
   } else save();
-  if (!$('panel-layers').hidden) renderOfflineList();
+  if (!$('panel-offline').hidden) renderOfflineList();
   const busy = offJob || st.deleting;
   if (busy && !offPoll) offPoll = setInterval(syncNativeOffline, 1000);
   if (!busy && offPoll) { clearInterval(offPoll); offPoll = null; }
@@ -1289,7 +1386,7 @@ async function runOffline(r) {
     const res = await downloadRegion(r, r.layerIds.map(offDef).filter(Boolean), (st) => {
       Object.assign(r, { done: st.done, total: st.total, failed: st.failed, bytes: startBytes + st.bytes });
       save();
-      if (!$('panel-layers').hidden) renderOfflineList();
+      if (!$('panel-offline').hidden) renderOfflineList();
     }, ctrl.signal);
     Object.assign(r, { done: res.done, total: res.total, failed: res.failed, bytes: startBytes + res.bytes });
     r.finished = !ctrl.signal.aborted && res.done >= res.total;
@@ -1311,15 +1408,18 @@ $('off-start').addEventListener('click', () => {
     setTool('offrect');
     return;
   }
-  const b = offBounds();
-  if (!b) return toast('Kein Bereich gewählt');
-  const z = Number($('off-zmax').value);
+  if ($('off-area').value === 'squares' && !offSel.size) return $('off-squares').click();
+  const areas = offAreas();
+  if (!areas) return toast('Kein Bereich gewählt');
+  const [zMin, z] = offZooms();
+  const squares = $('off-area').value === 'squares' ? [...offSel] : null;
   const r = {
     id: uid(),
     name: $('off-name').value.trim() || offDefaultName(),
-    bounds: b,
+    bounds: unionBounds(areas),
+    ...(squares ? { areas, squares } : {}),
     layerIds: offLayerIds(),
-    zMin: Math.min(6, z),
+    zMin,
     zMax: z,
     done: 0,
     total: 0,
@@ -1329,6 +1429,7 @@ $('off-start').addEventListener('click', () => {
   db.offline.push(r);
   $('off-name').value = '';
   offRect = null;
+  offSel = new Set();
   saveNow();
   runOffline(r);
 });
@@ -1621,7 +1722,7 @@ document.querySelectorAll('.panel .close').forEach((b) => b.addEventListener('cl
 // Seitenknopf nochmal antippen, während sein Fenster offen ist: Fenster schließen
 const SIDE_PANELS = {
   'btn-projects': 'panel-projects', 'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',
-  'btn-layers': 'panel-layers', 'btn-pdf': 'panel-pdf', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
+  'btn-layers': 'panel-layers', 'btn-offline': 'panel-offline', 'btn-pdf': 'panel-pdf', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
 };
 for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
   $(btn).addEventListener('click', (e) => {
@@ -1633,7 +1734,8 @@ for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
 $('btn-projects').addEventListener('click', () => { fillProjectForm(); renderProjects(); openPanel('panel-projects'); });
 $('btn-grid').addEventListener('click', () => { updateGridInfo(); openPanel('panel-grid'); });
 $('btn-teams').addEventListener('click', () => { renderMarks(); renderAlpha(); openPanel('panel-teams'); });
-$('btn-layers').addEventListener('click', () => { renderOfflineForm(); openPanel('panel-layers'); });
+$('btn-layers').addEventListener('click', () => openPanel('panel-layers'));
+$('btn-offline').addEventListener('click', () => { renderOfflineForm(); openPanel('panel-offline'); });
 $('app-version').textContent = `Version ${APP_VERSION}`;
 $('btn-pdf').addEventListener('click', () => {
   $('pdf-caption').value = P.caption || '';
