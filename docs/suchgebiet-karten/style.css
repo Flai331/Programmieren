@@ -153,7 +153,8 @@ button, input, select { font: inherit; }
 }
 .panel h2 { margin: 0 0 8px; font-size: 18px; }
 .panel label { display: block; margin: 10px 0 4px; font-size: 14px; font-weight: 600; }
-.panel label.check { font-weight: 400; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.panel label.check { font-weight: 400; display: flex; align-items: center; gap: 8px; }
+.panel label.check > input[type=checkbox], .panel label.check > input[type=radio] { flex: none; margin: 0; }
 .panel select, .panel input[type=text] {
   padding: 8px; border: 1px solid #bbb; border-radius: 8px; background: #fff; min-width: 0;
 }
