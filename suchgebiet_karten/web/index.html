@@ -50,6 +50,7 @@
     <button id="btn-mission" title="Einsatzprotokoll"><span>📋</span>Einsatz</button>
     <button id="btn-notes" title="Notizen: getippt und handschriftlich"><span>📝</span>Notizen</button>
     <button id="btn-layers" title="Kartenart"><span>🗺️</span>Karte</button>
+    <button id="btn-offline" title="Offline-Karten: Karte, Stufen und Bereich wählen"><span>📥</span>Offline</button>
     <button id="btn-gps" title="Mein Standort"><span>◎</span>GPS</button>
     <button id="btn-pdf" class="primary" title="PDF, GPX und Garmin-Karte"><span>📤</span>Export</button>
   </div>
@@ -73,6 +74,12 @@
       <button id="pen-back">↶ Strich</button>
       <button id="pen-done" class="primary">Fertig</button>
       <button id="pen-cancel">Abbrechen</button>
+    </div>
+    <div id="offsqbar" class="trackbar" hidden>
+      <span id="offsq-info">Quadrate antippen</span>
+      <button id="offsq-clear">Keine</button>
+      <button id="offsq-done" class="primary">Weiter</button>
+      <button id="offsq-cancel">Abbrechen</button>
     </div>
     <div id="trackbar" class="trackbar" hidden>
       <span id="track-info">Umriss: auf die Karte tippen</span>
@@ -183,30 +190,45 @@
     <div id="overlay-list"></div>
     <p class="small">Legt Wege (auch Waldwege), Straßen und Ortsnamen aus der amtlichen Karte TopPlusOpen auf das Luftbild.</p>
     <p class="small">Alle Karten sind amtliche, frei nutzbare Daten (auch kommerziell) von BKG, LGLN und Geobasis NRW.</p>
-    <h2 class="sub">📥 Offline-Karten (vorab herunterladen)</h2>
+    <button class="close">Schließen</button>
+  </section>
+
+  <!-- Offline-Karten -->
+  <section id="panel-offline" class="panel" hidden>
+    <h2>📥 Offline-Karten</h2>
     <p id="off-help" class="small"></p>
-    <p id="off-storage" class="info"></p>
-    <div id="off-list" class="offlist"></div>
+    <h2 class="sub">1. Karte</h2>
+    <label>Kartenart <select id="off-layer"></select></label>
+    <label class="check"><input type="checkbox" id="off-paths" checked> Wege-Ebene über dem Luftbild mit speichern</label>
+    <h2 class="sub">2. Zoomstufen</h2>
+    <div class="row">
+      <label>von Stufe <select id="off-zmin"></select></label>
+      <label>bis Stufe <select id="off-zmax"></select></label>
+    </div>
+    <p class="small">Nur diese Stufen werden gespeichert; alle anderen kommen wie gewohnt aus dem Internet. Die aktuelle Stufe steht links am Zoom-Regler.</p>
+    <button id="off-preview">👁 „bis Stufe“ auf der Karte ansehen</button>
+    <h2 class="sub">3. Bereich</h2>
     <label>Bereich
       <select id="off-area">
-        <option value="view">Aktueller Kartenausschnitt</option>
-        <option value="grid">Suchgebiet (alle Rastergebiete, mit Rand)</option>
-        <option value="rect">Rechteck auf der Karte aufziehen …</option>
         <option value="ni">Niedersachsen (ganzes Land)</option>
         <option value="nw">Nordrhein-Westfalen (ganzes Land)</option>
+        <option value="squares">Quadrate auf der Karte antippen (ca. 5,5 × 5,5 km) …</option>
+        <option value="grid">Suchgebiet (alle Rastergebiete, mit Rand)</option>
+        <option value="view">Aktueller Kartenausschnitt</option>
+        <option value="rect">Rechteck auf der Karte aufziehen …</option>
       </select>
     </label>
-    <label>Karte <select id="off-layer"></select></label>
-    <label class="check"><input type="checkbox" id="off-paths" checked> Wege-Ebene über dem Luftbild mit speichern</label>
-    <label>Schärfe bis Zoomstufe <select id="off-zmax"></select></label>
+    <div class="row">
+      <button id="off-squares">▦ Quadrate wählen</button>
+      <button id="off-redraw">▭ Rechteck aufziehen</button>
+    </div>
     <label class="check" hidden><input type="checkbox" id="off-wifi" checked> Nur über WLAN laden (wartet sonst)</label>
     <label>Name <input id="off-name" type="text"></label>
     <p id="off-est" class="info"></p>
-    <div class="row">
-      <button id="off-start" class="primary">📥 Herunterladen</button>
-      <button id="off-redraw">▭ Rechteck neu aufziehen</button>
-      <button id="off-preview">👁 Stufe ansehen</button>
-    </div>
+    <button id="off-start" class="primary">📥 Herunterladen</button>
+    <h2 class="sub">Gespeichert</h2>
+    <p id="off-storage" class="info"></p>
+    <div id="off-list" class="offlist"></div>
     <button class="close">Schließen</button>
   </section>
 

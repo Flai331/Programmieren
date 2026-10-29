@@ -371,3 +371,4 @@ button, input, select { font: inherit; }
   .panel { right: 98px; top: 46px; max-height: calc(100% - 52px); }
   #nt-text { height: 90px; }
 }
+.panel select { max-width: 100%; min-width: 0; text-overflow: ellipsis; }
