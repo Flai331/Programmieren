@@ -26,11 +26,12 @@ import {
   distance, bearing as bearingDeg,
 } from './rescue.js';
 import {
-  fetchWeather, fetchStations, dirName, beaufort, approach, circularMean, sunTimes, windChanged, STRENGTHS, ICONS as WX_ICONS,
+  fetchWeather, fetchStations, dirName, beaufort, approach, circularMean, sunTimes, windChanged, STRENGTHS, ICONS as WX_ICONS, CONDITIONS,
 } from './weather.js';
 import {
   PUBLIC_URL, pack, unpack, parseShared, shareLink, buildAssignment, projectFromAssignment, buildResult, applyResult,
 } from './share.js';
+import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
@@ -40,7 +41,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v68';
+const APP_VERSION = 'v69';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -812,6 +813,7 @@ function finishPointer(e, cancelled) {
       changed();
     }
     setTool('pan');
+    if (wizMeet) { wizGo(P.wiz + (text !== null ? 1 : 0)); wizMeet = false; }
   } else if (tool === 'erase' && erased) {
     changed();
   }
@@ -1051,14 +1053,14 @@ function renderMarks() {
       <button class="swatch" title="Zum Einfärben auswählen"></button>
       <div class="fields">
         <input type="text" class="name" placeholder="${m.kind === 'team' ? 'Teamname / Hundeführer' : 'Bedeutung'}">
-        ${m.kind === 'team' ? '<input type="text" class="dog" placeholder="Hund">' : ''}
+        ${m.kind === 'team' ? '<div class="pair"><label><small>Hund</small><input type="text" class="dog" placeholder="Name"></label><label><small>Suchhelfer</small><input type="number" class="helpers" min="0" inputmode="numeric" placeholder="Anzahl"></label></div>' : ''}
         <select class="color" aria-label="Farbe"></select>
         <div class="cells"></div>
       </div>
       <button class="del" title="Löschen">✕</button>`;
     el.querySelector('.swatch').style.background = m.color;
     el.querySelector('.name').value = m.label;
-    if (m.kind === 'team') el.querySelector('.dog').value = m.dog || '';
+    if (m.kind === 'team') { el.querySelector('.dog').value = m.dog || ''; el.querySelector('.helpers').value = m.helpers || ''; }
     el.querySelector('.cells').textContent = a && a.count ? `${a.count} Feld${a.count > 1 ? 'er' : ''}: ${a.text}` : 'keine Felder';
     const sel = el.querySelector('.color');
     for (const c of MARK_COLORS) {
@@ -1081,7 +1083,10 @@ function renderMarks() {
       renderPalette();
     });
     el.querySelector('.name').addEventListener('input', (e) => { m.label = e.target.value; renderPalette(); redraw(); save(); });
-    if (m.kind === 'team') el.querySelector('.dog').addEventListener('input', (e) => { m.dog = e.target.value; save(); });
+    if (m.kind === 'team') {
+      el.querySelector('.dog').addEventListener('input', (e) => { m.dog = e.target.value; save(); });
+      el.querySelector('.helpers').addEventListener('input', (e) => { const n = parseInt(e.target.value, 10); if (n > 0) m.helpers = n; else delete m.helpers; save(); });
+    }
     sel.addEventListener('change', () => { m.color = sel.value; changed(); renderMarks(); });
     el.querySelector('.del').addEventListener('click', () => {
       const cnt = a ? a.count : 0;
@@ -2975,6 +2980,8 @@ async function chooseModeIfNeeded() {
   });
   if (m === 'hf') await toHfMode(); else { db.mode = 'el'; saveNow(); }
   if (m === 'scan') startScan();
+  // frisches Gerät der Einsatzleitung: gleich mit dem Assistenten beginnen
+  if (m === 'el' && !P.title && !P.area) { P.title = wizTitle(); $('title').value = P.title; openWizard(0); }
 }
 
 // ---------- Nachtmodus ----------
@@ -3045,6 +3052,7 @@ function leadContact() {
   return normalizeContact({ id: 'lead', name: l.name || P.leader, role: 'Einsatzleitung', call: l.call, phone: l.phone });
 }
 function renderProjectContacts() {
+  if (!$('panel-wizard').hidden && P.wiz != null && WIZ_STEPS[P.wiz][0] === 'contacts') renderWizard();
   const box = $('pc-list');
   box.innerHTML = '';
   const lead = leadContact();
@@ -3108,15 +3116,17 @@ $('pc-new').addEventListener('click', () => openDlg((box, close) => {
     l.appendChild(f[k]);
     box.appendChild(l);
   }
-  const keep = document.createElement('label');
-  keep.className = 'check';
-  keep.innerHTML = '<input type="checkbox"> auch ins Adressbuch';
+  const keep = document.createElement('p');
+  keep.className = 'small';
+  keep.textContent = 'Wird auch im Adressbuch („Kontakte“) gespeichert.';
   box.appendChild(keep);
   dlgButton(box, 'Speichern', 'primary', () => {
     const c = normalizeContact(Object.fromEntries(Object.entries(f).map(([k, inp]) => [k, inp.value])));
     if (!c.name && !c.phone) return toast('Bitte Name oder Telefon eintragen');
     P.contacts.push(c);
-    if (keep.firstChild.checked) { db.contacts.push(normalizeContact({ ...c, id: uid() })); renderContacts(); }
+    // auch ins Adressbuch (ohne Doppelte)
+    db.contacts = mergeContacts(db.contacts, [c]).list;
+    renderContacts();
     touch();
     renderProjectContacts();
     close(true);
@@ -3320,6 +3330,7 @@ function fillProjectForm() {
   $('lead-call').value = P.lead.call || '';
   $('lead-elw').value = P.lead.elw || '';
   renderProjectContacts();
+  renderWizBtn();
   $('notes').value = P.notes || '';
   renderMeet();
 }
@@ -3379,10 +3390,8 @@ function renderProjects() {
   }
 }
 
-$('proj-new').addEventListener('click', () => {
-  const t = prompt('Name des neuen Suchgebiets:', '');
-  if (t === null) return;
-  const p = newProject(t.trim());
+function createProject(title) {
+  const p = newProject(title);
   p.layerId = P.layerId;
   p.cellM = P.cellM;
   const c = map.getCenter();
@@ -3390,7 +3399,281 @@ $('proj-new').addEventListener('click', () => {
   db.projects[p.id] = p;
   switchProject(p.id);
   renderProjects();
+  return p;
+}
+$('proj-new').addEventListener('click', async () => {
+  const how = await openDlg((box, close) => {
+    dlgHead(box, '+ Neuer Einsatz', 'Der Assistent fragt Einsatzleitung, Funk, B-Ort, Wetter, Person, Zeiten und Kontakte ab. Jeder Schritt lässt sich überspringen.');
+    dlgButton(box, '🧭 Mit Assistent', 'primary', () => close('wiz'));
+    dlgButton(box, 'Ohne Assistent (nur Name)', '', () => close('plain'));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!how) return;
+  if (how === 'plain') {
+    const t = prompt('Name des neuen Suchgebiets:', '');
+    if (t !== null) createProject(t.trim());
+    return;
+  }
+  const p = createProject(wizTitle());
+  p.wiz = 0;
+  openWizard(0);
 });
+
+// ---------- Assistent „Neuen Einsatz anlegen“ ----------
+// Eingaben landen sofort im Einsatz; P.wiz = offener Schritt (fehlt, wenn fertig)
+let wizMeet = false; // B-Ort wird gerade auf der Karte gesetzt
+let wizRevisit = false; // Assistent für einen schon fertigen Einsatz geöffnet: Schließen lässt ihn fertig
+function openWizard(step = P.wiz ?? 0) {
+  if ($('panel-wizard').hidden && !wizMeet) wizRevisit = P.wiz == null;
+  P.wiz = Math.max(0, Math.min(WIZ_STEPS.length - 1, step));
+  save();
+  renderWizard();
+  openPanel('panel-wizard');
+  $('panel-wizard').scrollTop = 0;
+}
+function wizGo(step) {
+  if (step >= WIZ_STEPS.length) return wizFinish();
+  openWizard(step);
+}
+function wizFinish() {
+  delete P.wiz;
+  touch();
+  closePanels();
+  renderWizBtn();
+  toast(`„${P.title || 'Einsatz'}“ angelegt`);
+}
+function renderWizBtn() {
+  $('wiz-open').textContent = P.wiz != null ? `🧭 Assistent fortsetzen (${WIZ_STEPS[P.wiz][1]})` : '🧭 Einsatz-Assistent';
+  $('wiz-open').classList.toggle('primary', P.wiz != null);
+  const n = P.radio.filter((r) => r.call || r.who).length;
+  $('radio-edit').textContent = `📻 Weitere Funkrufnamen${n ? ` (${n})` : ''}`;
+}
+$('wiz-open').addEventListener('click', () => openWizard(P.wiz ?? 0));
+$('radio-edit').addEventListener('click', () => openWizard(1));
+$('wz-back').addEventListener('click', () => wizGo(P.wiz - 1));
+$('wz-skip').addEventListener('click', () => wizGo(P.wiz + 1));
+$('wz-next').addEventListener('click', () => wizGo(P.wiz + 1));
+$('wz-exit').addEventListener('click', () => {
+  if (wizRevisit) { delete P.wiz; touch(); } else toast('Assistent unter „Gebiete“ fortsetzen');
+  closePanels();
+  renderWizBtn();
+});
+
+function wizField(box, label, value, onInput, type = 'text', extra = {}) {
+  const l = document.createElement('label');
+  l.textContent = label;
+  const inp = document.createElement(type === 'textarea' ? 'textarea' : 'input');
+  if (type !== 'textarea') inp.type = type;
+  else inp.rows = 3;
+  if (type === 'tel') inp.inputMode = 'tel';
+  Object.assign(inp, extra);
+  inp.value = value || '';
+  inp.addEventListener('input', () => { onInput(inp.value); touch(); });
+  l.appendChild(inp);
+  box.appendChild(l);
+  return inp;
+}
+function wizText(box, text, cls = 'small') {
+  const p = document.createElement('p');
+  p.className = cls;
+  p.textContent = text;
+  box.appendChild(p);
+  return p;
+}
+function wizBtn(box, label, fn, cls = '') {
+  const b = document.createElement('button');
+  b.innerHTML = label;
+  if (cls) b.className = cls;
+  b.addEventListener('click', fn);
+  box.appendChild(b);
+  return b;
+}
+
+function renderWizard() {
+  const i = P.wiz ?? 0;
+  const [key, name] = WIZ_STEPS[i];
+  $('wz-title').textContent = `🧭 ${i + 1}/${WIZ_STEPS.length} · ${name}`;
+  $('wz-dots').innerHTML = WIZ_STEPS.map((_, k) => `<i class="${k < i ? 'done' : k === i ? 'cur' : ''}"></i>`).join('');
+  $('wz-back').disabled = i === 0;
+  $('wz-skip').hidden = key === 'done' || key === 'name';
+  $('wz-next').textContent = key === 'done' ? 'Fertig ✓' : 'Weiter ›';
+  const box = $('wz-body');
+  box.innerHTML = '';
+  WIZ[key](box);
+}
+const WIZ = {
+  name(box) {
+    const inp = wizField(box, 'Name des Einsatzes (Überschrift im PDF)', P.title, (v) => { P.title = v; $('title').value = v; });
+    setTimeout(() => { inp.focus(); inp.select(); }, 50);
+  },
+  lead(box) {
+    const setLead = (k) => (v) => { P.lead[k] = v; if (k === 'name') P.leader = v; };
+    const last = lastLead(db.projects, P.id);
+    if (last && !P.lead.name && !P.lead.phone) {
+      wizBtn(box, `↺ wie letzter Einsatz: ${[last.lead.name, last.lead.call].filter(Boolean).join(' · ') || 'Einsatzleitung'}`, () => {
+        P.lead = { ...P.lead, ...last.lead };
+        P.leader = P.lead.name;
+        if (!P.radio.length) P.radio = last.radio;
+        touch();
+        renderWizard();
+      });
+    }
+    wizField(box, 'Name Einsatzleitung', P.lead.name || P.leader, setLead('name'));
+    wizField(box, 'Handy Einsatzleitung', P.lead.phone, setLead('phone'), 'tel', { placeholder: '0170 …' });
+    const r2 = document.createElement('div');
+    r2.className = 'row2';
+    box.appendChild(r2);
+    wizField(r2, 'Funkrufname EL', P.lead.call, setLead('call'), 'text', { placeholder: 'z. B. Rettungshund 1' });
+    wizField(r2, 'Funkrufname ELW', P.lead.elw, setLead('elw'), 'text', { placeholder: 'z. B. Rotkreuz 11-1' });
+    const h = document.createElement('label');
+    h.textContent = '📻 Weitere Funkrufnamen';
+    box.appendChild(h);
+    wizText(box, 'Stehen auf der Einsatzinfo-Seite im PDF.');
+    P.radio.forEach((r, k) => {
+      const row = document.createElement('div');
+      row.className = 'wz-radio';
+      for (const [f, ph] of [['call', 'Funkrufname'], ['who', 'wer (z. B. Zugführer, Polizei)']]) {
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.placeholder = ph;
+        inp.value = r[f] || '';
+        inp.addEventListener('input', () => { r[f] = inp.value; touch(); });
+        row.appendChild(inp);
+      }
+      wizBtn(row, '✕', () => { P.radio.splice(k, 1); touch(); renderWizard(); });
+      box.appendChild(row);
+    });
+    wizBtn(box, '+ Funkrufname', () => {
+      P.radio.push({ call: '', who: '' });
+      touch();
+      renderWizard();
+      const rows = box.querySelectorAll('.wz-radio input');
+      if (rows.length) rows[rows.length - 2].focus();
+    });
+  },
+  meet(box) {
+    const m = P.meet;
+    wizText(box, m ? `✅ ${m.text || 'B-Ort'}: ${m.lat.toFixed(5)}, ${m.lon.toFixed(5)}${P.showUtm ? ` · ${formatMgrs(m.lat, m.lon)}` : ''}` : 'Noch kein B-Ort gesetzt.', 'info');
+    const big = document.createElement('div');
+    big.className = 'wz-big';
+    box.appendChild(big);
+    wizBtn(big, '📍 Mein Standort (GPS)', wizMeetGps);
+    wizBtn(big, '🔎 Adresse oder Kreuzung suchen', () => {
+      wizMeet = true;
+      closePanels();
+      setTool('meet');
+      $('search-input').focus();
+      toast('Adresse oder Kreuzung oben eingeben, dann auf den genauen B-Ort tippen', 7000);
+    });
+    wizBtn(big, '🗺️ Auf der Karte antippen', () => {
+      wizMeet = true;
+      closePanels();
+      setTool('meet');
+    });
+  },
+  wx(box) {
+    const pt = P.meet || (() => { const c = map.getCenter(); return { lat: c.lat, lon: c.lng }; })();
+    wizText(box, P.meet ? 'DWD-Wetter am B-Ort:' : 'Kein B-Ort – DWD-Wetter an der Kartenmitte:');
+    const out = wizText(box, 'Wird geladen …', 'wz-wx');
+    fetchWeather(pt.lat, pt.lon).then((wx) => {
+      db.wxLast = wx;
+      const c = wx.current || {};
+      const lines = [];
+      if (c.from != null) lines.push(`🧭 Wind aus ${dirName(c.from)} (${Math.round(c.from)}°), ${Math.round(c.kmh ?? 0)} km/h${c.gust ? `, Böen ${Math.round(c.gust)} km/h` : ''} · ${beaufort(c.kmh ?? 0)} Bft`);
+      if (c.temp != null) lines.push(`🌡️ ${Math.round(c.temp)} °C${c.cond ? ` · ${CONDITIONS[c.cond] || c.cond}` : ''}`);
+      if (c.station) lines.push(`Station ${c.station}${c.km != null ? ` (${c.km.toFixed(0)} km)` : ''}, ${hhmm(c.t)}`);
+      out.textContent = lines.join('\n') || 'Keine Wetterdaten.';
+      out.style.whiteSpace = 'pre-line';
+      // Startwert ins Windprotokoll des Einsatzes
+      if (c.from != null && c.kmh != null && !(M().wind || []).some((w) => w.src === 'DWD' && w.t === c.t)) {
+        M().wind.push({ t: c.t, from: c.from, kmh: c.kmh, gust: c.gust, station: c.station, src: 'DWD' });
+        M().wind.sort((a, b) => a.t - b.t);
+        touch();
+      }
+    }).catch(() => { out.textContent = 'Wetter nicht abrufbar (kein Netz?). Später über „Wetter“ links nachholen.'; });
+    const on = wizBtn(box, db.wxOn ? '✅ Wetter wird auf der Karte angezeigt' : '🌦️ Wetter auf der Karte anzeigen', () => {
+      db.wxOn = true;
+      saveNow();
+      renderWx();
+      loadWeather(false);
+      on.textContent = '✅ Wetter wird auf der Karte angezeigt';
+    });
+  },
+  person(box) {
+    const inp = wizField(box, 'Vermisste Person', M().person, (v) => { M().person = v; }, 'textarea', { placeholder: 'Name, Alter, Kleidung, Erkrankungen, Besonderheiten …' });
+    setTimeout(() => inp.focus(), 50);
+  },
+  times(box) {
+    const t = M().times;
+    const row = (k, label) => {
+      const l = document.createElement('label');
+      l.textContent = label;
+      const r = document.createElement('div');
+      r.className = 'wz-radio';
+      const inp = document.createElement('input');
+      inp.type = 'time';
+      inp.value = t[k] || '';
+      inp.addEventListener('input', () => { t[k] = inp.value; if (k === 'alarm' && !t.alarmDate) t.alarmDate = isoDate(new Date()); touch(); });
+      r.appendChild(inp);
+      wizBtn(r, 'Jetzt', () => {
+        const d = new Date();
+        t[k] = hhmmOf(d);
+        if (k === 'alarm') t.alarmDate = isoDate(d);
+        touch();
+        renderWizard();
+      });
+      l.appendChild(r);
+      box.appendChild(l);
+    };
+    row('alarm', 'Alarmierung');
+    wizField(box, 'Datum der Alarmierung', t.alarmDate || '', (v) => { t.alarmDate = v; }, 'date');
+    row('arrive', 'Eintreffen Einsatzstelle (optional)');
+    wizText(box, 'Weitere Zeiten und Kräfte im Fenster „Einsatz“, Suchhelfer je Team unter „Teams“.');
+  },
+  contacts(box) {
+    wizText(box, 'Gehen auf Wunsch mit dem Auftrag an die Hundeführer. Die Einsatzleitung ist immer dabei.');
+    const list = document.createElement('div');
+    list.className = 'ctlist';
+    box.appendChild(list);
+    const lead = P.lead.name || P.lead.phone ? [`👤 ${[P.lead.name, P.lead.phone].filter(Boolean).join(' · ')} (Einsatzleitung)`] : [];
+    for (const line of [...lead, ...P.contacts.map((c) => `📇 ${[c.name, c.role, c.phone].filter(Boolean).join(' · ')}`)]) wizText(list, line, 'info');
+    if (!lead.length && !P.contacts.length) wizText(list, 'Noch keine Kontakte.');
+    const r = document.createElement('div');
+    r.className = 'row';
+    box.appendChild(r);
+    wizBtn(r, '+ aus Adressbuch', () => $('pc-add').click());
+    wizBtn(r, '+ neuer Kontakt', () => $('pc-new').click());
+  },
+  done(box) {
+    wizText(box, `„${P.title || 'Einsatz'}“ ist angelegt. Alles lässt sich später unter „Gebiete“ und „Einsatz“ ändern.`);
+    const big = document.createElement('div');
+    big.className = 'wz-big';
+    box.appendChild(big);
+    wizBtn(big, '# Raster aufziehen', () => { wizFinish(); setTool('grid'); });
+    wizBtn(big, '📐 Umriss zeichnen', () => { wizFinish(); setTool('track'); });
+    wizBtn(big, '📲 An Tablet/PC übergeben', () => { wizFinish(); $('ho-send').click(); });
+  },
+};
+
+// B-Ort per GPS: frischer Standort der GPS-Anzeige, sonst einmal abfragen
+function wizMeetGps() {
+  const setAt = (lat, lon, acc) => {
+    P.meet = { lat, lon, text: (P.meet && P.meet.text) || 'B-Ort' };
+    map.setView([lat, lon], Math.max(map.getZoom(), 15));
+    changed();
+    renderMeet();
+    toast(`B-Ort am Standort gesetzt${acc ? ` (± ${Math.round(acc)} m)` : ''}`);
+    wizGo(P.wiz + 1);
+  };
+  if (lastPos) return setAt(lastPos[0], lastPos[1], null);
+  if (!navigator.geolocation) return toast('Standort wird nicht unterstützt');
+  toast('Standort wird gesucht …', 20000);
+  navigator.geolocation.getCurrentPosition(
+    (pos) => setAt(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+    (err) => toast(`Standort nicht verfügbar: ${err.message}`),
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 },
+  );
+}
 
 $('leader').addEventListener('input', () => { P.leader = $('leader').value; P.lead.name = P.leader; P.updated = Date.now(); save(); renderProjectContacts(); });
 for (const [id, k] of [['lead-phone', 'phone'], ['lead-call', 'call'], ['lead-elw', 'elw']]) {

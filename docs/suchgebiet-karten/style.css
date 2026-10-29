@@ -212,6 +212,9 @@ button, input, select { font: inherit; }
 .mark .swatch { width: 36px; height: 36px; border-radius: 8px; border: 2px solid #fff; box-shadow: 0 0 0 1px #999; cursor: pointer; padding: 0; }
 .mark .fields { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .mark .fields input { width: 100%; padding: 6px 8px; }
+.mark .fields .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.panel .mark .pair label { margin: 0; font-weight: 400; }
+.mark .pair small { display: block; font-size: 11px; color: var(--muted); }
 .mark .cells { font-size: 12px; color: var(--muted); }
 .mark .del { padding: 6px 9px; color: var(--red); }
 .mark select { padding: 4px; font-size: 12px; }
@@ -543,3 +546,19 @@ body.hf #panel-layers .el-only { display: none !important; }
 #hfc-list .ctrow b { font-size: 17px; }
 #hfc-list .ctrow a { font-size: 18px; padding: 6px 0; }
 .btnlink { display: inline-block; text-decoration: none; color: inherit; border: 1px solid #ccc; background: var(--btn); border-radius: 10px; padding: 10px 14px; font-size: 15px; }
+.wz-dots { display: flex; gap: 4px; margin: 4px 0 10px; }
+.wz-dots i { flex: 1; height: 5px; border-radius: 3px; background: #ddd; }
+.wz-dots i.done { background: #ef9a9a; }
+.wz-dots i.cur { background: var(--red); }
+.wz-nav { justify-content: space-between; }
+.wz-nav button { flex: 1; white-space: nowrap; padding: 10px 6px; }
+.wz-big { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.wz-big button { font-size: 16px; padding: 14px 12px; text-align: left; }
+.wz-radio { display: flex; gap: 6px; margin: 4px 0; align-items: center; }
+.wz-radio input { flex: 1; min-width: 0; }
+.wz-wx { font-size: 15px; line-height: 1.5; background: #f5f5f5; border-radius: 10px; padding: 10px; margin: 8px 0; }
+#panel-wizard input[type=tel], #panel-wizard input[type=time], #panel-wizard input[type=date] {
+  padding: 8px; border: 1px solid #bbb; border-radius: 8px; background: #fff; min-width: 0; font: inherit;
+}
+#panel-wizard label > input, #panel-wizard label > textarea { display: block; width: 100%; margin-top: 4px; box-sizing: border-box; }
+#panel-wizard .wz-radio input { padding: 8px; border: 1px solid #bbb; border-radius: 8px; }

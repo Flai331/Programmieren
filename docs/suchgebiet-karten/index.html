@@ -226,6 +226,7 @@
   <!-- Suchgebiete -->
   <section id="panel-projects" class="panel" hidden>
     <h2>Suchgebiet</h2>
+    <div class="row"><button id="wiz-open">🧭 Einsatz-Assistent</button></div>
     <label>Name des Einsatzes (Überschrift im PDF)
       <input id="title" type="text" placeholder="z. B. Übung Stadtwald">
     </label>
@@ -237,6 +238,7 @@
       <label>Funkrufname EL <input id="lead-call" type="text" placeholder="z. B. Rettungshund 1"></label>
     </div>
     <label>Funkrufname ELW <input id="lead-elw" type="text" placeholder="z. B. Rotkreuz Celle 11-1"></label>
+    <div class="row"><button id="radio-edit">📻 Weitere Funkrufnamen</button></div>
     <label>📇 Kontakte für diesen Einsatz</label>
     <p class="small">Gehen auf Wunsch mit dem Auftrag an die Hundeführer (nur Name, Funktion, Funkrufname, Telefon). Die Einsatzleitung ist immer dabei.</p>
     <div id="pc-list" class="ctlist"></div>
@@ -280,6 +282,19 @@
       <a id="apk-link" class="btnlink" href="https://github.com/Flai331/Programmieren/releases/download/suchgebiet-karten/Suchgebiet-Karten.apk" target="_blank" rel="noopener">📥 Neueste APK herunterladen</a>
     </div>
     <button class="close">Schließen</button>
+  </section>
+
+  <!-- Assistent „Neuen Einsatz anlegen“ -->
+  <section id="panel-wizard" class="panel" hidden>
+    <h2 id="wz-title"></h2>
+    <div id="wz-dots" class="wz-dots"></div>
+    <div id="wz-body"></div>
+    <div class="row wz-nav">
+      <button id="wz-back">‹ Zurück</button>
+      <button id="wz-skip">Überspringen</button>
+      <button id="wz-next" class="primary">Weiter ›</button>
+    </div>
+    <button id="wz-exit">Schließen – später unter „Gebiete“ fortsetzen</button>
   </section>
 
   <!-- Teams & Legende -->
