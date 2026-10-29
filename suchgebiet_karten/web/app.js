@@ -71,6 +71,7 @@ let tool = 'pan';
 let draftTrack = null; // Umriss, der gerade Punkt für Punkt gesetzt wird
 let draftPen = null; // Stift-Zeichnung in Arbeit: { strokes: [...] } – bis „Fertig“ oder „Abbrechen“
 let undoStack = [];
+let searchPin = null; // Nadel des letzten Suchergebnisses (gehört zu keinem Einsatz)
 
 function load() {
   try {
@@ -3491,6 +3492,8 @@ function switchProject(id) {
   restoreDrafts();
   setTool('pan');
   undoStack = [];
+  // Suchnadel (z. B. Adresse des alten B-Orts) gehört nicht zum neuen Einsatz
+  if (searchPin) { map.removeLayer(searchPin); searchPin = null; }
   if (P.view) map.setView([P.view.lat, P.view.lon], P.view.z);
   else if (grid) map.fitBounds([[P.area.south, P.area.west], [P.area.north, P.area.east]]);
   setLayer(P.layerId);
@@ -5322,7 +5325,6 @@ async function sendMailRow(row, btn) {
 }
 
 // ---------- Suche (Adresse, Feld, Koordinaten) ----------
-let searchPin = null;
 
 function showSearchPin(lat, lon, label) {
   if (searchPin) map.removeLayer(searchPin);
