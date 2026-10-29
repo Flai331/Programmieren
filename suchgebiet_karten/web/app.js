@@ -982,22 +982,30 @@ function renderPalette() {
   }
   const add = document.createElement('button');
   add.textContent = '+ Team';
-  add.addEventListener('click', () => { addMark('team'); });
+  add.addEventListener('click', () => { addMark('team', true); });
   box.appendChild(add);
 }
 
 // ---------- Teams & Legende ----------
-function addMark(kind) {
+// quick: aus der Feld-Leiste – nur nach dem Namen fragen, kein Teams-Fenster
+function addMark(kind, quick = false) {
+  const n = P.marks.filter((m) => m.kind === 'team').length + 1;
+  let label = kind === 'team' ? `Team ${n}` : 'Markierung';
+  if (quick) {
+    const t = prompt('Name des Teams:', label);
+    if (t === null) return;
+    label = t.trim() || label;
+  }
   snapshot();
   const used = new Set(P.marks.map((m) => m.color));
   const color = MARK_COLORS.find((c) => !used.has(c)) || MARK_COLORS[P.marks.length % MARK_COLORS.length];
-  const n = P.marks.filter((m) => m.kind === 'team').length + 1;
   const m = kind === 'team'
-    ? { id: uid(), kind: 'team', label: `Team ${n}`, dog: '', color }
-    : { id: uid(), kind: 'status', label: 'Markierung', color };
+    ? { id: uid(), kind: 'team', label, dog: '', color }
+    : { id: uid(), kind: 'status', label, color };
   P.marks.push(m);
   db.activeMark = m.id;
   changed();
+  if (quick) return;
   openPanel('panel-teams');
   const inp = $('mark-list').querySelector(`[data-id="${m.id}"] input`);
   if (inp) { inp.focus(); inp.select(); }
