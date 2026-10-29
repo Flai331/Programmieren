@@ -175,6 +175,19 @@ export function migrateV1(old) {
   return p;
 }
 
+// Umriss zugeteilt an ein Team (it.to = Team-ID) oder eine Einheit aus den Kräften (it.to = 'u:Name')
+export function assignTargets(p) {
+  const teams = p.marks.filter((m) => m.kind === 'team').map((m) => ({ to: m.id, label: markLabel(m) || 'Team', color: m.color }));
+  const orgs = [...new Set(((p.mission && p.mission.forces) || []).map((f) => String(f.org || '').trim()).filter(Boolean))];
+  return [...teams, ...orgs.map((o) => ({ to: `u:${o}`, label: o, color: null }))];
+}
+export function assigneeName(p, to) {
+  if (!to) return '';
+  if (to.startsWith('u:')) return to.slice(2);
+  const m = p.marks.find((x) => x.id === to && x.kind === 'team');
+  return m ? m.label : '';
+}
+
 export function markLabel(m) {
   if (m.kind !== 'team') return m.label;
   const h = m.helpers > 0 ? ` + ${m.helpers} Suchhelfer` : '';
