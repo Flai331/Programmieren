@@ -484,6 +484,7 @@ const HINTS = {
   grid: 'Suchgebiet als Rechteck mit dem Finger aufziehen.',
   offrect: 'Bereich für die Offline-Karte als Rechteck aufziehen.',
   windpt: 'Tippe auf die Karte, wo der Wind (DWD) angezeigt werden soll.',
+  hfmarkpt: 'Tippe auf die Karte, wo der Punkt hin soll.',
   hffield: 'Feld antippen: abgesucht → teilweise → nicht begehbar → zurück. „Feld“ nochmal tippen = fertig.',
   sendpick: 'Felder für den Auftrag antippen (blau umrandet). Dann „Weiter“.',
   offsquares: 'Quadrate antippen (blau = gewählt, grün = schon gespeichert). Ziehen verschiebt die Karte.',
@@ -669,7 +670,7 @@ canvas.addEventListener('pointerdown', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill') {
     fillAt(ll, true);
-  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt'].includes(tool)) {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt'].includes(tool)) {
     panning = false;
   }
 });
@@ -689,7 +690,7 @@ canvas.addEventListener('pointermove', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill' && fillStroke) {
     fillAt(ll, false);
-  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt'].includes(tool)) {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt'].includes(tool)) {
     // Im Track-Modus verschiebt Ziehen die Karte, Tippen setzt Punkte
     if (!panning && Math.hypot(x - lastPt.x, y - lastPt.y) < 8) return;
     panning = true;
@@ -736,6 +737,11 @@ function finishPointer(e, cancelled) {
       $('off-area').value = 'rect';
       openPanel('panel-offline');
       updateOffEstimate();
+    }
+  } else if (tool === 'hfmarkpt') {
+    if (!cancelled && !panning) {
+      setTool('pan');
+      hfMarkDialog({ lat: ll.lat, lon: ll.lng }, 'Position: auf der Karte angetippt.');
     }
   } else if (tool === 'windpt') {
     if (!cancelled && !panning) {
@@ -2213,13 +2219,47 @@ document.addEventListener('visibilitychange', async () => {
 });
 $('hf-rec').addEventListener('click', () => (recWatch !== null ? stopRec() : startRec()));
 
-// Markieren: Art wählen, Position = GPS (sonst Kartenmitte)
+// Markieren: Art wählen, Position = GPS-Standort oder auf der Karte angetippt
 const HF_MARKS = [['⚠️', 'Anzeige'], ['✅', 'Fund'], ['🐾', 'Spur'], ['🎒', 'Gegenstand'], ['❗', 'Gefahr'], ['📝', 'Hinweis']];
+// Mit GPS: Punkt am Standort. Ohne GPS: fragen – auf der Karte antippen oder Standort einschalten
 $('hf-mark').addEventListener('click', () => {
-  const gps = !!lastPos;
-  const pos = gps ? { lat: lastPos[0], lon: lastPos[1] } : { lat: map.getCenter().lat, lon: map.getCenter().lng };
+  if (lastPos) return hfMarkDialog({ lat: lastPos[0], lon: lastPos[1] }, 'Position: dein GPS-Standort.');
   openDlg((box, close) => {
-    dlgHead(box, '📍 Markieren', gps ? 'Position: dein GPS-Standort.' : 'Kein GPS – Position: Kartenmitte. Karte vorher passend schieben.');
+    dlgHead(box, '📍 Markieren', 'Der Standort (GPS) ist aus. Wo soll der Punkt hin?');
+    const list = document.createElement('div');
+    list.className = 'dlg-btns';
+    box.appendChild(list);
+    dlgButton(list, '👆 Punkt auf der Karte antippen', '', () => {
+      close(true);
+      setTool('hfmarkpt');
+      toast('Auf die Karte tippen: dort wird der Punkt gesetzt', 5000);
+    });
+    const gpsBtn = dlgButton(list, '🛰️ Standort einschalten', 'primary', () => {
+      if (!navigator.geolocation) return toast('Standort wird nicht unterstützt');
+      if (watchId === null) $('btn-gps').click();
+      gpsBtn.disabled = true;
+      gpsBtn.textContent = '🛰️ Standort wird gesucht …';
+      const t0 = Date.now();
+      const wait = setInterval(() => {
+        if ($('dlg').hidden) return clearInterval(wait); // abgebrochen
+        if (lastPos) {
+          clearInterval(wait);
+          close(true);
+          hfMarkDialog({ lat: lastPos[0], lon: lastPos[1] }, 'Position: dein GPS-Standort.');
+        } else if (Date.now() - t0 > 60e3) {
+          clearInterval(wait);
+          gpsBtn.disabled = false;
+          gpsBtn.textContent = '🛰️ Nochmal versuchen';
+          toast('Kein Standort gefunden – ggf. Punkt auf der Karte antippen');
+        }
+      }, 500);
+    });
+    dlgButton(box, 'Abbrechen', '', () => close(false));
+  });
+});
+function hfMarkDialog(pos, where) {
+  openDlg((box, close) => {
+    dlgHead(box, '📍 Markieren', where);
     const note = document.createElement('input');
     note.type = 'text';
     note.placeholder = 'Notiz (optional)';
@@ -2239,7 +2279,7 @@ $('hf-mark').addEventListener('click', () => {
     }
     dlgButton(box, 'Abbrechen', '', () => close(false));
   });
-});
+}
 
 // Feld abgesucht: antippen schaltet durch
 $('hf-field').addEventListener('click', () => {
