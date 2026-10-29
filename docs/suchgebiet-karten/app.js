@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v64';
+const APP_VERSION = 'v65';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -2307,12 +2307,28 @@ function hfAreaDone(raw) {
   }
   if (pts.length < 3 || pathLen(pts) < 30) return toast('Zu klein – nochmal „✏️ Bereich“ und größer umkreisen');
   const n = P.items.filter((it) => it.kind === 'track' && /^Bereich \d+$/.test(it.name || '')).length + 1;
-  const t = prompt('Name des Bereichs (erscheint so beim EL und auf dem Garmin):', `Bereich ${n}`);
-  if (t === null) return;
-  ensureHf();
-  P.items.push({ kind: 'track', name: t.trim() || `Bereich ${n}`, color: hfColor(), w: 4, pts, t: Date.now() });
-  changed();
-  toast('Bereich gespeichert – geht mit „Zurückgeben“ an die Einsatzleitung');
+  openDlg((box, close) => {
+    dlgHead(box, '✏️ Bereich', 'Name und Notiz erscheinen so bei der Einsatzleitung und auf dem Garmin.');
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.value = `Bereich ${n}`;
+    const note = document.createElement('textarea');
+    note.rows = 3;
+    note.placeholder = 'Notiz (optional), z. B. Hund zeigt hier Interesse, dichtes Unterholz …';
+    box.append(name, note);
+    dlgButton(box, '💾 Speichern', 'primary', () => {
+      ensureHf();
+      const it = { kind: 'track', name: name.value.trim() || `Bereich ${n}`, color: hfColor(), w: 4, pts, t: Date.now() };
+      if (note.value.trim()) it.note = note.value.trim();
+      P.items.push(it);
+      changed();
+      close(true);
+      toast('Bereich gespeichert – geht mit „Zurückgeben“ an die Einsatzleitung');
+    });
+    dlgButton(box, 'Verwerfen', '', () => { close(false); redraw(); });
+    name.focus();
+    name.select();
+  });
 }
 
 // Feld abgesucht: antippen schaltet durch
