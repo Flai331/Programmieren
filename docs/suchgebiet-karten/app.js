@@ -14,6 +14,9 @@ import {
   MAIL_PARTS, REPORT_SECTIONS, MAP_PARTS, EXTRA_PARTS, hasReportText, newMailTo, mailAddresses,
 } from './mission.js';
 import { buildCustomMap, planCustomMap } from './kmz.js';
+import {
+  STATES, estimate, downloadRegion, deleteRegion, storageInfo, persistStorage, setHasOffline, cachedTileUrl, maxZoom,
+} from './offline.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
   newProject, normalizeProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
@@ -22,7 +25,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v45';
+const APP_VERSION = 'v46';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -154,6 +157,23 @@ const AppTiles = L.TileLayer.extend({
   getTileUrl(coords) {
     // _getZoomForUrl berücksichtigt zoomOffset (512er-Kacheln)
     return tileUrl(this.options.def, this._getZoomForUrl(), coords.x, coords.y);
+  },
+  // Offline gespeicherte Kachel zuerst (sofort, ohne Netz), sonst aus dem Internet
+  createTile(coords, done) {
+    const tile = document.createElement('img');
+    L.DomEvent.on(tile, 'load', L.Util.bind(this._tileOnLoad, this, done, tile));
+    L.DomEvent.on(tile, 'error', L.Util.bind(this._tileOnError, this, done, tile));
+    if (this.options.crossOrigin || this.options.crossOrigin === '') tile.crossOrigin = this.options.crossOrigin === true ? '' : this.options.crossOrigin;
+    tile.alt = '';
+    tile.setAttribute('role', 'presentation');
+    const url = this.getTileUrl(coords);
+    cachedTileUrl(url).then((local) => {
+      if (local) {
+        tile.addEventListener('load', () => URL.revokeObjectURL(local), { once: true });
+        tile.src = local;
+      } else tile.src = url;
+    });
+    return tile;
   },
 });
 
@@ -301,6 +321,7 @@ const HINTS = {
   fill: 'Team/Markierung wählen, dann Felder antippen oder darüberwischen. Nochmal tippen entfernt.',
   erase: 'Antippen oder darüberwischen löscht Zeichnungen, Umrisse, Texte, Treffpunkt und Feldfarben.',
   grid: 'Suchgebiet als Rechteck mit dem Finger aufziehen.',
+  offrect: 'Bereich für die Offline-Karte als Rechteck aufziehen.',
   meet: 'Auf die Karte tippen, um den Treffpunkt zu setzen.',
   track: 'Umriss: Punkte antippen. Karte mit dem Finger verschieben, Zoom mit +/−.',
 };
@@ -390,7 +411,7 @@ canvas.addEventListener('pointerdown', (e) => {
   if (tool === 'pen') {
     current = { kind: 'stroke', color: db.color, w: db.w, pts: [[ll.lat, ll.lng]] };
     redraw();
-  } else if (tool === 'grid') {
+  } else if (tool === 'grid' || tool === 'offrect') {
     dragRect = { a: ll, b: ll };
   } else if (tool === 'erase') {
     eraseAt(x, y);
@@ -409,7 +430,7 @@ canvas.addEventListener('pointermove', (e) => {
     current.pts.push([ll.lat, ll.lng]);
     lastPt = { x, y };
     redraw();
-  } else if (tool === 'grid' && dragRect) {
+  } else if ((tool === 'grid' || tool === 'offrect') && dragRect) {
     dragRect.b = ll;
     redraw();
   } else if (tool === 'erase') {
@@ -449,6 +470,21 @@ function finishPointer(e, cancelled) {
     if (!cancelled) setArea({ north: a.lat, south: ll.lat, west: a.lng, east: ll.lng });
     setTool('pan');
     redraw();
+  } else if (tool === 'offrect' && dragRect) {
+    // Bereich für Offline-Karten aufgezogen -> zurück ins Karte-Fenster
+    const a = dragRect.a;
+    dragRect = null;
+    setTool('pan');
+    redraw();
+    if (!cancelled) {
+      offRect = {
+        north: Math.max(a.lat, ll.lat), south: Math.min(a.lat, ll.lat),
+        west: Math.min(a.lng, ll.lng), east: Math.max(a.lng, ll.lng),
+      };
+      $('off-area').value = 'rect';
+      openPanel('panel-layers');
+      updateOffEstimate();
+    }
   } else if (tool === 'fill') {
     if (fillStroke) changed();
     fillStroke = null;
@@ -1028,6 +1064,204 @@ map.on('click', (e) => {
   if (parts.length) toast(parts.join(' · '));
 });
 
+// ---------- Offline-Karten ----------
+// Bereiche (für alle Suchgebiete gemeinsam) in db.offline:
+// { id, name, bounds, layerIds, zMin, zMax, done, total, failed, bytes, finished }
+if (!Array.isArray(db.offline)) db.offline = [];
+setHasOffline(db.offline.length > 0);
+let offRect = null; // aufgezogenes Rechteck
+let offJob = null; // { id, ctrl }
+const fmtMB = (mb) => (mb >= 1024 ? `${(mb / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} GB` : `${Math.max(1, Math.round(mb))} MB`);
+const fmtMin = (m) => (m >= 90 ? `ca. ${Math.round(m / 60)} Std.` : `ca. ${Math.max(1, Math.round(m))} Min.`);
+const ZOOMS = {
+  12: 'grobe Übersicht', 13: 'Übersicht', 14: 'Orte, Hauptstraßen', 15: 'Wege erkennbar',
+  16: 'gut', 17: 'scharf', 18: 'sehr scharf', 19: 'volle Luftbild-Schärfe',
+};
+
+function offBounds() {
+  const v = $('off-area').value;
+  if (STATES[v]) return STATES[v].bounds;
+  if (v === 'rect') return offRect;
+  if (v === 'grid') {
+    const gs = allGrids(P);
+    if (!gs.length) return null;
+    const b = { north: -90, south: 90, west: 180, east: -180 };
+    for (const g of gs) {
+      b.north = Math.max(b.north, g.area.north, g.area.south); b.south = Math.min(b.south, g.area.north, g.area.south);
+      b.west = Math.min(b.west, g.area.west, g.area.east); b.east = Math.max(b.east, g.area.west, g.area.east);
+    }
+    // 500 m Rand rundherum
+    const dLat = 0.0045;
+    const dLon = dLat / Math.cos((b.north * Math.PI) / 180);
+    return { north: b.north + dLat, south: b.south - dLat, west: b.west - dLon, east: b.east + dLon };
+  }
+  return viewBounds();
+}
+function offLayerIds() {
+  const id = $('off-layer').value;
+  const def = layerById(id);
+  return def.aerial && $('off-paths').checked ? [id, ...OVERLAYS.map((o) => o.id)] : [id];
+}
+const offDef = (id) => LAYERS.find((l) => l.id === id) || OVERLAYS.find((o) => o.id === id);
+function offDefaultName() {
+  const v = $('off-area').value;
+  const area = STATES[v] ? STATES[v].name.replace(/ \(.*/, '') : v === 'grid' ? (P.title || 'Suchgebiet') : v === 'rect' ? 'Bereich' : 'Kartenausschnitt';
+  return `${area} – ${layerById($('off-layer').value).name.replace(/ \(.*/, '')} bis Stufe ${$('off-zmax').value}`;
+}
+
+function renderOfflineForm() {
+  const sel = $('off-layer');
+  if (!sel.options.length) {
+    for (const l of LAYERS) sel.add(new Option(l.name, l.id));
+    for (let z = 12; z <= 19; z++) $('off-zmax').add(new Option(`${z} – ${ZOOMS[z]}`, String(z)));
+    $('off-zmax').value = '16';
+  }
+  if (!sel.dataset.touched) sel.value = P.layerId;
+  $('off-area').querySelector('[value=grid]').disabled = !allGrids(P).length;
+  if ($('off-area').value === 'grid' && !allGrids(P).length) $('off-area').value = 'view';
+  updateOffEstimate();
+  renderOfflineList();
+}
+async function updateOffEstimate() {
+  const b = offBounds();
+  $('off-paths').parentElement.hidden = !layerById($('off-layer').value).aerial;
+  $('off-name').placeholder = offDefaultName();
+  if (!b) {
+    $('off-est').textContent = $('off-area').value === 'rect' ? 'Noch kein Rechteck – „Herunterladen“ tippen und dann auf der Karte aufziehen.' : 'Kein Bereich.';
+    return;
+  }
+  const z = Number($('off-zmax').value);
+  const defs = offLayerIds().map(offDef);
+  const e = estimate(defs, b, Math.min(6, z), z);
+  const capped = defs.some((d) => z > maxZoom(d));
+  let text = `≈ ${e.tiles.toLocaleString('de-DE')} Kartenbilder · ≈ ${fmtMB(e.mb)} · Dauer ${fmtMin(e.minutes)} (je nach Netz)`;
+  if (capped) text += ' · Karte hat höchstens Stufe ' + Math.min(...defs.map(maxZoom));
+  const s = await storageInfo();
+  if (s && s.quotaMB) {
+    const free = s.quotaMB - s.usedMB;
+    text += ` · frei ca. ${fmtMB(free)}`;
+    if (e.mb > free * 0.9) text += ' ⚠️ passt vermutlich nicht auf dieses Gerät – geringere Stufe oder kleineren Bereich wählen';
+  }
+  $('off-est').textContent = text;
+}
+['off-area', 'off-layer', 'off-paths', 'off-zmax'].forEach((id) => $(id).addEventListener('change', () => {
+  if (id === 'off-layer') $('off-layer').dataset.touched = '1';
+  updateOffEstimate();
+}));
+
+let offListToken = 0;
+async function renderOfflineList() {
+  const box = $('off-list');
+  // mehrere Aufrufe kurz nacheinander: nur der letzte zeichnet
+  const token = ++offListToken;
+  const s = await storageInfo();
+  if (token !== offListToken) return;
+  box.innerHTML = '';
+  $('off-storage').textContent = db.offline.length
+    ? `Gespeichert: ${db.offline.length} Bereich${db.offline.length > 1 ? 'e' : ''}${s ? ` · belegt ca. ${fmtMB(s.usedMB)} von ${fmtMB(s.quotaMB)}` : ''}`
+    : 'Noch keine Offline-Karten gespeichert.';
+  for (const r of db.offline) {
+    const row = document.createElement('div');
+    row.className = 'offrow';
+    const running = offJob && offJob.id === r.id;
+    const pct = r.total ? Math.floor((100 * r.done) / r.total) : 0;
+    const info = document.createElement('div');
+    info.innerHTML = '<b></b><small></small>';
+    info.firstChild.textContent = r.name;
+    info.lastChild.textContent = r.finished
+      ? `✔ fertig · ${r.total.toLocaleString('de-DE')} Bilder · ${fmtMB((r.bytes || 0) / 1048576)}${r.failed ? ` (${r.failed} fehlgeschlagen)` : ''}`
+      : `${running ? '⏳ lädt' : '⏸ angehalten'} · ${pct} % (${r.done.toLocaleString('de-DE')} von ${r.total.toLocaleString('de-DE')}) · ${fmtMB((r.bytes || 0) / 1048576)}`;
+    const btns = document.createElement('span');
+    const act = document.createElement('button');
+    act.textContent = running ? '⏸' : r.finished ? '↻' : '▶';
+    act.title = running ? 'Anhalten' : r.finished ? 'Fehlende nachladen / aktualisieren' : 'Weiterladen';
+    act.addEventListener('click', () => (running ? offJob.ctrl.abort() : runOffline(r)));
+    const go = document.createElement('button');
+    go.textContent = '🔍';
+    go.title = 'Auf der Karte zeigen';
+    go.addEventListener('click', () => {
+      closePanels();
+      map.fitBounds([[r.bounds.south, r.bounds.west], [r.bounds.north, r.bounds.east]]);
+    });
+    const del = document.createElement('button');
+    del.textContent = '🗑️';
+    del.title = 'Löschen';
+    del.addEventListener('click', async () => {
+      if (running || !confirm(`Offline-Karte „${r.name}“ löschen?`)) return;
+      del.disabled = true;
+      del.textContent = '…';
+      const others = db.offline.filter((x) => x.id !== r.id);
+      await deleteRegion(r, r.layerIds.map(offDef).filter(Boolean), others, offDef);
+      db.offline = others;
+      setHasOffline(db.offline.length > 0);
+      saveNow();
+      renderOfflineList();
+    });
+    btns.append(act, go, del);
+    row.append(info, btns);
+    box.appendChild(row);
+  }
+}
+
+async function runOffline(r) {
+  if (offJob) return toast('Es lädt bereits eine Offline-Karte.');
+  const ctrl = new AbortController();
+  offJob = { id: r.id, ctrl };
+  persistStorage();
+  // Bildschirm anlassen, solange geladen wird (sonst hält das Handy die App an)
+  let lock = null;
+  try { lock = await navigator.wakeLock.request('screen'); } catch { /* nicht unterstützt */ }
+  renderOfflineList();
+  try {
+    const startBytes = r.bytes || 0;
+    const res = await downloadRegion(r, r.layerIds.map(offDef).filter(Boolean), (st) => {
+      Object.assign(r, { done: st.done, total: st.total, failed: st.failed, bytes: startBytes + st.bytes });
+      save();
+      if (!$('panel-layers').hidden) renderOfflineList();
+    }, ctrl.signal);
+    Object.assign(r, { done: res.done, total: res.total, failed: res.failed, bytes: startBytes + res.bytes });
+    r.finished = !ctrl.signal.aborted && res.done >= res.total;
+    toast(r.finished ? `Offline-Karte „${r.name}“ fertig` : `„${r.name}“ angehalten – ▶ lädt weiter`);
+  } catch (err) {
+    toast('Offline-Karte: ' + err.message);
+  } finally {
+    offJob = null;
+    if (lock) lock.release().catch(() => {});
+    setHasOffline(db.offline.length > 0);
+    saveNow();
+    renderOfflineList();
+  }
+}
+
+$('off-start').addEventListener('click', () => {
+  if ($('off-area').value === 'rect' && !offRect) {
+    closePanels();
+    setTool('offrect');
+    return;
+  }
+  const b = offBounds();
+  if (!b) return toast('Kein Bereich gewählt');
+  const z = Number($('off-zmax').value);
+  const r = {
+    id: uid(),
+    name: $('off-name').value.trim() || offDefaultName(),
+    bounds: b,
+    layerIds: offLayerIds(),
+    zMin: Math.min(6, z),
+    zMax: z,
+    done: 0,
+    total: 0,
+    failed: 0,
+    finished: false,
+  };
+  db.offline.push(r);
+  $('off-name').value = '';
+  offRect = null;
+  saveNow();
+  runOffline(r);
+});
+$('off-redraw').addEventListener('click', () => { closePanels(); setTool('offrect'); });
+
 // ---------- Kartenart ----------
 function renderLayerList() {
   const box = $('layer-list');
@@ -1318,7 +1552,7 @@ for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
 $('btn-projects').addEventListener('click', () => { fillProjectForm(); renderProjects(); openPanel('panel-projects'); });
 $('btn-grid').addEventListener('click', () => { updateGridInfo(); openPanel('panel-grid'); });
 $('btn-teams').addEventListener('click', () => { renderMarks(); renderAlpha(); openPanel('panel-teams'); });
-$('btn-layers').addEventListener('click', () => openPanel('panel-layers'));
+$('btn-layers').addEventListener('click', () => { renderOfflineForm(); openPanel('panel-layers'); });
 $('app-version').textContent = `Version ${APP_VERSION}`;
 $('btn-pdf').addEventListener('click', () => {
   $('pdf-caption').value = P.caption || '';

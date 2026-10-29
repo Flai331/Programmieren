@@ -9,6 +9,7 @@ import {
 } from './grid.js';
 import { drawOverlay, hatchRect } from './render.js';
 import { tileUrl } from './layers.js';
+import { cachedTileUrl } from './offline.js';
 import { formatMgrs, formatUtm, utmZone } from './utm.js';
 import {
   allGrids, assignments, embedMarker, gridLabel, markLabel, resolveFills, teamStatus,
@@ -84,14 +85,16 @@ export function planSheets(grid, opts, viewBounds) {
   return sheets.some((sh) => !sh.info) ? sheets : sheets.filter((sh) => !sh.info);
 }
 
-function loadImage(url) {
+// Kachel laden – offline gespeicherte zuerst (siehe offline.js)
+async function loadImage(url) {
+  const local = await cachedTileUrl(url);
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     const timer = setTimeout(() => resolve(null), 20000);
-    img.onload = () => { clearTimeout(timer); resolve(img); };
+    img.onload = () => { clearTimeout(timer); if (local) URL.revokeObjectURL(local); resolve(img); };
     img.onerror = () => { clearTimeout(timer); resolve(null); };
-    img.src = url;
+    img.src = local || url;
   });
 }
 
