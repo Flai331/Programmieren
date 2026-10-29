@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v53';
+const APP_VERSION = 'v54';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -1318,12 +1318,13 @@ async function renderOfflineList() {
     const btns = document.createElement('span');
     const act = document.createElement('button');
     act.textContent = running ? '⏸' : r.finished ? '↻' : '▶';
-    act.title = running ? 'Anhalten' : r.finished ? 'Fehlende nachladen / aktualisieren' : 'Weiterladen';
-    act.addEventListener('click', () => {
-      if (!running) runOffline(r);
-      else if (offJob.native) bridge.offlineStop();
-      else offJob.ctrl.abort();
-    });
+    act.title = running ? 'Anhalten (später weiterladen)' : r.finished ? 'Fehlende nachladen / aktualisieren' : 'Weiterladen';
+    act.addEventListener('click', () => (running ? stopOffline() : runOffline(r)));
+    const cancel = document.createElement('button');
+    cancel.textContent = '✕';
+    cancel.title = 'Download abbrechen';
+    cancel.className = 'danger';
+    cancel.addEventListener('click', () => cancelOffline(r));
     const go = document.createElement('button');
     go.textContent = '🔍';
     go.title = 'Auf der Karte zeigen';
@@ -1338,27 +1339,58 @@ async function renderOfflineList() {
       if (running || !confirm(`Offline-Karte „${r.name}“ löschen?`)) return;
       del.disabled = true;
       del.textContent = '…';
-      const others = db.offline.filter((x) => x.id !== r.id);
-      const defs = r.layerIds.map(offDef).filter(Boolean);
-      if (NATIVE_OFF) {
-        // löscht im Hintergrund; Bilder, die ein anderer Bereich braucht, bleiben
-        bridge.offlineDelete(JSON.stringify({
-          region: { ...nativeJob(r, defs), layerIds: r.layerIds },
-          others: others.map((o) => ({ bounds: o.bounds, areas: o.areas, zMin: o.zMin, zMax: o.zMax, layerIds: o.layerIds })),
-        }));
-      }
-      // ältere Bereiche (oder Browser) liegen im Cache-Speicher
-      if (!NATIVE_OFF || !r.native) await deleteRegion(r, defs, others, offDef);
-      db.offline = others;
-      refreshHasOffline();
-      if (NATIVE_OFF) setTimeout(syncNativeOffline, 300);
-      saveNow();
-      renderOfflineList();
+      await removeOffline(r);
     });
-    btns.append(act, go, del);
+    if (running) btns.append(act, cancel, go); else btns.append(act, go, del);
     row.append(info, btns);
     box.appendChild(row);
   }
+}
+
+// Bereich samt gespeicherter Kartenbilder löschen (Bilder, die ein anderer Bereich braucht, bleiben)
+async function removeOffline(r) {
+  const others = db.offline.filter((x) => x.id !== r.id);
+  const defs = r.layerIds.map(offDef).filter(Boolean);
+  if (NATIVE_OFF) {
+    bridge.offlineDelete(JSON.stringify({
+      region: { ...nativeJob(r, defs), layerIds: r.layerIds },
+      others: others.map((o) => ({ bounds: o.bounds, areas: o.areas, zMin: o.zMin, zMax: o.zMax, layerIds: o.layerIds })),
+    }));
+  }
+  // ältere Bereiche (oder Browser) liegen im Cache-Speicher
+  if (!NATIVE_OFF || !r.native) await deleteRegion(r, defs, others, offDef);
+  db.offline = others;
+  refreshHasOffline();
+  if (NATIVE_OFF) setTimeout(syncNativeOffline, 300);
+  saveNow();
+  renderOfflineList();
+}
+function stopOffline() {
+  if (!offJob) return;
+  if (offJob.native) bridge.offlineStop(); else offJob.ctrl.abort();
+}
+// Abbrechen: anhalten und (auf Wunsch) das bisher Geladene löschen
+async function cancelOffline(r) {
+  const choice = await openDlg((box, close) => {
+    dlgHead(box, '✕ Download abbrechen?', `„${r.name}“ – bisher ${r.total ? Math.floor((100 * r.done) / r.total) : 0} % geladen.`);
+    const list = document.createElement('div');
+    list.className = 'dlg-btns';
+    box.appendChild(list);
+    dlgButton(list, 'Abbrechen und Geladenes löschen<small>Platz wird wieder frei</small>', 'primary', () => close('delete'));
+    dlgButton(list, 'Nur anhalten<small>Später mit ▶ weiterladen</small>', '', () => close('pause'));
+    dlgButton(list, 'Weiterladen', '', () => close(null));
+  });
+  if (!choice) return;
+  stopOffline();
+  if (choice === 'pause') return;
+  toast('Download wird abgebrochen …');
+  // warten, bis der Download wirklich steht, dann löschen
+  for (let i = 0; i < 75 && offJob && offJob.id === r.id; i++) {
+    if (NATIVE_OFF) syncNativeOffline();
+    await new Promise((res) => setTimeout(res, 200));
+  }
+  await removeOffline(r);
+  toast(`„${r.name}“ abgebrochen und gelöscht`);
 }
 
 // Android-App: Stand vom Dienst abholen (läuft auch weiter, wenn die App zu ist)
@@ -1380,6 +1412,11 @@ function syncNativeOffline() {
     else if (r) toast(r.finished ? `Offline-Karte „${r.name}“ fertig` : `„${r.name}“ angehalten – ▶ lädt weiter`);
     saveNow();
   } else save();
+  // in der Benachrichtigung abgebrochen -> hier löschen
+  for (const r of db.offline) {
+    const n = st.regions[r.id];
+    if (n && n.cancelled && st.running !== r.id && !(offJob && offJob.id === r.id)) setTimeout(() => removeOffline(r), 0);
+  }
   if (!$('panel-offline').hidden) renderOfflineList();
   const busy = offJob || st.deleting;
   if (busy && !offPoll) offPoll = setInterval(syncNativeOffline, 1000);
