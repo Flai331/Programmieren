@@ -415,3 +415,45 @@ html.night.red .leaflet-control-container { filter: invert(1) grayscale(1) sepia
 html.night.red .leaflet-tile-pane { filter: brightness(0.45) grayscale(1) sepia(1) saturate(5) hue-rotate(-50deg); }
 html.night.red #overlay, html.night.red .leaflet-marker-pane, html.night.red .toast, html.night.red .hint { filter: grayscale(1) sepia(1) saturate(6) hue-rotate(-50deg) brightness(0.8); }
 html.night .leaflet-container { background: #111; }
+
+/* Wetter-Overlay */
+.wx {
+  position: fixed; top: 60px; left: 72px; z-index: 990; width: min(330px, calc(100vw - 150px));
+  background: rgba(255,255,255,0.96); border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.3); padding: 6px 8px; font-size: 13px;
+}
+.wx-head { display: flex; align-items: center; gap: 8px; }
+.wx-arrow { width: 36px; height: 36px; flex: none; fill: #1565c0; transition: transform 0.4s; }
+.wx-arrow.measured { fill: #2e7d32; }
+.wx-main { flex: 1; min-width: 0; }
+.wx-main b { display: block; font-size: 14px; }
+.wx-main small { display: block; color: #555; }
+.wx-head button { border: 0; background: transparent; font-size: 18px; cursor: pointer; padding: 4px; }
+.wx-line { margin-top: 4px; color: #333; }
+.wx-approach { font-weight: 600; color: #1b5e20; }
+.wx-hours { display: flex; gap: 6px; overflow-x: auto; margin-top: 4px; font-size: 11px; color: #444; }
+.wx-hours > div { flex: none; text-align: center; min-width: 36px; }
+.wx-hours i { display: inline-block; font-style: normal; font-weight: 700; color: #1565c0; }
+.wx-btns { display: flex; gap: 6px; margin-top: 6px; }
+.wx-btns button { border: 1px solid #ccc; background: var(--btn); border-radius: 10px; padding: 6px 10px; cursor: pointer; }
+.wx-btns button.primary { flex: 1; background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
+@media (max-height: 500px) and (orientation: landscape) { .wx { left: 64px; top: 50px; font-size: 12px; } }
+html.night .wx { filter: invert(1) hue-rotate(180deg); }
+html.night.red .wx { filter: invert(1) grayscale(1) sepia(1) saturate(6) hue-rotate(-50deg) brightness(0.75); }
+
+/* Wind messen */
+.windmeter { position: fixed; inset: 0; z-index: 3000; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.wm-box { background: #fff; border-radius: 14px; padding: 14px; width: min(380px, 100%); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.wm-box h2 { margin: 0; font-size: 18px; }
+.wm-box button { border: 1px solid #ccc; background: var(--btn); border-radius: 10px; padding: 10px; cursor: pointer; font-size: 15px; }
+.wm-box button.primary { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
+.wm-box button:disabled { opacity: 0.45; }
+.wm-rose { position: relative; width: 170px; height: 170px; margin: 0 auto; border-radius: 50%; border: 3px solid #1565c0; }
+.wm-needle { position: absolute; inset: 0; transition: transform 0.15s linear; }
+.wm-needle span { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); font-weight: 800; color: #c62828; font-size: 18px; }
+.wm-phone { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -60%); font-size: 46px; color: #1565c0; line-height: 1; }
+.wm-read { text-align: center; font-size: 16px; font-weight: 700; }
+.wm-manual { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.wm-str { display: flex; flex-direction: column; gap: 6px; }
+.wm-str button small { display: block; font-size: 12px; color: #555; font-weight: 400; }
+html.night .windmeter { filter: invert(1) hue-rotate(180deg); }
+html.night.red .windmeter { filter: invert(1) grayscale(1) sepia(1) saturate(6) hue-rotate(-50deg) brightness(0.75); }

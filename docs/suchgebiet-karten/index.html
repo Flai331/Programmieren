@@ -33,6 +33,46 @@
 
   <div id="hint" class="hint" hidden></div>
 
+  <!-- Wetter-Overlay (zuschaltbar): DWD-Wind + gemessener Wind, Ansatz, Vorhersage -->
+  <div id="wx" class="wx" hidden>
+    <div class="wx-head">
+      <svg id="wx-arrow" class="wx-arrow" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3 L29 19 L22 17 L22 37 L18 37 L18 17 L11 19 Z"/></svg>
+      <div class="wx-main"><b id="wx-wind">Wetter</b><small id="wx-src"></small></div>
+      <button id="wx-min" title="Kleiner / größer">▾</button>
+    </div>
+    <div id="wx-body">
+      <div id="wx-second" class="wx-line" hidden></div>
+      <div id="wx-approach" class="wx-line wx-approach"></div>
+      <div id="wx-more" class="wx-line"></div>
+      <div id="wx-hours" class="wx-hours"></div>
+      <div class="wx-btns"><button id="wx-measure" class="primary">🧭 Wind messen</button><button id="wx-refresh" title="Aktualisieren">↻</button></div>
+    </div>
+  </div>
+
+  <!-- Wind messen: Handy in Flugrichtung des Puders halten, Kompass liefert die Richtung -->
+  <div id="windmeter" class="windmeter" hidden>
+    <div class="wm-box">
+      <h2>🧭 Wind messen</h2>
+      <div id="wm-step1">
+        <p class="small">Puder werfen. Handy <b>flach</b> halten und dich so drehen, dass die <b>Oberkante des Handys</b> in die Richtung zeigt, in die das Puder fliegt.</p>
+        <div class="wm-rose"><div id="wm-needle" class="wm-needle"><span>N</span></div><div class="wm-phone">▲</div></div>
+        <div id="wm-read" class="wm-read">Kompass wird gestartet …</div>
+        <div id="wm-manual" class="wm-manual" hidden></div>
+        <button id="wm-take" class="primary" disabled>Richtung übernehmen</button>
+      </div>
+      <div id="wm-step2" hidden>
+        <div id="wm-dir" class="wm-read"></div>
+        <p class="small">Wie stark ist der Wind?</p>
+        <div class="wm-str">
+          <button data-s="light">leicht<small>Puder treibt langsam</small></button>
+          <button data-s="medium">mittel<small>Puder zieht deutlich weg</small></button>
+          <button data-s="strong">stark<small>Puder reißt sofort weg</small></button>
+        </div>
+      </div>
+      <button id="wm-cancel">Abbrechen</button>
+    </div>
+  </div>
+
   <nav class="toolbar" aria-label="Werkzeuge">
     <button data-tool="pan" class="active" title="Karte bewegen"><span>✋</span>Bewegen</button>
     <button data-tool="pen" title="Freihand zeichnen"><span>✏️</span>Stift</button>
@@ -61,6 +101,7 @@
     <button id="quick-grid" class="on" title="Raster ein-/ausblenden"><span>#</span>Raster</button>
     <button id="quick-marks" class="on" title="Teams und Markierungen ein-/ausblenden"><span>▦</span>Felder</button>
     <button id="quick-rp" class="on plain" title="Nächster Rettungspunkt (von GPS-Standort oder Kartenmitte)" hidden><span>🚑</span>RP</button>
+    <button id="quick-wx" class="plain" title="Wetter und Wind einblenden"><span>🌬️</span>Wetter</button>
     <button id="quick-night" class="plain" title="Nachtmodus: aus → dunkel → rot"><span>🌙</span>Nacht</button>
     <div class="zoomslider">
       <button id="zs-in" title="Hineinzoomen">+</button>
