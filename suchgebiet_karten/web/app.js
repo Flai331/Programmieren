@@ -22,7 +22,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v43';
+const APP_VERSION = 'v44';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -1201,7 +1201,7 @@ $('proj-new').addEventListener('click', () => {
 
 $('leader').addEventListener('input', () => { P.leader = $('leader').value; P.updated = Date.now(); save(); });
 $('pdf-caption').addEventListener('input', () => { P.caption = $('pdf-caption').value; P.updated = Date.now(); save(); });
-$('notes').addEventListener('input', () => { P.notes = $('notes').value; P.updated = Date.now(); save(); });
+$('notes').addEventListener('input', () => { P.notes = $('notes').value; $('nt-text').value = P.notes; P.updated = Date.now(); save(); });
 $('meet-set').addEventListener('click', () => { closePanels(); setTool('meet'); });
 $('meet-remove').addEventListener('click', () => {
   if (!P.meet) return;
@@ -1306,7 +1306,7 @@ document.querySelectorAll('.panel .close').forEach((b) => b.addEventListener('cl
 // Seitenknopf nochmal antippen, während sein Fenster offen ist: Fenster schließen
 const SIDE_PANELS = {
   'btn-projects': 'panel-projects', 'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',
-  'btn-layers': 'panel-layers', 'btn-pdf': 'panel-pdf', 'btn-mission': 'panel-mission',
+  'btn-layers': 'panel-layers', 'btn-pdf': 'panel-pdf', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
 };
 for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
   $(btn).addEventListener('click', (e) => {
@@ -1810,18 +1810,21 @@ function sources() {
   return out;
 }
 
+// Vorschaubilder im Einsatz-Fenster und im Notizen-Fenster
 function renderThumbs() {
-  const box = $('ms-thumbs');
-  box.innerHTML = '';
+  const boxes = [$('ms-thumbs'), $('nt-thumbs')];
+  for (const b of boxes) b.innerHTML = '';
   const add = (src, label, open, remove) => {
-    const d = document.createElement('div');
-    d.className = 'thumb';
-    d.innerHTML = '<img alt=""><small></small><button title="Löschen">✕</button>';
-    d.querySelector('img').src = src;
-    d.querySelector('small').textContent = label;
-    d.querySelector('img').addEventListener('click', open);
-    d.querySelector('button').addEventListener('click', remove);
-    box.appendChild(d);
+    for (const box of boxes) {
+      const d = document.createElement('div');
+      d.className = 'thumb';
+      d.innerHTML = '<img alt=""><small></small><button title="Löschen">✕</button>';
+      d.querySelector('img').src = src;
+      d.querySelector('small').textContent = label;
+      d.querySelector('img').addEventListener('click', open);
+      d.querySelector('button').addEventListener('click', remove);
+      box.appendChild(d);
+    }
   };
   M().pages.forEach((p, i) => {
     if (!p.strokes.length) return;
@@ -1832,7 +1835,10 @@ function renderThumbs() {
       renderThumbs();
     });
   });
-  M().photos.forEach((p, i) => add(p.src, `Foto ${i + 1}`, () => { showTab('ende'); viewIdx = sources().findIndex((s) => s.photo === i); renderViewer(); }, () => {
+  M().photos.forEach((p, i) => add(p.src, `Foto ${i + 1}`, () => {
+    // Foto groß ansehen: im Einsatz-Fenster (Einsatzende) mit Zoom
+    if ($('panel-mission').hidden) { renderMission(); openPanel('panel-mission'); }
+    showTab('ende'); viewIdx = sources().findIndex((s) => s.photo === i); renderViewer(); }, () => {
     if (!confirm(`Foto ${i + 1} löschen?`)) return;
     M().photos.splice(i, 1);
     touch();
@@ -2025,6 +2031,20 @@ function renderMission() {
   showTab(db.missionTab || 'lage');
 }
 $('btn-mission').addEventListener('click', () => { renderMission(); openPanel('panel-mission'); });
+// Notizen-Fenster: getippte Notizen (P.notes, wie im Einsatz-Fenster), Notizblock, Fotos
+$('btn-notes').addEventListener('click', () => {
+  $('nt-text').value = P.notes || '';
+  renderThumbs();
+  openPanel('panel-notes');
+});
+$('nt-text').addEventListener('input', () => {
+  P.notes = $('nt-text').value;
+  $('notes').value = P.notes;
+  P.updated = Date.now();
+  save();
+});
+$('nt-pad').addEventListener('click', () => openPad());
+$('nt-photo').addEventListener('click', () => $('ms-photo-file').click());
 [['ms-person', 'person'], ['ms-summary', 'summary'], ['ms-author', 'author']].forEach(([id, key]) => {
   $(id).addEventListener('input', () => { M()[key] = $(id).value; touch(); });
 });
