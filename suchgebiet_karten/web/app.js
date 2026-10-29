@@ -767,7 +767,6 @@ function finishPointer(e, cancelled) {
   } else if (tool === 'windpt') {
     if (!cancelled && !panning) {
       P.windPt = { lat: Math.round(ll.lat * 1e5) / 1e5, lon: Math.round(ll.lng * 1e5) / 1e5 };
-      if (!db.windArrows) { db.windArrows = true; $('quick-arrows').classList.add('on'); }
       setTool('pan');
       changed();
       loadWeather(true);
@@ -2033,9 +2032,9 @@ $('quick-arrows').addEventListener('click', () => {
   }
 });
 $('quick-arrows').classList.toggle('on', !!db.windArrows);
-// gemessener Wind soll sofort als Pfeil zu sehen sein
+// Hundeführer: gemessener Wind soll sofort als Pfeil zu sehen sein (Einsatzleitung schaltet „Wind“ selbst ein)
 function showWindArrows() {
-  if (db.windArrows) return;
+  if (db.windArrows || db.mode !== 'hf') return;
   db.windArrows = true;
   $('quick-arrows').classList.add('on');
   saveNow();
@@ -2771,7 +2770,6 @@ async function handleShared(text) {
   const res = applyResult(P, data);
   const sent = (P.sent || []).find((x) => x.id === data.a);
   if (sent) sent.last = Date.now();
-  if (res.winds) showWindArrows();
   changed();
   renderSentList();
   toast(`📥 Rückmeldung ${res.who}: ${res.ways} Weg${res.ways === 1 ? '' : 'e'}, ${res.marks} Markierung${res.marks === 1 ? '' : 'en'}, ${res.fields} Feld${res.fields === 1 ? '' : 'er'}${res.winds ? `, ${res.winds} Wind-Messung${res.winds === 1 ? '' : 'en'}` : ''}${res.known ? '' : ' (Auftrag hier unbekannt – ins aktuelle Suchgebiet übernommen)'}${res.ways + res.marks + res.fields + res.winds ? '' : ' – nichts Neues'}`, 9000);
