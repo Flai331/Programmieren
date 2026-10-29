@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v56';
+const APP_VERSION = 'v57';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -1902,7 +1902,9 @@ $('wx-point').addEventListener('click', () => { setTool('windpt'); toast('Auf di
 
 // ---------- Hundeführer-Modus, Aufträge und Rückmeldungen per QR-Code ----------
 // db.mode: 'el' (Einsatzleitung, alles) | 'hf' (Hundeführer, vereinfacht). Wechsel zur
-// Einsatzleitung nur mit PIN (db.pinHash; kommt beim Auftrag von der Einsatzleitung mit).
+// Einsatzleitung nur mit der festen PIN (hier nur als Prüfsumme hinterlegt).
+const EL_PIN_HASH = '99d942b4880b6f1c';
+delete db.pinHash; // früher frei wählbare PIN – gilt nicht mehr
 async function pinHash(pin) {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`suchgebiet:${pin}`));
   return [...new Uint8Array(d)].slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -1945,17 +1947,6 @@ function askPin(title, text) {
     setTimeout(() => inp.focus(), 50);
   });
 }
-async function setNewPin() {
-  const a = await askPin('🔒 PIN festlegen', 'Mindestens 4 Ziffern. Damit wechselt ein Hundeführer nicht versehentlich in die Einsatzleitung. Die PIN geht mit jedem Auftrag an die Hundeführer-Handys.');
-  if (!a) return false;
-  if (!/^\d{4,}$/.test(a)) { toast('Bitte mindestens 4 Ziffern'); return false; }
-  const b = await askPin('🔒 PIN wiederholen');
-  if (a !== b) { toast('PINs stimmen nicht überein'); return false; }
-  db.pinHash = await pinHash(a);
-  saveNow();
-  toast('PIN gespeichert');
-  return true;
-}
 function applyMode() {
   const hf = db.mode === 'hf';
   document.body.classList.toggle('hf', hf);
@@ -1966,7 +1957,6 @@ function applyMode() {
   resizeCanvas();
 }
 async function toHfMode() {
-  if (!db.pinHash && !(await setNewPin())) return;
   db.mode = 'hf';
   saveNow();
   closePanels();
@@ -1974,11 +1964,9 @@ async function toHfMode() {
   toast('Hundeführer-Modus');
 }
 async function toElMode() {
-  if (db.pinHash) {
-    const pin = await askPin('🔒 Einsatzleitung', 'PIN eingeben, um in die Einsatzleitung zu wechseln.');
-    if (!pin) return;
-    if ((await pinHash(pin)) !== db.pinHash) return toast('Falsche PIN');
-  }
+  const pin = await askPin('🔒 Einsatzleitung', 'PIN eingeben, um in die Einsatzleitung zu wechseln.');
+  if (!pin) return;
+  if ((await pinHash(pin)) !== EL_PIN_HASH) return toast('Falsche PIN');
   if (recWatch !== null) stopRec();
   db.mode = 'el';
   saveNow();
@@ -1988,14 +1976,6 @@ async function toElMode() {
   toast('Einsatzleitung');
 }
 $('mode-hf').addEventListener('click', toHfMode);
-$('mode-pin').addEventListener('click', async () => {
-  if (db.pinHash) {
-    const pin = await askPin('🔒 Alte PIN');
-    if (!pin) return;
-    if ((await pinHash(pin)) !== db.pinHash) return toast('Falsche PIN');
-  }
-  setNewPin();
-});
 $('hfm-el').addEventListener('click', toElMode);
 
 // ---- Hundeführer-Ansicht ----
@@ -2288,7 +2268,6 @@ async function currentAssignment() {
   if (sendCache) return sendCache;
   const sel = sendSelection();
   const a = buildAssignment(P, sel);
-  if (db.pinHash) a.pk = db.pinHash;
   const link = shareLink('a', await pack(a), PUBLIC_URL);
   sendCache = { a, link, sel };
   return sendCache;
@@ -2359,11 +2338,6 @@ function drawPicked(c) {
   }
 }
 async function prepareSend() {
-  if (!db.pinHash) {
-    toast('Bitte zuerst eine PIN festlegen – sie schützt die Hundeführer-Handys');
-    if (!(await setNewPin())) return null;
-    sendCache = null;
-  }
   const c = await currentAssignment();
   if (!c.a.g.length) { toast('Bitte mindestens ein Rastergebiet ankreuzen'); return null; }
   P.sent = P.sent || [];
@@ -2438,7 +2412,6 @@ async function takeAssignment(a) {
       renderRescueInfo();
     }
   }
-  if (a.pk) db.pinHash = a.pk;
   db.mode = 'hf';
   switchProject(p.id);
   const gs = allGrids(P);
