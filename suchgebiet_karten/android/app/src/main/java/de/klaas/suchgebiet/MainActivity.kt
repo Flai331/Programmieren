@@ -154,6 +154,7 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        BugReporter.init(this) // fängt Abstürze ab, sendet liegengebliebene Meldungen
         OfflineTiles.init(this)
         val assetLoader = WebViewAssetLoader.Builder()
             .setDomain(host)
@@ -340,6 +341,43 @@ class MainActivity : ComponentActivity() {
     }
 
     inner class Bridge {
+        // 🐛 Fehler melden: Bericht (JSON aus web/report.js) an die Notion-Fehlerzentrale.
+        // Antwort: "queued" (wird gesendet, ggf. später) oder "mail" (kein Token: Mail-App geöffnet).
+        @JavascriptInterface
+        fun reportBug(json: String): String {
+            return try {
+                val o = BugReporter.report(json)
+                if (!BugReporter.hasToken && o.optString("kind") == "Manuelle Meldung") {
+                    mailReport(o)
+                    "mail"
+                } else "queued"
+            } catch (e: Exception) {
+                Log.w("Suchgebiet", "Fehlermeldung fehlgeschlagen", e)
+                "error"
+            }
+        }
+
+        private fun mailReport(o: org.json.JSONObject) {
+            val text = buildString {
+                appendLine(o.optString("description"))
+                appendLine()
+                appendLine("Version: ${o.optString("version")} · Rolle: ${o.optString("role")}")
+                appendLine("Gerät: ${o.optString("device")} · ${o.optString("os")}")
+                appendLine("Seite: ${o.optString("page")}")
+                appendLine()
+                appendLine("Letzte Schritte:")
+                appendLine(o.optString("log"))
+            }
+            val mail = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")).apply {
+                putExtra(Intent.EXTRA_EMAIL, arrayOf("klaasotte99@gmail.com"))
+                putExtra(Intent.EXTRA_SUBJECT, "Suchgebiet-Karten: ${o.optString("title")}")
+                putExtra(Intent.EXTRA_TEXT, text)
+            }
+            runOnUiThread {
+                try { startActivity(mail) } catch (e: ActivityNotFoundException) { toast("Keine E-Mail-App gefunden") }
+            }
+        }
+
         // Empfangene Datei als JSON {name, data(Base64)} – einmalig, danach leer
         @JavascriptInterface
         fun takeSharedFile(): String {

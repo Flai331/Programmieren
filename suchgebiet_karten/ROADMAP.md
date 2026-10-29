@@ -10,7 +10,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
 
 - [x] **v75 – GPX/KML aus WhatsApp & Co.** „Teilen“ bzw. „Öffnen mit“ → nach Nachfrage in den laufenden Einsatz (direkt mit Klaas gebaut).
 
-- [ ] **v76 – 🐛 Fehler melden (nur Android-APK)**
+- [~] **v76 – 🐛 Fehler melden (nur Android-APK)** – in der Testversion
   - Kachel „⚙️ Mehr“ → „🐛 Fehler melden“: Beschreibung eintippen, senden. Nur in der APK
     sichtbar (Web-Version bekommt keine Meldefunktion).
   - Automatische Meldung bei JavaScript-Fehlern (`window.onerror`, `unhandledrejection`) und
@@ -66,3 +66,8 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
 ## Rückfragen an Klaas
 
 (Offene Fragen zu Ideen oder Meldungen; die Frage steht zusätzlich als Kommentar in Notion.)
+
+- 30.10.2026: Sechs Ideen (RHS Einsatz App) stehen in Notion schon auf „In Bearbeitung“, aber nicht im
+  Fahrplan: Raster in den Detailblättern, Raster größer/kleiner als 5×5, GPS-Standort immer zentrieren,
+  Raster im Hundeführer-Modus ein-/ausblenden, Beschriftung markierter Felder im PDF, Rückgabe-Link
+  ergänzt statt löscht. Sind sie schon umgesetzt (dann „Umgesetzt“) oder soll der Autopilot sie bauen?
