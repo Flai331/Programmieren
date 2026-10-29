@@ -462,7 +462,7 @@ html.night.red .windmeter { filter: invert(1) grayscale(1) sepia(1) saturate(6) 
 .hfonly { display: none !important; }
 body.hf .hfonly { display: flex !important; }
 body.hf .toolbar, body.hf .bottomstack, body.hf #quick-grid, body.hf #quick-marks,
-body.hf .sidebuttons > button:not(#btn-gps):not(#btn-hfmenu):not(#btn-notes) { display: none !important; }
+body.hf .sidebuttons > button:not(#btn-gps):not(#btn-hfmenu):not(#btn-notes):not(#btn-layers) { display: none !important; }
 body.hf #map, body.hf #overlay { bottom: 84px; }
 body.hf #overlay { height: calc(100% - 136px); }
 .hfbar {
@@ -515,3 +515,6 @@ html.night.red .hfbar, html.night.red .hfinfo { filter: invert(1) grayscale(1) s
 
 /* Einsatzleitung: kein Wind messen, dafür Windpunkt auf der Karte; Hundeführer umgekehrt */
 body:not(.hf) #wx-measure, body.hf #wx-point { display: none; }
+
+/* Hundeführer: im Karte-Fenster nur Kartenart und Wege-Ebene (Rettungspunkte-Import usw. ausgeblendet) */
+body.hf #panel-layers .el-only { display: none !important; }

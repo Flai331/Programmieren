@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v56';
+const APP_VERSION = 'v58';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -335,6 +335,14 @@ function redraw() {
 // Grün: selbst gemessener Wind an der Messstelle (auch von Hundeführern zurückgemeldet).
 function windArrowPoint() {
   const gs = allGrids(P);
+  if (db.mode === 'hf' && !gs.length && P.items.length) {
+    const pts = P.items.flatMap((it) => it.pts || (it.lat != null ? [[it.lat, it.lon]] : []));
+    if (pts.length) {
+      const la = pts.map((q) => q[0]);
+      const lo = pts.map((q) => q[1]);
+      return { lat: (Math.max(...la) + Math.min(...la)) / 2, lon: (Math.max(...lo) + Math.min(...lo)) / 2 };
+    }
+  }
   if (db.mode === 'hf' && gs.length) {
     const ns = gs.flatMap((g) => [g.area.north, g.area.south]);
     const ws = gs.flatMap((g) => [g.area.west, g.area.east]);
@@ -1902,7 +1910,9 @@ $('wx-point').addEventListener('click', () => { setTool('windpt'); toast('Auf di
 
 // ---------- Hundeführer-Modus, Aufträge und Rückmeldungen per QR-Code ----------
 // db.mode: 'el' (Einsatzleitung, alles) | 'hf' (Hundeführer, vereinfacht). Wechsel zur
-// Einsatzleitung nur mit PIN (db.pinHash; kommt beim Auftrag von der Einsatzleitung mit).
+// Einsatzleitung nur mit der festen PIN (hier nur als Prüfsumme hinterlegt).
+const EL_PIN_HASH = '99d942b4880b6f1c';
+delete db.pinHash; // früher frei wählbare PIN – gilt nicht mehr
 async function pinHash(pin) {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`suchgebiet:${pin}`));
   return [...new Uint8Array(d)].slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -1945,17 +1955,6 @@ function askPin(title, text) {
     setTimeout(() => inp.focus(), 50);
   });
 }
-async function setNewPin() {
-  const a = await askPin('🔒 PIN festlegen', 'Mindestens 4 Ziffern. Damit wechselt ein Hundeführer nicht versehentlich in die Einsatzleitung. Die PIN geht mit jedem Auftrag an die Hundeführer-Handys.');
-  if (!a) return false;
-  if (!/^\d{4,}$/.test(a)) { toast('Bitte mindestens 4 Ziffern'); return false; }
-  const b = await askPin('🔒 PIN wiederholen');
-  if (a !== b) { toast('PINs stimmen nicht überein'); return false; }
-  db.pinHash = await pinHash(a);
-  saveNow();
-  toast('PIN gespeichert');
-  return true;
-}
 function applyMode() {
   const hf = db.mode === 'hf';
   document.body.classList.toggle('hf', hf);
@@ -1966,7 +1965,6 @@ function applyMode() {
   resizeCanvas();
 }
 async function toHfMode() {
-  if (!db.pinHash && !(await setNewPin())) return;
   db.mode = 'hf';
   saveNow();
   closePanels();
@@ -1974,11 +1972,9 @@ async function toHfMode() {
   toast('Hundeführer-Modus');
 }
 async function toElMode() {
-  if (db.pinHash) {
-    const pin = await askPin('🔒 Einsatzleitung', 'PIN eingeben, um in die Einsatzleitung zu wechseln.');
-    if (!pin) return;
-    if ((await pinHash(pin)) !== db.pinHash) return toast('Falsche PIN');
-  }
+  const pin = await askPin('🔒 Einsatzleitung', 'PIN eingeben, um in die Einsatzleitung zu wechseln.');
+  if (!pin) return;
+  if ((await pinHash(pin)) !== EL_PIN_HASH) return toast('Falsche PIN');
   if (recWatch !== null) stopRec();
   db.mode = 'el';
   saveNow();
@@ -1988,14 +1984,6 @@ async function toElMode() {
   toast('Einsatzleitung');
 }
 $('mode-hf').addEventListener('click', toHfMode);
-$('mode-pin').addEventListener('click', async () => {
-  if (db.pinHash) {
-    const pin = await askPin('🔒 Alte PIN');
-    if (!pin) return;
-    if ((await pinHash(pin)) !== db.pinHash) return toast('Falsche PIN');
-  }
-  setNewPin();
-});
 $('hfm-el').addEventListener('click', toElMode);
 
 // ---- Hundeführer-Ansicht ----
@@ -2233,7 +2221,7 @@ function renderSend() {
     l.lastChild.textContent = `${gridLabel(P, g)}${sel.value ? ` (${n} Felder des Teams)` : ''}`;
     box.appendChild(l);
   }
-  if (!allGrids(P).length) box.textContent = 'Noch kein Raster angelegt.';
+  if (!allGrids(P).length) box.textContent = 'Kein Raster – es werden nur Umrisse und Zeichnungen verschickt.';
   const ib = $('send-items');
   const ichecked = new Set([...ib.querySelectorAll('input:checked')].map((i) => i.value));
   ib.innerHTML = '';
@@ -2288,7 +2276,6 @@ async function currentAssignment() {
   if (sendCache) return sendCache;
   const sel = sendSelection();
   const a = buildAssignment(P, sel);
-  if (db.pinHash) a.pk = db.pinHash;
   const link = shareLink('a', await pack(a), PUBLIC_URL);
   sendCache = { a, link, sel };
   return sendCache;
@@ -2296,7 +2283,7 @@ async function currentAssignment() {
 async function updateSendSize() {
   const { a, link } = await currentAssignment();
   const nf = a.g.reduce((x, g) => x + g.f.length, 0);
-  $('send-size').textContent = `${a.g.length} Gebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ${a.i.length} Zeichnungen · `
+  $('send-size').textContent = `${a.g.length ? `${a.g.length} Rastergebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ` : ''}Umrisse/Zeichnungen: ${a.i.length} · `
     + (link.length <= QR_MAX ? `passt in einen QR-Code (${link.length} Zeichen)` : `zu groß für einen QR-Code (${link.length} Zeichen) – per WhatsApp senden oder weniger auswählen`);
 }
 ['send-team', 'send-meet', 'send-rescue', 'send-person', 'send-hint'].forEach((id) => $(id).addEventListener(id === 'send-hint' ? 'input' : 'change', () => {
@@ -2310,7 +2297,7 @@ document.querySelectorAll('input[name=send-fields]').forEach((r) => r.addEventLi
   if (sendFields() === 'pick') { closePanels(); setTool('sendpick'); updatePickBar(); redraw(); } else renderSend();
 }));
 $('send-open').addEventListener('click', () => {
-  if (!allGrids(P).length) return toast('Bitte zuerst ein Raster anlegen');
+  if (!allGrids(P).length && !P.items.some((it) => !it.resultKey)) return toast('Nichts zu verschicken – zuerst ein Raster oder einen Umriss anlegen');
   $('send-grids').innerHTML = '';
   renderSend();
   openPanel('panel-send');
@@ -2359,13 +2346,8 @@ function drawPicked(c) {
   }
 }
 async function prepareSend() {
-  if (!db.pinHash) {
-    toast('Bitte zuerst eine PIN festlegen – sie schützt die Hundeführer-Handys');
-    if (!(await setNewPin())) return null;
-    sendCache = null;
-  }
   const c = await currentAssignment();
-  if (!c.a.g.length) { toast('Bitte mindestens ein Rastergebiet ankreuzen'); return null; }
+  if (!c.a.g.length && !c.a.i.length) { toast('Bitte ein Rastergebiet oder einen Umriss ankreuzen'); return null; }
   P.sent = P.sent || [];
   if (!P.sent.some((x) => x.id === c.a.id)) {
     const team = P.marks.find((m) => m.id === c.sel.teamId);
@@ -2438,17 +2420,17 @@ async function takeAssignment(a) {
       renderRescueInfo();
     }
   }
-  if (a.pk) db.pinHash = a.pk;
   db.mode = 'hf';
   switchProject(p.id);
-  const gs = allGrids(P);
-  if (gs.length && !known) {
-    const b = { n: -90, s: 90, w: 180, e: -180 };
-    for (const g of gs) {
-      b.n = Math.max(b.n, g.area.north, g.area.south); b.s = Math.min(b.s, g.area.north, g.area.south);
-      b.w = Math.min(b.w, g.area.west, g.area.east); b.e = Math.max(b.e, g.area.west, g.area.east);
-    }
-    map.fitBounds([[b.s, b.w], [b.n, b.e]]);
+  // auf Raster und Umrisse/Zeichnungen des Auftrags zoomen
+  const lats = [];
+  const lons = [];
+  for (const g of allGrids(P)) { lats.push(g.area.north, g.area.south); lons.push(g.area.west, g.area.east); }
+  for (const it of P.items) {
+    for (const [la, lo] of it.pts || (it.lat != null ? [[it.lat, it.lon]] : [])) { lats.push(la); lons.push(lo); }
+  }
+  if (lats.length && !known) {
+    map.fitBounds([[Math.min(...lats), Math.min(...lons)], [Math.max(...lats), Math.max(...lons)]], { padding: [30, 30], maxZoom: 17 });
   }
   saveNow();
   applyMode();
