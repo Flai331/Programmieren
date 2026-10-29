@@ -2341,7 +2341,7 @@ function sendSelection() {
     // ganze Zeichnung (alle Striche einer Gruppe)
     if (it.group) P.items.forEach((x, j) => { if (x.group === it.group) idx.push(j); }); else idx.push(Number(inp.value));
   }
-  // Rettungspunkte: im Rastergebiet/Umriss und im Umkreis von 3 km um dessen Mitte
+  // Rettungspunkte: im Rastergebiet/Umriss und im Umkreis von 2 km um dessen Mitte
   let rescue = [];
   if ($('send-rescue').checked && rescuePts.length) {
     const shapes = allGrids(P).filter((g) => gridIds.includes(g.id)).map((g) => ({ rect: g.area }));
@@ -2349,7 +2349,7 @@ function sendSelection() {
       const it = P.items[j];
       if (it.pts && it.pts.length) shapes.push({ pts: it.pts });
     }
-    rescue = rescueNear(rescuePts, shapes, 3, 80);
+    rescue = rescueNear(rescuePts, shapes, 2, 80);
   }
   return {
     teamId: $('send-team').value, gridIds, fields: sendFields(),

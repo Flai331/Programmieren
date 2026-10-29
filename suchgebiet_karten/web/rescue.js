@@ -130,7 +130,7 @@ function inPoly(lat, lon, poly) {
   }
   return c;
 }
-export function rescueNear(points, shapes, km = 3, max = 80) {
+export function rescueNear(points, shapes, km = 2, max = 80) {
   const forms = shapes.map((s) => {
     if (s.rect) {
       const r = s.rect;
