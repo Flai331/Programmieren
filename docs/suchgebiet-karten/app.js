@@ -7,7 +7,7 @@ import {
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { buildGpx, mergeGpx, parseGpx, trackDesc, trackLength, outlineName } from './gpx.js';
+import { buildGpx, mergeGpx, parseGpx, parseKml, trackDesc, trackLength, outlineName } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -41,7 +41,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v74';
+const APP_VERSION = 'v75';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -3824,13 +3824,34 @@ $('import-file').addEventListener('change', async () => {
   const f = $('import-file').files[0];
   $('import-file').value = '';
   if (!f) return;
+  await importFile(f.name, await f.arrayBuffer());
+});
+
+// Datei aus „Datei öffnen“, „Teilen“ (WhatsApp …) oder „Öffnen mit“ (Android-App).
+// GPX/KML: in den laufenden Einsatz (shared: vorher nachfragen); Suchgebiet/PDF der App: als Einsatz laden.
+async function importFile(name, buf, shared = false) {
   try {
-    const buf = await f.arrayBuffer();
     const text = new TextDecoder('latin1').decode(buf);
-    if (/\.gpx$/i.test(f.name) || /^\s*(<\?xml[^>]*>\s*)?<gpx\b/i.test(text)) {
-      importGpx(new TextDecoder().decode(buf), f.name);
+    const head = text.slice(0, 4000);
+    const gpx = /\.gpx$/i.test(name) || /^\s*(<\?xml[^>]*>\s*)?<gpx\b/i.test(head);
+    const kml = !gpx && (/\.kml$/i.test(name) || /<kml\b/i.test(head));
+    if (gpx || kml) {
+      const xml = new TextDecoder().decode(buf);
+      const g = gpx ? parseGpx(xml) : parseKml(xml);
+      if (shared) {
+        const n = g.tracks.length + g.waypoints.length;
+        if (!n) return toast(`„${name}“: keine Wege oder Punkte gefunden`);
+        const ok = await openDlg((box, close) => {
+          dlgHead(box, '📥 Datei übernehmen', `„${name}“ (${countText(g)}) in den Einsatz „${P.title || 'Suchgebiet'}“ übernehmen?`);
+          dlgButton(box, 'In diesen Einsatz', 'primary', () => close(true));
+          dlgButton(box, 'Abbrechen', '', () => close(false));
+        });
+        if (!ok) return;
+      }
+      importGeo(g, name);
       return;
     }
+    if (/\.xml$/i.test(name) || /^\s*<\?xml/i.test(head)) throw new Error('XML-Datei ist weder GPX noch KML');
     // JSON-Dateien sind UTF-8, PDFs werden nur nach dem eingebetteten Block durchsucht
     const p = importProject(text.trimStart().startsWith('{') ? new TextDecoder().decode(buf) : text);
     p.updated = Date.now();
@@ -3839,14 +3860,30 @@ $('import-file').addEventListener('change', async () => {
     renderProjects();
     toast(`„${p.title || 'Suchgebiet'}“ geladen`);
   } catch (err) {
-    toast('Datei konnte nicht geladen werden: ' + err.message);
+    toast(`„${name}“ konnte nicht geladen werden: ${err.message}`);
   }
-});
+}
+function countText(g) {
+  const parts = [];
+  if (g.tracks.length) parts.push(`${g.tracks.length} Weg${g.tracks.length > 1 ? 'e' : ''}/Umriss${g.tracks.length > 1 ? 'e' : ''}`);
+  if (g.waypoints.length) parts.push(`${g.waypoints.length} Wegpunkt${g.waypoints.length > 1 ? 'e' : ''}`);
+  return parts.join(', ');
+}
+// Android-App: per „Teilen“/„Öffnen mit“ empfangene Datei abholen (auch beim Start der App)
+window.onSharedFile = async () => {
+  if (!bridge || !bridge.takeSharedFile) return;
+  const raw = bridge.takeSharedFile();
+  if (!raw) return;
+  const { name, data } = JSON.parse(raw);
+  const bin = atob(data);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  await importFile(name, buf.buffer, true);
+};
 
-// GPX (z. B. aus BaseCamp) ins aktuelle Suchgebiet: Tracks/Routen als Umrisse, Wegpunkte als Text
-function importGpx(xml, fileName) {
-  const g = parseGpx(xml);
-  const base = fileName.replace(/\.gpx$/i, '');
+// GPX (z. B. aus BaseCamp) bzw. KML ins aktuelle Suchgebiet: Tracks/Routen als Umrisse, Wegpunkte als Text
+function importGeo(g, fileName) {
+  const base = fileName.replace(/\.(gpx|kml|xml)$/i, '');
   const added = [];
   for (const t of g.tracks) {
     const [a, z] = [t.pts[0], t.pts[t.pts.length - 1]];
@@ -5260,4 +5297,4 @@ window.__app = {
 
 // Modus anwenden, beim ersten Start fragen, Auftrag/Rückmeldung aus dem Link übernehmen
 applyMode();
-chooseModeIfNeeded().then(handleHash);
+chooseModeIfNeeded().then(handleHash).then(() => window.onSharedFile());

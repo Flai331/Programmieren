@@ -439,6 +439,39 @@ export function parseGpx(xml) {
   return { tracks, waypoints, skipped };
 }
 
+// KML (Google Earth, Behörden): Punkte als Wegpunkte, Linien als Wege, Flächen als Umrisse – gleiche Form wie parseGpx
+export function parseKml(xml) {
+  if (!/<kml\b|<Placemark\b/i.test(xml)) throw new Error('keine KML-Datei');
+  xml = xml.replace(/<!--[\s\S]*?-->/g, '');
+  const tracks = [];
+  const waypoints = [];
+  const coords = (c) => c.trim().split(/\s+/).map((t) => {
+    const [lon, lat] = t.split(',').map(Number);
+    return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? [lat, lon] : null;
+  }).filter(Boolean);
+  for (const pm of blocks(xml, 'Placemark')) {
+    const name = tag(pm.replace(/<(Point|LineString|Polygon|MultiGeometry)\b[\s\S]*/, ''), 'name') || tag(pm, 'name');
+    for (const pt of blocks(pm, 'Point')) {
+      const [p] = coords(tag(pt, 'coordinates'));
+      if (p) waypoints.push({ name: name || 'Wegpunkt', lat: p[0], lon: p[1] });
+    }
+    const lines = blocks(pm, 'LineString');
+    lines.forEach((ls, i) => {
+      const pts = coords(tag(ls, 'coordinates'));
+      if (pts.length > 1) tracks.push({ name: lines.length > 1 && i ? `${name} (${i + 1})` : name, color: null, pts });
+    });
+    const polys = blocks(pm, 'Polygon');
+    polys.forEach((pg, i) => {
+      const outer = blocks(pg, 'outerBoundaryIs')[0] || pg;
+      const pts = coords(tag(outer, 'coordinates'));
+      const z = pts[pts.length - 1];
+      if (pts.length > 3 && z[0] === pts[0][0] && z[1] === pts[0][1]) pts.pop();
+      if (pts.length > 2) tracks.push({ name: polys.length > 1 && i ? `${name} (${i + 1})` : name, color: null, pts, closed: true });
+    });
+  }
+  return { tracks, waypoints, skipped: 0 };
+}
+
 // Mehrere GPX-Texte (je Rastergebiet) zu einer Datei: Kopf der ersten, alle Wegpunkte, dann alle Tracks
 // docName: Name der Datei/Liste (ersetzt den ersten <name> im Kopf)
 export function mergeGpx(list, docName = '') {

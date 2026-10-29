@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import android.util.Base64
 import android.util.Log
 import android.webkit.ConsoleMessage
@@ -42,6 +43,10 @@ class MainActivity : ComponentActivity() {
 
     private var pendingGeo: Pair<String, GeolocationPermissions.Callback>? = null
     private var fileCallback: ValueCallback<Array<Uri>>? = null
+
+    // Per „Teilen“ (z. B. WhatsApp) oder „Öffnen mit“ empfangene Datei (GPX, KML, Suchgebiet, PDF).
+    // Die Web-App holt sie mit AndroidBridge.takeSharedFile() ab.
+    @Volatile private var sharedFile: String? = null
 
     private val locationPermission = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -264,6 +269,7 @@ class MainActivity : ComponentActivity() {
         })
 
         val link = sharedHash(intent)
+        receiveFile(intent)
         if (savedInstanceState != null && link == null) webView.restoreState(savedInstanceState)
         else webView.loadUrl(startUrl + (link ?: ""))
     }
@@ -277,9 +283,51 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (receiveFile(intent)) {
+            // App läuft schon: Web-App holt die Datei sofort ab
+            webView.evaluateJavascript("window.onSharedFile&&window.onSharedFile()", null)
+            return
+        }
         val link = sharedHash(intent) ?: return
         // App läuft schon: nur den Hash setzen, die Web-App übernimmt die Daten (hashchange)
         webView.evaluateJavascript("location.hash=" + org.json.JSONObject.quote(link), null)
+    }
+
+    // Datei aus ACTION_SEND (Teilen) bzw. ACTION_VIEW mit content:-Adresse (Öffnen mit) lesen
+    private fun receiveFile(i: Intent?): Boolean {
+        if (i == null) return false
+        val uri: Uri = when (i.action) {
+            Intent.ACTION_SEND -> (if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                else @Suppress("DEPRECATION") i.getParcelableExtra(Intent.EXTRA_STREAM)) ?: return false
+            Intent.ACTION_VIEW -> i.data?.takeIf { it.scheme == "content" || it.scheme == "file" } ?: return false
+            else -> return false
+        }
+        try {
+            var name = uri.lastPathSegment?.substringAfterLast('/') ?: "Datei"
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst() && !c.isNull(0)) name = c.getString(0)
+            }
+            val bytes = contentResolver.openInputStream(uri)?.use { inp ->
+                val out = java.io.ByteArrayOutputStream()
+                val buf = ByteArray(64 * 1024)
+                while (true) {
+                    val n = inp.read(buf)
+                    if (n < 0) break
+                    out.write(buf, 0, n)
+                    if (out.size() > 20 * 1024 * 1024) throw IllegalStateException("Datei zu groß (über 20 MB)")
+                }
+                out.toByteArray()
+            } ?: return false
+            sharedFile = org.json.JSONObject()
+                .put("name", name)
+                .put("data", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                .toString()
+            i.action = Intent.ACTION_MAIN // nicht nach Drehen/Neustart erneut importieren
+            return true
+        } catch (e: Exception) {
+            toast("Datei konnte nicht gelesen werden: ${e.message}")
+            return false
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -292,6 +340,14 @@ class MainActivity : ComponentActivity() {
     }
 
     inner class Bridge {
+        // Empfangene Datei als JSON {name, data(Base64)} – einmalig, danach leer
+        @JavascriptInterface
+        fun takeSharedFile(): String {
+            val f = sharedFile ?: return ""
+            sharedFile = null
+            return f
+        }
+
         // Text (z. B. Auftrags-Link) über den Teilen-Dialog senden – WhatsApp, SMS …
         @JavascriptInterface
         fun shareText(title: String, text: String) {
