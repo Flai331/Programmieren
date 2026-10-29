@@ -305,7 +305,8 @@ export function buildGpx(project, grid, opts, part = '') {
   }
   if (opts.tracks) {
     for (const it of project.items) {
-      if (it.kind === 'track') trks += trk(it.name || 'Umriss', it.color, [it.pts], trackDesc(it.pts, it.open));
+      // geschlossener Umriss: zurück zum ersten Punkt, damit BaseCamp/Garmin ihn rundum zeigen
+      if (it.kind === 'track') trks += trk(it.name || 'Umriss', it.color, [hasArea(it) ? [...it.pts, it.pts[0]] : it.pts], trackDesc(it.pts, it.open));
     }
   }
   if (opts.drawings) {
@@ -419,7 +420,11 @@ export function parseGpx(xml) {
     const segs = segTag ? blocks(el, segTag) : [el];
     segs.forEach((seg, i) => {
       const pts = blocks(seg, ptTag).map(point).filter(Boolean);
-      if (pts.length > 1) tracks.push({ name: segs.length > 1 && i ? `${name} (${i + 1})` : name, color, pts });
+      // letzter Punkt = erster (so schreiben wir geschlossene Umrisse): wieder als Umriss ohne Doppelpunkt
+      const z = pts[pts.length - 1];
+      const closed = pts.length > 3 && z[0] === pts[0][0] && z[1] === pts[0][1];
+      if (closed) pts.pop();
+      if (pts.length > 1) tracks.push({ name: segs.length > 1 && i ? `${name} (${i + 1})` : name, color, pts, ...(closed ? { closed } : {}) });
     });
   };
   for (const t of blocks(xml, 'trk')) add(t, 'trkseg', 'trkpt');

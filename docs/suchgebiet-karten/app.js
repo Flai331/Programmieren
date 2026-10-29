@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v63';
+const APP_VERSION = 'v64';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -484,6 +484,8 @@ const HINTS = {
   grid: 'Suchgebiet als Rechteck mit dem Finger aufziehen.',
   offrect: 'Bereich für die Offline-Karte als Rechteck aufziehen.',
   windpt: 'Tippe auf die Karte, wo der Wind (DWD) angezeigt werden soll.',
+  hfmarkpt: 'Tippe auf die Karte, wo der Punkt hin soll.',
+  hfdraw: 'Mit dem Finger einmal um den Bereich herum malen.',
   hffield: 'Feld antippen: abgesucht → teilweise → nicht begehbar → zurück. „Feld“ nochmal tippen = fertig.',
   sendpick: 'Felder für den Auftrag antippen (blau umrandet). Dann „Weiter“.',
   offsquares: 'Quadrate antippen (blau = gewählt, grün = schon gespeichert). Ziehen verschiebt die Karte.',
@@ -512,6 +514,7 @@ function setTool(t) {
   $('offsqbar').hidden = t !== 'offsquares';
   $('pickbar').hidden = t !== 'sendpick';
   $('hf-field').classList.toggle('on', t === 'hffield');
+  $('hf-draw').classList.toggle('on', t === 'hfdraw');
   if (t === 'offsquares') updateOffSqBar();
   updatePenbar();
   if (t === 'track' && !draftTrack) draftTrack = { kind: 'track', name: '', color: db.color, w: 4, pts: [] };
@@ -663,13 +666,16 @@ canvas.addEventListener('pointerdown', (e) => {
   if (tool === 'pen') {
     current = { kind: 'stroke', color: db.color, w: db.w, pts: [[ll.lat, ll.lng]] };
     redraw();
+  } else if (tool === 'hfdraw') {
+    current = { kind: 'stroke', color: hfColor(), w: 4, pts: [[ll.lat, ll.lng]] };
+    redraw();
   } else if (tool === 'grid' || tool === 'offrect') {
     dragRect = { a: ll, b: ll };
   } else if (tool === 'erase') {
     eraseAt(x, y);
   } else if (tool === 'fill') {
     fillAt(ll, true);
-  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt'].includes(tool)) {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt'].includes(tool)) {
     panning = false;
   }
 });
@@ -677,7 +683,7 @@ canvas.addEventListener('pointerdown', (e) => {
 canvas.addEventListener('pointermove', (e) => {
   if (e.pointerId !== activePointer) return;
   const { x, y, ll } = eventLatLng(e);
-  if (tool === 'pen' && current) {
+  if ((tool === 'pen' || tool === 'hfdraw') && current) {
     if (Math.hypot(x - lastPt.x, y - lastPt.y) < 2) return;
     current.pts.push([ll.lat, ll.lng]);
     lastPt = { x, y };
@@ -689,7 +695,7 @@ canvas.addEventListener('pointermove', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill' && fillStroke) {
     fillAt(ll, false);
-  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt'].includes(tool)) {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt'].includes(tool)) {
     // Im Track-Modus verschiebt Ziehen die Karte, Tippen setzt Punkte
     if (!panning && Math.hypot(x - lastPt.x, y - lastPt.y) < 8) return;
     panning = true;
@@ -702,7 +708,13 @@ function finishPointer(e, cancelled) {
   if (e.pointerId !== activePointer) return;
   activePointer = null;
   const { x, y, ll } = eventLatLng(e);
-  if (tool === 'pen' && current) {
+  if (tool === 'hfdraw' && current) {
+    const pts = current.pts;
+    current = null;
+    setTool('pan');
+    redraw();
+    if (!cancelled) hfAreaDone(pts);
+  } else if (tool === 'pen' && current) {
     // Antippen einer vorhandenen Zeichnung: benennen statt einen Punkt zu malen
     const tap = !cancelled && current.pts.length === 1 && Math.hypot(x - downPt.x, y - downPt.y) < 8;
     const hit = tap ? hitItem(P.items, toPx, downPt.x, downPt.y, 12) : -1;
@@ -736,6 +748,11 @@ function finishPointer(e, cancelled) {
       $('off-area').value = 'rect';
       openPanel('panel-offline');
       updateOffEstimate();
+    }
+  } else if (tool === 'hfmarkpt') {
+    if (!cancelled && !panning) {
+      setTool('pan');
+      hfMarkDialog({ lat: ll.lat, lon: ll.lng }, 'Position: auf der Karte angetippt.');
     }
   } else if (tool === 'windpt') {
     if (!cancelled && !panning) {
@@ -2139,7 +2156,6 @@ $('hfinfo').addEventListener('click', () => { db.hfInfoMin = !db.hfInfoMin; save
 $('btn-hfmenu').addEventListener('click', () => { renderHfInfo(); openPanel('panel-hfmenu'); });
 $('hfm-rp').addEventListener('click', showNearestRescue);
 $('hfm-notes').addEventListener('click', () => { closePanels(); $('btn-notes').click(); });
-$('hfm-contacts').addEventListener('click', () => { closePanels(); $('btn-contacts').click(); });
 $('hfm-projects').addEventListener('click', () => { closePanels(); $('btn-projects').click(); });
 $('hfm-meet').addEventListener('click', () => {
   if (!P.meet) return;
@@ -2214,13 +2230,47 @@ document.addEventListener('visibilitychange', async () => {
 });
 $('hf-rec').addEventListener('click', () => (recWatch !== null ? stopRec() : startRec()));
 
-// Markieren: Art wählen, Position = GPS (sonst Kartenmitte)
+// Markieren: Art wählen, Position = GPS-Standort oder auf der Karte angetippt
 const HF_MARKS = [['⚠️', 'Anzeige'], ['✅', 'Fund'], ['🐾', 'Spur'], ['🎒', 'Gegenstand'], ['❗', 'Gefahr'], ['📝', 'Hinweis']];
+// Mit GPS: Punkt am Standort. Ohne GPS: fragen – auf der Karte antippen oder Standort einschalten
 $('hf-mark').addEventListener('click', () => {
-  const gps = !!lastPos;
-  const pos = gps ? { lat: lastPos[0], lon: lastPos[1] } : { lat: map.getCenter().lat, lon: map.getCenter().lng };
+  if (lastPos) return hfMarkDialog({ lat: lastPos[0], lon: lastPos[1] }, 'Position: dein GPS-Standort.');
   openDlg((box, close) => {
-    dlgHead(box, '📍 Markieren', gps ? 'Position: dein GPS-Standort.' : 'Kein GPS – Position: Kartenmitte. Karte vorher passend schieben.');
+    dlgHead(box, '📍 Markieren', 'Der Standort (GPS) ist aus. Wo soll der Punkt hin?');
+    const list = document.createElement('div');
+    list.className = 'dlg-btns';
+    box.appendChild(list);
+    dlgButton(list, '👆 Punkt auf der Karte antippen', '', () => {
+      close(true);
+      setTool('hfmarkpt');
+      toast('Auf die Karte tippen: dort wird der Punkt gesetzt', 5000);
+    });
+    const gpsBtn = dlgButton(list, '🛰️ Standort einschalten', 'primary', () => {
+      if (!navigator.geolocation) return toast('Standort wird nicht unterstützt');
+      if (watchId === null) $('btn-gps').click();
+      gpsBtn.disabled = true;
+      gpsBtn.textContent = '🛰️ Standort wird gesucht …';
+      const t0 = Date.now();
+      const wait = setInterval(() => {
+        if ($('dlg').hidden) return clearInterval(wait); // abgebrochen
+        if (lastPos) {
+          clearInterval(wait);
+          close(true);
+          hfMarkDialog({ lat: lastPos[0], lon: lastPos[1] }, 'Position: dein GPS-Standort.');
+        } else if (Date.now() - t0 > 60e3) {
+          clearInterval(wait);
+          gpsBtn.disabled = false;
+          gpsBtn.textContent = '🛰️ Nochmal versuchen';
+          toast('Kein Standort gefunden – ggf. Punkt auf der Karte antippen');
+        }
+      }, 500);
+    });
+    dlgButton(box, 'Abbrechen', '', () => close(false));
+  });
+});
+function hfMarkDialog(pos, where) {
+  openDlg((box, close) => {
+    dlgHead(box, '📍 Markieren', where);
     const note = document.createElement('input');
     note.type = 'text';
     note.placeholder = 'Notiz (optional)';
@@ -2240,7 +2290,30 @@ $('hf-mark').addEventListener('click', () => {
     }
     dlgButton(box, 'Abbrechen', '', () => close(false));
   });
+}
+
+// Bereich umkreisen: ein Zug mit dem Finger, wird ein geschlossener Umriss (geht mit der Rückmeldung an die EL, dort im GPX)
+$('hf-draw').addEventListener('click', () => {
+  if (tool === 'hfdraw') return setTool('pan');
+  setTool('hfdraw');
+  toast('Mit dem Finger einmal um den Bereich herum malen', 5000);
 });
+function hfAreaDone(raw) {
+  // Punkte ausdünnen (ca. alle 3 m) – genug für Garmin, klein genug für den QR-Code
+  const pts = [];
+  for (const q of raw) {
+    const l = pts[pts.length - 1];
+    if (!l || distance(l[0], l[1], q[0], q[1]) >= 3) pts.push([Math.round(q[0] * 1e6) / 1e6, Math.round(q[1] * 1e6) / 1e6]);
+  }
+  if (pts.length < 3 || pathLen(pts) < 30) return toast('Zu klein – nochmal „✏️ Bereich“ und größer umkreisen');
+  const n = P.items.filter((it) => it.kind === 'track' && /^Bereich \d+$/.test(it.name || '')).length + 1;
+  const t = prompt('Name des Bereichs (erscheint so beim EL und auf dem Garmin):', `Bereich ${n}`);
+  if (t === null) return;
+  ensureHf();
+  P.items.push({ kind: 'track', name: t.trim() || `Bereich ${n}`, color: hfColor(), w: 4, pts, t: Date.now() });
+  changed();
+  toast('Bereich gespeichert – geht mit „Zurückgeben“ an die Einsatzleitung');
+}
 
 // Feld abgesucht: antippen schaltet durch
 $('hf-field').addEventListener('click', () => {
@@ -3022,7 +3095,7 @@ function importGpx(xml, fileName) {
   for (const t of g.tracks) {
     const [a, z] = [t.pts[0], t.pts[t.pts.length - 1]];
     // geschlossen (Ende am Anfang, < 30 m): Fläche anzeigen, sonst offener Weg
-    const open = trackLength([a, z]) > 30;
+    const open = !t.closed && trackLength([a, z]) > 30;
     added.push({ kind: 'track', name: t.name || base, color: t.color || db.color, w: 4, pts: t.pts, ...(open ? { open: true } : {}) });
   }
   for (const w of g.waypoints) added.push({ kind: 'text', color: db.color, lat: w.lat, lon: w.lon, text: w.name });
