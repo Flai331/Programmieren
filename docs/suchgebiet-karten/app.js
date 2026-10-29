@@ -358,18 +358,38 @@ function windArrowPoint() {
   }
   return wxPoint();
 }
-// Einsatzleitung: nur an den Standorten, die Teams zurückgemeldet haben (je Team der neueste), immer mit DWD-Wind
-function teamWindArrows(w) {
-  const last = new Map();
-  for (const m of P.mission.wind || []) if (m.by && m.lat != null && (!last.has(m.by) || last.get(m.by).t < m.t)) last.set(m.by, m);
-  return [...last.values()].map((m) => ({ lat: m.lat, lon: m.lon, from: w.from, kmh: w.kmh, color: '#1565c0',
-    text: `${m.by} ${new Date(m.t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}: aus ${dirName(w.from)} ${Math.round(w.kmh)} km/h (DWD)` }));
+// Gemessener Wind (grün) an der Messstelle; Hundeführer: eigene und zurückgemeldete, Einsatzleitung: die der Teams
+function measuredArrows(teamsOnly) {
+  const KMH = { light: 8, medium: 20, strong: 35 };
+  const out = [];
+  for (const m of P.mission.wind || []) {
+    if (m.src !== 'gemessen' || m.lat == null || (teamsOnly && !m.by)) continue;
+    const t = new Date(m.t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    out.push({ lat: m.lat, lon: m.lon, from: m.from, kmh: KMH[m.strength] || 15, color: '#2e7d32', old: Date.now() - m.t > 2 * 3600e3,
+      text: `${t}${m.by ? ` ${m.by}` : ''}: aus ${dirName(m.from)}, ${STRENGTHS[m.strength] ? STRENGTHS[m.strength].label : ''}` });
+  }
+  return out;
+}
+// Einsatzleitung: DWD-Wind (blau) in der Mitte jedes Rasters und jedes Umrisses, dazu die Messpunkte der Teams
+function areaWindArrows(w) {
+  const out = [];
+  const dwd = `aus ${dirName(w.from)} ${Math.round(w.kmh)} km/h${w.gust ? `, Böen ${Math.round(w.gust)}` : ''} (DWD)`;
+  const add = (name, ns, ws) => out.push({ lat: (Math.max(...ns) + Math.min(...ns)) / 2, lon: (Math.max(...ws) + Math.min(...ws)) / 2,
+    from: w.from, kmh: w.kmh, color: '#1565c0', big: true, text: `${name}: ${dwd}` });
+  for (const g of allGrids(P)) add(gridLabel(P, g), [g.area.north, g.area.south], [g.area.west, g.area.east]);
+  for (const it of P.items) {
+    if (it.kind !== 'track' || it.open || it.resultKey || !it.pts || it.pts.length < 3) continue;
+    add(it.name || 'Umriss', it.pts.map((q) => q[0]), it.pts.map((q) => q[1]));
+  }
+  if (!out.length) out.push({ ...wxPoint(), from: w.from, kmh: w.kmh, color: '#1565c0', big: true, text: `Wind ${dwd}` });
+  return out;
 }
 function windArrows() {
-  const out = [];
   const w = db.wxLast && db.wxLast.current;
-  if (db.mode !== 'hf') return w && w.from != null && w.kmh != null ? teamWindArrows(w) : out;
-  if (w && w.from != null && w.kmh != null) {
+  const dwdOk = w && w.from != null && w.kmh != null;
+  if (db.mode !== 'hf') return [...(dwdOk ? areaWindArrows(w) : []), ...measuredArrows(true)];
+  const out = [];
+  if (dwdOk) {
     const pt = windArrowPoint();
     out.push({ ...pt, from: w.from, kmh: w.kmh, color: '#1565c0', big: true,
       text: `Wind aus ${dirName(w.from)} ${Math.round(w.kmh)} km/h${w.gust ? `, Böen ${Math.round(w.gust)}` : ''} (DWD)` });
@@ -379,14 +399,7 @@ function windArrows() {
     out.push({ lat: st.lat, lon: st.lon, from: st.from, kmh: st.kmh, color: '#1565c0', station: true,
       text: `DWD ${st.name}: ${dirName(st.from)} ${Math.round(st.kmh)} km/h` });
   }
-  const KMH = { light: 8, medium: 20, strong: 35 };
-  for (const m of P.mission.wind || []) {
-    if (m.src !== 'gemessen' || m.lat == null) continue;
-    const t = new Date(m.t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    out.push({ lat: m.lat, lon: m.lon, from: m.from, kmh: KMH[m.strength] || 15, color: '#2e7d32', old: Date.now() - m.t > 2 * 3600e3,
-      text: `${t}${m.by ? ` ${m.by}` : ''}: aus ${dirName(m.from)}, ${STRENGTHS[m.strength] ? STRENGTHS[m.strength].label : ''}` });
-  }
-  return out;
+  return [...out, ...measuredArrows(false)];
 }
 function drawWindArrow(c) {
   if (!db.windArrows) return;
@@ -1795,7 +1808,7 @@ $('rp-clear').addEventListener('click', async () => {
 
 // ---------- Wetter und Wind ----------
 // Overlay zuschaltbar (db.wxOn); Daten vom DWD (Bright Sky), letzter Stand in db.wxLast.
-// Gemessener Wind (Kompass) steht im Windprotokoll des Einsatzes (M().wind) und hat Vorrang.
+// Gemessener Wind (Kompass) steht im Windprotokoll des Einsatzes (M().wind); angezeigt wird immer zuerst der DWD-Wind.
 if (db.wxOn === undefined) db.wxOn = false;
 const hhmm = (t) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 function wxPoint() {
@@ -1805,7 +1818,6 @@ function wxPoint() {
   return { lat: c.lat, lon: c.lng };
 }
 function lastMeasured() {
-  if (db.mode !== 'hf') return null; // Einsatzleitung: immer der Wind vom Wetterdienst
   const w = [...(P.mission.wind || [])].reverse().find((x) => x.src === 'gemessen');
   return w && Date.now() - w.t < 3 * 3600e3 ? w : null;
 }
@@ -1820,27 +1832,28 @@ function renderWx() {
   $('wx-min').textContent = db.wxMin ? '▸' : '▾';
   const wx = db.wxLast;
   const c = wx && wx.current && wx.current.from != null && wx.current.kmh != null ? wx.current : null;
+  // immer der Wind vom Wetterdienst; eine Messung vor Ort steht nur darunter (ohne DWD-Daten als Ersatz)
   const meas = lastMeasured();
   const arrow = $('wx-arrow');
-  const from = meas ? meas.from : c ? c.from : null;
+  const from = c ? c.from : meas ? meas.from : null;
   arrow.style.visibility = from == null ? 'hidden' : 'visible';
   // Pfeil zeigt, wohin der Wind weht
   if (from != null) arrow.style.transform = `rotate(${from + 180}deg)`;
-  arrow.classList.toggle('measured', !!meas);
+  arrow.classList.toggle('measured', !c && !!meas);
   const age = c ? Math.round((Date.now() - c.t) / 60000) : 0;
-  const dwdSrc = c ? `DWD ${c.station}${c.km != null ? ` (${Math.round(c.km)} km)` : ''} · ${hhmm(c.t)}${age > 90 ? ` – Stand vor ${Math.round(age / 60)} Std.` : ''}` : '';
-  if (meas) {
-    $('wx-wind').textContent = `aus ${dirName(meas.from)} (${Math.round(meas.from)}°) · ${STRENGTHS[meas.strength].label}`;
-    $('wx-src').textContent = `vor Ort gemessen · ${hhmm(meas.t)}`;
-    $('wx-second').hidden = !c;
-    if (c) $('wx-second').textContent = `${dwdSrc}: ${dwdText(c)}`;
-  } else if (c) {
+  const measText = meas && `aus ${dirName(meas.from)} (${Math.round(meas.from)}°) · ${STRENGTHS[meas.strength].label}`;
+  if (c) {
     $('wx-wind').textContent = dwdText(c);
-    $('wx-src').textContent = dwdSrc;
+    $('wx-src').textContent = `DWD ${c.station}${c.km != null ? ` (${Math.round(c.km)} km)` : ''} · ${hhmm(c.t)}${age > 90 ? ` – Stand vor ${Math.round(age / 60)} Std.` : ''}`;
+    $('wx-second').hidden = !meas;
+    if (meas) $('wx-second').textContent = `Vor Ort gemessen ${hhmm(meas.t)}${meas.by ? ` (${meas.by})` : ''}: ${measText}`;
+  } else if (meas) {
+    $('wx-wind').textContent = measText;
+    $('wx-src').textContent = `kein DWD-Wind – vor Ort gemessen · ${hhmm(meas.t)}`;
     $('wx-second').hidden = true;
   } else {
     $('wx-wind').textContent = 'Noch kein Wind';
-    $('wx-src').textContent = navigator.onLine ? 'Wird geladen … oder 🧭 Wind messen' : 'Kein Netz – 🧭 Wind messen';
+    $('wx-src').textContent = navigator.onLine ? 'Wird geladen …' : 'Kein Netz – letzter Stand fehlt';
     $('wx-second').hidden = true;
   }
   $('wx-approach').textContent = from != null ? `Ansatz: ${approach(from)}` : '';
@@ -1921,8 +1934,7 @@ $('quick-arrows').addEventListener('click', () => {
     const stale = !db.wxLast || Date.now() - db.wxLast.fetched > 10 * 60e3 || (db.mode === 'hf' && !db.wxStations);
     if (stale) loadWeather(true);
     toast(db.mode === 'hf' ? 'Windpfeile: blau = DWD (Punkt/Suchgebiet und Messstationen), grün = selbst gemessen'
-      : P.mission.wind && P.mission.wind.some((m) => m.by && m.lat != null) ? 'Windpfeile (DWD) an den Standorten, die die Teams zurückgemeldet haben'
-        : 'Windpfeile erscheinen an den Standorten, die Teams zurückmelden (Wind vom DWD)', 6000);
+      : 'Wind: blau = DWD in der Mitte jedes Rasters/Umrisses, grün = von den Teams gemessen', 6000);
   }
 });
 $('quick-arrows').classList.toggle('on', !!db.windArrows);

@@ -87,8 +87,9 @@ class MainActivity : ComponentActivity() {
         try {
             val dir = File(cacheDir, "shared").apply { mkdirs() }
             val file = File(dir, "foto.jpg")
-            photoUri = FileProvider.getUriForFile(this, "$packageName.files", file)
-            takePhoto.launch(photoUri)
+            val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
+            photoUri = uri
+            takePhoto.launch(uri)
         } catch (e: Exception) {
             toast("Keine Kamera-App gefunden")
             fileCallback?.onReceiveValue(null)
