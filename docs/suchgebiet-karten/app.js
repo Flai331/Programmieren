@@ -512,7 +512,8 @@ const HINTS = {
 
 let hintTimer = null;
 function setTool(t) {
-  if (t !== 'pan' && isLocked()) { lockedToast(); t = 'pan'; }
+  // Einzeichnen nur in einem offenen Einsatz (Offline-Bereich wählen u. Ä. geht immer)
+  if (['pen', 'text', 'fill', 'track', 'erase', 'meet', 'poi', 'grid'].includes(t) && isLocked()) { lockedToast(); t = 'pan'; }
   if (t !== tool) repLog.add(`Werkzeug ${t}`);
   // Offene Zeichnung/Umriss bleibt beim Werkzeugwechsel erhalten (bis „Fertig“ oder „Abbrechen“)
   if (tool === 'track' && t !== 'track') {
@@ -2797,7 +2798,8 @@ async function handleShared(text) {
     if (!go) return;
   }
   if (target && target !== P) switchProject(target.id);
-  if (isLocked() && !(await reopenClosed())) return;
+  if (isClosed() && !(await reopenClosed())) return;
+  if (isFree()) createProject(wizTitle());
   const res = applyResult(P, data);
   const sent = (P.sent || []).find((x) => x.id === data.a);
   if (sent) sent.last = Date.now();
@@ -2913,15 +2915,22 @@ $('hfm-scan').addEventListener('click', () => { closePanels(); startScan(); });
 // ---- Einsatz an ein weiteres Gerät der Einsatzleitung übergeben (Handy -> Tablet/PC) ----
 const PART_MAX = 16; // mehr Teile dauern beim Scannen zu lange
 // Abgeschlossener Einsatz: nur ansehen und exportieren, Ändern erst nach „Wieder öffnen“
-function isLocked() { return !!(P && P.closed) && db.mode === 'el'; }
+// Freie Karte (kein Einsatz offen): nur ansehen, Einzeichnen erst nach „+ Neuer Einsatz“
+function isClosed() { return !!(P && P.closed) && db.mode === 'el'; }
+function isFree() { return !!P && db.mode === 'el' && !P.closed && isBlankProject(P); }
+function isLocked() { return isClosed() || isFree(); }
 function applyClosed() {
-  const on = isLocked();
-  document.body.classList.toggle('closed', on);
-  $('closed-bar').hidden = !on;
-  if (on) $('closed-bar').textContent = `✅ „${P.title || 'Suchgebiet'}“ ist abgeschlossen – nur ansehen`;
+  const closed = isClosed();
+  const free = isFree();
+  document.body.classList.toggle('closed', closed || free);
+  $('closed-bar').hidden = !(closed || free);
+  $('closed-bar').classList.toggle('free-bar', free);
+  if (closed) $('closed-bar').textContent = `✅ „${P.title || 'Suchgebiet'}“ ist abgeschlossen – nur ansehen`;
+  if (free) $('closed-bar').textContent = '🗺️ Kein Einsatz offen – hier tippen: + Neuer Einsatz';
 }
 function lockedToast() {
-  toast('✅ Einsatz ist abgeschlossen – zum Ändern unter „Einsatz → Einsatzende“ wieder öffnen.', 5000);
+  if (isFree()) toast('Kein Einsatz offen – erst „+ Neuer Einsatz“ anlegen (Leiste oben antippen).', 5000);
+  else toast('✅ Einsatz ist abgeschlossen – zum Ändern unter „Einsatz → Einsatzende“ wieder öffnen.', 5000);
 }
 async function reopenClosed() {
   const ok = await openDlg((box, close) => {
@@ -2953,7 +2962,7 @@ function renderHanded() {
   $('handed').hidden = !h || db.mode !== 'el';
   if (h) $('handed').textContent = `📲 an weiteres Gerät übergeben (${new Date(h).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}) – dort weiterarbeiten`;
 }
-$('closed-bar').addEventListener('click', reopenClosed);
+$('closed-bar').addEventListener('click', () => (isFree() ? $('proj-new').click() : reopenClosed()));
 $('handed').addEventListener('click', async () => {
   const ok = await openDlg((box, close) => {
     dlgHead(box, '📲 Übergeben', `Dieser Einsatz wurde um ${hhmm(P.handedOver)} an ein weiteres Gerät übergeben. Dort laufen jetzt die Rückmeldungen ein. Hier geht alles weiter, wird aber nicht mehr abgeglichen.`);
@@ -3157,7 +3166,7 @@ async function chooseModeIfNeeded() {
   if (m === 'hf') await toHfMode(); else { db.mode = 'el'; saveNow(); }
   if (m === 'scan') startScan();
   // frisches Gerät der Einsatzleitung: gleich mit dem Assistenten beginnen
-  if (m === 'el' && !P.title && !P.area) { P.title = wizTitle(); $('title').value = P.title; openWizard(0); }
+  if (m === 'el' && !P.title && !P.area) { P.title = wizTitle(); $('title').value = P.title; applyClosed(); openWizard(0); }
 }
 
 // ---------- Nachtmodus ----------
@@ -3574,9 +3583,9 @@ function createProject(title) {
   // eine leere freie Karte wird weiterverwendet statt eine zweite anzulegen
   if (isBlankProject(P)) {
     P.title = title;
-    P.updated = Date.now();
     fillProjectForm();
     renderProjects();
+    changed();
     save();
     return P;
   }
@@ -3600,7 +3609,7 @@ $('proj-new').addEventListener('click', async () => {
   if (!how) return;
   if (how === 'plain') {
     const t = prompt('Name des neuen Suchgebiets:', '');
-    if (t !== null) createProject(t.trim());
+    if (t !== null) createProject(t.trim() || wizTitle());
     return;
   }
   const p = createProject(wizTitle());
@@ -4075,8 +4084,10 @@ async function importFile(name, buf, shared = false) {
         const n = g.tracks.length + g.waypoints.length;
         if (!n) return toast(`„${name}“: keine Wege oder Punkte gefunden`);
         const ok = await openDlg((box, close) => {
-          dlgHead(box, '📥 Datei übernehmen', `„${name}“ (${countText(g)}) in den Einsatz „${P.title || 'Suchgebiet'}“ übernehmen?`);
-          dlgButton(box, 'In diesen Einsatz', 'primary', () => close(true));
+          dlgHead(box, '📥 Datei übernehmen', isFree()
+            ? `„${name}“ (${countText(g)}) übernehmen? Dafür wird ein neuer Einsatz angelegt.`
+            : `„${name}“ (${countText(g)}) in den Einsatz „${P.title || 'Suchgebiet'}“ übernehmen?`);
+          dlgButton(box, isFree() ? 'Neuer Einsatz' : 'In diesen Einsatz', 'primary', () => close(true));
           dlgButton(box, 'Abbrechen', '', () => close(false));
         });
         if (!ok) return;
@@ -4116,7 +4127,8 @@ window.onSharedFile = async () => {
 
 // GPX (z. B. aus BaseCamp) bzw. KML ins aktuelle Suchgebiet: Tracks/Routen als Umrisse, Wegpunkte als Text
 function importGeo(g, fileName) {
-  if (isLocked()) return lockedToast();
+  if (isClosed()) return lockedToast();
+  if (isFree()) createProject(wizTitle()); // Datei ohne offenen Einsatz: dafür einen neuen anlegen
   const base = fileName.replace(/\.(gpx|kml|xml)$/i, '');
   const added = [];
   for (const t of g.tracks) {
@@ -4163,6 +4175,19 @@ function closePanels() {
   if ($('notepad').hidden) dropOverlay();
 }
 document.querySelectorAll('.panel .close').forEach((b) => b.addEventListener('click', closePanels));
+// Freie Karte: Einsatz-Fenster erst nach „+ Neuer Einsatz“
+for (const btn of ['btn-mission', 'btn-notes', 'btn-grid', 'btn-teams']) {
+  $(btn).addEventListener('click', async (e) => {
+    if (!isFree()) return;
+    e.stopImmediatePropagation();
+    const ok = await openDlg((box, close) => {
+      dlgHead(box, '🗺️ Kein Einsatz offen', 'Raster, Teams, Notizen und Einsatzdaten gehören zu einem Einsatz. Erst einen neuen anlegen – oder unter „📁 Einsätze“ einen bestehenden öffnen.');
+      dlgButton(box, '+ Neuer Einsatz', 'primary', () => close(true));
+      dlgButton(box, 'Abbrechen', '', () => close(false));
+    });
+    if (ok) $('proj-new').click();
+  }, { capture: true });
+}
 // Seitenknopf nochmal antippen, während sein Fenster offen ist: Fenster schließen
 const SIDE_PANELS = {
   'btn-projects': 'panel-projects', 'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',

@@ -34,6 +34,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
   - Tests: Unit-Test für das Zusammenstellen des Berichts (keine Einsatzdaten enthalten,
     Kürzung, Fingerprint); im CI-Emulator-Test darf kein Bericht ausgelöst werden.
 
+- [x] **v78 – Freie Karte ohne Einsatz nur ansehen** (Einzeichnen erst nach „+ Neuer Einsatz“; Suchnadel verschwindet beim Wechsel).
 - [x] **v78 – 📍 Lage-Orte** (direkt mit Klaas gebaut; Details: `PLAN-einsatz-assistent.md`, Abschnitt D)
   - Werkzeug „📍 Lage-Ort“ für EL-Geräte; Kategorien 🚐 ELW, 🅱️ Bereitstellungsraum,
     🅿️ Parkplatz, 🚻 Toilette, 🍲 Verpflegung, 🚰 Ver-/Entsorgung, 🚑 Sanität,
