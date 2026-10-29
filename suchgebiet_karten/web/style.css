@@ -512,3 +512,6 @@ html.night.red .hfbar, html.night.red .hfinfo { filter: invert(1) grayscale(1) s
 .dlg-btns button small { display: block; font-size: 12px; color: #555; font-weight: 400; }
 .wm-box input[type=password], .wm-box input[type=text], .wm-box textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #bbb; border-radius: 8px; font-size: 16px; }
 .wm-box input.pin { font-size: 26px; letter-spacing: 8px; text-align: center; }
+
+/* Einsatzleitung: kein Wind messen, dafür Windpunkt auf der Karte; Hundeführer umgekehrt */
+body:not(.hf) #wx-measure, body.hf #wx-point { display: none; }
