@@ -409,6 +409,7 @@ function filterState(st, opts) {
     opts.mapStatus === false ? { status: {}, statusLabels: {} } : {});
   strip(st);
   st.others = (st.others || []).map((o) => strip({ ...o }));
+  if (opts.rescue) st.rescue = opts.rescue;
   return st;
 }
 
