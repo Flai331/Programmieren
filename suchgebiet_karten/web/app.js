@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v54';
+const APP_VERSION = 'v55';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -327,6 +327,47 @@ function redraw() {
   }
   drawOffSquares(ctx);
   drawPicked(ctx);
+  drawWindArrow(ctx);
+}
+
+// Wind als großer Pfeil auf der Karte (am Windpunkt, sonst Mitte des Suchgebiets), zeigt wohin er weht
+function drawWindArrow(c) {
+  if (!db.wxOn || !db.wxLast || !db.wxLast.current) return;
+  const w = db.wxLast.current;
+  if (w.from == null || w.kmh == null) return;
+  const pt = wxPoint();
+  const [x, y] = toPx(pt.lat, pt.lon);
+  const ang = ((w.from + 180) * Math.PI) / 180; // Kartenwinkel: 0 = Norden, im Uhrzeigersinn
+  const len = 46 + Math.min(40, w.kmh); // stärkerer Wind = längerer Pfeil
+  c.save();
+  c.translate(x, y);
+  // Punkt
+  c.fillStyle = '#fff';
+  c.strokeStyle = '#1565c0';
+  c.lineWidth = 3;
+  c.beginPath(); c.arc(0, 0, 7, 0, Math.PI * 2); c.fill(); c.stroke();
+  // Pfeil
+  c.rotate(ang);
+  c.lineCap = 'round';
+  for (const [col, wd] of [['rgba(255,255,255,0.95)', 11], ['#1565c0', 6]]) {
+    c.strokeStyle = col;
+    c.lineWidth = wd;
+    c.beginPath(); c.moveTo(0, -10); c.lineTo(0, -len); c.stroke();
+    c.beginPath(); c.moveTo(-12, -len + 14); c.lineTo(0, -len - 2); c.lineTo(12, -len + 14); c.stroke();
+  }
+  c.restore();
+  // Beschriftung
+  const text = `Wind aus ${dirName(w.from)} ${Math.round(w.kmh)} km/h${w.gust ? `, Böen ${Math.round(w.gust)}` : ''}`;
+  c.font = 'bold 13px sans-serif';
+  c.textAlign = 'center';
+  c.textBaseline = 'top';
+  c.lineWidth = 4;
+  c.strokeStyle = 'rgba(255,255,255,0.95)';
+  c.strokeText(text, x, y + 12);
+  c.fillStyle = '#0d47a1';
+  c.fillText(text, x, y + 12);
+  c.textAlign = 'left';
+  c.textBaseline = 'alphabetic';
 }
 
 // Quadrate für Offline-Karten: blau = gewählt, grün = gespeichert, orange = angefangen
@@ -370,6 +411,7 @@ const HINTS = {
   erase: 'Antippen oder darüberwischen löscht Zeichnungen, Umrisse, Texte, Treffpunkt und Feldfarben.',
   grid: 'Suchgebiet als Rechteck mit dem Finger aufziehen.',
   offrect: 'Bereich für die Offline-Karte als Rechteck aufziehen.',
+  windpt: 'Tippe auf die Karte, wo der Wind (DWD) angezeigt werden soll.',
   hffield: 'Feld antippen: abgesucht → teilweise → nicht begehbar → zurück. „Feld“ nochmal tippen = fertig.',
   sendpick: 'Felder für den Auftrag antippen (blau umrandet). Dann „Weiter“.',
   offsquares: 'Quadrate antippen (blau = gewählt, grün = schon gespeichert). Ziehen verschiebt die Karte.',
@@ -539,6 +581,13 @@ function finishPointer(e, cancelled) {
       $('off-area').value = 'rect';
       openPanel('panel-offline');
       updateOffEstimate();
+    }
+  } else if (tool === 'windpt') {
+    if (!cancelled) {
+      P.windPt = { lat: Math.round(ll.lat * 1e5) / 1e5, lon: Math.round(ll.lng * 1e5) / 1e5 };
+      setTool('pan');
+      changed();
+      loadWeather(true);
     }
   } else if (tool === 'hffield' || tool === 'sendpick') {
     if (!cancelled && !panning) (tool === 'hffield' ? hfFieldTap : sendPickTap)(ll);
@@ -1606,6 +1655,7 @@ $('rp-clear').addEventListener('click', async () => {
 if (db.wxOn === undefined) db.wxOn = false;
 const hhmm = (t) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 function wxPoint() {
+  if (P.windPt) return P.windPt;
   if (P.area) return { lat: (P.area.north + P.area.south) / 2, lon: (P.area.west + P.area.east) / 2 };
   const c = map.getCenter();
   return { lat: c.lat, lon: c.lng };
@@ -1662,6 +1712,8 @@ function renderWx() {
     } else more.push(`Sonnenaufgang ${hhmm(now > sun.set ? sun.rise + 864e5 : sun.rise)}`);
   }
   $('wx-more').textContent = more.join(' · ');
+  // anderes Suchgebiet / Windpunkt weit weg vom geladenen Ort: neu laden
+  if (wx && !wxLoading && navigator.onLine && distance(wx.lat, wx.lon, pt.lat, pt.lon) > 3000) setTimeout(() => loadWeather(false), 0);
   const box = $('wx-hours');
   box.innerHTML = '';
   for (const h of (wx && wx.hours) || []) {
@@ -1700,12 +1752,14 @@ async function loadWeather(manual) {
     wxLoading = false;
     $('wx-refresh').disabled = false;
     renderWx();
+    redraw();
   }
 }
 $('quick-wx').addEventListener('click', () => {
   db.wxOn = !db.wxOn;
   saveNow();
   renderWx();
+  redraw();
   if (db.wxOn) loadWeather(true);
 });
 $('wx-refresh').addEventListener('click', () => loadWeather(true));
@@ -1793,6 +1847,7 @@ document.querySelectorAll('.wm-str button').forEach((b) => b.addEventListener('c
   toast(`Wind gemessen: aus ${dirName(wmFrom)}, ${STRENGTHS[s].label}. ${approach(wmFrom)}.`, 9000);
 }));
 $('wx-measure').addEventListener('click', openWindMeter);
+$('wx-point').addEventListener('click', () => { setTool('windpt'); toast('Auf die Karte tippen: dort wird der Wind angezeigt'); });
 
 // ---------- Hundeführer-Modus, Aufträge und Rückmeldungen per QR-Code ----------
 // db.mode: 'el' (Einsatzleitung, alles) | 'hf' (Hundeführer, vereinfacht). Wechsel zur
