@@ -182,6 +182,28 @@
     <div id="overlay-list"></div>
     <p class="small">Legt Wege (auch Waldwege), Straßen und Ortsnamen aus der amtlichen Karte TopPlusOpen auf das Luftbild.</p>
     <p class="small">Alle Karten sind amtliche, frei nutzbare Daten (auch kommerziell) von BKG, LGLN und Geobasis NRW.</p>
+    <h2 class="sub">📥 Offline-Karten (vorab herunterladen)</h2>
+    <p class="small">Vor dem Einsatz im WLAN laden. Gespeicherte Kartenbilder nimmt die App immer zuerst – sofort, auch ohne oder mit schlechtem Netz; nur Fehlendes kommt aus dem Internet. Gilt auch für PDF und Garmin-Karte. Beim Laden App geöffnet lassen; angehaltene Downloads laufen mit ▶ weiter.</p>
+    <p id="off-storage" class="info"></p>
+    <div id="off-list" class="offlist"></div>
+    <label>Bereich
+      <select id="off-area">
+        <option value="view">Aktueller Kartenausschnitt</option>
+        <option value="grid">Suchgebiet (alle Rastergebiete, mit Rand)</option>
+        <option value="rect">Rechteck auf der Karte aufziehen …</option>
+        <option value="ni">Niedersachsen (ganzes Land)</option>
+        <option value="nw">Nordrhein-Westfalen (ganzes Land)</option>
+      </select>
+    </label>
+    <label>Karte <select id="off-layer"></select></label>
+    <label class="check"><input type="checkbox" id="off-paths" checked> Wege-Ebene über dem Luftbild mit speichern</label>
+    <label>Schärfe bis Zoomstufe <select id="off-zmax"></select></label>
+    <label>Name <input id="off-name" type="text"></label>
+    <p id="off-est" class="info"></p>
+    <div class="row">
+      <button id="off-start" class="primary">📥 Herunterladen</button>
+      <button id="off-redraw">▭ Rechteck neu aufziehen</button>
+    </div>
     <button class="close">Schließen</button>
   </section>
 
