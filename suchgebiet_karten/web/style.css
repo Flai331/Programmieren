@@ -60,6 +60,16 @@ button, input, select { font: inherit; }
 }
 .sidebuttons button.primary { background: var(--red); color: #fff; }
 .sidebuttons button.on { color: #1565c0; font-weight: 700; }
+/* niedrige Bildschirme: Randknöpfe kleiner, sehr niedrig zweispaltig – nichts verdeckt die Werkzeugleiste */
+@media (max-height: 760px) {
+  .sidebuttons { gap: 4px; top: 58px; }
+  .sidebuttons button { height: 42px; font-size: 10px; }
+  .sidebuttons button span { font-size: 18px; line-height: 1.1; }
+}
+@media (max-height: 640px) and (orientation: portrait) {
+  .sidebuttons { display: grid; grid-template-columns: repeat(2, 50px); }
+  .sidebuttons button { width: 50px; }
+}
 
 .offlist { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
 .offrow { display: flex; gap: 6px; align-items: center; justify-content: space-between; border: 1px solid #ddd; border-radius: 8px; padding: 6px 8px; }
@@ -372,3 +382,17 @@ button, input, select { font: inherit; }
   #nt-text { height: 90px; }
 }
 .panel select { max-width: 100%; min-width: 0; text-overflow: ellipsis; }
+
+/* Adressbuch */
+#ct-search { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #bbb; border-radius: 8px; margin: 4px 0 6px; }
+.ctlist { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.ctrow { border: 1px solid #ddd; border-radius: 8px; padding: 6px 8px; display: flex; gap: 6px; align-items: flex-start; }
+.ctrow .ctinfo { flex: 1; min-width: 0; }
+.ctrow b { display: block; font-size: 15px; }
+.ctrow small { display: block; color: #555; overflow-wrap: anywhere; }
+.ctrow a { display: inline-block; margin: 3px 8px 0 0; color: #1565c0; text-decoration: none; overflow-wrap: anywhere; }
+.ctrow button { flex: none; min-width: 36px; }
+.ctform { border: 1px solid #1565c0; border-radius: 10px; padding: 8px; margin-bottom: 8px; }
+.ctform label { display: block; margin: 4px 0; }
+.ctform input, .ctform textarea { width: 100%; box-sizing: border-box; padding: 7px; border: 1px solid #bbb; border-radius: 8px; font: inherit; }
+.mailto .mrow .top select { max-width: 44px; }

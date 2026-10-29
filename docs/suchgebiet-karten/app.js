@@ -18,6 +18,9 @@ import {
   STATES, estimate, downloadRegion, deleteRegion, storageInfo, persistStorage, setHasOffline, cachedTileUrl, maxZoom, nativeJob,
   SQ_LAT, SQ_LON, squareKey, squareBounds, unionBounds,
 } from './offline.js';
+import {
+  FIELDS as CT_FIELDS, normalizeContact, sortContacts, matches as ctMatches, telHref, toVcf, parseContacts, mergeContacts,
+} from './contacts.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
   newProject, normalizeProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
@@ -26,7 +29,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v49';
+const APP_VERSION = 'v50';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -1444,6 +1447,131 @@ $('off-preview').addEventListener('click', () => {
   toast(`Stufe ${z} (${ZOOMS[z]}) – so scharf wird die Offline-Karte. Stufe steht links am Zoom-Regler.`);
 });
 
+// ---------- Adressbuch ----------
+// Kontakte für alle Suchgebiete gemeinsam in db.contacts
+if (!Array.isArray(db.contacts)) db.contacts = [];
+db.contacts = db.contacts.map(normalizeContact);
+let ctEditing = null; // id oder 'new'
+
+function renderContacts() {
+  const box = $('ct-list');
+  box.innerHTML = '';
+  const q = $('ct-search').value;
+  const list = sortContacts(db.contacts).filter((c) => ctMatches(c, q));
+  if (!db.contacts.length) box.innerHTML = '<p class="small">Noch keine Kontakte. „+ Neuer Kontakt“ oder Handy-Kontakte als vCard importieren.</p>';
+  else if (!list.length) box.innerHTML = '<p class="small">Kein Treffer.</p>';
+  for (const c of list) {
+    const row = document.createElement('div');
+    row.className = 'ctrow';
+    const info = document.createElement('div');
+    info.className = 'ctinfo';
+    const b = document.createElement('b');
+    b.textContent = c.name;
+    info.appendChild(b);
+    const sub = [c.role, c.org, c.call && `📻 ${c.call}`].filter(Boolean).join(' · ');
+    if (sub) { const sm = document.createElement('small'); sm.textContent = sub; info.appendChild(sm); }
+    const link = (href, text) => { const a = document.createElement('a'); a.href = href; a.textContent = text; info.appendChild(a); };
+    if (c.phone) link(telHref(c.phone), `📞 ${c.phone}`);
+    if (c.phone2) link(telHref(c.phone2), `📞 ${c.phone2}`);
+    if (c.email) link(`mailto:${c.email}`, `✉️ ${c.email}`);
+    if (c.note) { const sm = document.createElement('small'); sm.textContent = c.note; info.appendChild(sm); }
+    const edit = document.createElement('button');
+    edit.textContent = '✏️';
+    edit.title = 'Bearbeiten';
+    edit.addEventListener('click', () => openContactForm(c.id));
+    row.append(info, edit);
+    box.appendChild(row);
+  }
+}
+
+function openContactForm(id) {
+  ctEditing = id;
+  const c = id === 'new' ? normalizeContact({}) : db.contacts.find((x) => x.id === id);
+  const f = $('ct-form');
+  f.innerHTML = '';
+  for (const [k, label] of CT_FIELDS) {
+    const l = document.createElement('label');
+    l.textContent = label;
+    const inp = document.createElement(k === 'note' ? 'textarea' : 'input');
+    inp.id = `ct-f-${k}`;
+    if (k === 'phone' || k === 'phone2') { inp.type = 'tel'; inp.inputMode = 'tel'; }
+    if (k === 'email') { inp.type = 'email'; inp.inputMode = 'email'; }
+    if (k === 'note') inp.rows = 2;
+    inp.value = c[k];
+    l.appendChild(inp);
+    f.appendChild(l);
+  }
+  const btns = document.createElement('div');
+  btns.className = 'row';
+  btns.innerHTML = '<button class="primary">Speichern</button><button>Abbrechen</button>' + (id === 'new' ? '' : '<button class="danger">🗑️ Löschen</button>');
+  const [ok, cancel, del] = btns.querySelectorAll('button');
+  ok.addEventListener('click', () => {
+    const data = { id: c.id };
+    for (const [k] of CT_FIELDS) data[k] = $(`ct-f-${k}`).value;
+    const n = normalizeContact(data);
+    if (!n.name) return toast('Bitte einen Namen eingeben');
+    const i = db.contacts.findIndex((x) => x.id === n.id);
+    if (i >= 0) db.contacts[i] = n; else db.contacts.push(n);
+    saveNow();
+    closeContactForm();
+    toast(`Kontakt „${n.name}“ gespeichert`);
+  });
+  cancel.addEventListener('click', closeContactForm);
+  if (del) {
+    del.addEventListener('click', () => {
+      if (!confirm(`Kontakt „${c.name}“ löschen?`)) return;
+      db.contacts = db.contacts.filter((x) => x.id !== c.id);
+      saveNow();
+      closeContactForm();
+    });
+  }
+  f.appendChild(btns);
+  f.hidden = false;
+  $('ct-list').hidden = true;
+  $('ct-search').hidden = true;
+  $(`ct-f-name`).focus();
+}
+function closeContactForm() {
+  ctEditing = null;
+  $('ct-form').hidden = true;
+  $('ct-list').hidden = false;
+  $('ct-search').hidden = false;
+  renderContacts();
+}
+
+$('btn-contacts').addEventListener('click', () => {
+  if (ctEditing) closeContactForm(); else renderContacts();
+  openPanel('panel-contacts');
+});
+$('ct-search').addEventListener('input', renderContacts);
+$('ct-add').addEventListener('click', () => openContactForm('new'));
+$('ct-import').addEventListener('click', () => $('ct-file').click());
+$('ct-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const incoming = parseContacts(await file.text());
+    if (!incoming.length) return toast('Keine Kontakte in der Datei gefunden');
+    const m = mergeContacts(db.contacts, incoming);
+    db.contacts = m.list;
+    saveNow();
+    renderContacts();
+    toast(m.added ? `${m.added} Kontakt${m.added === 1 ? '' : 'e'} übernommen${incoming.length > m.added ? ` (${incoming.length - m.added} schon vorhanden)` : ''}` : 'Alle Kontakte waren schon vorhanden');
+  } catch {
+    toast('Datei konnte nicht gelesen werden (vCard .vcf oder .json)');
+  }
+});
+const contactsFile = () => new Blob([toVcf(sortContacts(db.contacts))], { type: 'text/vcard' });
+$('ct-share').addEventListener('click', () => {
+  if (!db.contacts.length) return toast('Noch keine Kontakte');
+  shareFile(contactsFile(), 'Kontakte-Suchgebiet.vcf', 'Kontakte', 'Adressbuch (vCard) – in Suchgebiet-Karten unter Kontakte → Importieren öffnen.');
+});
+$('ct-save').addEventListener('click', () => {
+  if (!db.contacts.length) return toast('Noch keine Kontakte');
+  saveFile(contactsFile(), 'Kontakte-Suchgebiet.vcf');
+});
+
 // ---------- Kartenart ----------
 function renderLayerList() {
   const box = $('layer-list');
@@ -1722,7 +1850,7 @@ document.querySelectorAll('.panel .close').forEach((b) => b.addEventListener('cl
 // Seitenknopf nochmal antippen, während sein Fenster offen ist: Fenster schließen
 const SIDE_PANELS = {
   'btn-projects': 'panel-projects', 'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',
-  'btn-layers': 'panel-layers', 'btn-offline': 'panel-offline', 'btn-pdf': 'panel-pdf', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
+  'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-offline': 'panel-offline', 'btn-pdf': 'panel-pdf', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
 };
 for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
   $(btn).addEventListener('click', (e) => {
@@ -2682,9 +2810,22 @@ function renderMailTo() {
   M().mailTo.forEach((row, i) => {
     const el = document.createElement('div');
     el.className = 'mrow';
-    el.innerHTML = '<div class="top"><input type="text" inputmode="email"><button class="del" title="Zeile löschen">✕</button></div><div class="groups"></div><button class="send primary"></button>';
+    el.innerHTML = '<div class="top"><input type="text" inputmode="email"><select title="Empfänger aus den Kontakten"></select><button class="del" title="Zeile löschen">✕</button></div><div class="groups"></div><button class="send primary"></button>';
     const inp = el.querySelector('input');
     inp.value = row.to;
+    // Empfänger aus dem Adressbuch anhängen
+    const pick = el.querySelector('select');
+    pick.add(new Option('📇', ''));
+    for (const c of sortContacts(db.contacts).filter((x) => x.email)) pick.add(new Option(`${c.name}${c.role ? ` (${c.role})` : ''} – ${c.email}`, c.email));
+    pick.hidden = pick.options.length < 2;
+    pick.addEventListener('change', () => {
+      if (!pick.value) return;
+      const have = inp.value.split(',').map((x) => x.trim()).filter(Boolean);
+      if (!have.includes(pick.value)) have.push(pick.value);
+      inp.value = row.to = have.join(', ');
+      pick.value = '';
+      touch();
+    });
     inp.placeholder = 'z. B. staffel@example.org, leitung@example.org';
     inp.addEventListener('input', () => { row.to = inp.value; touch(); });
     const group = (title, list) => {
