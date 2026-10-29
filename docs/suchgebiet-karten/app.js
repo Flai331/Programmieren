@@ -41,7 +41,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v70';
+const APP_VERSION = 'v71';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -2535,7 +2535,9 @@ function renderSend() {
   sel.add(new Option('ohne Team (nur Gebiet)', ''));
   if (teams.some((t) => t.id === prev) || prev === '') sel.value = prev;
   const box = $('send-grids');
-  const checked = new Set([...box.querySelectorAll('input:checked')].map((i) => i.value));
+  // schon gezeigte Häkchen bleiben, wie sie sind (auch abgewählt); Vorauswahl nur für neue Einträge
+  const was = (el) => Object.fromEntries([...el.querySelectorAll('input')].map((i) => [i.value, i.checked]));
+  const checked = was(box);
   box.innerHTML = '';
   for (const g of allGrids(P)) {
     const n = sel.value ? Object.values(g.fills).filter((id) => id === sel.value).length : 0;
@@ -2543,13 +2545,14 @@ function renderSend() {
     l.className = 'check';
     l.innerHTML = '<input type="checkbox"><span></span>';
     l.firstChild.value = g.id;
-    l.firstChild.checked = checked.size ? checked.has(g.id) : (!sel.value || n > 0 || allGrids(P).length === 1);
+    l.firstChild.checked = g.id in checked ? checked[g.id] : (!sel.value || n > 0 || allGrids(P).length === 1);
     l.lastChild.textContent = `${gridLabel(P, g)}${sel.value ? ` (${n} Felder des Teams)` : ''}`;
     box.appendChild(l);
   }
   if (!allGrids(P).length) box.textContent = 'Kein Raster – es werden nur Umrisse und Zeichnungen verschickt.';
+  syncSendFields();
   const ib = $('send-items');
-  const ichecked = new Set([...ib.querySelectorAll('input:checked')].map((i) => i.value));
+  const ichecked = was(ib);
   ib.innerHTML = '';
   const seen = new Set();
   P.items.forEach((it, i) => {
@@ -2563,7 +2566,7 @@ function renderSend() {
     l.firstChild.value = String(i);
     // zugeteilte Umrisse nur an ihr Team, übrige geschlossene Umrisse an alle
     const team = $('send-team').value;
-    l.firstChild.checked = ichecked.has(String(i)) || (it.kind === 'track' && (it.to ? it.to === team : !it.open));
+    l.firstChild.checked = String(i) in ichecked ? ichecked[String(i)] : (it.kind === 'track' && (it.to ? it.to === team : !it.open));
     l.lastChild.textContent = label;
     ib.appendChild(l);
   });
@@ -2640,7 +2643,13 @@ async function updateSendSize() {
   if (id === 'send-team') { $('send-grids').innerHTML = ''; $('send-items').innerHTML = ''; return renderSend(); }
   sendCache = null; updateSendSize();
 }));
-$('send-grids').addEventListener('change', () => { sendCache = null; updateSendSize(); });
+// ohne Raster gibt es keine Felder auszuwählen
+function syncSendFields() {
+  const none = !$('send-grids').querySelector('input:checked');
+  $('send-fields-label').hidden = none;
+  $('send-fields-box').hidden = none;
+}
+$('send-grids').addEventListener('change', () => { syncSendFields(); sendCache = null; updateSendSize(); });
 $('send-items').addEventListener('change', () => { sendCache = null; updateSendSize(); });
 $('send-ct-list').addEventListener('change', () => { sendCache = null; updateSendSize(); });
 $('send-contacts').addEventListener('change', () => { $('send-ct-list').hidden = !$('send-contacts').checked; sendCache = null; updateSendSize(); });

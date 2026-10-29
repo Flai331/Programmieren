@@ -326,10 +326,10 @@
     <h2 class="sub">1. Für wen?</h2>
     <select id="send-team"></select>
     <h2 class="sub">2. Was wird übertragen?</h2>
-    <label>Rastergebiete</label>
+    <label>Rastergebiete <small>(abwählen = Raster nicht mitschicken)</small></label>
     <div id="send-grids" class="checklist"></div>
-    <label>Felder</label>
-    <div class="checklist">
+    <label id="send-fields-label">Felder</label>
+    <div id="send-fields-box" class="checklist">
       <label class="check"><input type="radio" name="send-fields" value="team" checked> nur die Felder des Teams hervorgehoben</label>
       <label class="check"><input type="radio" name="send-fields" value="all"> ganzes Gebiet mit allen Feldern, Team hervorgehoben</label>
       <label class="check"><input type="radio" name="send-fields" value="pick"> Felder auf der Karte antippen …</label>
