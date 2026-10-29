@@ -115,9 +115,9 @@ Karteninformationen* ein- und ausschalten. Wer die eigene Wanderkarte sehen will
 
 ### Suchgebiet an die Staffel weitergeben
 
-- „Gebiete → Suchgebiet als Datei senden“ verschickt eine kleine Datei.
+- „Einsätze → Suchgebiet als Datei senden“ verschickt eine kleine Datei.
 - **Jedes PDF aus der App enthält das Suchgebiet ebenfalls.** Wer das PDF
-  bekommt, kann es unter „Gebiete → Datei öffnen“ laden und mit Raster,
+  bekommt, kann es unter „Einsätze → Datei öffnen“ laden und mit Raster,
   Teams und Zeichnungen weiterarbeiten.
 
 ## Hinweise

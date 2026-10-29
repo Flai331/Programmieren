@@ -41,7 +41,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v73';
+const APP_VERSION = 'v74';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -2746,7 +2746,7 @@ $('btn-teams').addEventListener('click', renderSentList);
 async function handleShared(text) {
   const sh = parseShared(text);
   if (!sh) return toast('Kein Auftrag und keine Rückmeldung erkannt');
-  if (sh.kind === 'm') return toast('Teil eines mehrteiligen QR-Codes – bitte in der App über „Gebiete → 📷 Einsatz übernehmen“ scannen', 8000);
+  if (sh.kind === 'm') return toast('Teil eines mehrteiligen QR-Codes – bitte in der App über „Einsätze → 📷 Einsatz übernehmen“ scannen', 8000);
   let data;
   try { data = await unpack(sh.data); } catch { return toast('Code beschädigt oder unvollständig'); }
   if (data.k === 'a') return takeAssignment(data);
@@ -2917,8 +2917,8 @@ $('ho-send').addEventListener('click', async () => {
   }
   const miss = [e.np && `${e.np} Foto${e.np === 1 ? '' : 's'}`, e.nn && `Notizblock (${e.nn} Seite${e.nn === 1 ? '' : 'n'})`].filter(Boolean);
   const how = parts
-    ? `${parts.length} QR-Codes wechseln sich ab. Auf dem anderen Gerät „Gebiete → 📷 Einsatz übernehmen“ antippen und die Kamera ruhig auf diesen Bildschirm halten, bis alle Teile gelesen sind (die Handy-Kamera-App reicht dafür nicht).`
-    : 'Auf dem anderen Gerät „Gebiete → 📷 Einsatz übernehmen“ antippen oder den Code mit der Kamera scannen.';
+    ? `${parts.length} QR-Codes wechseln sich ab. Auf dem anderen Gerät „Einsätze → 📷 Einsatz übernehmen“ antippen und die Kamera ruhig auf diesen Bildschirm halten, bis alle Teile gelesen sind (die Handy-Kamera-App reicht dafür nicht).`
+    : 'Auf dem anderen Gerät „Einsätze → 📷 Einsatz übernehmen“ antippen oder den Code mit der Kamera scannen.';
   const pc = ' Zum PC: „Teilen“ oder „Link kopieren“ (z. B. WhatsApp Web, Mail).';
   const lost = miss.length ? ` Nicht dabei: ${miss.join(', ')} – dafür „Suchgebiet als Datei senden“.` : '';
   qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
@@ -3079,7 +3079,7 @@ async function chooseModeIfNeeded() {
   if (parseShared(location.hash)) return; // Auftrag-Link legt den Modus fest
   if (Object.values(db.projects).some((p) => p.area || p.items.length)) { db.mode = 'el'; saveNow(); return; }
   const m = await openDlg((box, close) => {
-    dlgHead(box, 'Wie nutzt du die App?', 'Lässt sich später unter „Gebiete“ ändern.');
+    dlgHead(box, 'Wie nutzt du die App?', 'Lässt sich später unter „⚙️ Mehr“ ändern.');
     const list = document.createElement('div');
     list.className = 'dlg-btns';
     box.appendChild(list);
@@ -3301,6 +3301,7 @@ function closeContactForm() {
 
 $('btn-contacts').addEventListener('click', () => {
   if (ctEditing) closeContactForm(); else renderContacts();
+  renderProjectContacts();
   openPanel('panel-contacts');
 });
 $('ct-search').addEventListener('input', renderContacts);
@@ -3440,7 +3441,6 @@ function fillProjectForm() {
   $('lead-elw').value = P.lead.elw || '';
   renderProjectContacts();
   renderWizBtn();
-  $('notes').value = P.notes || '';
   renderMeet();
 }
 
@@ -3564,7 +3564,7 @@ $('wz-back').addEventListener('click', () => wizGo(P.wiz - 1));
 $('wz-skip').addEventListener('click', () => wizGo(P.wiz + 1));
 $('wz-next').addEventListener('click', () => wizGo(P.wiz + 1));
 $('wz-exit').addEventListener('click', () => {
-  if (wizRevisit) { delete P.wiz; touch(); } else toast('Assistent unter „Gebiete“ fortsetzen');
+  if (wizRevisit) { delete P.wiz; touch(); } else toast('Assistent unter „Einsatz → Stammdaten“ fortsetzen');
   closePanels();
   renderWizBtn();
 });
@@ -3755,7 +3755,7 @@ const WIZ = {
     wizBtn(r, '+ neuer Kontakt', () => $('pc-new').click());
   },
   done(box) {
-    wizText(box, `„${P.title || 'Einsatz'}“ ist angelegt. Alles lässt sich später unter „Gebiete“ und „Einsatz“ ändern.`);
+    wizText(box, `„${P.title || 'Einsatz'}“ ist angelegt. Alles lässt sich später unter „Einsatz“ ändern.`);
     const big = document.createElement('div');
     big.className = 'wz-big';
     box.appendChild(big);
@@ -3790,7 +3790,6 @@ for (const [id, k] of [['lead-phone', 'phone'], ['lead-call', 'call'], ['lead-el
   $(id).addEventListener('input', () => { P.lead[k] = $(id).value; P.updated = Date.now(); save(); renderProjectContacts(); });
 }
 $('pdf-caption').addEventListener('input', () => { P.caption = $('pdf-caption').value; P.updated = Date.now(); save(); });
-$('notes').addEventListener('input', () => { P.notes = $('notes').value; $('nt-text').value = P.notes; P.updated = Date.now(); save(); });
 $('meet-set').addEventListener('click', () => { closePanels(); setTool('meet'); });
 $('meet-remove').addEventListener('click', () => {
   if (!P.meet) return;
@@ -3815,7 +3814,7 @@ $('proj-share').addEventListener('click', async () => {
   saveNow();
   const text = exportProject(P);
   const title = P.title || 'Suchgebiet';
-  const msg = `Suchgebiet „${title}“ – in der App Suchgebiet-Karten unter „Gebiete → Datei öffnen“ laden.`;
+  const msg = `Suchgebiet „${title}“ – in der App Suchgebiet-Karten unter „Einsätze → Datei öffnen“ laden.`;
   const json = new Blob([text], { type: 'application/json' });
   await shareFile(json, safeName('.suchgebiet.json'), title, msg, null, true);
 });
@@ -3895,7 +3894,7 @@ document.querySelectorAll('.panel .close').forEach((b) => b.addEventListener('cl
 // Seitenknopf nochmal antippen, während sein Fenster offen ist: Fenster schließen
 const SIDE_PANELS = {
   'btn-projects': 'panel-projects', 'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',
-  'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-offline': 'panel-offline', 'btn-pdf': 'panel-pdf', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
+  'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-more': 'panel-more', 'btn-pdf': 'panel-pdf', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
 };
 for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
   $(btn).addEventListener('click', (e) => {
@@ -3908,7 +3907,8 @@ $('btn-projects').addEventListener('click', () => { fillProjectForm(); renderPro
 $('btn-grid').addEventListener('click', () => { updateGridInfo(); openPanel('panel-grid'); });
 $('btn-teams').addEventListener('click', () => { renderMarks(); renderAlpha(); openPanel('panel-teams'); });
 $('btn-layers').addEventListener('click', () => openPanel('panel-layers'));
-$('btn-offline').addEventListener('click', () => { renderOfflineForm(); openPanel('panel-offline'); });
+$('layers-offline').addEventListener('click', () => { renderOfflineForm(); openPanel('panel-offline'); });
+$('btn-more').addEventListener('click', () => { renderDeviceName(); openPanel('panel-more'); });
 $('app-version').textContent = `Version ${APP_VERSION}`;
 $('btn-pdf').addEventListener('click', () => {
   $('pdf-caption').value = P.caption || '';
@@ -4402,7 +4402,7 @@ function sources() {
 
 // Vorschaubilder im Einsatz-Fenster und im Notizen-Fenster
 function renderThumbs() {
-  const boxes = [$('ms-thumbs'), $('nt-thumbs')];
+  const boxes = [$('nt-thumbs')];
   for (const b of boxes) b.innerHTML = '';
   const add = (src, label, open, remove) => {
     for (const box of boxes) {
@@ -4437,8 +4437,6 @@ function renderThumbs() {
 }
 
 // Foto vom Papier: direkt mit der Kamera oder ein vorhandenes Bild
-$('ms-photo').addEventListener('click', () => $('ms-photo-file').click());
-$('ms-cam').addEventListener('click', () => $('ms-cam-file').click());
 const addPhoto = async (e) => {
   const f = e.target.files[0];
   e.target.value = '';
@@ -4604,6 +4602,7 @@ function endFullView() {
 function showTab(t) {
   endFullView();
   document.querySelectorAll('#panel-mission .tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
+  $('tab-stamm').hidden = t !== 'stamm';
   $('tab-lage').hidden = t !== 'lage';
   $('tab-ende').hidden = t !== 'ende';
   db.missionTab = t;
@@ -4612,8 +4611,8 @@ function showTab(t) {
 document.querySelectorAll('#panel-mission .tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
 
 function renderMission() {
+  fillProjectForm();
   $('ms-person').value = M().person;
-  $('notes').value = P.notes || '';
   $('ms-summary').value = M().summary;
   if (!M().author && P.leader) M().author = P.leader;
   $('ms-author').value = M().author;
@@ -4623,7 +4622,7 @@ function renderMission() {
   renderForces();
   renderThumbs();
   renderClosed();
-  showTab(db.missionTab || 'lage');
+  showTab(db.missionTab || 'stamm');
 }
 
 // Einsatz abschließen: Einsatzende eintragen (falls leer) und als abgeschlossen markieren
@@ -4676,7 +4675,6 @@ $('btn-notes').addEventListener('click', () => {
 });
 $('nt-text').addEventListener('input', () => {
   P.notes = $('nt-text').value;
-  $('notes').value = P.notes;
   P.updated = Date.now();
   save();
 });
@@ -4786,7 +4784,6 @@ window.addEventListener('popstate', () => {
     document.querySelectorAll('.panel').forEach((p) => { p.hidden = true; });
   }
 });
-$('ms-pad').addEventListener('click', () => openPad());
 $('pad-done').addEventListener('click', closePad);
 $('pad-prev').addEventListener('click', () => { padIdx--; padDraw(); });
 $('pad-next').addEventListener('click', () => { padIdx++; padDraw(); });
