@@ -40,16 +40,22 @@ test('Zusammenführen, nächster Punkt, Richtung, Ausschnitt', () => {
   assert.ok(Math.abs(distance(52, 8, 53, 8) - 111195) < 100);
 });
 
-test('Rettungspunkte im Umkreis von 3 km um die Mitte von Raster und Umriss', async () => {
+test('Rettungspunkte: alle im Raster/Umriss (auch große) plus 3 km um die Mitte', async () => {
   const { rescueNear } = await import('../web/rescue.js');
   const pts = [
     { n: 'mitte', lat: 52.29, lon: 8.02 },
     { n: '2,5km', lat: 52.3125, lon: 8.02 },
     { n: '3,5km', lat: 52.3215, lon: 8.02 },
-    { n: 'umriss', lat: 52.41, lon: 8.21 },
+    { n: 'großes-raster-ecke', lat: 52.205, lon: 7.81 }, // im großen Raster, aber > 3 km von dessen Mitte
+    { n: 'umriss-rand', lat: 52.405, lon: 8.27 }, // im großen Umriss, weit von der Mitte
     { n: 'weit', lat: 53, lon: 9 },
   ];
-  const r = rescueNear(pts, [{ rect: { north: 52.30, south: 52.28, west: 8.00, east: 8.04 } }, { pts: [[52.40, 8.20], [52.42, 8.21], [52.40, 8.22]] }], 3);
-  assert.deepEqual(r.map((p) => p.n), ['mitte', 'umriss', '2,5km']);
+  const shapes = [
+    { rect: { north: 52.30, south: 52.28, west: 8.00, east: 8.04 } },
+    { rect: { north: 52.30, south: 52.20, west: 7.80, east: 7.95 } },
+    { pts: [[52.40, 8.10], [52.42, 8.10], [52.42, 8.28], [52.40, 8.28]] },
+  ];
+  const r = rescueNear(pts, shapes, 3);
+  assert.deepEqual(r.map((p) => p.n).sort(), ['2,5km', 'großes-raster-ecke', 'mitte', 'umriss-rand']);
   assert.deepEqual(rescueNear(pts, [], 3), []);
 });

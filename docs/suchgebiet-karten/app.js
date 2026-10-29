@@ -2341,7 +2341,7 @@ function sendSelection() {
     // ganze Zeichnung (alle Striche einer Gruppe)
     if (it.group) P.items.forEach((x, j) => { if (x.group === it.group) idx.push(j); }); else idx.push(Number(inp.value));
   }
-  // Rettungspunkte: im Umkreis von 3 km um die Mitte jedes Rastergebiets bzw. Umrisses
+  // Rettungspunkte: im Rastergebiet/Umriss und im Umkreis von 3 km um dessen Mitte
   let rescue = [];
   if ($('send-rescue').checked && rescuePts.length) {
     const shapes = allGrids(P).filter((g) => gridIds.includes(g.id)).map((g) => ({ rect: g.area }));

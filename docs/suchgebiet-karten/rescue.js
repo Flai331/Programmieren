@@ -118,20 +118,43 @@ export function nearest(points, lat, lon) {
   return best && { p: best.p, m: best.m, deg: bearing(lat, lon, best.p.lat, best.p.lon) };
 }
 
-// Rettungspunkte für einen Auftrag: im Umkreis (km) um den Mittelpunkt jedes übertragenen
-// Rastergebiets bzw. Umrisses (Mitte des umschließenden Rechtecks), nächste zuerst.
+// Rettungspunkte für einen Auftrag: alle innerhalb jedes übertragenen Rastergebiets bzw.
+// Umrisses (egal wie groß) und zusätzlich im Umkreis (km) um dessen Mitte; nächste zuerst.
 // shapes: [{ rect: {north, south, west, east} } | { pts: [[lat, lon]…] }]
+function inPoly(lat, lon, poly) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [ai, oi] = poly[i];
+    const [aj, oj] = poly[j];
+    if ((ai > lat) !== (aj > lat) && lon < ((oj - oi) * (lat - ai)) / (aj - ai) + oi) c = !c;
+  }
+  return c;
+}
 export function rescueNear(points, shapes, km = 3, max = 80) {
-  const centers = shapes.map((s) => {
-    if (s.rect) return [(s.rect.north + s.rect.south) / 2, (s.rect.west + s.rect.east) / 2];
+  const forms = shapes.map((s) => {
+    if (s.rect) {
+      const r = s.rect;
+      const n = Math.max(r.north, r.south);
+      const so = Math.min(r.north, r.south);
+      const w = Math.min(r.west, r.east);
+      const e = Math.max(r.west, r.east);
+      return { c: [(n + so) / 2, (w + e) / 2], inside: (la, lo) => la <= n && la >= so && lo >= w && lo <= e };
+    }
     const la = s.pts.map((q) => q[0]);
     const lo = s.pts.map((q) => q[1]);
-    return [(Math.max(...la) + Math.min(...la)) / 2, (Math.max(...lo) + Math.min(...lo)) / 2];
+    return {
+      c: [(Math.max(...la) + Math.min(...la)) / 2, (Math.max(...lo) + Math.min(...lo)) / 2],
+      inside: (a, o) => s.pts.length > 2 && inPoly(a, o, s.pts),
+    };
   });
-  if (!centers.length) return [];
+  if (!forms.length) return [];
   const out = [];
   for (const pt of points) {
-    const d = Math.min(...centers.map(([la, lo]) => distance(la, lo, pt.lat, pt.lon)));
+    let d = Infinity;
+    for (const f of forms) {
+      if (f.inside(pt.lat, pt.lon)) { d = 0; break; }
+      d = Math.min(d, distance(f.c[0], f.c[1], pt.lat, pt.lon));
+    }
     if (d <= km * 1000) out.push({ pt, d });
   }
   return out.sort((a, b) => a.d - b.d).slice(0, max).map((x) => x.pt);
