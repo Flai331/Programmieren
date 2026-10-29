@@ -176,8 +176,9 @@ export function migrateV1(old) {
 }
 
 export function markLabel(m) {
-  if (m.kind === 'team' && m.dog) return `${m.label} (${m.dog})`;
-  return m.label;
+  if (m.kind !== 'team') return m.label;
+  const h = m.helpers > 0 ? ` + ${m.helpers} Suchhelfer` : '';
+  return `${m.label}${m.dog ? ` (${m.dog})` : ''}${h}`;
 }
 
 // Feldzuordnung, in der eine Markierung steht: Teams in fills, alles andere in status

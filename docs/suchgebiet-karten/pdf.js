@@ -321,6 +321,11 @@ function infoPage(doc, project, grid, W, H, top) {
   heading('Einsatz');
   row('Bezeichnung:', project.title || '–');
   row('Einsatzleitung/Ersteller:', project.leader || '–');
+  const ld = project.lead || {};
+  const elLine = [ld.phone && `Handy ${ld.phone}`, ld.call && `Funk ${ld.call}`, ld.elw && `ELW ${ld.elw}`].filter(Boolean).join(' · ');
+  if (elLine) row('Erreichbarkeit EL:', elLine);
+  const radio = (project.radio || []).filter((r) => r.call || r.who);
+  if (radio.length) row('Funkrufnamen:', radio.map((r) => [r.call, r.who].filter(Boolean).join(' – ')).join('\n'));
   row('Erstellt am:', new Date().toLocaleString('de-DE', { dateStyle: 'full', timeStyle: 'short' }));
   if (project.meet) {
     row('B-Ort:', project.meet.text || 'B-Ort');
