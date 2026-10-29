@@ -258,9 +258,12 @@ test('parseGpx: BaseCamp-Datei mit Track, Route, Wegpunkten', () => {
 test('parseGpx: eigener Export wird wieder eingelesen', () => {
   const p = newProject('T');
   p.items.push({ kind: 'track', name: 'Waldstück', color: '#d50000', w: 4, pts: [[51, 7], [51, 7.01], [50.99, 7.01]] });
-  const g = parseGpx(buildGpx(p, null, { tracks: true, drawings: true }));
+  const xml = buildGpx(p, null, { tracks: true, drawings: true });
+  // geschlossener Umriss endet im GPX wieder am ersten Punkt (BaseCamp zeigt ihn rundum)
+  assert.equal((xml.match(/<trkpt lat="51\.0000000" lon="7\.0000000"\/>/g) || []).length, 2);
+  const g = parseGpx(xml);
   const t = g.tracks.find((x) => x.name === 'Waldstück');
-  assert.ok(t && t.pts.length === 3 && t.color === '#d50000');
+  assert.ok(t && t.pts.length === 3 && t.color === '#d50000' && t.closed);
 });
 
 test('mergeGpx: zwei Rastergebiete in einer Datei', () => {

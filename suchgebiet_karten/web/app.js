@@ -485,6 +485,7 @@ const HINTS = {
   offrect: 'Bereich für die Offline-Karte als Rechteck aufziehen.',
   windpt: 'Tippe auf die Karte, wo der Wind (DWD) angezeigt werden soll.',
   hfmarkpt: 'Tippe auf die Karte, wo der Punkt hin soll.',
+  hfdraw: 'Mit dem Finger einmal um den Bereich herum malen.',
   hffield: 'Feld antippen: abgesucht → teilweise → nicht begehbar → zurück. „Feld“ nochmal tippen = fertig.',
   sendpick: 'Felder für den Auftrag antippen (blau umrandet). Dann „Weiter“.',
   offsquares: 'Quadrate antippen (blau = gewählt, grün = schon gespeichert). Ziehen verschiebt die Karte.',
@@ -513,6 +514,7 @@ function setTool(t) {
   $('offsqbar').hidden = t !== 'offsquares';
   $('pickbar').hidden = t !== 'sendpick';
   $('hf-field').classList.toggle('on', t === 'hffield');
+  $('hf-draw').classList.toggle('on', t === 'hfdraw');
   if (t === 'offsquares') updateOffSqBar();
   updatePenbar();
   if (t === 'track' && !draftTrack) draftTrack = { kind: 'track', name: '', color: db.color, w: 4, pts: [] };
@@ -664,6 +666,9 @@ canvas.addEventListener('pointerdown', (e) => {
   if (tool === 'pen') {
     current = { kind: 'stroke', color: db.color, w: db.w, pts: [[ll.lat, ll.lng]] };
     redraw();
+  } else if (tool === 'hfdraw') {
+    current = { kind: 'stroke', color: hfColor(), w: 4, pts: [[ll.lat, ll.lng]] };
+    redraw();
   } else if (tool === 'grid' || tool === 'offrect') {
     dragRect = { a: ll, b: ll };
   } else if (tool === 'erase') {
@@ -678,7 +683,7 @@ canvas.addEventListener('pointerdown', (e) => {
 canvas.addEventListener('pointermove', (e) => {
   if (e.pointerId !== activePointer) return;
   const { x, y, ll } = eventLatLng(e);
-  if (tool === 'pen' && current) {
+  if ((tool === 'pen' || tool === 'hfdraw') && current) {
     if (Math.hypot(x - lastPt.x, y - lastPt.y) < 2) return;
     current.pts.push([ll.lat, ll.lng]);
     lastPt = { x, y };
@@ -703,7 +708,13 @@ function finishPointer(e, cancelled) {
   if (e.pointerId !== activePointer) return;
   activePointer = null;
   const { x, y, ll } = eventLatLng(e);
-  if (tool === 'pen' && current) {
+  if (tool === 'hfdraw' && current) {
+    const pts = current.pts;
+    current = null;
+    setTool('pan');
+    redraw();
+    if (!cancelled) hfAreaDone(pts);
+  } else if (tool === 'pen' && current) {
     // Antippen einer vorhandenen Zeichnung: benennen statt einen Punkt zu malen
     const tap = !cancelled && current.pts.length === 1 && Math.hypot(x - downPt.x, y - downPt.y) < 8;
     const hit = tap ? hitItem(P.items, toPx, downPt.x, downPt.y, 12) : -1;
@@ -2281,6 +2292,29 @@ function hfMarkDialog(pos, where) {
   });
 }
 
+// Bereich umkreisen: ein Zug mit dem Finger, wird ein geschlossener Umriss (geht mit der Rückmeldung an die EL, dort im GPX)
+$('hf-draw').addEventListener('click', () => {
+  if (tool === 'hfdraw') return setTool('pan');
+  setTool('hfdraw');
+  toast('Mit dem Finger einmal um den Bereich herum malen', 5000);
+});
+function hfAreaDone(raw) {
+  // Punkte ausdünnen (ca. alle 3 m) – genug für Garmin, klein genug für den QR-Code
+  const pts = [];
+  for (const q of raw) {
+    const l = pts[pts.length - 1];
+    if (!l || distance(l[0], l[1], q[0], q[1]) >= 3) pts.push([Math.round(q[0] * 1e6) / 1e6, Math.round(q[1] * 1e6) / 1e6]);
+  }
+  if (pts.length < 3 || pathLen(pts) < 30) return toast('Zu klein – nochmal „✏️ Bereich“ und größer umkreisen');
+  const n = P.items.filter((it) => it.kind === 'track' && /^Bereich \d+$/.test(it.name || '')).length + 1;
+  const t = prompt('Name des Bereichs (erscheint so beim EL und auf dem Garmin):', `Bereich ${n}`);
+  if (t === null) return;
+  ensureHf();
+  P.items.push({ kind: 'track', name: t.trim() || `Bereich ${n}`, color: hfColor(), w: 4, pts, t: Date.now() });
+  changed();
+  toast('Bereich gespeichert – geht mit „Zurückgeben“ an die Einsatzleitung');
+}
+
 // Feld abgesucht: antippen schaltet durch
 $('hf-field').addEventListener('click', () => {
   if (!allGrids(P).length) return toast('Im Auftrag ist kein Raster');
@@ -3061,7 +3095,7 @@ function importGpx(xml, fileName) {
   for (const t of g.tracks) {
     const [a, z] = [t.pts[0], t.pts[t.pts.length - 1]];
     // geschlossen (Ende am Anfang, < 30 m): Fläche anzeigen, sonst offener Weg
-    const open = trackLength([a, z]) > 30;
+    const open = !t.closed && trackLength([a, z]) > 30;
     added.push({ kind: 'track', name: t.name || base, color: t.color || db.color, w: 4, pts: t.pts, ...(open ? { open: true } : {}) });
   }
   for (const w of g.waypoints) added.push({ kind: 'text', color: db.color, lat: w.lat, lon: w.lon, text: w.name });

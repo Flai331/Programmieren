@@ -97,6 +97,19 @@ test('Rückmeldung: Weg, Markierung, Feldstatus kommen beim richtigen Team an, d
   assert.equal(el.items.filter((it) => it.kind === 'track' && it.name.startsWith('Weg Team 2')).length, 1);
 });
 
+test('Rückmeldung: umkreister Bereich des Hundeführers kommt als geschlossener Umriss an (für GPX an den ELW)', async () => {
+  const el = elProject();
+  const a = buildAssignment(el, { teamId: 'T2', gridIds: [el.gridId], fields: 'team' });
+  el.sent = [{ id: a.id, teamId: 'T2', grids: a.g.map((g) => g.i) }];
+  const hf = projectFromAssignment(await unpack(await pack(a)));
+  const ring = Array.from({ length: 24 }, (_, i) => [52.29 + 0.002 * Math.sin(i / 4), 8.01 + 0.003 * Math.cos(i / 4)]);
+  hf.items.push({ kind: 'track', name: 'Bereich 1', color: '#1565c0', w: 4, pts: ring, t: 7 });
+  const sum = applyResult(el, await unpack(await pack(buildResult(hf))));
+  assert.equal(sum.marks, 1);
+  const t = el.items.find((it) => it.name === 'Bereich 1');
+  assert.ok(t && t.kind === 'track' && !t.open && t.pts.length > 3);
+});
+
 test('Auftrag ohne Raster: nur Umriss', async () => {
   const p = normalizeProject(newProject('Fläche'));
   p.items = [{ kind: 'track', color: '#d50000', name: 'Waldstück Nord', pts: [[52.29, 8.01], [52.3, 8.02], [52.29, 8.03]] }];
