@@ -25,10 +25,19 @@
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
             android:exported="true"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Auftrags- und Rückmelde-Links mit der App öffnen (Android fragt bzw. in den App-Einstellungen
+                 unter „Standardmäßig öffnen“ freischalten) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="flai331.github.io" android:pathPrefix="/Programmieren/suchgebiet-karten" />
             </intent-filter>
         </activity>
 

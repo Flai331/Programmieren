@@ -473,6 +473,22 @@ function drawGrid(ctx, toPx, state, grid, opt, s) {
         halo(ctx, cellLabel(c, r), x + 3 * s, y + 3 * s, '#a00000', s);
       }
     }
+  } else if (cellPx >= 12 * s) {
+    // kleine Felder (z. B. Übersicht im PDF): wenigstens die markierten Felder mittig beschriften
+    const marked = new Set([...Object.keys(state.fills || {}), ...Object.keys(state.status || {})]);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const key of marked) {
+      const [c, r] = key.split(',').map(Number);
+      if (c < v.c0 || c > v.c1 || r < v.r0 || r > v.r1) continue;
+      const t = cellLabel(c, r);
+      let fs = Math.min(13 * s, cellPx * 0.42);
+      ctx.font = `bold ${fs}px sans-serif`;
+      const w = ctx.measureText(t).width;
+      if (w > cellPx - 4 * s) { fs *= (cellPx - 4 * s) / w; ctx.font = `bold ${fs}px sans-serif`; }
+      const [x, y] = toPx(gridLat(grid, r + 0.5), gridLon(grid, c + 0.5));
+      halo(ctx, t, x, y, '#a00000', s);
+    }
   }
 }
 

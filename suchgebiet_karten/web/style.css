@@ -462,7 +462,7 @@ html.night.red .windmeter { filter: invert(1) grayscale(1) sepia(1) saturate(6) 
 /* ---------- Hundeführer-Modus: nur das Nötigste, große Knöpfe ---------- */
 .hfonly { display: none !important; }
 body.hf .hfonly { display: flex !important; }
-body.hf .toolbar, body.hf .bottomstack, body.hf #quick-grid, body.hf #quick-marks,
+body.hf .toolbar, body.hf .bottomstack, body.hf #quick-marks,
 body.hf .sidebuttons > button:not(#btn-gps):not(#btn-hfmenu):not(#btn-notes):not(#btn-layers) { display: none !important; }
 body.hf #map, body.hf #overlay { bottom: 84px; }
 body.hf #overlay { height: calc(100% - 136px); }

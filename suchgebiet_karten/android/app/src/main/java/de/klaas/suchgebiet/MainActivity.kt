@@ -263,8 +263,22 @@ class MainActivity : ComponentActivity() {
             }
         })
 
-        if (savedInstanceState != null) webView.restoreState(savedInstanceState)
-        else webView.loadUrl(startUrl)
+        val link = sharedHash(intent)
+        if (savedInstanceState != null && link == null) webView.restoreState(savedInstanceState)
+        else webView.loadUrl(startUrl + (link ?: ""))
+    }
+
+    // Auftrags-/Rückmelde-Link (https://flai331.github.io/…#a=… bzw. #r=…) in der App öffnen
+    private fun sharedHash(i: Intent?): String? {
+        val frag = i?.data?.fragment ?: return null
+        return if (frag.startsWith("a=") || frag.startsWith("r=")) "#$frag" else null
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val link = sharedHash(intent) ?: return
+        // App läuft schon: nur den Hash setzen, die Web-App übernimmt die Daten (hashchange)
+        webView.evaluateJavascript("location.hash=" + org.json.JSONObject.quote(link), null)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
