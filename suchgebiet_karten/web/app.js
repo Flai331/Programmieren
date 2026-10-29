@@ -2545,7 +2545,7 @@ function renderSend() {
     l.className = 'check';
     l.innerHTML = '<input type="checkbox"><span></span>';
     l.firstChild.value = g.id;
-    l.firstChild.checked = g.id in checked ? checked[g.id] : (!sel.value || n > 0 || allGrids(P).length === 1);
+    l.firstChild.checked = g.id in checked ? checked[g.id] : false; // Raster nur auf Wunsch
     l.lastChild.textContent = `${gridLabel(P, g)}${sel.value ? ` (${n} Felder des Teams)` : ''}`;
     box.appendChild(l);
   }
@@ -2564,9 +2564,9 @@ function renderSend() {
     l.className = 'check';
     l.innerHTML = '<input type="checkbox"><span></span>';
     l.firstChild.value = String(i);
-    // zugeteilte Umrisse nur an ihr Team, übrige geschlossene Umrisse an alle
+    // vorausgewählt: die dem Team zugeteilten Umrisse (ohne Team: die nicht zugeteilten geschlossenen)
     const team = $('send-team').value;
-    l.firstChild.checked = String(i) in ichecked ? ichecked[String(i)] : (it.kind === 'track' && (it.to ? it.to === team : !it.open));
+    l.firstChild.checked = String(i) in ichecked ? ichecked[String(i)] : (it.kind === 'track' && (team ? it.to === team : !it.to && !it.open));
     l.lastChild.textContent = label;
     ib.appendChild(l);
   });
@@ -2645,9 +2645,7 @@ async function updateSendSize() {
 }));
 // ohne Raster gibt es keine Felder auszuwählen
 function syncSendFields() {
-  const none = !$('send-grids').querySelector('input:checked');
-  $('send-fields-label').hidden = none;
-  $('send-fields-box').hidden = none;
+  $('send-fields-sub').hidden = !$('send-grids').querySelector('input:checked');
 }
 $('send-grids').addEventListener('change', () => { syncSendFields(); sendCache = null; updateSendSize(); });
 $('send-items').addEventListener('change', () => { sendCache = null; updateSendSize(); });
