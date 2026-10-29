@@ -22,7 +22,7 @@ import {
   FIELDS as CT_FIELDS, normalizeContact, sortContacts, matches as ctMatches, telHref, toVcf, parseContacts, mergeContacts,
 } from './contacts.js';
 import {
-  parseRescue, mergeRescue, nearest as nearestRescue, compass, inBounds, loadRescue, storeRescue,
+  parseRescue, mergeRescue, nearest as nearestRescue, compass, inBounds, loadRescue, storeRescue, rescueNear,
   distance, bearing as bearingDeg,
 } from './rescue.js';
 import {
@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v58';
+const APP_VERSION = 'v60';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -531,19 +531,102 @@ function fillAt(ll, first) {
   if (first) {
     snapshot();
     // Teams und Status liegen getrennt: „abgesucht“ überschreibt nicht das Team
-    fillStroke = { map: mapFor(P, m), mode: mapFor(P, m)[key] === m.id ? 'clear' : 'set', seen: new Set() };
+    fillStroke = { map: mapFor(P, m), mode: mapFor(P, m)[key] === m.id ? 'clear' : 'set', seen: new Set(), prev: {} };
   }
   if (fillStroke.seen.has(key)) return;
   fillStroke.seen.add(key);
+  fillStroke.prev[key] = fillStroke.map[key]; // für Abbruch durch zweiten Finger
   if (fillStroke.mode === 'clear') delete fillStroke.map[key];
   else fillStroke.map[key] = m.id;
   redraw();
 }
 
+// Karte bewegen, während ein Werkzeug aktiv ist: zwei Finger verschieben/zoomen (ein angefangener
+// Strich bzw. ein angefangenes Feld wird dann verworfen), rechte Maustaste verschiebt, Mausrad zoomt.
+// Diese Handler stehen vor den Werkzeug-Handlern und halten Ereignisse der Geste von ihnen fern.
+const touches = new Map(); // pointerId -> {x, y}
+let gesture = null; // { mid, dist, zoom }
+let mousePan = null;
+const midOf = () => {
+  const p = [...touches.values()];
+  return { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2, d: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1 };
+};
+function cancelToolAction() {
+  if (current) { current = null; }
+  if (fillStroke) {
+    for (const [k, v] of Object.entries(fillStroke.prev || {})) { if (v === undefined) delete fillStroke.map[k]; else fillStroke.map[k] = v; }
+    fillStroke = null;
+  }
+  dragRect = null;
+  activePointer = null;
+  redraw();
+}
+canvas.addEventListener('pointerdown', (e) => {
+  const { x, y } = eventLatLng(e);
+  if (e.pointerType === 'mouse' && e.button === 2) {
+    mousePan = { x, y };
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* z. B. Zeiger schon weg */ }
+    e.stopImmediatePropagation();
+    return;
+  }
+  if (e.pointerType === 'mouse') return;
+  touches.set(e.pointerId, { x, y });
+  if (touches.size === 2 && !gesture) {
+    cancelToolAction();
+    const m = midOf();
+    gesture = { mid: m, dist: m.d, zoom: map.getZoom() };
+  }
+  if (gesture) {
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* z. B. Zeiger schon weg */ }
+    e.stopImmediatePropagation();
+  }
+});
+canvas.addEventListener('pointermove', (e) => {
+  const { x, y } = eventLatLng(e);
+  if (mousePan) {
+    map.panBy([mousePan.x - x, mousePan.y - y], { animate: false });
+    mousePan = { x, y };
+    e.stopImmediatePropagation();
+    return;
+  }
+  if (!touches.has(e.pointerId)) return;
+  touches.set(e.pointerId, { x, y });
+  if (!gesture) return;
+  e.stopImmediatePropagation();
+  if (touches.size < 2) return;
+  const m = midOf();
+  map.panBy([gesture.mid.x - m.x, gesture.mid.y - m.y], { animate: false });
+  gesture.mid = m;
+  // Zoom in ganzen Stufen, sobald die Finger deutlich auseinander/zusammen gehen
+  const want = Math.round(gesture.zoom + Math.log2(m.d / gesture.dist));
+  if (want !== map.getZoom()) map.setZoomAround(L.point(m.x, m.y), want, { animate: false });
+});
+const endTouch = (e) => {
+  if (mousePan) { mousePan = null; e.stopImmediatePropagation(); return; }
+  if (!touches.has(e.pointerId)) return;
+  touches.delete(e.pointerId);
+  if (gesture) {
+    e.stopImmediatePropagation();
+    if (touches.size === 0) gesture = null;
+  }
+};
+canvas.addEventListener('pointerup', endTouch);
+canvas.addEventListener('pointercancel', endTouch);
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+let wheelAt = 0;
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const now = Date.now();
+  if (now - wheelAt < 180) return;
+  wheelAt = now;
+  const r = canvas.getBoundingClientRect();
+  map.setZoomAround(L.point(e.clientX - r.left, e.clientY - r.top), map.getZoom() + (e.deltaY < 0 ? 1 : -1));
+}, { passive: false });
+
 canvas.addEventListener('pointerdown', (e) => {
   if (activePointer !== null) return;
   activePointer = e.pointerId;
-  canvas.setPointerCapture(e.pointerId);
+  try { canvas.setPointerCapture(e.pointerId); } catch { /* z. B. Zeiger schon weg */ }
   const { x, y, ll } = eventLatLng(e);
   lastPt = { x, y };
   downPt = { x, y };
@@ -557,7 +640,7 @@ canvas.addEventListener('pointerdown', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill') {
     fillAt(ll, true);
-  } else if (tool === 'track' || tool === 'offsquares' || tool === 'hffield' || tool === 'sendpick') {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt'].includes(tool)) {
     panning = false;
   }
 });
@@ -577,7 +660,7 @@ canvas.addEventListener('pointermove', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill' && fillStroke) {
     fillAt(ll, false);
-  } else if (tool === 'track' || tool === 'offsquares' || tool === 'hffield' || tool === 'sendpick') {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt'].includes(tool)) {
     // Im Track-Modus verschiebt Ziehen die Karte, Tippen setzt Punkte
     if (!panning && Math.hypot(x - lastPt.x, y - lastPt.y) < 8) return;
     panning = true;
@@ -626,7 +709,7 @@ function finishPointer(e, cancelled) {
       updateOffEstimate();
     }
   } else if (tool === 'windpt') {
-    if (!cancelled) {
+    if (!cancelled && !panning) {
       P.windPt = { lat: Math.round(ll.lat * 1e5) / 1e5, lon: Math.round(ll.lng * 1e5) / 1e5 };
       if (!db.windArrows) { db.windArrows = true; $('quick-arrows').classList.add('on'); }
       setTool('pan');
@@ -659,7 +742,7 @@ function finishPointer(e, cancelled) {
     panning = false;
   } else if (cancelled) {
     return;
-  } else if (tool === 'text' && Math.hypot(x - lastPt.x, y - lastPt.y) < 10) {
+  } else if (tool === 'text' && !panning && Math.hypot(x - downPt.x, y - downPt.y) < 10) {
     const text = prompt('Text für diesen Punkt (z. B. Fundstelle, Hinweis):');
     if (text && text.trim()) {
       snapshot();
@@ -1644,7 +1727,8 @@ function renderRescueInfo() {
   $('rp-clear').disabled = !rescuePts.length;
   $('quick-rp').hidden = !rescuePts.length;
 }
-loadRescue().then((pts) => { rescuePts = pts; renderRescueInfo(); redraw(); });
+// gespeicherte Punkte laden – nicht überschreiben, was ein Auftrag-Link inzwischen mitgebracht hat
+loadRescue().then((pts) => { rescuePts = mergeRescue(pts, rescuePts); renderRescueInfo(); redraw(); });
 
 let rpMarker = null;
 function showNearestRescue() {
@@ -2257,14 +2341,15 @@ function sendSelection() {
     // ganze Zeichnung (alle Striche einer Gruppe)
     if (it.group) P.items.forEach((x, j) => { if (x.group === it.group) idx.push(j); }); else idx.push(Number(inp.value));
   }
-  const areas = allGrids(P).filter((g) => gridIds.includes(g.id)).map((g) => g.area);
+  // Rettungspunkte: im Rastergebiet/Umriss und im Umkreis von 2 km um dessen Mitte
   let rescue = [];
-  if ($('send-rescue').checked && areas.length && rescuePts.length) {
-    const pad = 0.01;
-    rescue = inBounds(rescuePts, {
-      north: Math.max(...areas.map((a) => Math.max(a.north, a.south))) + pad, south: Math.min(...areas.map((a) => Math.min(a.north, a.south))) - pad,
-      west: Math.min(...areas.map((a) => Math.min(a.west, a.east))) - pad, east: Math.max(...areas.map((a) => Math.max(a.west, a.east))) + pad,
-    }).slice(0, 60);
+  if ($('send-rescue').checked && rescuePts.length) {
+    const shapes = allGrids(P).filter((g) => gridIds.includes(g.id)).map((g) => ({ rect: g.area }));
+    for (const j of idx) {
+      const it = P.items[j];
+      if (it.pts && it.pts.length) shapes.push({ pts: it.pts });
+    }
+    rescue = rescueNear(rescuePts, shapes, 2, 80);
   }
   return {
     teamId: $('send-team').value, gridIds, fields: sendFields(),
@@ -2283,7 +2368,7 @@ async function currentAssignment() {
 async function updateSendSize() {
   const { a, link } = await currentAssignment();
   const nf = a.g.reduce((x, g) => x + g.f.length, 0);
-  $('send-size').textContent = `${a.g.length ? `${a.g.length} Rastergebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ` : ''}Umrisse/Zeichnungen: ${a.i.length} · `
+  $('send-size').textContent = `${a.g.length ? `${a.g.length} Rastergebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ` : ''}Umrisse/Zeichnungen: ${a.i.length} · ${a.rp ? `Rettungspunkte: ${a.rp.length} · ` : ''}`
     + (link.length <= QR_MAX ? `passt in einen QR-Code (${link.length} Zeichen)` : `zu groß für einen QR-Code (${link.length} Zeichen) – per WhatsApp senden oder weniger auswählen`);
 }
 ['send-team', 'send-meet', 'send-rescue', 'send-person', 'send-hint'].forEach((id) => $(id).addEventListener(id === 'send-hint' ? 'input' : 'change', () => {

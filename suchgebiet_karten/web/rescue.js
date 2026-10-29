@@ -118,6 +118,48 @@ export function nearest(points, lat, lon) {
   return best && { p: best.p, m: best.m, deg: bearing(lat, lon, best.p.lat, best.p.lon) };
 }
 
+// Rettungspunkte für einen Auftrag: alle innerhalb jedes übertragenen Rastergebiets bzw.
+// Umrisses (egal wie groß) und zusätzlich im Umkreis (km) um dessen Mitte; nächste zuerst.
+// shapes: [{ rect: {north, south, west, east} } | { pts: [[lat, lon]…] }]
+function inPoly(lat, lon, poly) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [ai, oi] = poly[i];
+    const [aj, oj] = poly[j];
+    if ((ai > lat) !== (aj > lat) && lon < ((oj - oi) * (lat - ai)) / (aj - ai) + oi) c = !c;
+  }
+  return c;
+}
+export function rescueNear(points, shapes, km = 2, max = 80) {
+  const forms = shapes.map((s) => {
+    if (s.rect) {
+      const r = s.rect;
+      const n = Math.max(r.north, r.south);
+      const so = Math.min(r.north, r.south);
+      const w = Math.min(r.west, r.east);
+      const e = Math.max(r.west, r.east);
+      return { c: [(n + so) / 2, (w + e) / 2], inside: (la, lo) => la <= n && la >= so && lo >= w && lo <= e };
+    }
+    const la = s.pts.map((q) => q[0]);
+    const lo = s.pts.map((q) => q[1]);
+    return {
+      c: [(Math.max(...la) + Math.min(...la)) / 2, (Math.max(...lo) + Math.min(...lo)) / 2],
+      inside: (a, o) => s.pts.length > 2 && inPoly(a, o, s.pts),
+    };
+  });
+  if (!forms.length) return [];
+  const out = [];
+  for (const pt of points) {
+    let d = Infinity;
+    for (const f of forms) {
+      if (f.inside(pt.lat, pt.lon)) { d = 0; break; }
+      d = Math.min(d, distance(f.c[0], f.c[1], pt.lat, pt.lon));
+    }
+    if (d <= km * 1000) out.push({ pt, d });
+  }
+  return out.sort((a, b) => a.d - b.d).slice(0, max).map((x) => x.pt);
+}
+
 export const inBounds = (points, b) => points.filter((p) => p.lat <= b.north && p.lat >= b.south && p.lon >= b.west && p.lon <= b.east);
 
 // ---------- Speicher (IndexedDB – auch für zehntausende Punkte) ----------
