@@ -1,7 +1,7 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v77**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v78**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
@@ -34,7 +34,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
   - Tests: Unit-Test für das Zusammenstellen des Berichts (keine Einsatzdaten enthalten,
     Kürzung, Fingerprint); im CI-Emulator-Test darf kein Bericht ausgelöst werden.
 
-- [ ] **v78 – 📍 Lage-Orte** (Details: `PLAN-einsatz-assistent.md`, Abschnitt D)
+- [x] **v78 – 📍 Lage-Orte** (direkt mit Klaas gebaut; Details: `PLAN-einsatz-assistent.md`, Abschnitt D)
   - Werkzeug „📍 Lage-Ort“ für EL-Geräte; Kategorien 🚐 ELW, 🅱️ Bereitstellungsraum,
     🅿️ Parkplatz, 🚻 Toilette, 🍲 Verpflegung, 🚰 Ver-/Entsorgung, 🚑 Sanität,
     ❓ letzter bekannter Ort, 📌 Sonstiges.

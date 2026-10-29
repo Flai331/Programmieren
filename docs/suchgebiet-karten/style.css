@@ -573,3 +573,9 @@ body.closed .toolbar, body.closed .bottomstack { display: none !important; }
 body.closed :is(#panel-mission, #panel-grid, #panel-teams, #panel-notes, #panel-send, #panel-wizard, #pc-list)
   :is(input, textarea, select, button):not(.keep):not(.close):not([data-tab]):not(.send),
 body.closed :is(#pc-add, #pc-new) { pointer-events: none; opacity: 0.45; }
+
+/* Lage-Orte: Auswahl der Art */
+.poi-cats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0; }
+.poi-cats button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; font-size: 12px; line-height: 1.2; }
+.poi-cats button span { font-size: 22px; }
+#dlg-box input[type=text] { width: 100%; box-sizing: border-box; margin-bottom: 6px; }

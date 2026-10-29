@@ -2,6 +2,7 @@
 // Wird für die Bildschirmanzeige UND für das PDF benutzt – so sehen beide
 // gleich aus. toPx(lat, lon) -> [x, y] rechnet in Canvas-Pixel um.
 
+import { poiCat, poiName } from './pois.js';
 import { colName, cellLabel, cellBounds, gridBounds } from './grid.js';
 import { toUtm, fromUtm, utmZone } from './utm.js';
 import { cellComponents, cellOutlines, formatArea, hasArea, polygonArea } from './gpx.js';
@@ -55,6 +56,7 @@ export function drawOverlay(ctx, toPx, state, opt) {
   }
   drawItems(ctx, toPx, state.items || [], s, state.teamNames);
   if (state.rescue && state.rescue.length) drawRescue(ctx, toPx, state.rescue, s);
+  if (state.pois && state.pois.length) drawPois(ctx, toPx, state.pois, s);
   if (state.meet) drawMeet(ctx, toPx, state.meet, s);
   for (const g of layers) {
     if (!opt.noGrid && !opt.noEdge) drawEdgeLabels(ctx, toPx, g.grid, opt, s);
@@ -680,6 +682,30 @@ export function hitItem(items, toPx, x, y, tol) {
     }
   }
   return -1;
+}
+
+// Lage-Orte: farbiger Kreis mit Symbol, Name daneben
+function drawPois(ctx, toPx, pois, s) {
+  for (const p of pois) {
+    const c = poiCat(p.cat);
+    const [x, y] = toPx(p.lat, p.lon);
+    const r = 12 * s;
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = c.color;
+    ctx.lineWidth = 3 * s;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+    ctx.font = `${13 * s}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#000';
+    ctx.fillText(c.icon, x, y + 1 * s);
+    ctx.font = `bold ${13 * s}px sans-serif`;
+    ctx.textAlign = 'left';
+    halo(ctx, poiName(p), x + r + 5 * s, y, c.color, s);
+  }
 }
 
 function drawMeet(ctx, toPx, m, s) {
