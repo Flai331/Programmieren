@@ -23,10 +23,14 @@ import {
 } from './contacts.js';
 import {
   parseRescue, mergeRescue, nearest as nearestRescue, compass, inBounds, loadRescue, storeRescue,
+  distance, bearing as bearingDeg,
 } from './rescue.js';
 import {
   fetchWeather, dirName, beaufort, approach, circularMean, sunTimes, windChanged, STRENGTHS, ICONS as WX_ICONS,
 } from './weather.js';
+import {
+  PUBLIC_URL, pack, unpack, parseShared, shareLink, buildAssignment, projectFromAssignment, buildResult, applyResult,
+} from './share.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
   newProject, normalizeProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
@@ -35,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v52';
+const APP_VERSION = 'v53';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -284,6 +288,8 @@ function redraw() {
   const b = map.getBounds();
   const view = { north: b.getNorth(), south: b.getSouth(), west: b.getWest(), east: b.getEast() };
   const items = [...P.items];
+  // Hundeführer: aufgezeichneter Weg
+  if (P.hf) for (const sg of P.hf.track) if (sg.pts.length > 1) items.push({ kind: 'track', open: true, color: hfColor(), w: 4, pts: sg.pts, name: '' });
   if (current) items.push(current);
   if (draftTrack && draftTrack.pts.length) items.push(draftTrack);
   const drafts = draftPen ? draftPen.strokes : [];
@@ -320,6 +326,7 @@ function redraw() {
     ctx.setLineDash([]);
   }
   drawOffSquares(ctx);
+  drawPicked(ctx);
 }
 
 // Quadrate für Offline-Karten: blau = gewählt, grün = gespeichert, orange = angefangen
@@ -363,6 +370,8 @@ const HINTS = {
   erase: 'Antippen oder darüberwischen löscht Zeichnungen, Umrisse, Texte, Treffpunkt und Feldfarben.',
   grid: 'Suchgebiet als Rechteck mit dem Finger aufziehen.',
   offrect: 'Bereich für die Offline-Karte als Rechteck aufziehen.',
+  hffield: 'Feld antippen: abgesucht → teilweise → nicht begehbar → zurück. „Feld“ nochmal tippen = fertig.',
+  sendpick: 'Felder für den Auftrag antippen (blau umrandet). Dann „Weiter“.',
   offsquares: 'Quadrate antippen (blau = gewählt, grün = schon gespeichert). Ziehen verschiebt die Karte.',
   meet: 'Auf die Karte tippen, um den Treffpunkt zu setzen.',
   track: 'Umriss: Punkte antippen. Karte mit dem Finger verschieben, Zoom mit +/−.',
@@ -387,6 +396,8 @@ function setTool(t) {
   $('trackbar').hidden = t !== 'track';
   $('penbar').hidden = t !== 'pen';
   $('offsqbar').hidden = t !== 'offsquares';
+  $('pickbar').hidden = t !== 'sendpick';
+  $('hf-field').classList.toggle('on', t === 'hffield');
   if (t === 'offsquares') updateOffSqBar();
   updatePenbar();
   if (t === 'track' && !draftTrack) draftTrack = { kind: 'track', name: '', color: db.color, w: 4, pts: [] };
@@ -461,7 +472,7 @@ canvas.addEventListener('pointerdown', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill') {
     fillAt(ll, true);
-  } else if (tool === 'track' || tool === 'offsquares') {
+  } else if (tool === 'track' || tool === 'offsquares' || tool === 'hffield' || tool === 'sendpick') {
     panning = false;
   }
 });
@@ -481,7 +492,7 @@ canvas.addEventListener('pointermove', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill' && fillStroke) {
     fillAt(ll, false);
-  } else if (tool === 'track' || tool === 'offsquares') {
+  } else if (tool === 'track' || tool === 'offsquares' || tool === 'hffield' || tool === 'sendpick') {
     // Im Track-Modus verschiebt Ziehen die Karte, Tippen setzt Punkte
     if (!panning && Math.hypot(x - lastPt.x, y - lastPt.y) < 8) return;
     panning = true;
@@ -529,6 +540,9 @@ function finishPointer(e, cancelled) {
       openPanel('panel-offline');
       updateOffEstimate();
     }
+  } else if (tool === 'hffield' || tool === 'sendpick') {
+    if (!cancelled && !panning) (tool === 'hffield' ? hfFieldTap : sendPickTap)(ll);
+    panning = false;
   } else if (tool === 'offsquares') {
     if (!cancelled && !panning) {
       if (map.getZoom() < 9) toast('Bitte näher heranzoomen, dann Quadrate antippen');
@@ -1742,6 +1756,645 @@ document.querySelectorAll('.wm-str button').forEach((b) => b.addEventListener('c
   toast(`Wind gemessen: aus ${dirName(wmFrom)}, ${STRENGTHS[s].label}. ${approach(wmFrom)}.`, 9000);
 }));
 $('wx-measure').addEventListener('click', openWindMeter);
+
+// ---------- Hundeführer-Modus, Aufträge und Rückmeldungen per QR-Code ----------
+// db.mode: 'el' (Einsatzleitung, alles) | 'hf' (Hundeführer, vereinfacht). Wechsel zur
+// Einsatzleitung nur mit PIN (db.pinHash; kommt beim Auftrag von der Einsatzleitung mit).
+async function pinHash(pin) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`suchgebiet:${pin}`));
+  return [...new Uint8Array(d)].slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+function openDlg(build) {
+  const box = $('dlg-box');
+  box.innerHTML = '';
+  $('dlg').hidden = false;
+  return new Promise((resolve) => {
+    build(box, (v) => { $('dlg').hidden = true; resolve(v); });
+  });
+}
+function dlgHead(box, title, text) {
+  const h = document.createElement('h2');
+  h.textContent = title;
+  box.appendChild(h);
+  if (text) { const p = document.createElement('p'); p.className = 'small'; p.textContent = text; box.appendChild(p); }
+}
+function dlgButton(box, label, cls, fn) {
+  const b = document.createElement('button');
+  b.innerHTML = label;
+  if (cls) b.className = cls;
+  b.addEventListener('click', fn);
+  box.appendChild(b);
+  return b;
+}
+function askPin(title, text) {
+  return openDlg((box, close) => {
+    dlgHead(box, title, text);
+    const inp = document.createElement('input');
+    inp.type = 'password';
+    inp.inputMode = 'numeric';
+    inp.className = 'pin';
+    inp.autocomplete = 'off';
+    box.appendChild(inp);
+    const ok = () => close(inp.value.trim() || null);
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') ok(); });
+    dlgButton(box, 'OK', 'primary', ok);
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+    setTimeout(() => inp.focus(), 50);
+  });
+}
+async function setNewPin() {
+  const a = await askPin('🔒 PIN festlegen', 'Mindestens 4 Ziffern. Damit wechselt ein Hundeführer nicht versehentlich in die Einsatzleitung. Die PIN geht mit jedem Auftrag an die Hundeführer-Handys.');
+  if (!a) return false;
+  if (!/^\d{4,}$/.test(a)) { toast('Bitte mindestens 4 Ziffern'); return false; }
+  const b = await askPin('🔒 PIN wiederholen');
+  if (a !== b) { toast('PINs stimmen nicht überein'); return false; }
+  db.pinHash = await pinHash(a);
+  saveNow();
+  toast('PIN gespeichert');
+  return true;
+}
+function applyMode() {
+  const hf = db.mode === 'hf';
+  document.body.classList.toggle('hf', hf);
+  $('hfbar').hidden = !hf;
+  if (hf && !['pan', 'hffield'].includes(tool)) setTool('pan');
+  renderHfInfo();
+  map.invalidateSize();
+  resizeCanvas();
+}
+async function toHfMode() {
+  if (!db.pinHash && !(await setNewPin())) return;
+  db.mode = 'hf';
+  saveNow();
+  closePanels();
+  applyMode();
+  toast('Hundeführer-Modus');
+}
+async function toElMode() {
+  if (db.pinHash) {
+    const pin = await askPin('🔒 Einsatzleitung', 'PIN eingeben, um in die Einsatzleitung zu wechseln.');
+    if (!pin) return;
+    if ((await pinHash(pin)) !== db.pinHash) return toast('Falsche PIN');
+  }
+  if (recWatch !== null) stopRec();
+  db.mode = 'el';
+  saveNow();
+  closePanels();
+  setTool('pan');
+  applyMode();
+  toast('Einsatzleitung');
+}
+$('mode-hf').addEventListener('click', toHfMode);
+$('mode-pin').addEventListener('click', async () => {
+  if (db.pinHash) {
+    const pin = await askPin('🔒 Alte PIN');
+    if (!pin) return;
+    if ((await pinHash(pin)) !== db.pinHash) return toast('Falsche PIN');
+  }
+  setNewPin();
+});
+$('hfm-el').addEventListener('click', toElMode);
+
+// ---- Hundeführer-Ansicht ----
+function hfColor() { return ((P.marks.find((m) => m.id === 'team') || {}).color) || '#d50000'; }
+function renderHfInfo() {
+  const show = db.mode === 'hf';
+  $('hfinfo').hidden = !show;
+  if (!show) return;
+  const h = P.hf;
+  $('hfinfo').style.setProperty('--team', hfColor());
+  $('hfi-title').textContent = h ? `${h.team} · ${P.title.replace(/ – [^–]*$/, '')}` : 'Kein Auftrag';
+  const rec = h ? h.track.reduce((a, sg) => a + pathLen(sg.pts), 0) : 0;
+  $('hfi-text').textContent = h
+    ? [h.hint && `⚠️ ${h.hint}`, `Auftrag ${hhmm(h.received)}`, rec ? `gelaufen ${fmtKm(rec)}` : ''].filter(Boolean).join(' · ')
+    : 'QR-Code der Einsatzleitung mit der Handy-Kamera scannen.';
+  $('hfinfo').classList.toggle('min', !!db.hfInfoMin);
+  const m = $('hfm-info');
+  m.textContent = '';
+  if (h) {
+    const lines = [`${h.team} – ${P.title}`, `Auftrag erhalten ${hhmm(h.received)}`];
+    if (h.hint) lines.push(`Hinweis: ${h.hint}`);
+    if (P.mission.person) lines.push(`Vermisste Person: ${P.mission.person}`);
+    if (P.meet) lines.push(`Treffpunkt: ${P.meet.text || 'gesetzt'}`);
+    m.textContent = lines.join('\n');
+    m.style.whiteSpace = 'pre-line';
+  } else m.textContent = 'Noch kein Auftrag. QR-Code der Einsatzleitung mit der Handy-Kamera scannen.';
+  $('hfm-meet').disabled = !P.meet;
+}
+$('hfinfo').addEventListener('click', () => { db.hfInfoMin = !db.hfInfoMin; save(); renderHfInfo(); });
+$('btn-hfmenu').addEventListener('click', () => { renderHfInfo(); openPanel('panel-hfmenu'); });
+$('hfm-rp').addEventListener('click', showNearestRescue);
+$('hfm-notes').addEventListener('click', () => { closePanels(); $('btn-notes').click(); });
+$('hfm-contacts').addEventListener('click', () => { closePanels(); $('btn-contacts').click(); });
+$('hfm-projects').addEventListener('click', () => { closePanels(); $('btn-projects').click(); });
+$('hfm-meet').addEventListener('click', () => {
+  if (!P.meet) return;
+  closePanels();
+  map.setView([P.meet.lat, P.meet.lon], Math.max(map.getZoom(), 16));
+  if (lastPos) {
+    const m = distance(lastPos[0], lastPos[1], P.meet.lat, P.meet.lon);
+    const deg = bearingDeg(lastPos[0], lastPos[1], P.meet.lat, P.meet.lon);
+    toast(`🎯 Treffpunkt: ${fmtKm(m)} Richtung ${compass(deg)} (${Math.round(deg)}°)`, 8000);
+  }
+});
+function pathLen(pts) {
+  let m = 0;
+  for (let i = 1; i < pts.length; i++) m += distance(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
+  return m;
+}
+const fmtKm = (m) => (m >= 1000 ? `${(m / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km` : `${Math.round(m)} m`);
+
+// Weg aufzeichnen (Bildschirm bleibt an; Browser zeichnen bei gesperrtem Bildschirm nicht auf)
+let recWatch = null;
+let recSeg = null;
+let recLock = null;
+let recTimer = null;
+function ensureHf() {
+  if (!P.hf) P.hf = { id: uid(), team: 'Ich', hint: '', received: Date.now(), grids: allGrids(P).map((g) => g.id), track: [] };
+}
+async function startRec() {
+  if (!navigator.geolocation) return toast('Standort wird nicht unterstützt');
+  ensureHf();
+  recSeg = { t0: Date.now(), pts: [] };
+  P.hf.track.push(recSeg);
+  if (watchId === null) $('btn-gps').click();
+  recWatch = navigator.geolocation.watchPosition((pos) => {
+    if (pos.coords.accuracy > 40) return;
+    const pt = [Math.round(pos.coords.latitude * 1e6) / 1e6, Math.round(pos.coords.longitude * 1e6) / 1e6];
+    const last = recSeg.pts[recSeg.pts.length - 1];
+    if (last && distance(last[0], last[1], pt[0], pt[1]) < 5) return;
+    recSeg.pts.push(pt);
+    save();
+    redraw();
+  }, (err) => toast('GPS: ' + err.message), { enableHighAccuracy: true, maximumAge: 0 });
+  try { recLock = await navigator.wakeLock.request('screen'); } catch { if (bridge && bridge.keepScreenOn) bridge.keepScreenOn(true); }
+  recTimer = setInterval(updateRecBtn, 5000);
+  updateRecBtn();
+  toast('Weg wird aufgezeichnet – Bildschirm bleibt an. Nicht sperren!', 6000);
+}
+function stopRec() {
+  if (recWatch !== null) navigator.geolocation.clearWatch(recWatch);
+  recWatch = null;
+  if (recLock) recLock.release().catch(() => {});
+  recLock = null;
+  if (bridge && bridge.keepScreenOn) bridge.keepScreenOn(false);
+  clearInterval(recTimer);
+  if (recSeg && recSeg.pts.length < 2) P.hf.track = P.hf.track.filter((sg) => sg !== recSeg);
+  recSeg = null;
+  saveNow();
+  updateRecBtn();
+  redraw();
+}
+function updateRecBtn() {
+  const on = recWatch !== null;
+  $('hf-rec').classList.toggle('on', on);
+  $('hf-rec').querySelector('span').textContent = on ? '⏹' : '⏺';
+  $('hf-rec').querySelector('b').textContent = on
+    ? `${fmtKm(pathLen(recSeg.pts))} · ${Math.round((Date.now() - recSeg.t0) / 60000)} min` : 'Weg';
+  renderHfInfo();
+}
+document.addEventListener('visibilitychange', async () => {
+  if (!document.hidden && recWatch !== null && !recLock) {
+    try { recLock = await navigator.wakeLock.request('screen'); } catch { /* egal */ }
+  }
+});
+$('hf-rec').addEventListener('click', () => (recWatch !== null ? stopRec() : startRec()));
+
+// Markieren: Art wählen, Position = GPS (sonst Kartenmitte)
+const HF_MARKS = [['⚠️', 'Anzeige'], ['✅', 'Fund'], ['🐾', 'Spur'], ['🎒', 'Gegenstand'], ['❗', 'Gefahr'], ['📝', 'Hinweis']];
+$('hf-mark').addEventListener('click', () => {
+  const gps = !!lastPos;
+  const pos = gps ? { lat: lastPos[0], lon: lastPos[1] } : { lat: map.getCenter().lat, lon: map.getCenter().lng };
+  openDlg((box, close) => {
+    dlgHead(box, '📍 Markieren', gps ? 'Position: dein GPS-Standort.' : 'Kein GPS – Position: Kartenmitte. Karte vorher passend schieben.');
+    const note = document.createElement('input');
+    note.type = 'text';
+    note.placeholder = 'Notiz (optional)';
+    box.appendChild(note);
+    const list = document.createElement('div');
+    list.className = 'dlg-btns';
+    box.appendChild(list);
+    for (const [ico, label] of HF_MARKS) {
+      dlgButton(list, `${ico} ${label}`, '', () => {
+        ensureHf();
+        const text = `${ico} ${label} ${hhmm(Date.now())}${note.value.trim() ? `: ${note.value.trim()}` : ''}`;
+        P.items.push({ kind: 'text', color: hfColor(), lat: pos.lat, lon: pos.lon, text, t: Date.now() });
+        changed();
+        close(true);
+        toast(`${ico} ${label} markiert`);
+      });
+    }
+    dlgButton(box, 'Abbrechen', '', () => close(false));
+  });
+});
+
+// Feld abgesucht: antippen schaltet durch
+$('hf-field').addEventListener('click', () => {
+  if (!allGrids(P).length) return toast('Im Auftrag ist kein Raster');
+  setTool(tool === 'hffield' ? 'pan' : 'hffield');
+});
+function hfFieldTap(ll) {
+  const h = useGridAt(ll.lat, ll.lng);
+  if (!h) return toast('Außerhalb des Rasters');
+  const key = `${h.c},${h.r}`;
+  const order = ['abgesucht', 'teilweise abgesucht', 'nicht begehbar'].map((l) => P.marks.find((m) => m.kind === 'status' && m.label === l)).filter(Boolean);
+  const cur = order.findIndex((m) => m.id === P.status[key]);
+  const next = order[cur + 1];
+  if (next) P.status[key] = next.id; else delete P.status[key];
+  ensureHf();
+  changed();
+  toast(`Feld ${h.label}${cellLabel(h.c, h.r)}: ${next ? next.label : 'zurückgesetzt'}`);
+}
+$('hf-wind').addEventListener('click', openWindMeter);
+
+// ---- QR-Code anzeigen / Link teilen ----
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const el = document.createElement('script');
+    el.src = src;
+    el.onload = resolve;
+    el.onerror = () => reject(new Error(`${src} nicht ladbar`));
+    document.head.appendChild(el);
+  });
+}
+const QR_MAX = 1800; // Zeichen, die eine Handy-Kamera vom Bildschirm noch sicher liest
+async function showQr(link, title, text) {
+  await loadScript('lib/qrcode.js');
+  $('qr-title').textContent = title;
+  $('qr-text').textContent = text;
+  const box = $('qr-code');
+  if (link.length > QR_MAX) {
+    box.innerHTML = '<p class="small">Zu viele Daten für einen QR-Code – bitte über „Teilen“ (WhatsApp, SMS …) senden.</p>';
+  } else {
+    const q = window.qrcode(0, link.length < 2000 ? 'M' : 'L');
+    q.addData(link, 'Byte');
+    q.make();
+    box.innerHTML = q.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+  }
+  $('qrbox').dataset.link = link;
+  $('qrbox').hidden = false;
+}
+async function shareLinkText(link, title, text) {
+  const msg = `${text}\n${link}`;
+  if (bridge && bridge.shareText) return bridge.shareText(title, msg);
+  if (navigator.share) {
+    try { await navigator.share({ title, text: msg }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  copyText(link);
+}
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); toast('Link kopiert – z. B. in WhatsApp einfügen'); } catch { prompt('Link kopieren:', t); }
+}
+$('qr-close').addEventListener('click', () => { $('qrbox').hidden = true; });
+$('qr-copy').addEventListener('click', () => copyText($('qrbox').dataset.link));
+$('qr-share').addEventListener('click', () => shareLinkText($('qrbox').dataset.link, $('qr-title').textContent, $('qr-text').textContent));
+
+// ---- Hundeführer: Rückmeldung zurückgeben ----
+async function resultLink() {
+  ensureHf();
+  let link = '';
+  for (const tol of [4, 8, 15, 30, 60]) {
+    link = shareLink('r', await pack(buildResult(P, tol)), PUBLIC_URL);
+    if (link.length <= QR_MAX) break;
+  }
+  return link;
+}
+$('hf-back').addEventListener('click', async () => {
+  const link = await resultLink();
+  const n = P.hf.track.reduce((a, sg) => a + pathLen(sg.pts), 0);
+  showQr(link, `📤 Rückmeldung ${P.hf.team}`, `Die Einsatzleitung scannt diesen Code (Teams → „Rückmeldung scannen“). Gelaufen: ${fmtKm(n)}. Mehrfach zurückgeben schadet nicht – es kommt nichts doppelt an.`);
+});
+
+// ---- Einsatzleitung: Auftrag zusammenstellen ----
+let sendPicked = {}; // gridId -> Set("c,r")
+let sendCache = null;
+function renderSend() {
+  const teams = P.marks.filter((m) => m.kind === 'team');
+  const sel = $('send-team');
+  const prev = sel.value;
+  sel.innerHTML = '';
+  for (const t of teams) sel.add(new Option(`${t.label}${t.dog ? ` – ${t.dog}` : ''}`, t.id));
+  sel.add(new Option('ohne Team (nur Gebiet)', ''));
+  if (teams.some((t) => t.id === prev) || prev === '') sel.value = prev;
+  const box = $('send-grids');
+  const checked = new Set([...box.querySelectorAll('input:checked')].map((i) => i.value));
+  box.innerHTML = '';
+  for (const g of allGrids(P)) {
+    const n = sel.value ? Object.values(g.fills).filter((id) => id === sel.value).length : 0;
+    const l = document.createElement('label');
+    l.className = 'check';
+    l.innerHTML = '<input type="checkbox"><span></span>';
+    l.firstChild.value = g.id;
+    l.firstChild.checked = checked.size ? checked.has(g.id) : (!sel.value || n > 0 || allGrids(P).length === 1);
+    l.lastChild.textContent = `${gridLabel(P, g)}${sel.value ? ` (${n} Felder des Teams)` : ''}`;
+    box.appendChild(l);
+  }
+  if (!allGrids(P).length) box.textContent = 'Noch kein Raster angelegt.';
+  const ib = $('send-items');
+  const ichecked = new Set([...ib.querySelectorAll('input:checked')].map((i) => i.value));
+  ib.innerHTML = '';
+  const seen = new Set();
+  P.items.forEach((it, i) => {
+    if (it.resultKey) return; // Rückmeldungen der Hundeführer nicht zurückschicken
+    const label = it.kind === 'text' ? `Text: ${it.text}` : it.name || (it.kind === 'track' ? 'Umriss' : 'Zeichnung');
+    if (it.group && seen.has(it.group)) return;
+    if (it.group) seen.add(it.group);
+    const l = document.createElement('label');
+    l.className = 'check';
+    l.innerHTML = '<input type="checkbox"><span></span>';
+    l.firstChild.value = String(i);
+    l.firstChild.checked = ichecked.has(String(i)) || (it.kind === 'track' && !it.open);
+    l.lastChild.textContent = label;
+    ib.appendChild(l);
+  });
+  if (!ib.children.length) ib.textContent = 'Keine.';
+  $('send-meet').parentElement.hidden = !P.meet;
+  $('send-person').parentElement.hidden = !P.mission.person.trim();
+  const picked = Object.values(sendPicked).reduce((a, x) => a + x.size, 0);
+  $('send-pickinfo').textContent = sendFields() === 'pick' ? `${picked} Felder angetippt.` : '';
+  sendCache = null;
+  updateSendSize();
+}
+const sendFields = () => (document.querySelector('input[name=send-fields]:checked') || {}).value || 'team';
+function sendSelection() {
+  const gridIds = [...$('send-grids').querySelectorAll('input:checked')].map((i) => i.value);
+  const idx = [];
+  for (const inp of $('send-items').querySelectorAll('input:checked')) {
+    const it = P.items[Number(inp.value)];
+    if (!it) continue;
+    // ganze Zeichnung (alle Striche einer Gruppe)
+    if (it.group) P.items.forEach((x, j) => { if (x.group === it.group) idx.push(j); }); else idx.push(Number(inp.value));
+  }
+  const areas = allGrids(P).filter((g) => gridIds.includes(g.id)).map((g) => g.area);
+  let rescue = [];
+  if ($('send-rescue').checked && areas.length && rescuePts.length) {
+    const pad = 0.01;
+    rescue = inBounds(rescuePts, {
+      north: Math.max(...areas.map((a) => Math.max(a.north, a.south))) + pad, south: Math.min(...areas.map((a) => Math.min(a.north, a.south))) - pad,
+      west: Math.min(...areas.map((a) => Math.min(a.west, a.east))) - pad, east: Math.max(...areas.map((a) => Math.max(a.west, a.east))) + pad,
+    }).slice(0, 60);
+  }
+  return {
+    teamId: $('send-team').value, gridIds, fields: sendFields(),
+    picked: Object.fromEntries(Object.entries(sendPicked).map(([k, v]) => [k, [...v]])),
+    itemIdx: idx, meet: $('send-meet').checked && !!P.meet, rescue, hint: $('send-hint').value.trim(), person: $('send-person').checked,
+  };
+}
+async function currentAssignment() {
+  if (sendCache) return sendCache;
+  const sel = sendSelection();
+  const a = buildAssignment(P, sel);
+  if (db.pinHash) a.pk = db.pinHash;
+  const link = shareLink('a', await pack(a), PUBLIC_URL);
+  sendCache = { a, link, sel };
+  return sendCache;
+}
+async function updateSendSize() {
+  const { a, link } = await currentAssignment();
+  const nf = a.g.reduce((x, g) => x + g.f.length, 0);
+  $('send-size').textContent = `${a.g.length} Gebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ${a.i.length} Zeichnungen · `
+    + (link.length <= QR_MAX ? `passt in einen QR-Code (${link.length} Zeichen)` : `zu groß für einen QR-Code (${link.length} Zeichen) – per WhatsApp senden oder weniger auswählen`);
+}
+['send-team', 'send-meet', 'send-rescue', 'send-person', 'send-hint'].forEach((id) => $(id).addEventListener(id === 'send-hint' ? 'input' : 'change', () => {
+  if (id === 'send-team') { $('send-grids').innerHTML = ''; return renderSend(); }
+  sendCache = null; updateSendSize();
+}));
+$('send-grids').addEventListener('change', () => { sendCache = null; updateSendSize(); });
+$('send-items').addEventListener('change', () => { sendCache = null; updateSendSize(); });
+document.querySelectorAll('input[name=send-fields]').forEach((r) => r.addEventListener('change', () => {
+  sendCache = null;
+  if (sendFields() === 'pick') { closePanels(); setTool('sendpick'); updatePickBar(); redraw(); } else renderSend();
+}));
+$('send-open').addEventListener('click', () => {
+  if (!allGrids(P).length) return toast('Bitte zuerst ein Raster anlegen');
+  $('send-grids').innerHTML = '';
+  renderSend();
+  openPanel('panel-send');
+});
+function sendPickTap(ll) {
+  const h = hitGrid(ll.lat, ll.lng);
+  if (!h) return toast('Außerhalb des Rasters');
+  const set = sendPicked[h.g.id] || (sendPicked[h.g.id] = new Set());
+  const key = `${h.c},${h.r}`;
+  if (set.has(key)) set.delete(key); else set.add(key);
+  updatePickBar();
+  redraw();
+}
+function updatePickBar() {
+  const n = Object.values(sendPicked).reduce((a, x) => a + x.size, 0);
+  $('pick-info').textContent = `${n} Feld${n === 1 ? '' : 'er'} für den Auftrag gewählt`;
+}
+$('pick-done').addEventListener('click', () => {
+  // Gebiete mit angetippten Feldern automatisch ankreuzen
+  setTool('pan');
+  redraw();
+  renderSend();
+  for (const inp of $('send-grids').querySelectorAll('input')) if (sendPicked[inp.value] && sendPicked[inp.value].size) inp.checked = true;
+  sendCache = null;
+  updateSendSize();
+  openPanel('panel-send');
+});
+$('pick-clear').addEventListener('click', () => { sendPicked = {}; updatePickBar(); redraw(); });
+function drawPicked(c) {
+  if (tool !== 'sendpick') return;
+  c.lineWidth = 3;
+  c.strokeStyle = '#1565c0';
+  c.fillStyle = 'rgba(21,101,192,0.25)';
+  for (const g of allGrids(P)) {
+    const set = sendPicked[g.id];
+    if (!set || !set.size) continue;
+    const gg = makeGrid(g.area, g.cellM);
+    for (const k of set) {
+      const [cc, rr] = k.split(',').map(Number);
+      const b = cellBounds(gg, cc, rr);
+      const [x0, y0] = toPx(b.north, b.west);
+      const [x1, y1] = toPx(b.south, b.east);
+      c.fillRect(x0, y0, x1 - x0, y1 - y0);
+      c.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    }
+  }
+}
+async function prepareSend() {
+  if (!db.pinHash) {
+    toast('Bitte zuerst eine PIN festlegen – sie schützt die Hundeführer-Handys');
+    if (!(await setNewPin())) return null;
+    sendCache = null;
+  }
+  const c = await currentAssignment();
+  if (!c.a.g.length) { toast('Bitte mindestens ein Rastergebiet ankreuzen'); return null; }
+  P.sent = P.sent || [];
+  if (!P.sent.some((x) => x.id === c.a.id)) {
+    const team = P.marks.find((m) => m.id === c.sel.teamId);
+    P.sent.push({ id: c.a.id, teamId: c.sel.teamId, team: team ? team.label : 'ohne Team', grids: c.a.g.map((g) => g.i), at: Date.now() });
+    touch();
+    renderSentList();
+  }
+  return c;
+}
+$('send-qr').addEventListener('click', async () => {
+  const c = await prepareSend();
+  if (!c) return;
+  showQr(c.link, `📲 Auftrag ${c.a.tm ? c.a.tm.l : ''}`.trim(), 'Mit der Kamera des Hundeführer-Handys scannen und den Link öffnen – es braucht keine App. Beim ersten Öffnen ist Internet nötig.');
+});
+$('send-share').addEventListener('click', async () => {
+  const c = await prepareSend();
+  if (!c) return;
+  shareLinkText(c.link, 'Suchauftrag', `Suchauftrag ${c.a.tm ? `für ${c.a.tm.l} ` : ''}(${P.title || 'Einsatz'}) – Link öffnen:`);
+});
+$('send-copy').addEventListener('click', async () => {
+  const c = await prepareSend();
+  if (c) copyText(c.link);
+});
+function renderSentList() {
+  const box = $('sent-list');
+  box.innerHTML = '';
+  for (const x of [...(P.sent || [])].reverse()) {
+    const d = document.createElement('div');
+    d.textContent = `📲 ${hhmm(x.at)} Auftrag an ${x.team}${x.last ? ` · Rückmeldung ${hhmm(x.last)}` : ' · noch keine Rückmeldung'}`;
+    box.appendChild(d);
+  }
+}
+$('btn-teams').addEventListener('click', renderSentList);
+
+// ---- Einsatzleitung: Rückmeldung übernehmen (Kamera oder eingefügter Link) ----
+async function handleShared(text) {
+  const sh = parseShared(text);
+  if (!sh) return toast('Kein Auftrag und keine Rückmeldung erkannt');
+  let data;
+  try { data = await unpack(sh.data); } catch { return toast('Code beschädigt oder unvollständig'); }
+  if (data.k === 'a') return takeAssignment(data);
+  if (data.k !== 'r') return toast('Unbekannter Inhalt');
+  // Suchgebiet finden, an das der Auftrag ging
+  const target = Object.values(db.projects).find((p) => (p.sent || []).some((x) => x.id === data.a));
+  if (target && target !== P) switchProject(target.id);
+  const res = applyResult(P, data);
+  const sent = (P.sent || []).find((x) => x.id === data.a);
+  if (sent) sent.last = Date.now();
+  changed();
+  renderSentList();
+  toast(`📥 Rückmeldung ${res.who}: ${res.ways} Weg${res.ways === 1 ? '' : 'e'}, ${res.marks} Markierung${res.marks === 1 ? '' : 'en'}, ${res.fields} Feld${res.fields === 1 ? '' : 'er'}${res.known ? '' : ' (Auftrag hier unbekannt – ins aktuelle Suchgebiet übernommen)'}${res.ways + res.marks + res.fields ? '' : ' – nichts Neues'}`, 9000);
+}
+async function takeAssignment(a) {
+  const known = Object.values(db.projects).find((p) => p.hf && p.hf.id === a.id);
+  if (db.mode === 'el' && !known) {
+    const ok = await openDlg((box, close) => {
+      dlgHead(box, '📲 Suchauftrag', `Auftrag „${a.t}${a.tm ? ` – ${a.tm.l}` : ''}“ auf diesem Gerät als Hundeführer übernehmen? Die App wechselt in den Hundeführer-Modus.`);
+      dlgButton(box, 'Übernehmen', 'primary', () => close(true));
+      dlgButton(box, 'Abbrechen', '', () => close(false));
+    });
+    if (!ok) return;
+  }
+  let p = known;
+  if (!p) {
+    p = projectFromAssignment(a);
+    db.projects[p.id] = p;
+    if (p.hfRescue.length) {
+      rescuePts = mergeRescue(rescuePts, p.hfRescue);
+      storeRescue(rescuePts).catch(() => {});
+      renderRescueInfo();
+    }
+  }
+  if (a.pk) db.pinHash = a.pk;
+  db.mode = 'hf';
+  switchProject(p.id);
+  const gs = allGrids(P);
+  if (gs.length && !known) {
+    const b = { n: -90, s: 90, w: 180, e: -180 };
+    for (const g of gs) {
+      b.n = Math.max(b.n, g.area.north, g.area.south); b.s = Math.min(b.s, g.area.north, g.area.south);
+      b.w = Math.min(b.w, g.area.west, g.area.east); b.e = Math.max(b.e, g.area.west, g.area.east);
+    }
+    map.fitBounds([[b.s, b.w], [b.n, b.e]]);
+  }
+  saveNow();
+  applyMode();
+  toast(known ? 'Auftrag ist schon da' : `📲 Auftrag übernommen: ${p.hf.team}`, 5000);
+}
+$('recv-paste').addEventListener('click', () => openDlg((box, close) => {
+  dlgHead(box, '📋 Rückmeldung einfügen', 'Den Link aus WhatsApp/SMS hier einfügen.');
+  const ta = document.createElement('textarea');
+  ta.rows = 4;
+  box.appendChild(ta);
+  dlgButton(box, 'Übernehmen', 'primary', () => { close(true); handleShared(ta.value); });
+  dlgButton(box, 'Abbrechen', '', () => close(false));
+  setTimeout(() => ta.focus(), 50);
+}));
+// Kamera-Scanner: BarcodeDetector (falls vorhanden), sonst jsQR
+let scanStream = null;
+let scanRun = false;
+async function startScan() {
+  $('scanbox').hidden = false;
+  $('scan-text').textContent = 'Kamera wird gestartet …';
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+  } catch (e) {
+    $('scan-text').textContent = 'Keine Kamera verfügbar oder nicht erlaubt. Alternativ: Link per WhatsApp schicken lassen und „Rückmeldung einfügen“.';
+    return;
+  }
+  const v = $('scan-video');
+  v.srcObject = scanStream;
+  await v.play().catch(() => {});
+  $('scan-text').textContent = 'Kamera auf den QR-Code richten …';
+  let detector = null;
+  if ('BarcodeDetector' in window) { try { detector = new BarcodeDetector({ formats: ['qr_code'] }); } catch { detector = null; } }
+  if (!detector) await loadScript('lib/jsQR.js');
+  const cv = document.createElement('canvas');
+  const cx = cv.getContext('2d', { willReadFrequently: true });
+  scanRun = true;
+  const tick = async () => {
+    if (!scanRun) return;
+    if (v.readyState >= 2) {
+      let text = null;
+      if (detector) {
+        try { const r = await detector.detect(v); if (r.length) text = r[0].rawValue; } catch { /* nächster Versuch */ }
+      } else {
+        const w = Math.min(800, v.videoWidth);
+        const h = Math.round((v.videoHeight / v.videoWidth) * w);
+        cv.width = w; cv.height = h;
+        cx.drawImage(v, 0, 0, w, h);
+        const r = window.jsQR(cx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' });
+        if (r) text = r.data;
+      }
+      if (text) { stopScan(); handleShared(text); return; }
+    }
+    setTimeout(tick, 200);
+  };
+  tick();
+}
+function stopScan() {
+  scanRun = false;
+  if (scanStream) scanStream.getTracks().forEach((t) => t.stop());
+  scanStream = null;
+  $('scanbox').hidden = true;
+}
+$('recv-scan').addEventListener('click', startScan);
+$('scan-close').addEventListener('click', stopScan);
+
+// Link mit Auftrag/Rückmeldung (Kamera-App, WhatsApp …) – beim Start und wenn er sich ändert
+async function handleHash() {
+  if (!parseShared(location.hash)) return;
+  const h = location.hash;
+  history.replaceState(null, '', location.pathname + location.search);
+  await handleShared(h);
+}
+window.addEventListener('hashchange', handleHash);
+
+// Erster Start: Modus wählen (vorhandene Daten -> Einsatzleitung)
+async function chooseModeIfNeeded() {
+  if (db.mode) return;
+  if (parseShared(location.hash)) return; // Auftrag-Link legt den Modus fest
+  if (Object.values(db.projects).some((p) => p.area || p.items.length)) { db.mode = 'el'; saveNow(); return; }
+  const m = await openDlg((box, close) => {
+    dlgHead(box, 'Wie nutzt du die App?', 'Lässt sich später unter „Gebiete“ ändern.');
+    const list = document.createElement('div');
+    list.className = 'dlg-btns';
+    box.appendChild(list);
+    dlgButton(list, '🧭 Einsatzleitung<small>Alles: Raster, Teams, Aufträge, Berichte</small>', 'primary', () => close('el'));
+    dlgButton(list, '🐕 Hundeführer<small>Vereinfacht: Auftrag, Weg, Markieren, Zurückgeben</small>', '', () => close('hf'));
+  });
+  if (m === 'hf') await toHfMode(); else { db.mode = 'el'; saveNow(); }
+}
 
 // ---------- Nachtmodus ----------
 // aus → dunkel → rot (schont die Nachtsicht) → aus; gilt fürs Gerät (db.night)
@@ -3480,3 +4133,7 @@ console.info(`Suchgebiet-Karten bereit (${bridge ? 'Android-App' : 'Browser'})`)
 window.__app = {
   get P() { return P; }, get grid() { return grid; }, get db() { return db; }, map, setArea, setTool, saveNow,
 };
+
+// Modus anwenden, beim ersten Start fragen, Auftrag/Rückmeldung aus dem Link übernehmen
+applyMode();
+chooseModeIfNeeded().then(handleHash);

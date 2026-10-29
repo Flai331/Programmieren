@@ -14,6 +14,8 @@ import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.GeolocationPermissions
 import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
+import android.view.WindowManager
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -48,6 +50,14 @@ class MainActivity : ComponentActivity() {
         pendingGeo?.let { (origin, cb) -> cb.invoke(origin, granted, false) }
         pendingGeo = null
         if (!granted) toast("Ohne Standortfreigabe kein GPS")
+    }
+
+    // Kamera für den QR-Scanner (Rückmeldungen der Hundeführer)
+    private var pendingCamera: PermissionRequest? = null
+    private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        pendingCamera?.let { req -> if (granted) req.grant(req.resources) else req.deny() }
+        pendingCamera = null
+        if (!granted) toast("Ohne Kamera-Freigabe kein QR-Scan")
     }
 
     // Für die Fortschrittsanzeige des Offline-Downloads (Android 13+); ohne geht es trotzdem
@@ -121,6 +131,7 @@ class MainActivity : ComponentActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
+            mediaPlaybackRequiresUserGesture = false // Kamera-Vorschau beim QR-Scan
             setGeolocationEnabled(true)
             allowFileAccess = false
             allowContentAccess = false
@@ -158,6 +169,19 @@ class MainActivity : ComponentActivity() {
                     locationPermission.launch(
                         arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
                     )
+                }
+            }
+
+            override fun onPermissionRequest(request: PermissionRequest) {
+                runOnUiThread {
+                    if (!request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
+                        request.deny()
+                    } else if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                        request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
+                    } else {
+                        pendingCamera = request
+                        cameraPermission.launch(Manifest.permission.CAMERA)
+                    }
                 }
             }
 
@@ -218,6 +242,26 @@ class MainActivity : ComponentActivity() {
     }
 
     inner class Bridge {
+        // Text (z. B. Auftrags-Link) über den Teilen-Dialog senden – WhatsApp, SMS …
+        @JavascriptInterface
+        fun shareText(title: String, text: String) {
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, title)
+                putExtra(Intent.EXTRA_TEXT, text)
+            }
+            runOnUiThread {
+                try { startActivity(Intent.createChooser(send, "Senden an …")) } catch (e: ActivityNotFoundException) { toast("Keine App zum Teilen gefunden") }
+            }
+        }
+
+        // Bildschirm anlassen (Weg aufzeichnen)
+        @JavascriptInterface
+        fun keepScreenOn(on: Boolean) = runOnUiThread {
+            if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+
         // ---------- Offline-Karten (siehe OfflineTiles / TileDownloadService) ----------
         @JavascriptInterface
         fun offlineStart(job: String) {
