@@ -140,17 +140,17 @@ Neue Logik kommt in eigene, testbare Dateien (`handover.js`, `pois.js`, `wizard.
 - **Zwei Geräte arbeiten weiter:** Nach der Übergabe gibt es kein echtes Zusammenführen, das Tablet führt.
 - **Datenschutz:** Telefonnummern und vermisste Person stehen im Link. Deshalb Auswahl je Kontakt; die Person geht nur auf Wunsch mit.
 
-## Offene Fragen an dich
+## Entscheidungen (29.10.2026)
 
-1. **Kontakte im Auftrag:** Sollen standardmäßig alle Einsatz-Kontakte mitgehen oder nur angehakte? Ist die EL-Nummer immer dabei?
-2. **Hundeführer:** Soll er Kontakte ins Handy-Telefonbuch speichern können oder nur anrufen?
-3. **Assistent:** Fehlt ein Schritt? Zum Beispiel Einsatzstichwort, Leitstelle mit Nummer oder Anforderer (Polizei)?
-4. **Funkrufnamen:** Freie Liste oder feste Felder (Leitstelle, Polizei, Staffelführer)? Sollen sie ins PDF bzw. JUH-Formular?
-5. **Übergabe:** Ist der mehrteilige QR-Code (ohne Netz, große Einsätze) wichtig, oder reichen QR klein + Link + Datei?
-6. **Handy nach der Übergabe:** Weiter normal arbeiten, nur anzeigen oder löschen?
-7. **ELW-Gerät:** Passt es, dass die ELW-Besatzung die EL-PIN kennt (EL-Modus)? Oder braucht es einen eingeschränkten ELW-Modus ohne PIN?
-8. **Richtung der Infos:** Nur ELW → EL, oder auch EL → ELW? Das kostet kaum mehr.
-9. **Kategorien der Lage-Orte:** Passen sie? Fehlen z. B. Hubschrauber-Landeplatz, Hydrant, Sammelstelle, Presse?
-10. **Lage-Orte an Hundeführer:** Sollen sie optional mit dem Auftrag gehen?
-11. **Vom ELW gelöschte Orte:** Sollen sie beim EL verschwinden oder nur markiert werden?
-12. **Gerätename:** Soll beim ersten Senden nach einem Gerätenamen gefragt werden (Vorschlag: Funkrufname ELW), oder reicht „ELW“?
+1. **Kontakte im Auftrag:** Alle Einsatz-Kontakte sind vorausgewählt und einzeln abwählbar. Die EL-Nummer ist immer dabei.
+2. **Hundeführer:** Kontakte nur anrufen, nicht ins Handy speichern.
+3. **Assistent:** Zusätzlicher Schritt „Wetter beim Start“ (DWD-Wind und Wetter am B-Ort anzeigen). Kein Einsatzstichwort, keine Leitstelle.
+4. **Funkrufnamen:** Freie Liste „Funkrufname + wer“, steht auf der PDF-Einsatzinfo-Seite.
+5. **Mehrteiliger QR-Code:** Später. Zuerst QR klein + Link + Datei.
+6. **Handy nach der Übergabe:** Arbeitet normal weiter, zeigt das Banner „an Tablet übergeben“.
+7. **ELW-Gerät:** Arbeitet im Einsatzleiter-Modus (kennt die PIN). Kein dritter Modus.
+8. **Lage-Orte:** Werden in beide Richtungen übertragen (ELW ↔ EL).
+9. **Kategorien:** Keine zusätzlichen, die vorgeschlagene Liste bleibt.
+10. **Lage-Orte an Hundeführer:** Optional per Häkchen im Auftrag, nur zum Ansehen.
+11. **Vom ELW gelöschte Orte:** Verschwinden auch beim Einsatzleiter.
+12. **Gerätename:** Beim ersten Senden einmal fragen, vorbelegt mit dem Funkrufnamen ELW.
