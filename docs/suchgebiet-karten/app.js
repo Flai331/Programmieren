@@ -25,7 +25,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v47';
+const APP_VERSION = 'v48';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -975,6 +975,7 @@ $('quick-marks').addEventListener('click', () => {
     const max = map.getMaxZoom();
     const z = map.getZoom();
     if (!Number.isFinite(z)) return;
+    $('zs-level').textContent = `St. ${Math.round(z)}`;
     const f = (z - min) / (max - min);
     const h = track.clientHeight - 12;
     $('zs-thumb').style.top = `${6 + (1 - f) * h}px`;
@@ -1332,6 +1333,15 @@ $('off-start').addEventListener('click', () => {
   runOffline(r);
 });
 $('off-redraw').addEventListener('click', () => { closePanels(); setTool('offrect'); });
+// So sieht die gewählte Stufe aus: Karte dieser Art in genau dieser Zoomstufe zeigen
+$('off-preview').addEventListener('click', () => {
+  const z = Number($('off-zmax').value);
+  const id = $('off-layer').value;
+  if (P.layerId !== id) setLayer(id);
+  closePanels();
+  map.setZoom(z);
+  toast(`Stufe ${z} (${ZOOMS[z]}) – so scharf wird die Offline-Karte. Stufe steht links am Zoom-Regler.`);
+});
 
 // ---------- Kartenart ----------
 function renderLayerList() {

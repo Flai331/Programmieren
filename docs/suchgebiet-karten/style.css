@@ -96,6 +96,7 @@ button, input, select { font: inherit; }
   position: absolute; left: 7px; width: 22px; height: 14px; margin-top: -7px; border-radius: 7px;
   background: #fff; border: 2px solid #1565c0; box-sizing: border-box; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
+.zs-level { font-size: 12px; font-weight: 700; color: #1565c0; line-height: 1; padding: 2px 0; font-variant-numeric: tabular-nums; }
 @media (max-height: 560px) { .zs-track { height: 90px; } }
 @media (max-height: 430px) { .zoomslider { display: none; } }
 
