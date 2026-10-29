@@ -672,7 +672,7 @@ function drawMeet(ctx, toPx, m, s) {
   ctx.font = `bold ${10 * s}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('TP', x, y + 0.5 * s);
+  ctx.fillText('B', x, y + 0.5 * s);
   if (m.text) {
     ctx.font = `bold ${14 * s}px sans-serif`;
     ctx.textAlign = 'left';

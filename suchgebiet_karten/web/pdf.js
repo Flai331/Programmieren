@@ -290,7 +290,7 @@ function coordText(lat, lon, utm) {
   return utm ? `UTMREF ${formatMgrs(lat, lon, 5)} · UTM ${formatUtm(lat, lon)} · ${dec}` : dec;
 }
 
-// Seite mit Einsatzinformationen: Teams, Legende, Treffpunkt, Notizen
+// Seite mit Einsatzinformationen: Teams, Legende, B-Ort, Notizen
 function infoPage(doc, project, grid, W, H, top) {
   let y = top;
   const x = MARGIN;
@@ -323,7 +323,7 @@ function infoPage(doc, project, grid, W, H, top) {
   row('Einsatzleitung/Ersteller:', project.leader || '–');
   row('Erstellt am:', new Date().toLocaleString('de-DE', { dateStyle: 'full', timeStyle: 'short' }));
   if (project.meet) {
-    row('Treffpunkt:', project.meet.text || 'Treffpunkt');
+    row('B-Ort:', project.meet.text || 'B-Ort');
     row('Koordinaten:', coordText(project.meet.lat, project.meet.lon, project.showUtm));
   }
   if (grid) {
@@ -430,7 +430,7 @@ export function planMultiSheets(views, opts, viewBounds) {
   return sheets.some((sh) => !sh.info) ? sheets : sheets.filter((sh) => !sh.info);
 }
 
-// Ausschnitt, auf dem alle markierten Felder, Zeichnungen, Tracks, Texte und der Treffpunkt
+// Ausschnitt, auf dem alle markierten Felder, Zeichnungen, Tracks, Texte und der B-Ort
 // samt Beschriftung zu sehen sind (null, wenn nichts eingezeichnet ist).
 // aspect/mmW: Seitenverhältnis und Breite der Karte auf Papier, um Beschriftungen
 // (Schrift ca. 4,5 mm, wie in drawOverlay) mit einzurechnen.
@@ -459,13 +459,13 @@ export function contentBounds(state, aspect, mmW, pad = 0.06) {
   const m = state.meet;
   if (m) {
     pts.push([m.lat, m.lon]);
-    labels.push([m.lat, m.lon, m.text || 'TP']);
+    labels.push([m.lat, m.lon, m.text || 'B-Ort']);
   }
   if (!pts.length) return null;
   let x0 = Infinity; let x1 = -Infinity; let y0 = Infinity; let y1 = -Infinity;
   const add = (x, y) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); };
   for (const [lat, lon] of pts) add(mercX(lon), mercY(lat));
-  // mindestens ca. 300 m Ausschnitt (z. B. nur ein Treffpunkt)
+  // mindestens ca. 300 m Ausschnitt (z. B. nur ein B-Ort)
   const minW = 300 / metersPerUnit(mercLat((y0 + y1) / 2));
   if (x1 - x0 < minW) { const c = (x0 + x1) / 2; x0 = c - minW / 2; x1 = c + minW / 2; }
   if (y1 - y0 < minW) { const c = (y0 + y1) / 2; y0 = c - minW / 2; y1 = c + minW / 2; }
@@ -564,7 +564,7 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
     if (g) info.push(`Raster ${formatMeters(g.cellM)}, A1 = NW-Ecke`);
     if (project.meet) {
       const m = project.meet;
-      info.push(`TP ${m.text ? m.text + ': ' : ''}${project.showUtm ? formatMgrs(m.lat, m.lon) : `${m.lat.toFixed(5)}, ${m.lon.toFixed(5)}`}`);
+      info.push(`B-Ort${m.text && m.text !== 'B-Ort' ? ' ' + m.text : ''}: ${project.showUtm ? formatMgrs(m.lat, m.lon) : `${m.lat.toFixed(5)}, ${m.lon.toFixed(5)}`}`);
     }
     if (project.showUtm) info.push(`UTM-Gitter blau, Zone ${utmZone((sh.bounds.north + sh.bounds.south) / 2, (sh.bounds.west + sh.bounds.east) / 2)}`);
     doc.setFontSize(8.5);

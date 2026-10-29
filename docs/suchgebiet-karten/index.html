@@ -230,11 +230,11 @@
     <label>Einsatzleitung / Ersteller
       <input id="leader" type="text" placeholder="Name">
     </label>
-    <label>Treffpunkt</label>
+    <label>B-Ort</label>
     <p id="meet-info" class="info"></p>
     <div class="row">
-      <button id="meet-set">Treffpunkt auf Karte setzen</button>
-      <button id="meet-remove">Treffpunkt entfernen</button>
+      <button id="meet-set">B-Ort auf Karte setzen</button>
+      <button id="meet-remove">B-Ort entfernen</button>
     </div>
 
     <h2 class="sub">Datei</h2>
@@ -297,7 +297,7 @@
     <label>Umrisse und Zeichnungen</label>
     <div id="send-items" class="checklist"></div>
     <div class="checklist">
-      <label class="check"><input type="checkbox" id="send-meet" checked> Treffpunkt</label>
+      <label class="check"><input type="checkbox" id="send-meet" checked> B-Ort</label>
       <label class="check"><input type="checkbox" id="send-rescue" checked> Forst-Rettungspunkte im Raster/Umriss und im Umkreis von 2 km um dessen Mitte</label>
       <label class="check"><input type="checkbox" id="send-person"> Vermisste Person mitsenden (Datenschutz beachten)</label>
     </div>
@@ -318,7 +318,7 @@
     <div id="hfm-info" class="info"></div>
     <div class="list hfm-list">
       <button id="hfm-rp">🚑 Nächster Rettungspunkt</button>
-      <button id="hfm-meet">🎯 Zum Treffpunkt</button>
+      <button id="hfm-meet">🎯 Zum B-Ort</button>
       <button id="hfm-notes">📝 Notizen</button>
       <button id="hfm-contacts">📇 Kontakte</button>
       <button id="hfm-projects">📁 Frühere Aufträge</button>
@@ -433,7 +433,7 @@
         <option value="5">5×5</option>
       </select> Feldern
     </label>
-    <label class="check"><input type="checkbox" id="pdf-info"> Zusätzlich Einsatzinfo-Seite (Teams, Legende, Treffpunkt, Notizen)</label>
+    <label class="check"><input type="checkbox" id="pdf-info"> Zusätzlich Einsatzinfo-Seite (Teams, Legende, B-Ort, Notizen)</label>
     <label class="check"><input type="checkbox" id="pdf-view"> Aktueller Kartenausschnitt</label>
     <label class="check"><input type="checkbox" id="pdf-nogrid"> Raster ausblenden (Flächen beschriftet, Liste am Rand)</label>
     <label>Beschriftung (steht über der Karte, max. 4 Zeilen)
@@ -481,7 +481,7 @@
     <label class="check"><input type="checkbox" id="gpx-tracks" checked> Umrisse (als Tracks)</label>
     <label class="check"><input type="checkbox" id="gpx-drawings" checked> Stift-Markierungen (als Tracks)</label>
     <label class="check"><input type="checkbox" id="gpx-teams" checked> Team-Bereiche und Status (Umrisse)</label>
-    <label class="check"><input type="checkbox" id="gpx-points" checked> Treffpunkt und Textpunkte als Wegpunkte</label>
+    <label class="check"><input type="checkbox" id="gpx-points" checked> B-Ort und Textpunkte als Wegpunkte</label>
     <div class="row">
       <button id="gpx-share" class="primary">📤 Teilen</button>
       <button id="gpx-save">💾 Speichern</button>

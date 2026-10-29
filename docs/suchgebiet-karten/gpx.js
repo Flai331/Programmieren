@@ -271,7 +271,7 @@ export function buildGpx(project, grid, opts, part = '') {
   const corner = ([c, r]) => [grid.originLat - r * grid.dLat, grid.originLon + c * grid.dLon];
 
   if (opts.points) {
-    if (project.meet) wpts += wpt(project.meet.lat, project.meet.lon, project.meet.text || 'Treffpunkt', 'Flag, Blue', 'Treffpunkt');
+    if (project.meet) wpts += wpt(project.meet.lat, project.meet.lon, project.meet.text || 'B-Ort', 'Flag, Blue', 'B-Ort');
     for (const it of project.items) {
       if (it.kind === 'text') wpts += wpt(it.lat, it.lon, it.text, 'Pin, Red');
     }

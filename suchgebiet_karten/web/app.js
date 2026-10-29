@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v60';
+const APP_VERSION = 'v61';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -451,14 +451,14 @@ const HINTS = {
   pen: 'Mit dem Finger zeichnen – mehrere Striche gehören zu einer Zeichnung, bis „Fertig“. Zwischendurch „Bewegen“ und zurück geht. Vorhandene Zeichnung antippen: umbenennen.',
   text: 'Auf die Karte tippen, um einen Punkt mit Text zu setzen.',
   fill: 'Team/Markierung wählen, dann Felder antippen oder darüberwischen. Nochmal tippen entfernt.',
-  erase: 'Antippen oder darüberwischen löscht Zeichnungen, Umrisse, Texte, Treffpunkt und Feldfarben.',
+  erase: 'Antippen oder darüberwischen löscht Zeichnungen, Umrisse, Texte, B-Ort und Feldfarben.',
   grid: 'Suchgebiet als Rechteck mit dem Finger aufziehen.',
   offrect: 'Bereich für die Offline-Karte als Rechteck aufziehen.',
   windpt: 'Tippe auf die Karte, wo der Wind (DWD) angezeigt werden soll.',
   hffield: 'Feld antippen: abgesucht → teilweise → nicht begehbar → zurück. „Feld“ nochmal tippen = fertig.',
   sendpick: 'Felder für den Auftrag antippen (blau umrandet). Dann „Weiter“.',
   offsquares: 'Quadrate antippen (blau = gewählt, grün = schon gespeichert). Ziehen verschiebt die Karte.',
-  meet: 'Auf die Karte tippen, um den Treffpunkt zu setzen.',
+  meet: 'Auf die Karte tippen, um den B-Ort zu setzen.',
   track: 'Umriss: Punkte antippen. Karte mit dem Finger verschieben, Zoom mit +/−.',
 };
 
@@ -750,7 +750,7 @@ function finishPointer(e, cancelled) {
       changed();
     }
   } else if (tool === 'meet') {
-    const text = prompt('Bezeichnung des Treffpunkts:', (P.meet && P.meet.text) || 'Treffpunkt');
+    const text = prompt('Bezeichnung des B-Orts:', (P.meet && P.meet.text) || 'B-Ort');
     if (text !== null) {
       snapshot();
       P.meet = { lat: ll.lat, lon: ll.lng, text: text.trim() };
@@ -764,7 +764,7 @@ function finishPointer(e, cancelled) {
 canvas.addEventListener('pointerup', (e) => finishPointer(e, false));
 canvas.addEventListener('pointercancel', (e) => finishPointer(e, true));
 
-// Radierer: zuerst Zeichnungen/Tracks/Texte, dann Treffpunkt, dann Feldfarbe/Zuteilung.
+// Radierer: zuerst Zeichnungen/Tracks/Texte, dann B-Ort, dann Feldfarbe/Zuteilung.
 // Das Raster selbst bleibt (Raster → „Raster entfernen“).
 function eraseAt(x, y) {
   const before = () => {
@@ -1174,7 +1174,7 @@ function renderViewToggles() {
   head('Raster');
   row('Rasterlinien und Feldnamen', !hide.grid, setHide('grid'));
   row('Randbeschriftung (A, B … / 1, 2 …)', !hide.edge, setHide('edge'));
-  if (P.meet) row(`Treffpunkt${P.meet.text ? `: ${P.meet.text}` : ''}`, !hide.meet, setHide('meet'), '#0d47a1');
+  if (P.meet) row(`B-Ort${P.meet.text ? `: ${P.meet.text}` : ''}`, !hide.meet, setHide('meet'), '#0d47a1');
   const used = new Set(allGrids(P).flatMap((g) => [...Object.values(g.fills), ...Object.values(g.status)]));
   const marks = P.marks.filter((m) => used.has(m.id));
   if (marks.length) head('Teams und Markierungen');
@@ -2090,7 +2090,7 @@ function renderHfInfo() {
     const lines = [`${h.team} – ${P.title}`, `Auftrag erhalten ${hhmm(h.received)}`];
     if (h.hint) lines.push(`Hinweis: ${h.hint}`);
     if (P.mission.person) lines.push(`Vermisste Person: ${P.mission.person}`);
-    if (P.meet) lines.push(`Treffpunkt: ${P.meet.text || 'gesetzt'}`);
+    if (P.meet) lines.push(`B-Ort: ${P.meet.text || 'gesetzt'}`);
     m.textContent = lines.join('\n');
     m.style.whiteSpace = 'pre-line';
   } else m.textContent = 'Noch kein Auftrag. QR-Code der Einsatzleitung mit der Handy-Kamera scannen.';
@@ -2109,7 +2109,7 @@ $('hfm-meet').addEventListener('click', () => {
   if (lastPos) {
     const m = distance(lastPos[0], lastPos[1], P.meet.lat, P.meet.lon);
     const deg = bearingDeg(lastPos[0], lastPos[1], P.meet.lat, P.meet.lon);
-    toast(`🎯 Treffpunkt: ${fmtKm(m)} Richtung ${compass(deg)} (${Math.round(deg)}°)`, 8000);
+    toast(`🎯 B-Ort: ${fmtKm(m)} Richtung ${compass(deg)} (${Math.round(deg)}°)`, 8000);
   }
 });
 function pathLen(pts) {
@@ -2855,8 +2855,8 @@ function fillProjectForm() {
 function renderMeet() {
   const m = P.meet;
   $('meet-info').textContent = m
-    ? `${m.text || 'Treffpunkt'}: ${m.lat.toFixed(5)}, ${m.lon.toFixed(5)}${P.showUtm ? ` · ${formatMgrs(m.lat, m.lon)}` : ''}`
-    : 'Kein Treffpunkt gesetzt.';
+    ? `${m.text || 'B-Ort'}: ${m.lat.toFixed(5)}, ${m.lon.toFixed(5)}${P.showUtm ? ` · ${formatMgrs(m.lat, m.lon)}` : ''}`
+    : 'Kein B-Ort gesetzt.';
   $('meet-remove').disabled = !m;
 }
 
