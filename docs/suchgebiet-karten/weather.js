@@ -79,6 +79,37 @@ export async function fetchWeather(lat, lon, now = new Date()) {
   return { current, hours: parseForecast(fc).filter((h) => h.t > now.getTime()).slice(0, 8), fetched: now.getTime(), lat, lon };
 }
 
+// DWD-Messstationen im Umkreis (Bright Sky /sources): nur Stationen mit aktuellen Messungen,
+// je Station einmal, die nächsten zuerst -> [{ id, name, lat, lon, km }]
+export function parseStations(j, max = 6) {
+  const seen = new Set();
+  const out = [];
+  const list = ((j && j.sources) || []).filter((s) => ['synop', 'current'].includes(s.observation_type) && s.dwd_station_id)
+    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
+  for (const s of list) {
+    if (seen.has(s.dwd_station_id)) continue;
+    seen.add(s.dwd_station_id);
+    out.push({ id: s.dwd_station_id, name: s.station_name || s.dwd_station_id, lat: s.lat, lon: s.lon, km: (s.distance || 0) / 1000 });
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+// Aktueller Wind an den Stationen rund um einen Punkt (Umkreis in km)
+export async function fetchStations(lat, lon, radiusKm = 40) {
+  const res = await fetch(`${API}/sources?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}&max_dist=${radiusKm * 1000}`);
+  if (!res.ok) throw new Error('keine Stationen');
+  const stations = parseStations(await res.json());
+  await Promise.all(stations.map(async (st) => {
+    try {
+      const r = await fetch(`${API}/current_weather?dwd_station_id=${encodeURIComponent(st.id)}`);
+      const c = r.ok ? parseCurrent(await r.json()) : null;
+      if (c) Object.assign(st, { from: c.from, kmh: c.kmh, gust: c.gust, t: c.t });
+    } catch { /* Station ohne aktuelle Daten */ }
+  }));
+  return { lat, lon, fetched: Date.now(), list: stations.filter((s) => s.from != null && s.kmh != null) };
+}
+
 // Kompass: mehrere Messwerte zu einer Richtung mitteln (über 0°/360° hinweg richtig)
 export function circularMean(degs) {
   if (!degs.length) return null;
@@ -112,7 +143,7 @@ const hhmm = (t) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', m
 export function windLines(m) {
   return (m.wind || []).map((w) => {
     const d = w.from != null ? `aus ${dirName(w.from)} (${Math.round(w.from)}°)` : '';
-    if (w.src === 'gemessen') return `${hhmm(w.t)} gemessen: ${d}, ${STRENGTHS[w.strength]?.label || ''}`;
+    if (w.src === 'gemessen') return `${hhmm(w.t)} gemessen${w.by ? ` (${w.by})` : ''}: ${d}, ${STRENGTHS[w.strength]?.label || ''}`;
     return `${hhmm(w.t)} DWD${w.station ? ` ${w.station}` : ''}: ${d}, ${Math.round(w.kmh)} km/h${w.gust ? `, Böen ${Math.round(w.gust)}` : ''} (Bft ${beaufort(w.kmh)})`;
   });
 }
