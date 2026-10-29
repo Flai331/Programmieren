@@ -154,6 +154,8 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ErrorReports.installCrashHandler(this)
+        ErrorReports.flush(this)
         OfflineTiles.init(this)
         val assetLoader = WebViewAssetLoader.Builder()
             .setDomain(host)
@@ -340,6 +342,35 @@ class MainActivity : ComponentActivity() {
     }
 
     inner class Bridge {
+        // Fehlerbericht aus der Web-App (JSON, ohne Einsatzdaten) an die Notion-Fehlerzentrale.
+        // Rückgabe: "sent" (wird gesendet), "mail" (kein Token: Mail-App geöffnet), "none" (Auto-Fehler ohne Token)
+        @JavascriptInterface
+        fun reportError(json: String): String {
+            val r = try { org.json.JSONObject(json) } catch (_: Exception) { return "none" }
+            if (ErrorReports.hasToken) {
+                ErrorReports.send(this@MainActivity, r)
+                return "sent"
+            }
+            if (r.optString("kind") != "Manuelle Meldung") return "none"
+            val body = listOf(
+                "Beschreibung: " + r.optString("desc"),
+                "Fehler: " + r.optString("error"),
+                "Seite: " + r.optString("page"),
+                "Rolle: " + r.optString("role"),
+                "Version: " + r.optString("version"),
+                "Gerät: " + ErrorReports.device() + ", " + ErrorReports.os(),
+                "", "Protokoll:", r.optString("log"),
+            ).joinToString("\n")
+            val mail = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:klaasotte99@gmail.com")).apply {
+                putExtra(Intent.EXTRA_SUBJECT, "Suchgebiet-Karten: " + r.optString("title", "Fehlerbericht"))
+                putExtra(Intent.EXTRA_TEXT, body)
+            }
+            runOnUiThread {
+                try { startActivity(mail) } catch (e: ActivityNotFoundException) { toast("Keine Mail-App gefunden") }
+            }
+            return "mail"
+        }
+
         // Empfangene Datei als JSON {name, data(Base64)} – einmalig, danach leer
         @JavascriptInterface
         fun takeSharedFile(): String {
