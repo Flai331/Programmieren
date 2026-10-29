@@ -487,6 +487,15 @@ body.hf #overlay { height: calc(100% - 136px); }
 .hfinfo b { display: block; font-size: 14px; }
 .hfinfo span { display: block; color: #333; overflow-wrap: anywhere; }
 .hfinfo.min span { display: none; }
+/* Randknöpfe zweispaltig: Auftragsanzeige endet davor */
+@media (max-height: 640px) and (orientation: portrait) { .hfinfo { right: 124px; } }
+@media (max-height: 500px) and (orientation: landscape) { .hfinfo { right: 98px; left: 54px; top: 46px; } }
+.leaflet-control-attribution { cursor: pointer; }
+.leaflet-control-attribution.folded {
+  font-size: 0 !important; width: 22px; height: 22px; padding: 0 !important; border-radius: 11px 0 0 0;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.leaflet-control-attribution.folded::before { content: 'ⓘ'; font-size: 15px; color: #333; }
 body.hf .wx { top: 120px; }
 .hfm-list button { font-size: 16px; padding: 12px; text-align: left; }
 html.night .hfbar, html.night .hfinfo, html.night .qrbox { filter: invert(1) hue-rotate(180deg); }

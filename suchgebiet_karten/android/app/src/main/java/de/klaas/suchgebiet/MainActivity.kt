@@ -68,6 +68,34 @@ class MainActivity : ComponentActivity() {
         fileCallback = null
     }
 
+    // Foto vom Papier: Kamera-App nimmt in eine Datei im Cache auf, die dann an die Web-App geht
+    private var photoUri: Uri? = null
+    private val takePhoto = registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val uri = photoUri
+        fileCallback?.onReceiveValue(if (ok && uri != null) arrayOf(uri) else null)
+        fileCallback = null
+    }
+    private val photoPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) launchCamera() else {
+            toast("Ohne Kamera-Freigabe kein Foto")
+            fileCallback?.onReceiveValue(null)
+            fileCallback = null
+        }
+    }
+
+    private fun launchCamera() {
+        try {
+            val dir = File(cacheDir, "shared").apply { mkdirs() }
+            val file = File(dir, "foto.jpg")
+            photoUri = FileProvider.getUriForFile(this, "$packageName.files", file)
+            takePhoto.launch(photoUri)
+        } catch (e: Exception) {
+            toast("Keine Kamera-App gefunden")
+            fileCallback?.onReceiveValue(null)
+            fileCallback = null
+        }
+    }
+
     // „Speichern“: Android fragt nach Ordner und Dateiname, dann wird die Datei geschrieben
     private class CreateDoc : ActivityResultContracts.CreateDocument("*/*") {
         var mime = "*/*"
@@ -192,8 +220,14 @@ class MainActivity : ComponentActivity() {
             ): Boolean {
                 fileCallback?.onReceiveValue(null)
                 fileCallback = callback
+                val image = params.acceptTypes.any { it.startsWith("image/") }
+                if (image && params.isCaptureEnabled) {
+                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) launchCamera()
+                    else photoPermission.launch(Manifest.permission.CAMERA)
+                    return true
+                }
                 return try {
-                    pickFile.launch(arrayOf("application/pdf", "application/json", "text/plain", "application/octet-stream", "application/gpx+xml", "application/xml", "text/xml", "text/vcard", "text/x-vcard", "text/directory", "application/vnd.google-earth.kml+xml", "text/csv", "text/comma-separated-values"))
+                    if (image) pickFile.launch(arrayOf("image/*")) else pickFile.launch(arrayOf("application/pdf", "application/json", "text/plain", "application/octet-stream", "application/gpx+xml", "application/xml", "text/xml", "text/vcard", "text/x-vcard", "text/directory", "application/vnd.google-earth.kml+xml", "text/csv", "text/comma-separated-values"))
                     true
                 } catch (e: ActivityNotFoundException) {
                     fileCallback = null

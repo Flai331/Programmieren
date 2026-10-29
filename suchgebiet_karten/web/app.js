@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v62';
+const APP_VERSION = 'v63';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -165,6 +165,14 @@ function changed() {
 load();
 const map = L.map('map', { zoomControl: false, maxZoom: 20 });
 L.control.zoom({ position: 'bottomright' }).addTo(map);
+// Quellenangabe: kurz ausgeklappt, dann nur „ⓘ“ (verdeckt sonst Bedienelemente); antippen klappt sie auf
+const attrBox = map.attributionControl.getContainer();
+setTimeout(() => attrBox.classList.add('folded'), 6000);
+attrBox.addEventListener('click', (e) => {
+  if (e.target.closest('a') && !attrBox.classList.contains('folded')) return;
+  e.preventDefault();
+  attrBox.classList.toggle('folded');
+});
 
 // Eine Kachelschicht für alle Dienste (auch WMS), dieselben URLs wie im PDF
 const AppTiles = L.TileLayer.extend({
@@ -331,7 +339,7 @@ function redraw() {
 }
 
 // Windpfeile (Overlay, ein-/ausschaltbar: db.windArrows). Jeder Pfeil zeigt, wohin der Wind weht.
-// Blau: DWD am Windpunkt bzw. über dem Suchgebiet und an den DWD-Messstationen ringsum.
+// Hundeführer – Blau: DWD am Windpunkt bzw. über dem Suchgebiet und an den DWD-Messstationen ringsum.
 // Grün: selbst gemessener Wind an der Messstelle (auch von Hundeführern zurückgemeldet).
 function windArrowPoint() {
   const gs = allGrids(P);
@@ -350,9 +358,17 @@ function windArrowPoint() {
   }
   return wxPoint();
 }
+// Einsatzleitung: nur an den Standorten, die Teams zurückgemeldet haben (je Team der neueste), immer mit DWD-Wind
+function teamWindArrows(w) {
+  const last = new Map();
+  for (const m of P.mission.wind || []) if (m.by && m.lat != null && (!last.has(m.by) || last.get(m.by).t < m.t)) last.set(m.by, m);
+  return [...last.values()].map((m) => ({ lat: m.lat, lon: m.lon, from: w.from, kmh: w.kmh, color: '#1565c0',
+    text: `${m.by} ${new Date(m.t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}: aus ${dirName(w.from)} ${Math.round(w.kmh)} km/h (DWD)` }));
+}
 function windArrows() {
   const out = [];
   const w = db.wxLast && db.wxLast.current;
+  if (db.mode !== 'hf') return w && w.from != null && w.kmh != null ? teamWindArrows(w) : out;
   if (w && w.from != null && w.kmh != null) {
     const pt = windArrowPoint();
     out.push({ ...pt, from: w.from, kmh: w.kmh, color: '#1565c0', big: true,
@@ -1789,6 +1805,7 @@ function wxPoint() {
   return { lat: c.lat, lon: c.lng };
 }
 function lastMeasured() {
+  if (db.mode !== 'hf') return null; // Einsatzleitung: immer der Wind vom Wetterdienst
   const w = [...(P.mission.wind || [])].reverse().find((x) => x.src === 'gemessen');
   return w && Date.now() - w.t < 3 * 3600e3 ? w : null;
 }
@@ -1865,7 +1882,7 @@ async function loadWeather(manual) {
     const wx = await fetchWeather(pt.lat, pt.lon);
     db.wxLast = wx;
     // Messstationen ringsum (für die Windpfeile)
-    if (db.windArrows) db.wxStations = await fetchStations(pt.lat, pt.lon).catch(() => db.wxStations || null);
+    if (db.windArrows && db.mode === 'hf') db.wxStations = await fetchStations(pt.lat, pt.lon).catch(() => db.wxStations || null);
     const c = wx.current;
     // deutliche Änderung (Drehung ≥ 45° oder ±2 Bft) kommt ins Windprotokoll des Einsatzes
     if (c.from != null && c.kmh != null) {
@@ -1901,9 +1918,11 @@ $('quick-arrows').addEventListener('click', () => {
   $('quick-arrows').classList.toggle('on', !!db.windArrows);
   redraw();
   if (db.windArrows) {
-    const stale = !db.wxLast || Date.now() - db.wxLast.fetched > 10 * 60e3 || !db.wxStations;
+    const stale = !db.wxLast || Date.now() - db.wxLast.fetched > 10 * 60e3 || (db.mode === 'hf' && !db.wxStations);
     if (stale) loadWeather(true);
-    toast('Windpfeile: blau = DWD (Punkt/Suchgebiet und Messstationen), grün = selbst gemessen');
+    toast(db.mode === 'hf' ? 'Windpfeile: blau = DWD (Punkt/Suchgebiet und Messstationen), grün = selbst gemessen'
+      : P.mission.wind && P.mission.wind.some((m) => m.by && m.lat != null) ? 'Windpfeile (DWD) an den Standorten, die die Teams zurückgemeldet haben'
+        : 'Windpfeile erscheinen an den Standorten, die Teams zurückmelden (Wind vom DWD)', 6000);
   }
 });
 $('quick-arrows').classList.toggle('on', !!db.windArrows);
@@ -3567,10 +3586,12 @@ function renderThumbs() {
   }));
 }
 
+// Foto vom Papier: direkt mit der Kamera oder ein vorhandenes Bild
 $('ms-photo').addEventListener('click', () => $('ms-photo-file').click());
-$('ms-photo-file').addEventListener('change', async () => {
-  const f = $('ms-photo-file').files[0];
-  $('ms-photo-file').value = '';
+$('ms-cam').addEventListener('click', () => $('ms-cam-file').click());
+const addPhoto = async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
   if (!f) return;
   try {
     M().photos.push({ t: Date.now(), src: await shrinkPhoto(f) });
@@ -3581,7 +3602,9 @@ $('ms-photo-file').addEventListener('change', async () => {
   } catch (err) {
     toast('Foto: ' + err.message);
   }
-});
+};
+$('ms-photo-file').addEventListener('change', addPhoto);
+$('ms-cam-file').addEventListener('change', addPhoto);
 
 let viewIdx = 0;
 function renderViewer() {
@@ -3766,6 +3789,7 @@ $('nt-text').addEventListener('input', () => {
 });
 $('nt-pad').addEventListener('click', () => openPad());
 $('nt-photo').addEventListener('click', () => $('ms-photo-file').click());
+$('nt-cam').addEventListener('click', () => $('ms-cam-file').click());
 [['ms-person', 'person'], ['ms-summary', 'summary'], ['ms-author', 'author']].forEach(([id, key]) => {
   $(id).addEventListener('input', () => { M()[key] = $(id).value; touch(); });
 });

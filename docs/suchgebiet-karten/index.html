@@ -136,7 +136,7 @@
     <button id="quick-marks" class="on" title="Teams und Markierungen ein-/ausblenden"><span>▦</span>Felder</button>
     <button id="quick-rp" class="on plain" title="Nächster Rettungspunkt (von GPS-Standort oder Kartenmitte)" hidden><span>🚑</span>RP</button>
     <button id="quick-wx" class="plain" title="Wetter und Wind einblenden"><span>🌬️</span>Wetter</button>
-    <button id="quick-arrows" class="plain" title="Windpfeile auf der Karte ein/aus (DWD-Stationen, Windpunkt, eigene Messungen)"><span>➚</span>Pfeile</button>
+    <button id="quick-arrows" class="plain" title="Wind auf der Karte ein/aus (Einsatzleitung: DWD an den Team-Standorten; Hundeführer: DWD und eigene Messungen)"><span>➚</span>Wind</button>
     <button id="quick-night" class="plain" title="Nachtmodus: aus → dunkel → rot"><span>🌙</span>Nacht</button>
     <div class="zoomslider">
       <button id="zs-in" title="Hineinzoomen">+</button>
@@ -518,7 +518,8 @@
     <textarea id="nt-text" rows="7" placeholder="z. B. Funkkanal, Hinweise von Angehörigen, Meldungen der Teams …"></textarea>
     <div class="row">
       <button id="nt-pad" class="primary">✍️ Notizblock (Handschrift)</button>
-      <button id="nt-photo">📷 Foto vom Papier</button>
+      <button id="nt-cam">📷 Foto aufnehmen</button>
+      <button id="nt-photo">🖼️ Bild wählen</button>
     </div>
     <div id="nt-thumbs" class="thumbs"></div>
     <button class="close">Schließen</button>
@@ -545,8 +546,10 @@
       </label>
       <div class="row">
         <button id="ms-pad" class="primary">✍️ Notizblock (Handschrift)</button>
-        <button id="ms-photo">📷 Foto vom Papier</button>
+        <button id="ms-cam">📷 Foto aufnehmen</button>
+        <button id="ms-photo">🖼️ Bild wählen</button>
         <input id="ms-photo-file" type="file" accept="image/*" hidden>
+        <input id="ms-cam-file" type="file" accept="image/*" capture="environment" hidden>
       </div>
       <div id="ms-thumbs" class="thumbs"></div>
     </div>
