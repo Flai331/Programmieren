@@ -31,6 +31,7 @@ class TileDownloadService : Service() {
     companion object {
         const val ACTION_START = "start"
         const val ACTION_STOP = "stop"
+        const val ACTION_CANCEL = "cancel"
         const val EXTRA_JOB = "job"
         private const val CHANNEL = "offline"
         private const val NOTIF_ID = 7
@@ -47,6 +48,7 @@ class TileDownloadService : Service() {
     }
 
     private val stopFlag = AtomicBoolean(false)
+    private val cancelFlag = AtomicBoolean(false)
     private var worker: Thread? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
@@ -55,7 +57,8 @@ class TileDownloadService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         OfflineTiles.init(this)
-        if (intent?.action == ACTION_STOP) {
+        if (intent?.action == ACTION_STOP || intent?.action == ACTION_CANCEL) {
+            if (intent?.action == ACTION_CANCEL) cancelFlag.set(true)
             stopFlag.set(true)
             if (worker == null) stopSelf()
             return START_NOT_STICKY
@@ -64,6 +67,7 @@ class TileDownloadService : Service() {
         startForegroundNow(notification("Offline-Karte wird vorbereitet …", 0, 0))
         if (jobJson == null || worker != null) return START_NOT_STICKY
         stopFlag.set(false)
+        cancelFlag.set(false)
         worker = Thread { run(JSONObject(jobJson)) }.also { it.start() }
         return START_NOT_STICKY
     }
@@ -98,6 +102,10 @@ class TileDownloadService : Service() {
             .setProgress(100, pct, total == 0L)
             .setContentIntent(open)
             .addAction(0, "Anhalten", stop)
+            .addAction(0, "Abbrechen", PendingIntent.getService(
+                this, 2, Intent(this, TileDownloadService::class.java).setAction(ACTION_CANCEL),
+                PendingIntent.FLAG_IMMUTABLE
+            ))
             .build()
     }
 
@@ -129,7 +137,8 @@ class TileDownloadService : Service() {
         fun publish(finished: Boolean) {
             OfflineTiles.setStatus(id, JSONObject()
                 .put("done", done.get()).put("total", total).put("failed", failed.get())
-                .put("bytes", bytes.get()).put("finished", finished))
+                .put("bytes", bytes.get()).put("finished", finished)
+                .put("cancelled", cancelFlag.get())) // in der Benachrichtigung abgebrochen: App löscht den Bereich
         }
         try {
             val arr = job.getJSONArray("layers")
@@ -192,6 +201,7 @@ class TileDownloadService : Service() {
             worker = null
             val s = OfflineTiles.getStatus(id)
             val msg = when {
+                cancelFlag.get() -> "$name abgebrochen – wird beim nächsten Öffnen der App gelöscht"
                 OfflineTiles.lastError.isNotEmpty() -> "$name: Fehler – ${OfflineTiles.lastError}"
                 s?.optBoolean("finished") == true -> "$name ist fertig (${s.optLong("bytes") / 1048576} MB)"
                 else -> "$name angehalten – in der App mit ▶ weiterladen"
