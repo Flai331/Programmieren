@@ -41,7 +41,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v72';
+const APP_VERSION = 'v73';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -2182,6 +2182,7 @@ function applyMode() {
   if (hf && !['pan', 'hffield'].includes(tool)) setTool('pan');
   renderHfInfo();
   renderHanded();
+  renderDeviceName();
   map.invalidateSize();
   resizeCanvas();
 }
@@ -2953,8 +2954,39 @@ async function takeHandover(e) {
   saveNow();
   renderProjects();
   applyMode();
+  await askDeviceName(true);
   toast(`📥 Einsatz „${p.title || 'Suchgebiet'}“ übernommen – Rückmeldungen jetzt hier scannen${e.np ? ` (ohne ${e.np} Foto${e.np === 1 ? '' : 's'})` : ''}`, 8000);
 }
+
+// Name dieses Geräts (z. B. „ELW 11-1“, „Tablet EL“) – wird beim Übernehmen eines Einsatzes abgefragt
+function renderDeviceName() {
+  $('dev-name').textContent = db.deviceName || '–';
+}
+async function askDeviceName(joined) {
+  const name = await openDlg((box, close) => {
+    dlgHead(box, '📛 Name dieses Geräts', joined
+      ? 'Dieses Gerät ist jetzt im Einsatz dabei. Wie soll es heißen? Der Name hilft, Geräte und ihre Meldungen auseinanderzuhalten.'
+      : 'Der Name hilft, Geräte und ihre Meldungen auseinanderzuhalten.');
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.placeholder = 'z. B. ELW 11-1, Tablet EL';
+    inp.value = db.deviceName || '';
+    inp.setAttribute('list', 'dev-sugg');
+    const dl = document.createElement('datalist');
+    dl.id = 'dev-sugg';
+    for (const v of ['ELW', 'Tablet EL', 'Handy EL', 'PC EL']) { const o = document.createElement('option'); o.value = v; dl.appendChild(o); }
+    box.append(inp, dl);
+    inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') close(inp.value); });
+    dlgButton(box, 'Speichern', 'primary', () => close(inp.value));
+    dlgButton(box, joined ? 'Später' : 'Abbrechen', '', () => close(null));
+    setTimeout(() => inp.focus(), 50);
+  });
+  if (name === null) return;
+  db.deviceName = name.trim();
+  saveNow();
+  renderDeviceName();
+}
+$('dev-edit').addEventListener('click', () => askDeviceName(false));
 
 // Link mit Auftrag/Rückmeldung (Kamera-App, WhatsApp …) – beim Start und wenn er sich ändert
 async function handleHash() {
@@ -3431,7 +3463,8 @@ function renderProjects() {
     el.innerHTML = '<div class="meta"><b></b><span></span></div>';
     el.querySelector('b').textContent = p.title || '(ohne Titel)';
     el.querySelector('span').textContent = `${new Date(p.updated).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}`
-      + (g ? ` · ${g.cols}×${g.rows} Felder à ${formatMeters(g.cellM)}` : ' · kein Raster');
+      + (g ? ` · ${g.cols}×${g.rows} Felder à ${formatMeters(g.cellM)}` : ' · kein Raster')
+      + (p.closed ? ' · ✅ abgeschlossen' : '');
     const btn = (label, fn) => {
       const b = document.createElement('button');
       b.textContent = label;
@@ -4589,8 +4622,51 @@ function renderMission() {
   renderTimes();
   renderForces();
   renderThumbs();
+  renderClosed();
   showTab(db.missionTab || 'lage');
 }
+
+// Einsatz abschließen: Einsatzende eintragen (falls leer) und als abgeschlossen markieren
+function renderClosed() {
+  $('ms-closed').textContent = P.closed
+    ? `✅ Abgeschlossen am ${new Date(P.closed).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}.`
+    : 'Trägt das Einsatzende ein (falls noch leer) und markiert den Einsatz in der Liste als abgeschlossen. Alles bleibt bearbeitbar.';
+  $('ms-close').textContent = P.closed ? '↩️ Wieder öffnen' : '✅ Einsatz abschließen';
+  $('ms-close').className = P.closed ? '' : 'primary';
+}
+$('ms-close').addEventListener('click', async () => {
+  if (P.closed) {
+    delete P.closed;
+    touch();
+    renderClosed();
+    return toast('Einsatz wieder geöffnet');
+  }
+  const t = M().times;
+  const now = new Date();
+  const hm = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const ok = await openDlg((box, close) => {
+    dlgHead(box, '✅ Einsatz abschließen', t.end
+      ? `„${P.title || 'Suchgebiet'}“ abschließen? Einsatzende bleibt ${t.end}.`
+      : `„${P.title || 'Suchgebiet'}“ abschließen? Als Einsatzende wird ${hm} eingetragen.`);
+    dlgButton(box, 'Abschließen', 'primary', () => close(true));
+    dlgButton(box, 'Abbrechen', '', () => close(false));
+  });
+  if (!ok) return;
+  if (!t.end) t.end = hm;
+  P.closed = now.getTime();
+  touch();
+  renderTimes();
+  renderClosed();
+  renderProjects();
+  const next = await openDlg((box, close) => {
+    dlgHead(box, '✅ Einsatz abgeschlossen', 'Abschlussbericht und JUH-Formular stehen weiter oben bereit.');
+    dlgButton(box, '📤 Abschlussbericht teilen', 'primary', () => close('share'));
+    dlgButton(box, '+ Neuer Einsatz', '', () => close('new'));
+    dlgButton(box, 'Fertig', '', () => close(null));
+  });
+  if (next === 'share') $('ms-share').click();
+  if (next === 'new') { closePanels(); $('proj-new').click(); }
+});
 $('btn-mission').addEventListener('click', () => { renderMission(); openPanel('panel-mission'); });
 // Notizen-Fenster: getippte Notizen (P.notes, wie im Einsatz-Fenster), Notizblock, Fotos
 $('btn-notes').addEventListener('click', () => {
