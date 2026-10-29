@@ -30,3 +30,24 @@ test('estimate: ganzes Niedersachsen wächst je Stufe etwa ×4', () => {
   assert.ok(e16.tiles > e14.tiles * 12 && e16.tiles < e14.tiles * 25);
   assert.ok(e16.mb > 1000);
 });
+
+test('nativeJob: Vorlagen für die Android-App ergeben dieselben Adressen', async () => {
+  const { nativeJob } = await import('../web/offline.js');
+  const job = nativeJob({ id: 'x', name: 'n', bounds: b, zMin: 6, zMax: 16 }, [topo, dop], true);
+  assert.equal(job.wifiOnly, true);
+  const [lt, ld] = job.layers;
+  assert.equal(lt.zoomOffset, 0);
+  assert.equal(ld.zoomOffset, 1);
+  assert.equal(ld.maxZoom, 19);
+  assert.ok(lt.template.includes('{z}/{y}/{x}'));
+  assert.ok(ld.wmsPrefix.endsWith('BBOX='));
+  for (const s of ld.samples) assert.ok(s.url.startsWith(ld.wmsPrefix));
+  // Nachbau der Kotlin-Formel (BBOX mit 2 Nachkommastellen)
+  const HALF = 20037508.342789244;
+  for (const s of ld.samples) {
+    const size = (2 * HALF) / 2 ** s.z;
+    const minx = -HALF + s.x * size;
+    const maxy = HALF - s.y * size;
+    assert.equal(s.url, ld.wmsPrefix + [minx, maxy - size, minx + size, maxy].map((v) => v.toFixed(2)).join(','));
+  }
+});

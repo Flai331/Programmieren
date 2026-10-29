@@ -15,7 +15,7 @@ import {
 } from './mission.js';
 import { buildCustomMap, planCustomMap } from './kmz.js';
 import {
-  STATES, estimate, downloadRegion, deleteRegion, storageInfo, persistStorage, setHasOffline, cachedTileUrl, maxZoom,
+  STATES, estimate, downloadRegion, deleteRegion, storageInfo, persistStorage, setHasOffline, cachedTileUrl, maxZoom, nativeJob,
 } from './offline.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
@@ -25,7 +25,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v46';
+const APP_VERSION = 'v47';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -1068,7 +1068,11 @@ map.on('click', (e) => {
 // Bereiche (für alle Suchgebiete gemeinsam) in db.offline:
 // { id, name, bounds, layerIds, zMin, zMax, done, total, failed, bytes, finished }
 if (!Array.isArray(db.offline)) db.offline = [];
-setHasOffline(db.offline.length > 0);
+// Android-App: ein eigener Dienst lädt im Hintergrund und liefert die Bilder selbst aus.
+// Im Browser-Speicher (Cache) liegen dann nur noch Bereiche aus älteren Versionen.
+const NATIVE_OFF = !!(bridge && bridge.offlineStart);
+const refreshHasOffline = () => setHasOffline(db.offline.some((r) => !(NATIVE_OFF && r.native)));
+refreshHasOffline();
 let offRect = null; // aufgezogenes Rechteck
 let offJob = null; // { id, ctrl }
 const fmtMB = (mb) => (mb >= 1024 ? `${(mb / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} GB` : `${Math.max(1, Math.round(mb))} MB`);
@@ -1111,6 +1115,10 @@ function offDefaultName() {
 
 function renderOfflineForm() {
   const sel = $('off-layer');
+  $('off-wifi').parentElement.hidden = !NATIVE_OFF;
+  $('off-help').textContent = NATIVE_OFF
+    ? 'Vor dem Einsatz laden. Die App lädt im Hintergrund weiter – auch bei ausgeschaltetem Bildschirm oder geschlossener App (Fortschritt in der Benachrichtigung) – und speichert auf der SD-Karte, falls vorhanden. Gespeicherte Kartenbilder nimmt die App immer zuerst – sofort, auch ohne oder mit schlechtem Netz; nur Fehlendes kommt aus dem Internet. Gilt auch für PDF und Garmin-Karte.'
+    : 'Vor dem Einsatz im WLAN laden. Gespeicherte Kartenbilder nimmt die App immer zuerst – sofort, auch ohne oder mit schlechtem Netz; nur Fehlendes kommt aus dem Internet. Gilt auch für PDF und Garmin-Karte. Beim Laden App geöffnet lassen; angehaltene Downloads laufen mit ▶ weiter.';
   if (!sel.options.length) {
     for (const l of LAYERS) sel.add(new Option(l.name, l.id));
     for (let z = 12; z <= 19; z++) $('off-zmax').add(new Option(`${z} – ${ZOOMS[z]}`, String(z)));
@@ -1122,6 +1130,18 @@ function renderOfflineForm() {
   updateOffEstimate();
   renderOfflineList();
 }
+// Speicher: { usedMB, freeMB, text }
+async function offStorage() {
+  if (NATIVE_OFF) {
+    try {
+      const s = JSON.parse(bridge.offlineStorage());
+      return { usedMB: s.usedMB, freeMB: s.freeMB, text: `belegt ca. ${fmtMB(s.usedMB)}${s.place ? ` (${s.place})` : ''} · frei ${fmtMB(s.freeMB)}` };
+    } catch { return null; }
+  }
+  const s = await storageInfo();
+  return s && { usedMB: s.usedMB, freeMB: s.quotaMB - s.usedMB, text: `belegt ca. ${fmtMB(s.usedMB)} von ${fmtMB(s.quotaMB)}` };
+}
+
 async function updateOffEstimate() {
   const b = offBounds();
   $('off-paths').parentElement.hidden = !layerById($('off-layer').value).aerial;
@@ -1136,11 +1156,10 @@ async function updateOffEstimate() {
   const capped = defs.some((d) => z > maxZoom(d));
   let text = `≈ ${e.tiles.toLocaleString('de-DE')} Kartenbilder · ≈ ${fmtMB(e.mb)} · Dauer ${fmtMin(e.minutes)} (je nach Netz)`;
   if (capped) text += ' · Karte hat höchstens Stufe ' + Math.min(...defs.map(maxZoom));
-  const s = await storageInfo();
-  if (s && s.quotaMB) {
-    const free = s.quotaMB - s.usedMB;
-    text += ` · frei ca. ${fmtMB(free)}`;
-    if (e.mb > free * 0.9) text += ' ⚠️ passt vermutlich nicht auf dieses Gerät – geringere Stufe oder kleineren Bereich wählen';
+  const s = await offStorage();
+  if (s && s.freeMB) {
+    text += ` · frei ca. ${fmtMB(s.freeMB)}`;
+    if (e.mb > s.freeMB * 0.9) text += ' ⚠️ passt vermutlich nicht auf dieses Gerät – geringere Stufe oder kleineren Bereich wählen';
   }
   $('off-est').textContent = text;
 }
@@ -1154,11 +1173,11 @@ async function renderOfflineList() {
   const box = $('off-list');
   // mehrere Aufrufe kurz nacheinander: nur der letzte zeichnet
   const token = ++offListToken;
-  const s = await storageInfo();
+  const s = await offStorage();
   if (token !== offListToken) return;
   box.innerHTML = '';
   $('off-storage').textContent = db.offline.length
-    ? `Gespeichert: ${db.offline.length} Bereich${db.offline.length > 1 ? 'e' : ''}${s ? ` · belegt ca. ${fmtMB(s.usedMB)} von ${fmtMB(s.quotaMB)}` : ''}`
+    ? `Gespeichert: ${db.offline.length} Bereich${db.offline.length > 1 ? 'e' : ''}${s ? ` · ${s.text}` : ''}`
     : 'Noch keine Offline-Karten gespeichert.';
   for (const r of db.offline) {
     const row = document.createElement('div');
@@ -1170,12 +1189,16 @@ async function renderOfflineList() {
     info.firstChild.textContent = r.name;
     info.lastChild.textContent = r.finished
       ? `✔ fertig · ${r.total.toLocaleString('de-DE')} Bilder · ${fmtMB((r.bytes || 0) / 1048576)}${r.failed ? ` (${r.failed} fehlgeschlagen)` : ''}`
-      : `${running ? '⏳ lädt' : '⏸ angehalten'} · ${pct} % (${r.done.toLocaleString('de-DE')} von ${r.total.toLocaleString('de-DE')}) · ${fmtMB((r.bytes || 0) / 1048576)}`;
+      : `${running ? (offWaiting ? `⏳ wartet auf ${offWaiting}` : '⏳ lädt') : '⏸ angehalten'} · ${pct} % (${r.done.toLocaleString('de-DE')} von ${r.total.toLocaleString('de-DE')}) · ${fmtMB((r.bytes || 0) / 1048576)}`;
     const btns = document.createElement('span');
     const act = document.createElement('button');
     act.textContent = running ? '⏸' : r.finished ? '↻' : '▶';
     act.title = running ? 'Anhalten' : r.finished ? 'Fehlende nachladen / aktualisieren' : 'Weiterladen';
-    act.addEventListener('click', () => (running ? offJob.ctrl.abort() : runOffline(r)));
+    act.addEventListener('click', () => {
+      if (!running) runOffline(r);
+      else if (offJob.native) bridge.offlineStop();
+      else offJob.ctrl.abort();
+    });
     const go = document.createElement('button');
     go.textContent = '🔍';
     go.title = 'Auf der Karte zeigen';
@@ -1191,9 +1214,19 @@ async function renderOfflineList() {
       del.disabled = true;
       del.textContent = '…';
       const others = db.offline.filter((x) => x.id !== r.id);
-      await deleteRegion(r, r.layerIds.map(offDef).filter(Boolean), others, offDef);
+      const defs = r.layerIds.map(offDef).filter(Boolean);
+      if (NATIVE_OFF) {
+        // löscht im Hintergrund; Bilder, die ein anderer Bereich braucht, bleiben
+        bridge.offlineDelete(JSON.stringify({
+          region: { ...nativeJob(r, defs), layerIds: r.layerIds },
+          others: others.map((o) => ({ bounds: o.bounds, zMin: o.zMin, zMax: o.zMax, layerIds: o.layerIds })),
+        }));
+      }
+      // ältere Bereiche (oder Browser) liegen im Cache-Speicher
+      if (!NATIVE_OFF || !r.native) await deleteRegion(r, defs, others, offDef);
       db.offline = others;
-      setHasOffline(db.offline.length > 0);
+      refreshHasOffline();
+      if (NATIVE_OFF) setTimeout(syncNativeOffline, 300);
       saveNow();
       renderOfflineList();
     });
@@ -1203,8 +1236,46 @@ async function renderOfflineList() {
   }
 }
 
+// Android-App: Stand vom Dienst abholen (läuft auch weiter, wenn die App zu ist)
+let offWaiting = '';
+let offPoll = null;
+function syncNativeOffline() {
+  let st;
+  try { st = JSON.parse(bridge.offlineStatus()); } catch { return; }
+  for (const r of db.offline) {
+    const n = st.regions[r.id];
+    if (n) Object.assign(r, { done: n.done, total: n.total, failed: n.failed, bytes: n.bytes, finished: n.finished, native: true });
+  }
+  offWaiting = st.waiting || '';
+  if (st.running && !offJob) offJob = { id: st.running, native: true };
+  if (offJob && offJob.native && st.running !== offJob.id) {
+    const r = db.offline.find((x) => x.id === offJob.id);
+    offJob = null;
+    if (st.error) toast('Offline-Karte: ' + st.error);
+    else if (r) toast(r.finished ? `Offline-Karte „${r.name}“ fertig` : `„${r.name}“ angehalten – ▶ lädt weiter`);
+    saveNow();
+  } else save();
+  if (!$('panel-layers').hidden) renderOfflineList();
+  const busy = offJob || st.deleting;
+  if (busy && !offPoll) offPoll = setInterval(syncNativeOffline, 1000);
+  if (!busy && offPoll) { clearInterval(offPoll); offPoll = null; }
+}
+if (NATIVE_OFF) syncNativeOffline();
+
 async function runOffline(r) {
   if (offJob) return toast('Es lädt bereits eine Offline-Karte.');
+  if (NATIVE_OFF) {
+    const defs = r.layerIds.map(offDef).filter(Boolean);
+    r.native = true;
+    r.finished = false;
+    saveNow();
+    bridge.offlineStart(JSON.stringify(nativeJob(r, defs, $('off-wifi').checked)));
+    offJob = { id: r.id, native: true };
+    toast('Lädt im Hintergrund – auch bei ausgeschaltetem Bildschirm. Fortschritt in der Benachrichtigung.');
+    renderOfflineList();
+    if (!offPoll) offPoll = setInterval(syncNativeOffline, 1000);
+    return;
+  }
   const ctrl = new AbortController();
   offJob = { id: r.id, ctrl };
   persistStorage();
@@ -1227,7 +1298,7 @@ async function runOffline(r) {
   } finally {
     offJob = null;
     if (lock) lock.release().catch(() => {});
-    setHasOffline(db.offline.length > 0);
+    refreshHasOffline();
     saveNow();
     renderOfflineList();
   }

@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.util.Base64
@@ -48,6 +49,9 @@ class MainActivity : ComponentActivity() {
         pendingGeo = null
         if (!granted) toast("Ohne Standortfreigabe kein GPS")
     }
+
+    // Für die Fortschrittsanzeige des Offline-Downloads (Android 13+); ohne geht es trotzdem
+    private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     private val pickFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         fileCallback?.onReceiveValue(if (uri != null) arrayOf(uri) else null)
@@ -106,6 +110,7 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        OfflineTiles.init(this)
         val assetLoader = WebViewAssetLoader.Builder()
             .setDomain(host)
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
@@ -123,8 +128,13 @@ class MainActivity : ComponentActivity() {
         webView.addJavascriptInterface(Bridge(), "AndroidBridge")
 
         webView.webViewClient = object : WebViewClient() {
-            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                assetLoader.shouldInterceptRequest(request.url)
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                // Offline gespeicherte Kartenbilder sofort aus dem Speicher, sonst aus dem Netz
+                if (request.method == "GET" && OfflineTiles.isTileHost(request.url.host)) {
+                    return OfflineTiles.serve(request.url.toString())
+                }
+                return assetLoader.shouldInterceptRequest(request.url)
+            }
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (request.url.host == host) return false
@@ -208,6 +218,28 @@ class MainActivity : ComponentActivity() {
     }
 
     inner class Bridge {
+        // ---------- Offline-Karten (siehe OfflineTiles / TileDownloadService) ----------
+        @JavascriptInterface
+        fun offlineStart(job: String) {
+            if (Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) runOnUiThread { notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
+            TileDownloadService.start(this@MainActivity, job)
+        }
+
+        @JavascriptInterface
+        fun offlineStop() = TileDownloadService.stop(this@MainActivity)
+
+        @JavascriptInterface
+        fun offlineStatus(): String = OfflineTiles.statusJson()
+
+        @JavascriptInterface
+        fun offlineStorage(): String = OfflineTiles.storageJson()
+
+        // JSON: { region: {id, bounds, zMin, zMax, layerIds, layers}, others: [{bounds, zMin, zMax, layerIds}] }
+        @JavascriptInterface
+        fun offlineDelete(json: String) = OfflineTiles.delete(json)
+
         // Mehrere Dateien in einen frei wählbaren Ordner speichern (JSON: [{b64, name, mime}])
         @JavascriptInterface
         fun saveFiles(json: String) {
