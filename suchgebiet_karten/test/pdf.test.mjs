@@ -9,7 +9,7 @@ test('contentBounds: nichts eingezeichnet -> null', () => {
   assert.equal(contentBounds({ grid, fills: {}, status: {}, items: [] }), null);
 });
 
-test('contentBounds: umfasst markierte Felder, Zeichnungen und Treffpunkt', () => {
+test('contentBounds: umfasst markierte Felder, Zeichnungen und B-Ort', () => {
   const state = {
     grid,
     fills: { '2,3': '#f00' },

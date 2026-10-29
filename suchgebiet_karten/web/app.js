@@ -7,7 +7,7 @@ import {
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { buildGpx, mergeGpx, parseGpx, trackDesc, trackLength } from './gpx.js';
+import { buildGpx, mergeGpx, parseGpx, trackDesc, trackLength, outlineName } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v60';
+const APP_VERSION = 'v63';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -165,6 +165,14 @@ function changed() {
 load();
 const map = L.map('map', { zoomControl: false, maxZoom: 20 });
 L.control.zoom({ position: 'bottomright' }).addTo(map);
+// Quellenangabe: kurz ausgeklappt, dann nur „ⓘ“ (verdeckt sonst Bedienelemente); antippen klappt sie auf
+const attrBox = map.attributionControl.getContainer();
+setTimeout(() => attrBox.classList.add('folded'), 6000);
+attrBox.addEventListener('click', (e) => {
+  if (e.target.closest('a') && !attrBox.classList.contains('folded')) return;
+  e.preventDefault();
+  attrBox.classList.toggle('folded');
+});
 
 // Eine Kachelschicht für alle Dienste (auch WMS), dieselben URLs wie im PDF
 const AppTiles = L.TileLayer.extend({
@@ -331,7 +339,7 @@ function redraw() {
 }
 
 // Windpfeile (Overlay, ein-/ausschaltbar: db.windArrows). Jeder Pfeil zeigt, wohin der Wind weht.
-// Blau: DWD am Windpunkt bzw. über dem Suchgebiet und an den DWD-Messstationen ringsum.
+// Hundeführer – Blau: DWD am Windpunkt bzw. über dem Suchgebiet und an den DWD-Messstationen ringsum.
 // Grün: selbst gemessener Wind an der Messstelle (auch von Hundeführern zurückgemeldet).
 function windArrowPoint() {
   const gs = allGrids(P);
@@ -350,10 +358,38 @@ function windArrowPoint() {
   }
   return wxPoint();
 }
-function windArrows() {
+// Gemessener Wind (grün) an der Messstelle; Hundeführer: eigene und zurückgemeldete, Einsatzleitung: die der Teams
+function measuredArrows(teamsOnly) {
+  const KMH = { light: 8, medium: 20, strong: 35 };
   const out = [];
+  for (const m of P.mission.wind || []) {
+    if (m.src !== 'gemessen' || m.lat == null || (teamsOnly && !m.by)) continue;
+    const t = new Date(m.t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    out.push({ lat: m.lat, lon: m.lon, from: m.from, kmh: KMH[m.strength] || 15, color: '#2e7d32', old: Date.now() - m.t > 2 * 3600e3,
+      text: `${t}${m.by ? ` ${m.by}` : ''}: aus ${dirName(m.from)}, ${STRENGTHS[m.strength] ? STRENGTHS[m.strength].label : ''}` });
+  }
+  return out;
+}
+// Einsatzleitung: DWD-Wind (blau) in der Mitte jedes Rasters und jedes Umrisses, dazu die Messpunkte der Teams
+function areaWindArrows(w) {
+  const out = [];
+  const dwd = `aus ${dirName(w.from)} ${Math.round(w.kmh)} km/h${w.gust ? `, Böen ${Math.round(w.gust)}` : ''} (DWD)`;
+  const add = (name, ns, ws) => out.push({ lat: (Math.max(...ns) + Math.min(...ns)) / 2, lon: (Math.max(...ws) + Math.min(...ws)) / 2,
+    from: w.from, kmh: w.kmh, color: '#1565c0', big: true, text: `${name}: ${dwd}` });
+  for (const g of allGrids(P)) add(gridLabel(P, g), [g.area.north, g.area.south], [g.area.west, g.area.east]);
+  for (const it of P.items) {
+    if (it.kind !== 'track' || it.open || it.resultKey || !it.pts || it.pts.length < 3) continue;
+    add(it.name || 'Umriss', it.pts.map((q) => q[0]), it.pts.map((q) => q[1]));
+  }
+  if (!out.length) out.push({ ...wxPoint(), from: w.from, kmh: w.kmh, color: '#1565c0', big: true, text: `Wind ${dwd}` });
+  return out;
+}
+function windArrows() {
   const w = db.wxLast && db.wxLast.current;
-  if (w && w.from != null && w.kmh != null) {
+  const dwdOk = w && w.from != null && w.kmh != null;
+  if (db.mode !== 'hf') return [...(dwdOk ? areaWindArrows(w) : []), ...measuredArrows(true)];
+  const out = [];
+  if (dwdOk) {
     const pt = windArrowPoint();
     out.push({ ...pt, from: w.from, kmh: w.kmh, color: '#1565c0', big: true,
       text: `Wind aus ${dirName(w.from)} ${Math.round(w.kmh)} km/h${w.gust ? `, Böen ${Math.round(w.gust)}` : ''} (DWD)` });
@@ -363,14 +399,7 @@ function windArrows() {
     out.push({ lat: st.lat, lon: st.lon, from: st.from, kmh: st.kmh, color: '#1565c0', station: true,
       text: `DWD ${st.name}: ${dirName(st.from)} ${Math.round(st.kmh)} km/h` });
   }
-  const KMH = { light: 8, medium: 20, strong: 35 };
-  for (const m of P.mission.wind || []) {
-    if (m.src !== 'gemessen' || m.lat == null) continue;
-    const t = new Date(m.t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    out.push({ lat: m.lat, lon: m.lon, from: m.from, kmh: KMH[m.strength] || 15, color: '#2e7d32', old: Date.now() - m.t > 2 * 3600e3,
-      text: `${t}${m.by ? ` ${m.by}` : ''}: aus ${dirName(m.from)}, ${STRENGTHS[m.strength] ? STRENGTHS[m.strength].label : ''}` });
-  }
-  return out;
+  return [...out, ...measuredArrows(false)];
 }
 function drawWindArrow(c) {
   if (!db.windArrows) return;
@@ -451,14 +480,14 @@ const HINTS = {
   pen: 'Mit dem Finger zeichnen – mehrere Striche gehören zu einer Zeichnung, bis „Fertig“. Zwischendurch „Bewegen“ und zurück geht. Vorhandene Zeichnung antippen: umbenennen.',
   text: 'Auf die Karte tippen, um einen Punkt mit Text zu setzen.',
   fill: 'Team/Markierung wählen, dann Felder antippen oder darüberwischen. Nochmal tippen entfernt.',
-  erase: 'Antippen oder darüberwischen löscht Zeichnungen, Umrisse, Texte, Treffpunkt und Feldfarben.',
+  erase: 'Antippen oder darüberwischen löscht Zeichnungen, Umrisse, Texte, B-Ort und Feldfarben.',
   grid: 'Suchgebiet als Rechteck mit dem Finger aufziehen.',
   offrect: 'Bereich für die Offline-Karte als Rechteck aufziehen.',
   windpt: 'Tippe auf die Karte, wo der Wind (DWD) angezeigt werden soll.',
   hffield: 'Feld antippen: abgesucht → teilweise → nicht begehbar → zurück. „Feld“ nochmal tippen = fertig.',
   sendpick: 'Felder für den Auftrag antippen (blau umrandet). Dann „Weiter“.',
   offsquares: 'Quadrate antippen (blau = gewählt, grün = schon gespeichert). Ziehen verschiebt die Karte.',
-  meet: 'Auf die Karte tippen, um den Treffpunkt zu setzen.',
+  meet: 'Auf die Karte tippen, um den B-Ort zu setzen.',
   track: 'Umriss: Punkte antippen. Karte mit dem Finger verschieben, Zoom mit +/−.',
 };
 
@@ -750,7 +779,7 @@ function finishPointer(e, cancelled) {
       changed();
     }
   } else if (tool === 'meet') {
-    const text = prompt('Bezeichnung des Treffpunkts:', (P.meet && P.meet.text) || 'Treffpunkt');
+    const text = prompt('Bezeichnung des B-Orts:', (P.meet && P.meet.text) || 'B-Ort');
     if (text !== null) {
       snapshot();
       P.meet = { lat: ll.lat, lon: ll.lng, text: text.trim() };
@@ -764,7 +793,7 @@ function finishPointer(e, cancelled) {
 canvas.addEventListener('pointerup', (e) => finishPointer(e, false));
 canvas.addEventListener('pointercancel', (e) => finishPointer(e, true));
 
-// Radierer: zuerst Zeichnungen/Tracks/Texte, dann Treffpunkt, dann Feldfarbe/Zuteilung.
+// Radierer: zuerst Zeichnungen/Tracks/Texte, dann B-Ort, dann Feldfarbe/Zuteilung.
 // Das Raster selbst bleibt (Raster → „Raster entfernen“).
 function eraseAt(x, y) {
   const before = () => {
@@ -885,8 +914,8 @@ function finishTrack(auto) {
   const d = draftTrack;
   draftTrack = null;
   if (!d || d.pts.length < 2) { redraw(); return; }
-  const n = P.items.filter((it) => it.kind === 'track').length + 1;
-  let name = `Umriss ${n}`;
+  // Vorschlag: Himmelsrichtung vom B-Ort + fortlaufende Nummer („Nordwest 2“)
+  let name = outlineName(P.items, P.meet, d.pts);
   if (!auto) {
     const t = prompt('Name des Umrisses (erscheint so auf dem Garmin):', name);
     if (t === null) { draftTrack = d; return; }
@@ -953,22 +982,30 @@ function renderPalette() {
   }
   const add = document.createElement('button');
   add.textContent = '+ Team';
-  add.addEventListener('click', () => { addMark('team'); });
+  add.addEventListener('click', () => { addMark('team', true); });
   box.appendChild(add);
 }
 
 // ---------- Teams & Legende ----------
-function addMark(kind) {
+// quick: aus der Feld-Leiste – nur nach dem Namen fragen, kein Teams-Fenster
+function addMark(kind, quick = false) {
+  const n = P.marks.filter((m) => m.kind === 'team').length + 1;
+  let label = kind === 'team' ? `Team ${n}` : 'Markierung';
+  if (quick) {
+    const t = prompt('Name des Teams:', label);
+    if (t === null) return;
+    label = t.trim() || label;
+  }
   snapshot();
   const used = new Set(P.marks.map((m) => m.color));
   const color = MARK_COLORS.find((c) => !used.has(c)) || MARK_COLORS[P.marks.length % MARK_COLORS.length];
-  const n = P.marks.filter((m) => m.kind === 'team').length + 1;
   const m = kind === 'team'
-    ? { id: uid(), kind: 'team', label: `Team ${n}`, dog: '', color }
-    : { id: uid(), kind: 'status', label: 'Markierung', color };
+    ? { id: uid(), kind: 'team', label, dog: '', color }
+    : { id: uid(), kind: 'status', label, color };
   P.marks.push(m);
   db.activeMark = m.id;
   changed();
+  if (quick) return;
   openPanel('panel-teams');
   const inp = $('mark-list').querySelector(`[data-id="${m.id}"] input`);
   if (inp) { inp.focus(); inp.select(); }
@@ -1174,7 +1211,7 @@ function renderViewToggles() {
   head('Raster');
   row('Rasterlinien und Feldnamen', !hide.grid, setHide('grid'));
   row('Randbeschriftung (A, B … / 1, 2 …)', !hide.edge, setHide('edge'));
-  if (P.meet) row(`Treffpunkt${P.meet.text ? `: ${P.meet.text}` : ''}`, !hide.meet, setHide('meet'), '#0d47a1');
+  if (P.meet) row(`B-Ort${P.meet.text ? `: ${P.meet.text}` : ''}`, !hide.meet, setHide('meet'), '#0d47a1');
   const used = new Set(allGrids(P).flatMap((g) => [...Object.values(g.fills), ...Object.values(g.status)]));
   const marks = P.marks.filter((m) => used.has(m.id));
   if (marks.length) head('Teams und Markierungen');
@@ -1779,7 +1816,7 @@ $('rp-clear').addEventListener('click', async () => {
 
 // ---------- Wetter und Wind ----------
 // Overlay zuschaltbar (db.wxOn); Daten vom DWD (Bright Sky), letzter Stand in db.wxLast.
-// Gemessener Wind (Kompass) steht im Windprotokoll des Einsatzes (M().wind) und hat Vorrang.
+// Gemessener Wind (Kompass) steht im Windprotokoll des Einsatzes (M().wind); angezeigt wird immer zuerst der DWD-Wind.
 if (db.wxOn === undefined) db.wxOn = false;
 const hhmm = (t) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 function wxPoint() {
@@ -1803,27 +1840,28 @@ function renderWx() {
   $('wx-min').textContent = db.wxMin ? '▸' : '▾';
   const wx = db.wxLast;
   const c = wx && wx.current && wx.current.from != null && wx.current.kmh != null ? wx.current : null;
+  // immer der Wind vom Wetterdienst; eine Messung vor Ort steht nur darunter (ohne DWD-Daten als Ersatz)
   const meas = lastMeasured();
   const arrow = $('wx-arrow');
-  const from = meas ? meas.from : c ? c.from : null;
+  const from = c ? c.from : meas ? meas.from : null;
   arrow.style.visibility = from == null ? 'hidden' : 'visible';
   // Pfeil zeigt, wohin der Wind weht
   if (from != null) arrow.style.transform = `rotate(${from + 180}deg)`;
-  arrow.classList.toggle('measured', !!meas);
+  arrow.classList.toggle('measured', !c && !!meas);
   const age = c ? Math.round((Date.now() - c.t) / 60000) : 0;
-  const dwdSrc = c ? `DWD ${c.station}${c.km != null ? ` (${Math.round(c.km)} km)` : ''} · ${hhmm(c.t)}${age > 90 ? ` – Stand vor ${Math.round(age / 60)} Std.` : ''}` : '';
-  if (meas) {
-    $('wx-wind').textContent = `aus ${dirName(meas.from)} (${Math.round(meas.from)}°) · ${STRENGTHS[meas.strength].label}`;
-    $('wx-src').textContent = `vor Ort gemessen · ${hhmm(meas.t)}`;
-    $('wx-second').hidden = !c;
-    if (c) $('wx-second').textContent = `${dwdSrc}: ${dwdText(c)}`;
-  } else if (c) {
+  const measText = meas && `aus ${dirName(meas.from)} (${Math.round(meas.from)}°) · ${STRENGTHS[meas.strength].label}`;
+  if (c) {
     $('wx-wind').textContent = dwdText(c);
-    $('wx-src').textContent = dwdSrc;
+    $('wx-src').textContent = `DWD ${c.station}${c.km != null ? ` (${Math.round(c.km)} km)` : ''} · ${hhmm(c.t)}${age > 90 ? ` – Stand vor ${Math.round(age / 60)} Std.` : ''}`;
+    $('wx-second').hidden = !meas;
+    if (meas) $('wx-second').textContent = `Vor Ort gemessen ${hhmm(meas.t)}${meas.by ? ` (${meas.by})` : ''}: ${measText}`;
+  } else if (meas) {
+    $('wx-wind').textContent = measText;
+    $('wx-src').textContent = `kein DWD-Wind – vor Ort gemessen · ${hhmm(meas.t)}`;
     $('wx-second').hidden = true;
   } else {
     $('wx-wind').textContent = 'Noch kein Wind';
-    $('wx-src').textContent = navigator.onLine ? 'Wird geladen … oder 🧭 Wind messen' : 'Kein Netz – 🧭 Wind messen';
+    $('wx-src').textContent = navigator.onLine ? 'Wird geladen …' : 'Kein Netz – letzter Stand fehlt';
     $('wx-second').hidden = true;
   }
   $('wx-approach').textContent = from != null ? `Ansatz: ${approach(from)}` : '';
@@ -1865,7 +1903,7 @@ async function loadWeather(manual) {
     const wx = await fetchWeather(pt.lat, pt.lon);
     db.wxLast = wx;
     // Messstationen ringsum (für die Windpfeile)
-    if (db.windArrows) db.wxStations = await fetchStations(pt.lat, pt.lon).catch(() => db.wxStations || null);
+    if (db.windArrows && db.mode === 'hf') db.wxStations = await fetchStations(pt.lat, pt.lon).catch(() => db.wxStations || null);
     const c = wx.current;
     // deutliche Änderung (Drehung ≥ 45° oder ±2 Bft) kommt ins Windprotokoll des Einsatzes
     if (c.from != null && c.kmh != null) {
@@ -1901,9 +1939,10 @@ $('quick-arrows').addEventListener('click', () => {
   $('quick-arrows').classList.toggle('on', !!db.windArrows);
   redraw();
   if (db.windArrows) {
-    const stale = !db.wxLast || Date.now() - db.wxLast.fetched > 10 * 60e3 || !db.wxStations;
+    const stale = !db.wxLast || Date.now() - db.wxLast.fetched > 10 * 60e3 || (db.mode === 'hf' && !db.wxStations);
     if (stale) loadWeather(true);
-    toast('Windpfeile: blau = DWD (Punkt/Suchgebiet und Messstationen), grün = selbst gemessen');
+    toast(db.mode === 'hf' ? 'Windpfeile: blau = DWD (Punkt/Suchgebiet und Messstationen), grün = selbst gemessen'
+      : 'Wind: blau = DWD in der Mitte jedes Rasters/Umrisses, grün = von den Teams gemessen', 6000);
   }
 });
 $('quick-arrows').classList.toggle('on', !!db.windArrows);
@@ -2090,7 +2129,7 @@ function renderHfInfo() {
     const lines = [`${h.team} – ${P.title}`, `Auftrag erhalten ${hhmm(h.received)}`];
     if (h.hint) lines.push(`Hinweis: ${h.hint}`);
     if (P.mission.person) lines.push(`Vermisste Person: ${P.mission.person}`);
-    if (P.meet) lines.push(`Treffpunkt: ${P.meet.text || 'gesetzt'}`);
+    if (P.meet) lines.push(`B-Ort: ${P.meet.text || 'gesetzt'}`);
     m.textContent = lines.join('\n');
     m.style.whiteSpace = 'pre-line';
   } else m.textContent = 'Noch kein Auftrag. QR-Code der Einsatzleitung mit der Handy-Kamera scannen.';
@@ -2109,7 +2148,7 @@ $('hfm-meet').addEventListener('click', () => {
   if (lastPos) {
     const m = distance(lastPos[0], lastPos[1], P.meet.lat, P.meet.lon);
     const deg = bearingDeg(lastPos[0], lastPos[1], P.meet.lat, P.meet.lon);
-    toast(`🎯 Treffpunkt: ${fmtKm(m)} Richtung ${compass(deg)} (${Math.round(deg)}°)`, 8000);
+    toast(`🎯 B-Ort: ${fmtKm(m)} Richtung ${compass(deg)} (${Math.round(deg)}°)`, 8000);
   }
 });
 function pathLen(pts) {
@@ -2855,8 +2894,8 @@ function fillProjectForm() {
 function renderMeet() {
   const m = P.meet;
   $('meet-info').textContent = m
-    ? `${m.text || 'Treffpunkt'}: ${m.lat.toFixed(5)}, ${m.lon.toFixed(5)}${P.showUtm ? ` · ${formatMgrs(m.lat, m.lon)}` : ''}`
-    : 'Kein Treffpunkt gesetzt.';
+    ? `${m.text || 'B-Ort'}: ${m.lat.toFixed(5)}, ${m.lon.toFixed(5)}${P.showUtm ? ` · ${formatMgrs(m.lat, m.lon)}` : ''}`
+    : 'Kein B-Ort gesetzt.';
   $('meet-remove').disabled = !m;
 }
 
@@ -3567,10 +3606,12 @@ function renderThumbs() {
   }));
 }
 
+// Foto vom Papier: direkt mit der Kamera oder ein vorhandenes Bild
 $('ms-photo').addEventListener('click', () => $('ms-photo-file').click());
-$('ms-photo-file').addEventListener('change', async () => {
-  const f = $('ms-photo-file').files[0];
-  $('ms-photo-file').value = '';
+$('ms-cam').addEventListener('click', () => $('ms-cam-file').click());
+const addPhoto = async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
   if (!f) return;
   try {
     M().photos.push({ t: Date.now(), src: await shrinkPhoto(f) });
@@ -3581,7 +3622,9 @@ $('ms-photo-file').addEventListener('change', async () => {
   } catch (err) {
     toast('Foto: ' + err.message);
   }
-});
+};
+$('ms-photo-file').addEventListener('change', addPhoto);
+$('ms-cam-file').addEventListener('change', addPhoto);
 
 let viewIdx = 0;
 function renderViewer() {
@@ -3766,6 +3809,7 @@ $('nt-text').addEventListener('input', () => {
 });
 $('nt-pad').addEventListener('click', () => openPad());
 $('nt-photo').addEventListener('click', () => $('ms-photo-file').click());
+$('nt-cam').addEventListener('click', () => $('ms-cam-file').click());
 [['ms-person', 'person'], ['ms-summary', 'summary'], ['ms-author', 'author']].forEach(([id, key]) => {
   $(id).addEventListener('input', () => { M()[key] = $(id).value; touch(); });
 });

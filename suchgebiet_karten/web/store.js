@@ -54,6 +54,8 @@ export function normalizeProject(p) {
   if (!Array.isArray(out.marks)) out.marks = base.marks;
   if (!Array.isArray(out.items)) out.items = [];
   out.mission = normalizeMission(out.mission);
+  // v61: „Treffpunkt“ heißt jetzt „B-Ort“
+  if (out.meet && out.meet.text === 'Treffpunkt') out.meet = { ...out.meet, text: 'B-Ort' };
   // v31: nur „Raster ausblenden“ -> allgemeine Anzeige-Schalter
   if (!out.hide || typeof out.hide !== 'object') out.hide = out.hideGrid ? { grid: true } : {};
   delete out.hide.marks; // v32: Gruppen-Schalter, jetzt je Team/Zeichnung (m.hidden / it.hidden)
