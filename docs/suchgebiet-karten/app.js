@@ -39,8 +39,10 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v65';
+const APP_VERSION = 'v66';
 const STORE_KEY = 'suchgebiet-karten-v2';
+let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
+let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
 const MARK_COLORS = [...new Set([...TEAM_COLORS, '#f06292', '#00c853', '#2e7d32', '#fdd835', '#616161', '#000000'])];
@@ -123,6 +125,7 @@ function save() {
 }
 function saveNow() {
   clearTimeout(saveTimer);
+  if (handedOff) return;
   if (map) {
     const c = map.getCenter();
     P.view = { lat: c.lat, lon: c.lng, z: map.getZoom() };
@@ -165,6 +168,7 @@ function changed() {
 load();
 const map = L.map('map', { zoomControl: false, maxZoom: 20 });
 L.control.zoom({ position: 'bottomright' }).addTo(map);
+map.on('dragstart', () => { userMovedAt = Date.now(); });
 // Quellenangabe: kurz ausgeklappt, dann nur „ⓘ“ (verdeckt sonst Bedienelemente); antippen klappt sie auf
 const attrBox = map.attributionControl.getContainer();
 setTimeout(() => attrBox.classList.add('folded'), 6000);
@@ -617,6 +621,7 @@ canvas.addEventListener('pointermove', (e) => {
   const { x, y } = eventLatLng(e);
   if (mousePan) {
     map.panBy([mousePan.x - x, mousePan.y - y], { animate: false });
+    userMovedAt = Date.now();
     mousePan = { x, y };
     e.stopImmediatePropagation();
     return;
@@ -628,6 +633,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (touches.size < 2) return;
   const m = midOf();
   map.panBy([gesture.mid.x - m.x, gesture.mid.y - m.y], { animate: false });
+  userMovedAt = Date.now();
   gesture.mid = m;
   // Zoom in ganzen Stufen, sobald die Finger deutlich auseinander/zusammen gehen
   const want = Math.round(gesture.zoom + Math.log2(m.d / gesture.dist));
@@ -700,6 +706,7 @@ canvas.addEventListener('pointermove', (e) => {
     if (!panning && Math.hypot(x - lastPt.x, y - lastPt.y) < 8) return;
     panning = true;
     map.panBy([lastPt.x - x, lastPt.y - y], { animate: false });
+    userMovedAt = Date.now();
     lastPt = { x, y };
   }
 });
@@ -2113,8 +2120,8 @@ async function toHfMode() {
 }
 async function toElMode() {
   const pin = await askPin('🔒 Einsatzleitung', 'PIN eingeben, um in die Einsatzleitung zu wechseln.');
-  if (!pin) return;
-  if ((await pinHash(pin)) !== EL_PIN_HASH) return toast('Falsche PIN');
+  if (!pin) return false;
+  if ((await pinHash(pin)) !== EL_PIN_HASH) { toast('Falsche PIN'); return false; }
   if (recWatch !== null) stopRec();
   db.mode = 'el';
   saveNow();
@@ -2122,6 +2129,7 @@ async function toElMode() {
   setTool('pan');
   applyMode();
   toast('Einsatzleitung');
+  return true;
 }
 $('mode-hf').addEventListener('click', toHfMode);
 $('hfm-el').addEventListener('click', toElMode);
@@ -2603,8 +2611,20 @@ async function handleShared(text) {
   try { data = await unpack(sh.data); } catch { return toast('Code beschädigt oder unvollständig'); }
   if (data.k === 'a') return takeAssignment(data);
   if (data.k !== 'r') return toast('Unbekannter Inhalt');
+  // Rückmeldungen gehören zur Einsatzleitung: Modus umschalten (vom Hundeführer-Modus nur mit PIN)
+  if (db.mode === 'hf' && !(await toElMode())) return;
+  if (db.mode !== 'el') { db.mode = 'el'; applyMode(); }
   // Suchgebiet finden, an das der Auftrag ging
   const target = Object.values(db.projects).find((p) => (p.sent || []).some((x) => x.id === data.a));
+  if (!target && !Object.values(db.projects).some((p) => (p.sent || []).length)) {
+    // dieser Browser bzw. diese App kennt keinen Einsatz mit Aufträgen (z. B. Einsatz läuft in der Android-App)
+    const go = await openDlg((box, close) => {
+      dlgHead(box, '📥 Rückmeldung', 'Hier ist kein Einsatz bekannt, zu dem diese Rückmeldung gehört. Läuft der Einsatz in der Android-App oder in einem anderen Browser, den Link dort öffnen oder dort über „Rückmeldung einfügen“ übernehmen.');
+      dlgButton(box, 'Trotzdem hier übernehmen', '', () => close(true));
+      dlgButton(box, 'Abbrechen', 'primary', () => close(false));
+    });
+    if (!go) return;
+  }
   if (target && target !== P) switchProject(target.id);
   const res = applyResult(P, data);
   const sent = (P.sent || []).find((x) => x.id === data.a);
@@ -2711,11 +2731,87 @@ $('scan-close').addEventListener('click', stopScan);
 
 // Link mit Auftrag/Rückmeldung (Kamera-App, WhatsApp …) – beim Start und wenn er sich ändert
 async function handleHash() {
-  if (!parseShared(location.hash)) return;
+  const sh = parseShared(location.hash);
+  if (!sh) return;
   const h = location.hash;
   history.replaceState(null, '', location.pathname + location.search);
+  // Rückmeldung: ist die App schon in einem anderen Fenster/Tab offen, dort übernehmen (sonst überschreiben sich die Fenster)
+  if (sh.kind === 'r' && await handOff(h)) return;
   await handleShared(h);
 }
+
+// ---------- Mehrere Fenster/Tabs ----------
+// Alle Tabs teilen sich den Speicher. Ein neu geöffneter Rückmelde-Link gibt die Daten an einen schon
+// offenen Tab ab; schreibt ein anderer Tab, liest dieser Tab den Stand neu ein (statt ihn später zu überschreiben).
+const tabs = 'BroadcastChannel' in window ? new BroadcastChannel('suchgebiet-tabs') : null;
+const tabId = uid();
+if (tabs) {
+  tabs.onmessage = async (e) => {
+    const m = e.data || {};
+    if (m.to && m.to !== tabId) return;
+    if (m.t === 'ping') tabs.postMessage({ t: 'pong', to: m.from, from: tabId, el: db.mode === 'el', visible: !document.hidden });
+    if (m.t === 'take') {
+      reloadFromStorage();
+      tabs.postMessage({ t: 'took', to: m.from, from: tabId });
+      try { window.focus(); } catch { /* egal */ }
+      await handleShared(m.hash);
+    }
+  };
+}
+function askTabs(msg, answer, ms) {
+  return new Promise((resolve) => {
+    const got = [];
+    const prev = tabs.onmessage;
+    const timer = setTimeout(() => { tabs.onmessage = prev; resolve(got); }, ms);
+    tabs.onmessage = (e) => {
+      const m = e.data || {};
+      if (m.to === tabId && m.t === answer) {
+        got.push(m);
+        if (msg.t === 'take') { clearTimeout(timer); tabs.onmessage = prev; resolve(got); }
+      } else prev(e);
+    };
+    tabs.postMessage({ ...msg, from: tabId });
+  });
+}
+async function handOff(hash) {
+  if (!tabs) return false;
+  const others = await askTabs({ t: 'ping' }, 'pong', 400);
+  if (!others.length) return false;
+  // bevorzugt ein Tab der Einsatzleitung, der gerade sichtbar ist
+  others.sort((a, b) => (b.el - a.el) || (b.visible - a.visible));
+  handedOff = true; // ab jetzt nichts mehr speichern – der andere Tab schreibt
+  const ok = await askTabs({ t: 'take', to: others[0].from, hash }, 'took', 2000);
+  if (!ok.length) { handedOff = false; return false; }
+  openDlg((box) => {
+    dlgHead(box, '📥 Rückmeldung übergeben', 'Die Rückmeldung wurde in dem Fenster übernommen, in dem der Einsatz schon offen ist. Dieses Fenster kann geschlossen werden.');
+    dlgButton(box, 'Fenster schließen', 'primary', () => { window.close(); });
+  });
+  setTimeout(() => { try { window.close(); } catch { /* nur möglich, wenn per Link geöffnet */ } }, 1500);
+  return true;
+}
+function reloadFromStorage(raw) {
+  try {
+    const s = JSON.parse(raw || localStorage.getItem(STORE_KEY) || 'null');
+    if (!s || !s.projects) return;
+    const cur = db.currentId;
+    db = { ...db, ...s, currentId: s.projects[cur] ? cur : s.currentId };
+  } catch { return; }
+  for (const id of Object.keys(db.projects)) db.projects[id] = normalizeProject(db.projects[id]);
+  P = db.projects[db.currentId] || Object.values(db.projects)[0];
+  syncGrid();
+  restoreDrafts();
+  fillProjectForm();
+  updateGridInfo();
+  renderPalette();
+  if (!$('panel-teams').hidden) renderMarks();
+  renderSentList();
+  applyMode();
+  redraw();
+  updateStatus();
+}
+window.addEventListener('storage', (e) => {
+  if (e.key === STORE_KEY && e.newValue && !handedOff) reloadFromStorage(e.newValue);
+});
 window.addEventListener('hashchange', handleHash);
 
 // Erster Start: Modus wählen (vorhandene Daten -> Einsatzleitung)
@@ -2913,6 +3009,7 @@ let watchId = null;
 let gpsMarker = null;
 let gpsCircle = null;
 let lastPos = null;
+const FOLLOW_PAUSE = 15000; // ms ohne Mitführen, nachdem die Karte von Hand verschoben wurde
 
 function updateStatus() {
   if (!lastPos) { $('status').textContent = ''; return; }
@@ -2949,7 +3046,9 @@ $('btn-gps').addEventListener('click', () => {
       gpsMarker.setLatLng(ll);
       gpsCircle.setLatLng(ll).setRadius(pos.coords.accuracy);
     }
+    // Standort immer in der Mitte halten – außer kurz nachdem man die Karte selbst verschoben hat
     if (first) { map.setView(ll, Math.max(map.getZoom(), 16)); first = false; }
+    else if (Date.now() - userMovedAt > FOLLOW_PAUSE) map.panTo(ll, { animate: true, duration: 0.5 });
     updateStatus();
   }, (err) => {
     toast('Standort nicht verfügbar: ' + err.message);

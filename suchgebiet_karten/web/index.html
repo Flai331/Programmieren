@@ -427,15 +427,19 @@
     <label class="check"><input type="checkbox" id="pdf-overview" checked> Ganzes Suchgebiet auf einer Seite</label>
     <label class="check"><input type="checkbox" id="pdf-details"> Zusätzlich Detailblätter mit
       <select id="pdf-k">
+        <option value="1">1×1</option>
         <option value="2">2×2</option>
         <option value="3" selected>3×3</option>
         <option value="4">4×4</option>
         <option value="5">5×5</option>
+        <option value="6">6×6</option>
+        <option value="8">8×8</option>
+        <option value="10">10×10</option>
       </select> Feldern
     </label>
     <label class="check"><input type="checkbox" id="pdf-info"> Zusätzlich Einsatzinfo-Seite (Teams, Legende, B-Ort, Notizen)</label>
     <label class="check"><input type="checkbox" id="pdf-view"> Aktueller Kartenausschnitt</label>
-    <label class="check"><input type="checkbox" id="pdf-nogrid"> Raster ausblenden (Flächen beschriftet, Liste am Rand)</label>
+    <label class="check"><input type="checkbox" id="pdf-nogrid"> Raster ausblenden (Flächen beschriftet, Liste am Rand; Detailblätter behalten das Raster)</label>
     <label>Beschriftung (steht über der Karte, max. 4 Zeilen)
       <textarea id="pdf-caption" rows="2" placeholder="z. B. Auftrag: Flächensuche Team 1–3, Funkkanal 3"></textarea>
     </label>

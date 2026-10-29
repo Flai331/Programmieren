@@ -547,7 +547,8 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
       continue;
     }
 
-    const r = await renderSheet(sh.state || rstate, sh, layer, Wpx, Hpx, area.w, { utm: project.showUtm, legend, noGrid: opts.noGrid, areaLabels: opts.areaLabels });
+    // Detailblätter (sh.focus) behalten Raster und Feldnamen auch bei „Raster ausblenden“ – zum Orientieren im Gelände
+    const r = await renderSheet(sh.state || rstate, sh, layer, Wpx, Hpx, area.w, { utm: project.showUtm, legend, noGrid: opts.noGrid && !sh.focus, areaLabels: opts.areaLabels });
     missing += r.missing;
     if (captionLines.length) {
       doc.setFont('helvetica', 'normal');
