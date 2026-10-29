@@ -40,3 +40,13 @@ test('contentBounds: Platz für Beschriftung rechts vom Text', () => {
   assert.ok(withLabel.east > plain.east);
   assert.ok(Math.abs(withLabel.west - plain.west) < 1e-9);
 });
+
+test('withItems: Umriss außerhalb des Rasters erweitert die Übersicht', async () => {
+  const { withItems } = await import('../web/pdf.js');
+  const b = { north: 52.63, south: 52.61, west: 10.06, east: 10.09 };
+  assert.deepEqual(withItems(b, { items: [] }), b);
+  const r = withItems(b, { items: [{ kind: 'track', pts: [[52.65, 10.10], [52.66, 10.12], [52.65, 10.12]] }] });
+  assert.ok(r.north > 52.6599 && r.east > 10.1199);
+  assert.equal(r.south, 52.61);
+  assert.equal(r.west, 10.06);
+});
