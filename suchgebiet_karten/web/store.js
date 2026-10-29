@@ -53,6 +53,15 @@ export function newProject(title = '') {
   };
 }
 
+// Leeres Suchgebiet ohne eigene Angaben („freie Karte“) – darf wiederverwendet werden
+export function isBlankProject(p) {
+  const m = p.mission || {};
+  return !p.title && !p.area && !(p.items || []).length && !(p.otherGrids || []).length && !p.meet && !p.closed
+    && !p.notes && !(p.contacts || []).length && !(p.pois || []).length
+    && !m.person && !Object.keys(m.times || {}).length && !(m.forces || []).length
+    && !(m.pages || []).length && !(m.photos || []).length && !m.summary;
+}
+
 // Fehlende Felder ergänzen (ältere Dateien, Importe)
 export function normalizeProject(p) {
   const base = newProject();
