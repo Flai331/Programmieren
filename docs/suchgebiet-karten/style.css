@@ -564,3 +564,4 @@ body.hf #panel-layers .el-only { display: none !important; }
 #panel-wizard .wz-radio input { padding: 8px; border: 1px solid #bbb; border-radius: 8px; }
 .wm-box select { width: 100%; padding: 10px; border: 1px solid #bbb; border-radius: 8px; font-size: 16px; background: #fff; }
 .wm-box > label:not(.check) { display: block; font-size: 14px; font-weight: 600; margin-top: 4px; }
+#dev-edit.mini { padding: 4px 10px; font-size: 13px; margin-left: 6px; }
