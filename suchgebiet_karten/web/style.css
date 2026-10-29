@@ -352,4 +352,5 @@ button, input, select { font: inherit; }
   .palette .widths button { padding: 3px 6px; font-size: 11px; }
   .hint { top: 46px; left: 54px; right: 98px; font-size: 12px; padding: 3px 8px; }
   .panel { right: 98px; top: 46px; max-height: calc(100% - 52px); }
+  #nt-text { height: 90px; }
 }

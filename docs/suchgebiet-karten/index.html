@@ -48,6 +48,7 @@
     <button id="btn-grid" title="Raster"><span>#</span>Raster</button>
     <button id="btn-teams" title="Teams &amp; Legende"><span>👥</span>Teams</button>
     <button id="btn-mission" title="Einsatzprotokoll"><span>📋</span>Einsatz</button>
+    <button id="btn-notes" title="Notizen: getippt und handschriftlich"><span>📝</span>Notizen</button>
     <button id="btn-layers" title="Kartenart"><span>🗺️</span>Karte</button>
     <button id="btn-gps" title="Mein Standort"><span>◎</span>GPS</button>
     <button id="btn-pdf" class="primary" title="PDF, GPX und Garmin-Karte"><span>📤</span>Export</button>
@@ -289,6 +290,18 @@
   </section>
 
   <!-- Einsatzprotokoll -->
+  <!-- Notizen schnell erreichbar (gleiche Daten wie im Einsatz-Fenster) -->
+  <section id="panel-notes" class="panel" hidden>
+    <h2>Notizen</h2>
+    <textarea id="nt-text" rows="7" placeholder="z. B. Funkkanal, Hinweise von Angehörigen, Meldungen der Teams …"></textarea>
+    <div class="row">
+      <button id="nt-pad" class="primary">✍️ Notizblock (Handschrift)</button>
+      <button id="nt-photo">📷 Foto vom Papier</button>
+    </div>
+    <div id="nt-thumbs" class="thumbs"></div>
+    <button class="close">Schließen</button>
+  </section>
+
   <section id="panel-mission" class="panel wide" hidden>
     <div class="tabs">
       <button data-tab="lage" class="active">📋 Lage</button>
