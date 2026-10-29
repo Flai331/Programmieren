@@ -119,6 +119,9 @@ Karteninformationen* ein- und ausschalten. Wer die eigene Wanderkarte sehen will
 - **Jedes PDF aus der App enthält das Suchgebiet ebenfalls.** Wer das PDF
   bekommt, kann es unter „Einsätze → Datei öffnen“ laden und mit Raster,
   Teams und Zeichnungen weiterarbeiten.
+- **GPX/KML aus WhatsApp & Co.** (Android-App): Datei in WhatsApp antippen →
+  „Teilen“ bzw. im Dateimanager „Öffnen mit“ → „Suchgebiet-Karten“. Nach einer
+  Nachfrage landen Wege, Umrisse und Wegpunkte im laufenden Einsatz.
 
 ## Hinweise
 

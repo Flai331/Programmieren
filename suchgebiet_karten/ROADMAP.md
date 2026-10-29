@@ -1,14 +1,16 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v74**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v75**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
-- [ ] **v75 – 🐛 Fehler melden (nur Android-APK)**
+- [x] **v75 – GPX/KML aus WhatsApp & Co.** „Teilen“ bzw. „Öffnen mit“ → nach Nachfrage in den laufenden Einsatz (direkt mit Klaas gebaut).
+
+- [ ] **v76 – 🐛 Fehler melden (nur Android-APK)**
   - Kachel „⚙️ Mehr“ → „🐛 Fehler melden“: Beschreibung eintippen, senden. Nur in der APK
     sichtbar (Web-Version bekommt keine Meldefunktion).
   - Automatische Meldung bei JavaScript-Fehlern (`window.onerror`, `unhandledrejection`) und
@@ -31,7 +33,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
   - Tests: Unit-Test für das Zusammenstellen des Berichts (keine Einsatzdaten enthalten,
     Kürzung, Fingerprint); im CI-Emulator-Test darf kein Bericht ausgelöst werden.
 
-- [ ] **v76 – 📍 Lage-Orte** (Details: `PLAN-einsatz-assistent.md`, Abschnitt D)
+- [ ] **v77 – 📍 Lage-Orte** (Details: `PLAN-einsatz-assistent.md`, Abschnitt D)
   - Werkzeug „📍 Lage-Ort“ für EL-Geräte; Kategorien 🚐 ELW, 🅱️ Bereitstellungsraum,
     🅿️ Parkplatz, 🚻 Toilette, 🍲 Verpflegung, 🚰 Ver-/Entsorgung, 🚑 Sanität,
     ❓ letzter bekannter Ort, 📌 Sonstiges.
@@ -40,7 +42,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
   - Gehen bei der Übergabe an ein weiteres EL-Gerät (`#e=`) mit.
   - Neue Logik in `web/pois.js` mit Unit-Tests.
 
-- [ ] **v77 – 📤 Infos an EL senden** (`#i=`, Abschnitt D)
+- [ ] **v78 – 📤 Infos an EL senden** (`#i=`, Abschnitt D)
   - „📤 Infos senden“: neue/geänderte/gelöschte Lage-Orte (optional Kontakte) per QR-Code
     oder Link, mit Gerätename (`db.deviceName`) als Absender; beide Richtungen.
   - Zusammenführen ohne Duplikate (feste IDs + Änderungszeit), gelöschte verschwinden auch
@@ -49,7 +51,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
   - `#i=` in `parseShared`, Android-`sharedHash` und Tab-Übergabe (`handOff`) ist schon vorbereitet.
   - Ohne Gerätename vor dem ersten Senden danach fragen.
 
-- [ ] **v78 – Lage-Orte an Hundeführer**
+- [ ] **v79 – Lage-Orte an Hundeführer**
   - Im Auftrag (Senden-Fenster) Lage-Orte einzeln anhakbar (B-Ort-nahe wie ELW/Sanität
     standardmäßig an); HF sieht sie auf der Karte und unter „☰ Mein Auftrag“.
 
