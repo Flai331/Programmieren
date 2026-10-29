@@ -2080,6 +2080,8 @@ function wmStep2(from) {
   $('wm-dir').textContent = `Wind kommt aus ${dirName(wmFrom)} (${Math.round(wmFrom)}°)`;
 }
 async function openWindMeter() {
+  // Wind messen nur die Hundeführer vor Ort; die Einsatzleitung bekommt ihre Messungen per Rückmeldung
+  if (db.mode !== 'hf') return toast('Wind messen nur im Hundeführer-Modus – Messungen der Teams kommen mit der Rückmeldung');
   wmBuf = [];
   wmHeading = null;
   $('windmeter').hidden = false;
