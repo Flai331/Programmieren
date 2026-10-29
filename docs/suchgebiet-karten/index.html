@@ -120,15 +120,15 @@
 
   <div class="sidebuttons">
     <button id="btn-hfmenu" class="hfonly" title="Mein Auftrag, Rettungspunkt, Notizen …"><span>☰</span>Menü</button>
-    <button id="btn-projects" title="Suchgebiete"><span>📁</span>Gebiete</button>
+    <button id="btn-projects" title="Einsätze: Liste, neu, Datei, an weiteres Gerät übergeben"><span>📁</span>Einsätze</button>
+    <button id="btn-mission" title="Einsatz: Stammdaten, Lage, Einsatzende"><span>📋</span>Einsatz</button>
+    <button id="btn-notes" title="Notizen: getippt und handschriftlich"><span>📝</span>Notizen</button>
     <button id="btn-grid" title="Raster"><span>#</span>Raster</button>
     <button id="btn-teams" title="Teams &amp; Legende"><span>👥</span>Teams</button>
-    <button id="btn-mission" title="Einsatzprotokoll"><span>📋</span>Einsatz</button>
-    <button id="btn-notes" title="Notizen: getippt und handschriftlich"><span>📝</span>Notizen</button>
-    <button id="btn-layers" title="Kartenart"><span>🗺️</span>Karte</button>
-    <button id="btn-contacts" title="Adressbuch: Kontakte für alle Einsätze"><span>📇</span>Kontakte</button>
-    <button id="btn-offline" title="Offline-Karten: Karte, Stufen und Bereich wählen"><span>📥</span>Offline</button>
+    <button id="btn-contacts" title="Kontakte: für diesen Einsatz und Adressbuch"><span>📇</span>Kontakte</button>
+    <button id="btn-layers" title="Kartenart, Rettungspunkte, Offline-Karten"><span>🗺️</span>Karte</button>
     <button id="btn-gps" title="Mein Standort"><span>◎</span>GPS</button>
+    <button id="btn-more" title="Gerät, Hundeführer-Modus, App-Download"><span>⚙️</span>Mehr</button>
     <button id="btn-pdf" class="primary" title="PDF, GPX und Garmin-Karte"><span>📤</span>Export</button>
   </div>
 
@@ -225,53 +225,38 @@
 
   <!-- Suchgebiete -->
   <section id="panel-projects" class="panel" hidden>
-    <h2>Suchgebiet</h2>
-    <div class="row"><button id="wiz-open">🧭 Einsatz-Assistent</button></div>
-    <label>Name des Einsatzes (Überschrift im PDF)
-      <input id="title" type="text" placeholder="z. B. Übung Stadtwald">
-    </label>
-    <label>Einsatzleitung / Ersteller
-      <input id="leader" type="text" placeholder="Name">
-    </label>
-    <div class="row2">
-      <label>Handy EL <input id="lead-phone" type="tel" inputmode="tel" placeholder="0170 …"></label>
-      <label>Funkrufname EL <input id="lead-call" type="text" placeholder="z. B. Rettungshund 1"></label>
+    <h2>📁 Einsätze</h2>
+    <div class="row el-only">
+      <button id="proj-new" class="primary">+ Neuer Einsatz</button>
     </div>
-    <label>Funkrufname ELW <input id="lead-elw" type="text" placeholder="z. B. Rotkreuz Celle 11-1"></label>
-    <div class="row"><button id="radio-edit">📻 Weitere Funkrufnamen</button></div>
-    <label>📇 Kontakte für diesen Einsatz</label>
-    <p class="small">Gehen auf Wunsch mit dem Auftrag an die Hundeführer (nur Name, Funktion, Funkrufname, Telefon). Die Einsatzleitung ist immer dabei.</p>
-    <div id="pc-list" class="ctlist"></div>
-    <div class="row">
-      <button id="pc-add">+ aus Adressbuch</button>
-      <button id="pc-new">+ neuer Kontakt</button>
-    </div>
-    <label>B-Ort</label>
-    <p id="meet-info" class="info"></p>
-    <div class="row">
-      <button id="meet-set">B-Ort auf Karte setzen</button>
-      <button id="meet-remove">B-Ort entfernen</button>
-    </div>
+    <div id="project-list" class="plist"></div>
 
-    <h2 class="sub">Datei</h2>
-    <p class="small">Zum Weitergeben an die Staffel. Jedes PDF aus dieser App enthält das Suchgebiet ebenfalls und kann hier wieder geöffnet werden.</p>
-    <div class="row">
+    <h2 class="sub el-only">Datei</h2>
+    <p class="small el-only">Zum Weitergeben an die Staffel. Jedes PDF aus dieser App enthält das Suchgebiet ebenfalls und kann hier wieder geöffnet werden.</p>
+    <div class="row el-only">
       <button id="proj-share" class="primary">Suchgebiet als Datei senden</button>
       <button id="proj-import">Datei öffnen (Suchgebiet, PDF oder GPX)</button>
       <input id="import-file" type="file" accept=".json,.txt,.pdf,.gpx,application/json,text/plain,application/pdf,application/gpx+xml" hidden>
     </div>
 
+    <div class="el-only">
     <h2 class="sub">📲 Weiteres Gerät der Einsatzleitung (Tablet/PC)</h2>
     <p class="small">Überträgt den ganzen Einsatz mit Raster, Teams, Aufträgen und Rückmeldungen auf ein weiteres Gerät der Einsatzleitung. Fotos gehen nur über „Suchgebiet als Datei senden“.</p>
     <div class="row">
       <button id="ho-send" class="primary">📲 Einsatz übergeben (QR-Code)</button>
       <button id="ho-scan">📷 Einsatz übernehmen (scannen)</button>
     </div>
-    <p class="small">Dieses Gerät: <b id="dev-name">–</b> <button id="dev-edit" class="mini">✏️ Name</button></p>
+    </div>
 
-    <h2 class="sub">Gespeicherte Suchgebiete</h2>
-    <div class="row"><button id="proj-new">+ Neues Suchgebiet</button></div>
-    <div id="project-list" class="plist"></div>
+    <button class="close">Schließen</button>
+  </section>
+
+
+  <!-- Mehr: Gerät, App-Modus, App-Download -->
+  <section id="panel-more" class="panel" hidden>
+    <h2>⚙️ Mehr <span id="app-version" class="version"></span></h2>
+    <h2 class="sub first">📛 Dieses Gerät</h2>
+    <p>Name: <b id="dev-name">–</b> <button id="dev-edit" class="mini">✏️ Name</button></p>
     <h2 class="sub">App-Modus</h2>
     <p class="small">Einsatzleitung: alles. Hundeführer: stark vereinfacht (große Knöpfe, nur der eigene Auftrag). Zurück zur Einsatzleitung nur mit der PIN der Einsatzleitung.</p>
     <div class="row">
@@ -295,7 +280,7 @@
       <button id="wz-skip">Überspringen</button>
       <button id="wz-next" class="primary">Weiter ›</button>
     </div>
-    <button id="wz-exit">Schließen – später unter „Gebiete“ fortsetzen</button>
+    <button id="wz-exit">Schließen – später unter „Einsatz“ fortsetzen</button>
   </section>
 
   <!-- Teams & Legende -->
@@ -401,6 +386,9 @@
       <button id="rp-clear" class="danger">🗑️ Löschen</button>
     </div>
     <p class="small">Die Forst-Rettungspunkte gibt es kostenlos beim KWF (rettungspunkte-forst.de) bzw. bei den Landesforsten als GPX-, KML- oder CSV-Datei je Bundesland. Einmal importieren – danach offline, für alle Einsätze. Mehrere Dateien nacheinander importieren ergänzt die Liste.</p>
+    <h2 class="sub">📥 Offline-Karten</h2>
+    <p class="small">Karten für Gegenden ohne Netz vorab aufs Gerät laden.</p>
+    <div class="row"><button id="layers-offline">📥 Offline-Karten verwalten</button></div>
     <input id="rp-file" type="file" accept=".gpx,.kml,.csv,.txt,application/gpx+xml,application/vnd.google-earth.kml+xml,text/csv,text/plain,application/xml,text/xml" hidden>
     </div>
     <button class="close">Schließen</button>
@@ -409,6 +397,14 @@
   <!-- Adressbuch -->
   <section id="panel-contacts" class="panel" hidden>
     <h2>📇 Kontakte</h2>
+    <h2 class="sub first">Für diesen Einsatz</h2>
+    <p class="small">Gehen auf Wunsch mit dem Auftrag an die Hundeführer (nur Name, Funktion, Funkrufname, Telefon). Die Einsatzleitung ist immer dabei.</p>
+    <div id="pc-list" class="ctlist"></div>
+    <div class="row">
+      <button id="pc-add">+ aus Adressbuch</button>
+      <button id="pc-new">+ neuer Kontakt</button>
+    </div>
+    <h2 class="sub">Adressbuch (alle Einsätze)</h2>
     <p class="small">Gilt für alle Einsätze. Nummer oder Adresse antippen ruft an bzw. schreibt eine Mail. Handy-Kontakte als vCard-Datei (.vcf) importieren; „Teilen“ schickt das Adressbuch z. B. per WhatsApp an andere Handys.</p>
     <input id="ct-search" type="search" placeholder="Suchen: Name, Funktion, Funkrufname, Nummer …">
     <div id="ct-list" class="ctlist"></div>
@@ -464,7 +460,7 @@
 
   <!-- PDF -->
   <section id="panel-pdf" class="panel" hidden>
-    <h2>Exportieren <span id="app-version" class="version"></span></h2>
+    <h2>Exportieren</h2>
     <p class="small">„Teilen“ öffnet das Teilen-Menü des Handys (WhatsApp, Mail, Signal …). „Speichern“ legt die Datei ab – im Browser im Download-Ordner, in der App an einem Ort deiner Wahl.</p>
     <div id="export-grids-box" hidden>
       <label>Rastergebiete im Export (PDF, GPX, Garmin-Karte)</label>
@@ -581,16 +577,41 @@
       <button id="nt-photo">🖼️ Bild wählen</button>
     </div>
     <div id="nt-thumbs" class="thumbs"></div>
+    <input id="ms-photo-file" type="file" accept="image/*" hidden>
+    <input id="ms-cam-file" type="file" accept="image/*" capture="environment" hidden>
     <button class="close">Schließen</button>
   </section>
 
   <section id="panel-mission" class="panel wide" hidden>
     <div class="tabs">
-      <button data-tab="lage" class="active">📋 Lage</button>
+      <button data-tab="stamm" class="active">📌 Stammdaten</button>
+      <button data-tab="lage">📋 Lage</button>
       <button data-tab="ende">🏁 Einsatzende</button>
     </div>
 
-    <div id="tab-lage">
+    <div id="tab-stamm">
+    <div class="row"><button id="wiz-open">🧭 Einsatz-Assistent</button></div>
+    <label>Name des Einsatzes (Überschrift im PDF)
+      <input id="title" type="text" placeholder="z. B. Übung Stadtwald">
+    </label>
+    <label>Einsatzleitung / Ersteller
+      <input id="leader" type="text" placeholder="Name">
+    </label>
+    <div class="row2">
+      <label>Handy EL <input id="lead-phone" type="tel" inputmode="tel" placeholder="0170 …"></label>
+      <label>Funkrufname EL <input id="lead-call" type="text" placeholder="z. B. Rettungshund 1"></label>
+    </div>
+    <label>Funkrufname ELW <input id="lead-elw" type="text" placeholder="z. B. Rotkreuz Celle 11-1"></label>
+    <div class="row"><button id="radio-edit">📻 Weitere Funkrufnamen</button></div>
+    <label>B-Ort</label>
+    <p id="meet-info" class="info"></p>
+    <div class="row">
+      <button id="meet-set">B-Ort auf Karte setzen</button>
+      <button id="meet-remove">B-Ort entfernen</button>
+    </div>
+    </div>
+
+    <div id="tab-lage" hidden>
       <label>Vermisste Person
         <textarea id="ms-person" rows="3" placeholder="Name, Alter, Aussehen, Kleidung, Erkrankungen, zuletzt gesehen …"></textarea>
       </label>
@@ -600,17 +621,7 @@
       <div id="ms-forces" class="forces"></div>
       <div class="row"><button id="ms-force-add">+ Organisation</button></div>
       <p id="ms-total" class="info"></p>
-      <label>Notizen (alles, was man im Einsatz erfährt)
-        <textarea id="notes" rows="5" placeholder="z. B. Funkkanal, Hinweise von Angehörigen, Meldungen der Teams …"></textarea>
-      </label>
-      <div class="row">
-        <button id="ms-pad" class="primary">✍️ Notizblock (Handschrift)</button>
-        <button id="ms-cam">📷 Foto aufnehmen</button>
-        <button id="ms-photo">🖼️ Bild wählen</button>
-        <input id="ms-photo-file" type="file" accept="image/*" hidden>
-        <input id="ms-cam-file" type="file" accept="image/*" capture="environment" hidden>
-      </div>
-      <div id="ms-thumbs" class="thumbs"></div>
+      <p class="small">Notizen, Notizblock und Fotos: Kachel „📝 Notizen“.</p>
     </div>
 
     <div id="tab-ende" hidden>
