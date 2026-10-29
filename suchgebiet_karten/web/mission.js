@@ -2,6 +2,8 @@
 // handschriftlicher Notizblock, Fotos vom Papier, Zusammenfassung am Einsatzende,
 // Kartenlegende, Verfasser und Mail-Empfänger. Gehört zum jeweiligen Suchgebiet.
 
+import { windLines } from './weather.js';
+
 export const FORCE_KEYS = [
   ['lead', 'Führung'],
   ['helpers', 'Helfer'],
@@ -21,13 +23,14 @@ export function newMission() {
     recipients: '', // alt (ein Feld für alle) – wird zu mailTo umgezogen
     mailTo: [], // [{to: 'a@b.de, c@d.de', report, map, notes, gpx}] – was an wen geht
     legend: {}, // Farbe -> Bedeutung (z. B. "#d50000": "Spur Mantrailer")
+    wind: [], // [{t, from (°, woher), src: 'gemessen'|'DWD', strength | kmh, gust, station}]
   };
 }
 
 export function normalizeMission(m) {
   const base = newMission();
   const out = { ...base, ...(m && typeof m === 'object' ? m : {}) };
-  for (const k of ['forces', 'pages', 'photos']) if (!Array.isArray(out[k])) out[k] = [];
+  for (const k of ['forces', 'pages', 'photos', 'wind']) if (!Array.isArray(out[k])) out[k] = [];
   if (!out.legend || typeof out.legend !== 'object') out.legend = {};
   if (!out.times || typeof out.times !== 'object') out.times = {};
   if (!Array.isArray(out.mailTo)) out.mailTo = [];
@@ -157,6 +160,7 @@ export function missionText(project, grid, attach = 'Abschlussbericht im Anhang 
   if (m.author) out.push(`Verfasser: ${m.author}`);
   out.push(`Stand: ${fmtDate(Date.now())}`);
   if (want(sec, 'times') && timeLines(m).length) out.push('', 'Zeiten:', ...timeLines(m));
+  if (want(sec, 'times') && m.wind && m.wind.length) out.push('', 'Wind:', ...windLines(m));
   if (want(sec, 'person') && m.person.trim()) out.push('', 'Vermisste Person:', m.person.trim());
   if (want(sec, 'forces') && m.forces.length) out.push('', `Kräfte (${STRENGTH_HINT}):`, ...m.forces.map(forceLine), totalLine(m.forces));
   if (want(sec, 'summary') && m.summary.trim()) out.push('', 'Zusammenfassung:', m.summary.trim());
@@ -254,6 +258,7 @@ export async function addReportPages(doc, project, grid, W, H, margin, parts = {
     text(meta.join('   ·   '), 9.5);
 
     if (want(parts, 'times') && timeLines(m).length) { heading('Zeiten'); for (const l of timeLines(m)) text(l); }
+    if (want(parts, 'times') && m.wind && m.wind.length) { heading('Wind'); for (const l of windLines(m)) text(l); }
     if (want(parts, 'person') && m.person.trim()) { heading('Vermisste Person'); text(m.person.trim()); }
 
     if (want(parts, 'forces') && m.forces.length) {

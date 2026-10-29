@@ -24,6 +24,9 @@ import {
 import {
   parseRescue, mergeRescue, nearest as nearestRescue, compass, inBounds, loadRescue, storeRescue,
 } from './rescue.js';
+import {
+  fetchWeather, dirName, beaufort, approach, circularMean, sunTimes, windChanged, STRENGTHS, ICONS as WX_ICONS,
+} from './weather.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
   newProject, normalizeProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
@@ -32,7 +35,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v51';
+const APP_VERSION = 'v52';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -1545,6 +1548,200 @@ $('rp-clear').addEventListener('click', async () => {
   renderRescueInfo();
   redraw();
 });
+
+// ---------- Wetter und Wind ----------
+// Overlay zuschaltbar (db.wxOn); Daten vom DWD (Bright Sky), letzter Stand in db.wxLast.
+// Gemessener Wind (Kompass) steht im Windprotokoll des Einsatzes (M().wind) und hat Vorrang.
+if (db.wxOn === undefined) db.wxOn = false;
+const hhmm = (t) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+function wxPoint() {
+  if (P.area) return { lat: (P.area.north + P.area.south) / 2, lon: (P.area.west + P.area.east) / 2 };
+  const c = map.getCenter();
+  return { lat: c.lat, lon: c.lng };
+}
+function lastMeasured() {
+  const w = [...(P.mission.wind || [])].reverse().find((x) => x.src === 'gemessen');
+  return w && Date.now() - w.t < 3 * 3600e3 ? w : null;
+}
+function dwdText(c) {
+  return `aus ${dirName(c.from)} (${Math.round(c.from)}°) · ${Math.round(c.kmh)} km/h${c.gust ? `, Böen ${Math.round(c.gust)}` : ''} · Bft ${beaufort(c.kmh)}`;
+}
+function renderWx() {
+  $('quick-wx').classList.toggle('on', !!db.wxOn);
+  $('wx').hidden = !db.wxOn;
+  if (!db.wxOn) return;
+  $('wx-body').hidden = !!db.wxMin;
+  $('wx-min').textContent = db.wxMin ? '▸' : '▾';
+  const wx = db.wxLast;
+  const c = wx && wx.current && wx.current.from != null && wx.current.kmh != null ? wx.current : null;
+  const meas = lastMeasured();
+  const arrow = $('wx-arrow');
+  const from = meas ? meas.from : c ? c.from : null;
+  arrow.style.visibility = from == null ? 'hidden' : 'visible';
+  // Pfeil zeigt, wohin der Wind weht
+  if (from != null) arrow.style.transform = `rotate(${from + 180}deg)`;
+  arrow.classList.toggle('measured', !!meas);
+  const age = c ? Math.round((Date.now() - c.t) / 60000) : 0;
+  const dwdSrc = c ? `DWD ${c.station}${c.km != null ? ` (${Math.round(c.km)} km)` : ''} · ${hhmm(c.t)}${age > 90 ? ` – Stand vor ${Math.round(age / 60)} Std.` : ''}` : '';
+  if (meas) {
+    $('wx-wind').textContent = `aus ${dirName(meas.from)} (${Math.round(meas.from)}°) · ${STRENGTHS[meas.strength].label}`;
+    $('wx-src').textContent = `vor Ort gemessen · ${hhmm(meas.t)}`;
+    $('wx-second').hidden = !c;
+    if (c) $('wx-second').textContent = `${dwdSrc}: ${dwdText(c)}`;
+  } else if (c) {
+    $('wx-wind').textContent = dwdText(c);
+    $('wx-src').textContent = dwdSrc;
+    $('wx-second').hidden = true;
+  } else {
+    $('wx-wind').textContent = 'Noch kein Wind';
+    $('wx-src').textContent = navigator.onLine ? 'Wird geladen … oder 🧭 Wind messen' : 'Kein Netz – 🧭 Wind messen';
+    $('wx-second').hidden = true;
+  }
+  $('wx-approach').textContent = from != null ? `Ansatz: ${approach(from)}` : '';
+  const more = [];
+  if (c && c.temp != null) more.push(`${WX_ICONS[c.icon] || ''} ${Math.round(c.temp)} °C`.trim());
+  if (c && c.rain) more.push(`Regen ${c.rain.toLocaleString('de-DE')} mm/h`);
+  const pt = wxPoint();
+  const sun = sunTimes(new Date(), pt.lat, pt.lon);
+  if (sun) {
+    const now = Date.now();
+    if (now < sun.set && now > sun.rise) {
+      const left = Math.round((sun.set - now) / 60000);
+      more.push(`Sonnenuntergang ${hhmm(sun.set)} (noch ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} h)`);
+    } else more.push(`Sonnenaufgang ${hhmm(now > sun.set ? sun.rise + 864e5 : sun.rise)}`);
+  }
+  $('wx-more').textContent = more.join(' · ');
+  const box = $('wx-hours');
+  box.innerHTML = '';
+  for (const h of (wx && wx.hours) || []) {
+    if (h.from == null) continue;
+    const d = document.createElement('div');
+    d.innerHTML = `<div></div><i>↑</i><div></div>`;
+    d.firstChild.textContent = `${new Date(h.t).getHours()} Uhr`;
+    d.children[1].style.transform = `rotate(${h.from + 180}deg)`;
+    d.lastChild.textContent = `${dirName(h.from)} ${Math.round(h.kmh)}${h.prob ? ` · ${h.prob}%` : ''}`;
+    d.title = `${dirName(h.from)} ${Math.round(h.kmh)} km/h${h.gust ? `, Böen ${Math.round(h.gust)}` : ''}${h.prob != null ? `, Regen ${h.prob} %` : ''}`;
+    box.appendChild(d);
+  }
+}
+let wxLoading = false;
+async function loadWeather(manual) {
+  if (!db.wxOn || wxLoading) return;
+  wxLoading = true;
+  $('wx-refresh').disabled = true;
+  try {
+    const pt = wxPoint();
+    const wx = await fetchWeather(pt.lat, pt.lon);
+    db.wxLast = wx;
+    const c = wx.current;
+    // deutliche Änderung (Drehung ≥ 45° oder ±2 Bft) kommt ins Windprotokoll des Einsatzes
+    if (c.from != null && c.kmh != null) {
+      const last = [...(M().wind || [])].reverse().find((w) => w.src === 'DWD');
+      if ((!last || last.t !== c.t) && windChanged(last, c)) {
+        (M().wind ||= []).push({ t: c.t, from: c.from, kmh: c.kmh, gust: c.gust, station: c.station, src: 'DWD' });
+        touch();
+      }
+    }
+    saveNow();
+  } catch {
+    if (manual) toast('Wetter nicht abrufbar (kein Netz?) – angezeigt wird der letzte Stand');
+  } finally {
+    wxLoading = false;
+    $('wx-refresh').disabled = false;
+    renderWx();
+  }
+}
+$('quick-wx').addEventListener('click', () => {
+  db.wxOn = !db.wxOn;
+  saveNow();
+  renderWx();
+  if (db.wxOn) loadWeather(true);
+});
+$('wx-refresh').addEventListener('click', () => loadWeather(true));
+$('wx-min').addEventListener('click', () => { db.wxMin = !db.wxMin; saveNow(); renderWx(); });
+setInterval(() => { if (db.wxOn && navigator.onLine) loadWeather(false); else renderWx(); }, 15 * 60e3);
+window.addEventListener('online', () => loadWeather(false));
+renderWx();
+if (db.wxOn && (!db.wxLast || Date.now() - db.wxLast.fetched > 10 * 60e3)) loadWeather(false);
+
+// Wind messen: Kompass des Handys (Oberkante zeigt, wohin das Puder fliegt)
+let wmBuf = [];
+let wmHeading = null;
+let wmFrom = null;
+let wmTimer = null;
+function wmOri(e) {
+  let h = null;
+  if (typeof e.webkitCompassHeading === 'number' && !Number.isNaN(e.webkitCompassHeading)) h = e.webkitCompassHeading;
+  else if ((e.absolute || e.type === 'deviceorientationabsolute') && e.alpha != null) h = 360 - e.alpha;
+  if (h == null) return;
+  const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+  h = (((h + ang) % 360) + 360) % 360;
+  wmBuf.push(h);
+  if (wmBuf.length > 10) wmBuf.shift();
+  wmHeading = circularMean(wmBuf);
+  const tilted = e.beta != null && Math.abs(e.beta) > 55;
+  $('wm-needle').style.transform = `rotate(${-wmHeading}deg)`;
+  $('wm-read').textContent = tilted ? 'Handy flacher halten …'
+    : `Puder fliegt nach ${dirName(wmHeading)} (${Math.round(wmHeading)}°) → Wind kommt aus ${dirName(wmHeading + 180)}`;
+  $('wm-take').disabled = tilted;
+  $('wm-manual').hidden = true;
+}
+function wmStop() {
+  window.removeEventListener('deviceorientationabsolute', wmOri);
+  window.removeEventListener('deviceorientation', wmOri);
+  clearTimeout(wmTimer);
+}
+function wmStep2(from) {
+  wmFrom = (from + 360) % 360;
+  wmStop();
+  $('wm-step1').hidden = true;
+  $('wm-step2').hidden = false;
+  $('wm-dir').textContent = `Wind kommt aus ${dirName(wmFrom)} (${Math.round(wmFrom)}°)`;
+}
+async function openWindMeter() {
+  wmBuf = [];
+  wmHeading = null;
+  $('windmeter').hidden = false;
+  $('wm-step1').hidden = false;
+  $('wm-step2').hidden = true;
+  $('wm-take').disabled = true;
+  $('wm-read').textContent = 'Kompass wird gestartet …';
+  $('wm-manual').hidden = true;
+  // iPhone: Erlaubnis für den Kompass (muss direkt aus dem Antippen kommen)
+  if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try { await DeviceOrientationEvent.requestPermission(); } catch { /* dann Handauswahl */ }
+  }
+  window.addEventListener('deviceorientationabsolute', wmOri);
+  window.addEventListener('deviceorientation', wmOri);
+  wmTimer = setTimeout(() => {
+    if (wmHeading != null) return;
+    $('wm-read').textContent = 'Kein Kompass verfügbar – antippen, wohin das Puder fliegt:';
+    $('wm-manual').hidden = false;
+  }, 2500);
+}
+{
+  const box = $('wm-manual');
+  ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'].forEach((n, i) => {
+    const b = document.createElement('button');
+    b.textContent = `→ ${n}`;
+    b.addEventListener('click', () => wmStep2(i * 45 + 180));
+    box.appendChild(b);
+  });
+}
+$('wm-take').addEventListener('click', () => { if (wmHeading != null) wmStep2(wmHeading + 180); });
+$('wm-cancel').addEventListener('click', () => { wmStop(); $('windmeter').hidden = true; });
+document.querySelectorAll('.wm-str button').forEach((b) => b.addEventListener('click', () => {
+  const s = b.dataset.s;
+  const pos = gpsMarker ? gpsMarker.getLatLng() : map.getCenter();
+  (M().wind ||= []).push({ t: Date.now(), from: Math.round(wmFrom), strength: s, src: 'gemessen', lat: pos.lat, lon: pos.lng });
+  touch();
+  $('windmeter').hidden = true;
+  db.wxOn = true;
+  saveNow();
+  renderWx();
+  toast(`Wind gemessen: aus ${dirName(wmFrom)}, ${STRENGTHS[s].label}. ${approach(wmFrom)}.`, 9000);
+}));
+$('wx-measure').addEventListener('click', openWindMeter);
 
 // ---------- Nachtmodus ----------
 // aus → dunkel → rot (schont die Nachtsicht) → aus; gilt fürs Gerät (db.night)
