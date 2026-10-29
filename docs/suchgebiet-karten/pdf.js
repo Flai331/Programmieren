@@ -61,6 +61,7 @@ export function planSheets(grid, opts, viewBounds) {
       title: `Übersicht – Felder ${rangeLabel(0, 0, grid.cols - 1, grid.rows - 1)}`,
       bounds: gridBounds(grid),
       pad: 0.04,
+      overview: true,
       outlines: useDetail && detail.length > 1 ? detail.map((d, i) => ({ ...d, page: firstDetail + i })) : null,
     });
     page++;
@@ -498,6 +499,16 @@ export function contentBounds(state, aspect, mmW, pad = 0.06) {
   return { west: mercLon(x0), east: mercLon(x1), north: mercLat(y0), south: mercLat(y1) };
 }
 
+// Ausschnitt b so erweitern, dass auch alle Zeichnungen, Texte und der B-Ort drauf sind
+export function withItems(b, state) {
+  const ib = contentBounds({ items: state.items, meet: state.meet });
+  if (!ib) return b;
+  return {
+    north: Math.max(b.north, ib.north), south: Math.min(b.south, ib.south),
+    west: Math.min(b.west, ib.west), east: Math.max(b.east, ib.east),
+  };
+}
+
 // opts: { format, orient, overview, view, details, k, info, title, dpi }
 export async function buildPdf(project, grid, opts, layer, viewBounds, onProgress) {
   const { jsPDF } = window.jspdf;
@@ -508,6 +519,8 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
   const sheets = opts.noMap ? [] : fit ? [{ title: 'Einsatzkarte', bounds: fit, pad: 0.06 }]
     : opts.views && opts.views.length ? planMultiSheets(opts.views, opts, viewBounds) : planSheets(grid, opts, viewBounds);
   for (const sh of sheets) if (sh.view) sh.state = filterState(renderState(sh.view.project, sh.view.grid), opts);
+  // Übersicht: auch Umrisse, Zeichnungen und B-Ort außerhalb des Rasters zeigen
+  for (const sh of sheets) if (sh.overview) sh.bounds = withItems(sh.bounds, sh.state || rstate);
   if (!sheets.length && !opts.report) throw new Error('Keine Blätter ausgewählt.');
   // nur Bericht ohne Karte: Hochformat
   const orient = sheets.length ? resolveOrient(opts.orient, sheets) : (opts.orient === 'auto' ? 'portrait' : opts.orient);
