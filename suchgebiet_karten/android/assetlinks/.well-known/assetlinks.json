@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "de.klaas.suchgebiet",
+      "sha256_cert_fingerprints": ["F4:B5:40:A7:64:91:CB:43:53:66:9B:9E:A7:18:B6:53:14:48:75:C0:48:EC:71:1E:7E:D2:2A:E1:2D:77:AA:F3"]
+    }
+  }
+]

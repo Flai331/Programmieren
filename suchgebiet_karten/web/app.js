@@ -41,7 +41,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v70';
+const APP_VERSION = 'v71';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -767,7 +767,6 @@ function finishPointer(e, cancelled) {
   } else if (tool === 'windpt') {
     if (!cancelled && !panning) {
       P.windPt = { lat: Math.round(ll.lat * 1e5) / 1e5, lon: Math.round(ll.lng * 1e5) / 1e5 };
-      if (!db.windArrows) { db.windArrows = true; $('quick-arrows').classList.add('on'); }
       setTool('pan');
       changed();
       loadWeather(true);
@@ -2033,9 +2032,9 @@ $('quick-arrows').addEventListener('click', () => {
   }
 });
 $('quick-arrows').classList.toggle('on', !!db.windArrows);
-// gemessener Wind soll sofort als Pfeil zu sehen sein
+// Hundeführer: gemessener Wind soll sofort als Pfeil zu sehen sein (Einsatzleitung schaltet „Wind“ selbst ein)
 function showWindArrows() {
-  if (db.windArrows) return;
+  if (db.windArrows || db.mode !== 'hf') return;
   db.windArrows = true;
   $('quick-arrows').classList.add('on');
   saveNow();
@@ -2119,7 +2118,7 @@ document.querySelectorAll('.wm-str button').forEach((b) => b.addEventListener('c
   (M().wind ||= []).push({ t: Date.now(), from: Math.round(wmFrom), strength: s, src: 'gemessen', lat: pos.lat, lon: pos.lng });
   touch();
   $('windmeter').hidden = true;
-  db.wxOn = true;
+  // Wetterspalte bleibt, wie sie ist – die Messung erscheint als grüner Pfeil auf der Karte
   showWindArrows();
   saveNow();
   renderWx();
@@ -2221,7 +2220,7 @@ function renderHfInfo() {
   const rec = h ? h.track.reduce((a, sg) => a + pathLen(sg.pts), 0) : 0;
   $('hfi-text').textContent = h
     ? [h.hint && `⚠️ ${h.hint}`, `Auftrag ${hhmm(h.received)}`, rec ? `gelaufen ${fmtKm(rec)}` : ''].filter(Boolean).join(' · ')
-    : 'QR-Code der Einsatzleitung mit der Handy-Kamera scannen.';
+    : 'QR-Code der Einsatzleitung scannen: Menü → „📷 Auftrag scannen“.';
   $('hfinfo').classList.toggle('min', !!db.hfInfoMin);
   const m = $('hfm-info');
   m.textContent = '';
@@ -2234,7 +2233,7 @@ function renderHfInfo() {
     if (el) lines.push(`Einsatzleitung: ${[el.name, el.call && `📻 ${el.call}`, el.phone && `📞 ${el.phone}`].filter(Boolean).join(' · ')}`);
     m.textContent = lines.join('\n');
     m.style.whiteSpace = 'pre-line';
-  } else m.textContent = 'Noch kein Auftrag. QR-Code der Einsatzleitung mit der Handy-Kamera scannen.';
+  } else m.textContent = 'Noch kein Auftrag. QR-Code der Einsatzleitung scannen: Menü → „📷 Auftrag scannen“.';
   $('hfm-meet').disabled = !P.meet;
   $('hfm-contacts').hidden = !P.contacts.length;
   $('hfm-contacts').textContent = `📞 Kontakte (${P.contacts.length})`;
@@ -2535,7 +2534,9 @@ function renderSend() {
   sel.add(new Option('ohne Team (nur Gebiet)', ''));
   if (teams.some((t) => t.id === prev) || prev === '') sel.value = prev;
   const box = $('send-grids');
-  const checked = new Set([...box.querySelectorAll('input:checked')].map((i) => i.value));
+  // schon gezeigte Häkchen bleiben, wie sie sind (auch abgewählt); Vorauswahl nur für neue Einträge
+  const was = (el) => Object.fromEntries([...el.querySelectorAll('input')].map((i) => [i.value, i.checked]));
+  const checked = was(box);
   box.innerHTML = '';
   for (const g of allGrids(P)) {
     const n = sel.value ? Object.values(g.fills).filter((id) => id === sel.value).length : 0;
@@ -2543,13 +2544,14 @@ function renderSend() {
     l.className = 'check';
     l.innerHTML = '<input type="checkbox"><span></span>';
     l.firstChild.value = g.id;
-    l.firstChild.checked = checked.size ? checked.has(g.id) : (!sel.value || n > 0 || allGrids(P).length === 1);
+    l.firstChild.checked = g.id in checked ? checked[g.id] : false; // Raster nur auf Wunsch
     l.lastChild.textContent = `${gridLabel(P, g)}${sel.value ? ` (${n} Felder des Teams)` : ''}`;
     box.appendChild(l);
   }
   if (!allGrids(P).length) box.textContent = 'Kein Raster – es werden nur Umrisse und Zeichnungen verschickt.';
+  syncSendFields();
   const ib = $('send-items');
-  const ichecked = new Set([...ib.querySelectorAll('input:checked')].map((i) => i.value));
+  const ichecked = was(ib);
   ib.innerHTML = '';
   const seen = new Set();
   P.items.forEach((it, i) => {
@@ -2561,9 +2563,9 @@ function renderSend() {
     l.className = 'check';
     l.innerHTML = '<input type="checkbox"><span></span>';
     l.firstChild.value = String(i);
-    // zugeteilte Umrisse nur an ihr Team, übrige geschlossene Umrisse an alle
+    // vorausgewählt: die dem Team zugeteilten Umrisse (ohne Team: die nicht zugeteilten geschlossenen)
     const team = $('send-team').value;
-    l.firstChild.checked = ichecked.has(String(i)) || (it.kind === 'track' && (it.to ? it.to === team : !it.open));
+    l.firstChild.checked = String(i) in ichecked ? ichecked[String(i)] : (it.kind === 'track' && (team ? it.to === team : !it.to && !it.open));
     l.lastChild.textContent = label;
     ib.appendChild(l);
   });
@@ -2640,7 +2642,11 @@ async function updateSendSize() {
   if (id === 'send-team') { $('send-grids').innerHTML = ''; $('send-items').innerHTML = ''; return renderSend(); }
   sendCache = null; updateSendSize();
 }));
-$('send-grids').addEventListener('change', () => { sendCache = null; updateSendSize(); });
+// ohne Raster gibt es keine Felder auszuwählen
+function syncSendFields() {
+  $('send-fields-sub').hidden = !$('send-grids').querySelector('input:checked');
+}
+$('send-grids').addEventListener('change', () => { syncSendFields(); sendCache = null; updateSendSize(); });
 $('send-items').addEventListener('change', () => { sendCache = null; updateSendSize(); });
 $('send-ct-list').addEventListener('change', () => { sendCache = null; updateSendSize(); });
 $('send-contacts').addEventListener('change', () => { $('send-ct-list').hidden = !$('send-contacts').checked; sendCache = null; updateSendSize(); });
@@ -2764,7 +2770,6 @@ async function handleShared(text) {
   const res = applyResult(P, data);
   const sent = (P.sent || []).find((x) => x.id === data.a);
   if (sent) sent.last = Date.now();
-  if (res.winds) showWindArrows();
   changed();
   renderSentList();
   toast(`📥 Rückmeldung ${res.who}: ${res.ways} Weg${res.ways === 1 ? '' : 'e'}, ${res.marks} Markierung${res.marks === 1 ? '' : 'en'}, ${res.fields} Feld${res.fields === 1 ? '' : 'er'}${res.winds ? `, ${res.winds} Wind-Messung${res.winds === 1 ? '' : 'en'}` : ''}${res.known ? '' : ' (Auftrag hier unbekannt – ins aktuelle Suchgebiet übernommen)'}${res.ways + res.marks + res.fields + res.winds ? '' : ' – nichts Neues'}`, 9000);
@@ -2872,6 +2877,7 @@ function stopScan() {
 }
 $('recv-scan').addEventListener('click', startScan);
 $('scan-close').addEventListener('click', stopScan);
+$('hfm-scan').addEventListener('click', () => { closePanels(); startScan(); });
 
 // ---- Einsatz an ein weiteres Gerät der Einsatzleitung übergeben (Handy -> Tablet/PC) ----
 const PART_MAX = 16; // mehr Teile dauern beim Scannen zu lange

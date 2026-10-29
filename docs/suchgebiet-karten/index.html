@@ -326,17 +326,19 @@
     <h2 class="sub">1. Für wen?</h2>
     <select id="send-team"></select>
     <h2 class="sub">2. Was wird übertragen?</h2>
-    <label>Rastergebiete</label>
-    <div id="send-grids" class="checklist"></div>
-    <label>Felder</label>
-    <div class="checklist">
-      <label class="check"><input type="radio" name="send-fields" value="team" checked> nur die Felder des Teams hervorgehoben</label>
-      <label class="check"><input type="radio" name="send-fields" value="all"> ganzes Gebiet mit allen Feldern, Team hervorgehoben</label>
-      <label class="check"><input type="radio" name="send-fields" value="pick"> Felder auf der Karte antippen …</label>
-    </div>
-    <div id="send-pickinfo" class="small"></div>
-    <label>Umrisse und Zeichnungen</label>
+    <label>Umrisse und Zeichnungen <small>(dem Team zugeteilte sind angehakt)</small></label>
     <div id="send-items" class="checklist"></div>
+    <label>Raster <small>(anhaken = Raster mit Feldern mitschicken)</small></label>
+    <div id="send-grids" class="checklist"></div>
+    <div id="send-fields-sub" class="sub-list">
+      <label id="send-fields-label">Felder</label>
+      <div id="send-fields-box" class="checklist">
+        <label class="check"><input type="radio" name="send-fields" value="team" checked> nur die Felder des Teams hervorgehoben</label>
+        <label class="check"><input type="radio" name="send-fields" value="all"> ganzes Gebiet mit allen Feldern, Team hervorgehoben</label>
+        <label class="check"><input type="radio" name="send-fields" value="pick"> Felder auf der Karte antippen …</label>
+      </div>
+      <div id="send-pickinfo" class="small"></div>
+    </div>
     <div class="checklist">
       <label class="check"><input type="checkbox" id="send-meet" checked> B-Ort</label>
       <label class="check"><input type="checkbox" id="send-rescue" checked> Forst-Rettungspunkte im Raster/Umriss und im Umkreis von 2 km um dessen Mitte</label>
@@ -368,6 +370,7 @@
     <h2>☰ Mein Auftrag</h2>
     <div id="hfm-info" class="info"></div>
     <div class="list hfm-list">
+      <button id="hfm-scan">📷 Auftrag scannen (QR-Code)</button>
       <button id="hfm-rp">🚑 Nächster Rettungspunkt</button>
       <button id="hfm-meet">🎯 Zum B-Ort</button>
       <button id="hfm-contacts" hidden>📞 Kontakte</button>
