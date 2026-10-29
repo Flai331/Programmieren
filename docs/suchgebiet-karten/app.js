@@ -335,6 +335,14 @@ function redraw() {
 // Grün: selbst gemessener Wind an der Messstelle (auch von Hundeführern zurückgemeldet).
 function windArrowPoint() {
   const gs = allGrids(P);
+  if (db.mode === 'hf' && !gs.length && P.items.length) {
+    const pts = P.items.flatMap((it) => it.pts || (it.lat != null ? [[it.lat, it.lon]] : []));
+    if (pts.length) {
+      const la = pts.map((q) => q[0]);
+      const lo = pts.map((q) => q[1]);
+      return { lat: (Math.max(...la) + Math.min(...la)) / 2, lon: (Math.max(...lo) + Math.min(...lo)) / 2 };
+    }
+  }
   if (db.mode === 'hf' && gs.length) {
     const ns = gs.flatMap((g) => [g.area.north, g.area.south]);
     const ws = gs.flatMap((g) => [g.area.west, g.area.east]);
@@ -2213,7 +2221,7 @@ function renderSend() {
     l.lastChild.textContent = `${gridLabel(P, g)}${sel.value ? ` (${n} Felder des Teams)` : ''}`;
     box.appendChild(l);
   }
-  if (!allGrids(P).length) box.textContent = 'Noch kein Raster angelegt.';
+  if (!allGrids(P).length) box.textContent = 'Kein Raster – es werden nur Umrisse und Zeichnungen verschickt.';
   const ib = $('send-items');
   const ichecked = new Set([...ib.querySelectorAll('input:checked')].map((i) => i.value));
   ib.innerHTML = '';
@@ -2275,7 +2283,7 @@ async function currentAssignment() {
 async function updateSendSize() {
   const { a, link } = await currentAssignment();
   const nf = a.g.reduce((x, g) => x + g.f.length, 0);
-  $('send-size').textContent = `${a.g.length} Gebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ${a.i.length} Zeichnungen · `
+  $('send-size').textContent = `${a.g.length ? `${a.g.length} Rastergebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ` : ''}Umrisse/Zeichnungen: ${a.i.length} · `
     + (link.length <= QR_MAX ? `passt in einen QR-Code (${link.length} Zeichen)` : `zu groß für einen QR-Code (${link.length} Zeichen) – per WhatsApp senden oder weniger auswählen`);
 }
 ['send-team', 'send-meet', 'send-rescue', 'send-person', 'send-hint'].forEach((id) => $(id).addEventListener(id === 'send-hint' ? 'input' : 'change', () => {
@@ -2289,7 +2297,7 @@ document.querySelectorAll('input[name=send-fields]').forEach((r) => r.addEventLi
   if (sendFields() === 'pick') { closePanels(); setTool('sendpick'); updatePickBar(); redraw(); } else renderSend();
 }));
 $('send-open').addEventListener('click', () => {
-  if (!allGrids(P).length) return toast('Bitte zuerst ein Raster anlegen');
+  if (!allGrids(P).length && !P.items.some((it) => !it.resultKey)) return toast('Nichts zu verschicken – zuerst ein Raster oder einen Umriss anlegen');
   $('send-grids').innerHTML = '';
   renderSend();
   openPanel('panel-send');
@@ -2339,7 +2347,7 @@ function drawPicked(c) {
 }
 async function prepareSend() {
   const c = await currentAssignment();
-  if (!c.a.g.length) { toast('Bitte mindestens ein Rastergebiet ankreuzen'); return null; }
+  if (!c.a.g.length && !c.a.i.length) { toast('Bitte ein Rastergebiet oder einen Umriss ankreuzen'); return null; }
   P.sent = P.sent || [];
   if (!P.sent.some((x) => x.id === c.a.id)) {
     const team = P.marks.find((m) => m.id === c.sel.teamId);
@@ -2414,14 +2422,15 @@ async function takeAssignment(a) {
   }
   db.mode = 'hf';
   switchProject(p.id);
-  const gs = allGrids(P);
-  if (gs.length && !known) {
-    const b = { n: -90, s: 90, w: 180, e: -180 };
-    for (const g of gs) {
-      b.n = Math.max(b.n, g.area.north, g.area.south); b.s = Math.min(b.s, g.area.north, g.area.south);
-      b.w = Math.min(b.w, g.area.west, g.area.east); b.e = Math.max(b.e, g.area.west, g.area.east);
-    }
-    map.fitBounds([[b.s, b.w], [b.n, b.e]]);
+  // auf Raster und Umrisse/Zeichnungen des Auftrags zoomen
+  const lats = [];
+  const lons = [];
+  for (const g of allGrids(P)) { lats.push(g.area.north, g.area.south); lons.push(g.area.west, g.area.east); }
+  for (const it of P.items) {
+    for (const [la, lo] of it.pts || (it.lat != null ? [[it.lat, it.lon]] : [])) { lats.push(la); lons.push(lo); }
+  }
+  if (lats.length && !known) {
+    map.fitBounds([[Math.min(...lats), Math.min(...lons)], [Math.max(...lats), Math.max(...lons)]], { padding: [30, 30], maxZoom: 17 });
   }
   saveNow();
   applyMode();

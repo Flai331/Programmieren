@@ -96,3 +96,14 @@ test('Rückmeldung: Weg, Markierung, Feldstatus kommen beim richtigen Team an, d
   applyResult(el, await unpack(await pack(buildResult(hf))));
   assert.equal(el.items.filter((it) => it.kind === 'track' && it.name.startsWith('Weg Team 2')).length, 1);
 });
+
+test('Auftrag ohne Raster: nur Umriss', async () => {
+  const p = normalizeProject(newProject('Fläche'));
+  p.items = [{ kind: 'track', color: '#d50000', name: 'Waldstück Nord', pts: [[52.29, 8.01], [52.3, 8.02], [52.29, 8.03]] }];
+  const a = buildAssignment(p, { teamId: '', gridIds: [], fields: 'team', itemIdx: [0] });
+  assert.equal(a.g.length, 0);
+  const hf = projectFromAssignment(await unpack(await pack(a)));
+  assert.equal(hf.area, null);
+  assert.equal(hf.items[0].name, 'Waldstück Nord');
+  assert.equal(buildResult(hf).d.length, 0);
+});
