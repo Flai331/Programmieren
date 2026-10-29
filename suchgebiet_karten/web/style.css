@@ -457,3 +457,58 @@ html.night.red .wx { filter: invert(1) grayscale(1) sepia(1) saturate(6) hue-rot
 .wm-str button small { display: block; font-size: 12px; color: #555; font-weight: 400; }
 html.night .windmeter { filter: invert(1) hue-rotate(180deg); }
 html.night.red .windmeter { filter: invert(1) grayscale(1) sepia(1) saturate(6) hue-rotate(-50deg) brightness(0.75); }
+
+/* ---------- Hundeführer-Modus: nur das Nötigste, große Knöpfe ---------- */
+.hfonly { display: none !important; }
+body.hf .hfonly { display: flex !important; }
+body.hf .toolbar, body.hf .bottomstack, body.hf #quick-grid, body.hf #quick-marks,
+body.hf .sidebuttons > button:not(#btn-gps):not(#btn-hfmenu):not(#btn-notes) { display: none !important; }
+body.hf #map, body.hf #overlay { bottom: 84px; }
+body.hf #overlay { height: calc(100% - 136px); }
+.hfbar {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 84px; z-index: 1000; display: flex; gap: 4px;
+  padding: 6px max(6px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
+  background: #fff; border-top: 1px solid var(--line);
+}
+.hfbar button {
+  flex: 1; min-width: 0; border: 1px solid #ccc; border-radius: 14px; background: var(--btn); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--fg);
+}
+.hfbar button span { font-size: 26px; line-height: 1; }
+.hfbar button b { font-size: 12px; }
+.hfbar button.on { background: #ffebee; border-color: var(--red); color: var(--red); }
+.hfbar button.primary { background: var(--red); border-color: var(--red); color: #fff; }
+.hfbar #hf-rec.on span { animation: rp-pulse 1s ease-in-out infinite alternate; }
+.hfinfo {
+  position: fixed; top: 58px; left: 72px; right: 76px; z-index: 995; background: rgba(255,255,255,0.96); border-radius: 12px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.3); padding: 6px 10px; font-size: 13px; cursor: pointer; border-left: 6px solid var(--team, #d50000);
+}
+.hfinfo b { display: block; font-size: 14px; }
+.hfinfo span { display: block; color: #333; overflow-wrap: anywhere; }
+.hfinfo.min span { display: none; }
+body.hf .wx { top: 120px; }
+.hfm-list button { font-size: 16px; padding: 12px; text-align: left; }
+html.night .hfbar, html.night .hfinfo, html.night .qrbox { filter: invert(1) hue-rotate(180deg); }
+html.night .qr-code { filter: invert(1); }
+html.night.red .hfbar, html.night.red .hfinfo { filter: invert(1) grayscale(1) sepia(1) saturate(6) hue-rotate(-50deg) brightness(0.75); }
+
+/* Auftrag zusammenstellen */
+.checklist { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 8px; }
+.checklist label.check { margin: 0; }
+#send-hint { width: 100%; box-sizing: border-box; padding: 7px; border: 1px solid #bbb; border-radius: 8px; font: inherit; }
+#sent-list div { padding: 3px 0; border-bottom: 1px solid #eee; }
+
+/* QR-Code groß, Scanner */
+.qrbox { position: fixed; inset: 0; z-index: 3100; background: #fff; display: flex; align-items: center; justify-content: center; padding: 12px; overflow: auto; }
+.qr-inner { width: min(560px, 100%); display: flex; flex-direction: column; gap: 8px; align-items: center; text-align: center; }
+.qr-inner h2 { margin: 0; font-size: 18px; }
+.qr-code { width: min(92vw, 70vh, 520px); aspect-ratio: 1; }
+.qr-code svg { width: 100%; height: 100%; display: block; }
+.qr-inner .row { justify-content: center; }
+.qr-inner button { border: 1px solid #ccc; background: var(--btn); border-radius: 10px; padding: 10px 14px; font-size: 15px; cursor: pointer; }
+.qr-inner button.primary { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
+#scan-video { width: min(92vw, 60vh, 480px); aspect-ratio: 1; object-fit: cover; background: #000; border-radius: 12px; }
+.dlg-btns { display: flex; flex-direction: column; gap: 6px; }
+.dlg-btns button small { display: block; font-size: 12px; color: #555; font-weight: 400; }
+.wm-box input[type=password], .wm-box input[type=text], .wm-box textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #bbb; border-radius: 8px; font-size: 16px; }
+.wm-box input.pin { font-size: 26px; letter-spacing: 8px; text-align: center; }

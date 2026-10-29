@@ -49,6 +49,39 @@
     </div>
   </div>
 
+  <!-- Hundeführer: Auftrag oben, große Knöpfe unten -->
+  <div id="hfinfo" class="hfinfo" hidden><b id="hfi-title"></b><span id="hfi-text"></span></div>
+  <div id="hfbar" class="hfbar" hidden>
+    <button id="hf-rec"><span>⏺</span><b>Weg</b></button>
+    <button id="hf-mark"><span>📍</span><b>Markieren</b></button>
+    <button id="hf-field"><span>✅</span><b>Feld</b></button>
+    <button id="hf-wind"><span>🧭</span><b>Wind</b></button>
+    <button id="hf-back" class="primary"><span>📤</span><b>Zurück­geben</b></button>
+  </div>
+
+  <!-- Dialoge: Modus, PIN, Markieren, QR-Code, Scanner, Einfügen -->
+  <div id="dlg" class="windmeter" hidden><div class="wm-box" id="dlg-box"></div></div>
+  <div id="qrbox" class="qrbox" hidden>
+    <div class="qr-inner">
+      <h2 id="qr-title"></h2>
+      <div id="qr-code" class="qr-code"></div>
+      <p id="qr-text" class="small"></p>
+      <div class="row">
+        <button id="qr-share">📤 Teilen</button>
+        <button id="qr-copy">📋 Link kopieren</button>
+        <button id="qr-close" class="primary">Fertig</button>
+      </div>
+    </div>
+  </div>
+  <div id="scanbox" class="qrbox" hidden>
+    <div class="qr-inner">
+      <h2>📷 QR-Code scannen</h2>
+      <video id="scan-video" playsinline muted></video>
+      <p id="scan-text" class="small">Kamera auf den QR-Code auf dem Handy des Hundeführers richten.</p>
+      <button id="scan-close">Abbrechen</button>
+    </div>
+  </div>
+
   <!-- Wind messen: Handy in Flugrichtung des Puders halten, Kompass liefert die Richtung -->
   <div id="windmeter" class="windmeter" hidden>
     <div class="wm-box">
@@ -84,6 +117,7 @@
   </nav>
 
   <div class="sidebuttons">
+    <button id="btn-hfmenu" class="hfonly" title="Mein Auftrag, Rettungspunkt, Notizen …"><span>☰</span>Menü</button>
     <button id="btn-projects" title="Suchgebiete"><span>📁</span>Gebiete</button>
     <button id="btn-grid" title="Raster"><span>#</span>Raster</button>
     <button id="btn-teams" title="Teams &amp; Legende"><span>👥</span>Teams</button>
@@ -118,6 +152,11 @@
       <button id="pen-back">↶ Strich</button>
       <button id="pen-done" class="primary">Fertig</button>
       <button id="pen-cancel">Abbrechen</button>
+    </div>
+    <div id="pickbar" class="trackbar" hidden>
+      <span id="pick-info">Felder antippen</span>
+      <button id="pick-clear">Keine</button>
+      <button id="pick-done" class="primary">Weiter</button>
     </div>
     <div id="offsqbar" class="trackbar" hidden>
       <span id="offsq-info">Quadrate antippen</span>
@@ -208,6 +247,12 @@
     <h2 class="sub">Gespeicherte Suchgebiete</h2>
     <div class="row"><button id="proj-new">+ Neues Suchgebiet</button></div>
     <div id="project-list" class="plist"></div>
+    <h2 class="sub">App-Modus</h2>
+    <p class="small">Einsatzleitung: alles. Hundeführer: stark vereinfacht (große Knöpfe, nur der eigene Auftrag). Zurück zur Einsatzleitung nur mit PIN.</p>
+    <div class="row">
+      <button id="mode-hf">🐕 Hundeführer-Modus</button>
+      <button id="mode-pin">🔒 PIN ändern</button>
+    </div>
     <button class="close">Schließen</button>
   </section>
 
@@ -223,6 +268,63 @@
       <button id="team-add" class="primary">+ Team</button>
       <button id="mark-add">+ Markierung (z. B. „Fundstelle“)</button>
     </div>
+    <h2 class="sub">📲 Hundeführer (ohne App, per QR-Code)</h2>
+    <p class="small">Auftrag aufs Handy des Hundeführers: QR-Code mit der Handy-Kamera scannen – öffnet die vereinfachte Hundeführer-Ansicht im Browser. Zurück kommen gelaufener Weg, Markierungen und abgesuchte Felder.</p>
+    <div class="row">
+      <button id="send-open" class="primary">📲 Auftrag an Hundeführer</button>
+      <button id="recv-scan">📷 Rückmeldung scannen</button>
+      <button id="recv-paste">📋 Rückmeldung einfügen</button>
+    </div>
+    <div id="sent-list" class="small"></div>
+    <button class="close">Schließen</button>
+  </section>
+
+  <!-- Auftrag an Hundeführer zusammenstellen -->
+  <section id="panel-send" class="panel" hidden>
+    <h2>📲 Auftrag an Hundeführer</h2>
+    <h2 class="sub">1. Für wen?</h2>
+    <select id="send-team"></select>
+    <h2 class="sub">2. Was wird übertragen?</h2>
+    <label>Rastergebiete</label>
+    <div id="send-grids" class="checklist"></div>
+    <label>Felder</label>
+    <div class="checklist">
+      <label class="check"><input type="radio" name="send-fields" value="team" checked> nur die Felder des Teams hervorgehoben</label>
+      <label class="check"><input type="radio" name="send-fields" value="all"> ganzes Gebiet mit allen Feldern, Team hervorgehoben</label>
+      <label class="check"><input type="radio" name="send-fields" value="pick"> Felder auf der Karte antippen …</label>
+    </div>
+    <div id="send-pickinfo" class="small"></div>
+    <label>Umrisse und Zeichnungen</label>
+    <div id="send-items" class="checklist"></div>
+    <div class="checklist">
+      <label class="check"><input type="checkbox" id="send-meet" checked> Treffpunkt</label>
+      <label class="check"><input type="checkbox" id="send-rescue" checked> Rettungspunkte im Gebiet</label>
+      <label class="check"><input type="checkbox" id="send-person"> Vermisste Person mitsenden (Datenschutz beachten)</label>
+    </div>
+    <label>Hinweis an den Hundeführer <textarea id="send-hint" rows="2" placeholder="z. B. Achtung Bahnlinie im Osten, Rückmeldung 15:30"></textarea></label>
+    <p id="send-size" class="info"></p>
+    <h2 class="sub">3. Übergeben</h2>
+    <div class="row">
+      <button id="send-qr" class="primary">🔳 QR-Code zeigen</button>
+      <button id="send-share">📤 Per WhatsApp/SMS senden</button>
+      <button id="send-copy">📋 Link kopieren</button>
+    </div>
+    <button class="close">Schließen</button>
+  </section>
+
+  <!-- Hundeführer: Menü -->
+  <section id="panel-hfmenu" class="panel" hidden>
+    <h2>☰ Mein Auftrag</h2>
+    <div id="hfm-info" class="info"></div>
+    <div class="list hfm-list">
+      <button id="hfm-rp">🚑 Nächster Rettungspunkt</button>
+      <button id="hfm-meet">🎯 Zum Treffpunkt</button>
+      <button id="hfm-notes">📝 Notizen</button>
+      <button id="hfm-contacts">📇 Kontakte</button>
+      <button id="hfm-projects">📁 Frühere Aufträge</button>
+      <button id="hfm-el">🔒 Zur Einsatzleitung wechseln (PIN)</button>
+    </div>
+    <p class="small">Neuer Auftrag: einfach den neuen QR-Code mit der Kamera scannen. Der alte bleibt unter „Frühere Aufträge“ erhalten.</p>
     <button class="close">Schließen</button>
   </section>
 
