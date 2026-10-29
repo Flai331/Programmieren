@@ -22,7 +22,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v44';
+const APP_VERSION = 'v45';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -2055,6 +2055,49 @@ let padColor = '#000000';
 let padStroke = null;
 const padCanvas = $('pad-canvas');
 
+// Bild-in-Bild nur, wenn neben dem kleinen Notizblock noch genug Karte bleibt
+const pipPossible = () => window.innerWidth >= 700 && window.innerHeight >= 480;
+function applyPip() {
+  const on = !!db.padPip && pipPossible();
+  $('notepad').classList.toggle('pip', on);
+  if (!on) Object.assign($('notepad').style, { left: '', top: '', right: '', width: '', height: '' });
+  $('pad-pip').hidden = !pipPossible();
+  $('pad-pip').textContent = on ? '⛶ Groß' : '🗗 Klein';
+  // klein: Fenster dahinter schließen, damit die Karte frei ist
+  if (on && !$('notepad').hidden) closePanels();
+}
+$('pad-pip').addEventListener('click', () => {
+  db.padPip = !db.padPip;
+  save();
+  applyPip();
+  padSize();
+  padDraw();
+});
+// kleines Fenster an der Leiste verschieben (nicht an den Knöpfen)
+{
+  const bar = document.querySelector('#notepad .padbar');
+  let mv = null;
+  bar.addEventListener('pointerdown', (e) => {
+    if (!$('notepad').classList.contains('pip') || e.target.closest('button')) return;
+    const r = $('notepad').getBoundingClientRect();
+    mv = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
+    bar.setPointerCapture(e.pointerId);
+  });
+  bar.addEventListener('pointermove', (e) => {
+    if (!mv || e.pointerId !== mv.id) return;
+    const n = $('notepad');
+    const x = Math.max(0, Math.min(window.innerWidth - 120, e.clientX - mv.dx));
+    const y = Math.max(0, Math.min(window.innerHeight - 60, e.clientY - mv.dy));
+    Object.assign(n.style, { left: `${x}px`, top: `${y}px`, right: 'auto' });
+  });
+  const stop = () => { mv = null; };
+  bar.addEventListener('pointerup', stop);
+  bar.addEventListener('pointercancel', stop);
+  // Größe ändern (Ecke unten rechts am PC): Seite neu einpassen
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => { if (!$('notepad').hidden) { padSize(); padDraw(); } }).observe($('notepad'));
+  }
+}
 function padSize() {
   const wrap = padCanvas.parentElement;
   const w = Math.max(200, Math.min(wrap.clientWidth - 20, (wrap.clientHeight - 20) / PAGE_RATIO));
@@ -2079,6 +2122,7 @@ function openPad(i) {
   if (!M().pages.length) M().pages.push({ t: Date.now(), strokes: [] });
   padIdx = Math.max(0, Math.min(i ?? M().pages.length - 1, M().pages.length - 1));
   $('notepad').hidden = false;
+  applyPip();
   padSize();
   padDraw();
 }
@@ -2156,7 +2200,7 @@ const padEnd = (e) => {
 };
 padCanvas.addEventListener('pointerup', padEnd);
 padCanvas.addEventListener('pointercancel', padEnd);
-window.addEventListener('resize', () => { if (!$('notepad').hidden) { padSize(); padDraw(); } });
+window.addEventListener('resize', () => { if (!$('notepad').hidden) { applyPip(); padSize(); padDraw(); } });
 
 // Abschlussbericht der App (ohne Karte) mit den angekreuzten Inhalten
 // Karte nur, wenn angekreuzt: ohne Raster, Flächen beschriftet, Liste am Rand

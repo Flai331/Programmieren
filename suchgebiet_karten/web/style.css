@@ -296,6 +296,16 @@ button, input, select { font: inherit; }
 .padcolors button.active { box-shadow: 0 0 0 3px var(--fg); }
 .padwrap { flex: 1; overflow: auto; display: flex; justify-content: center; padding: 10px; }
 #pad-canvas { background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.25); touch-action: none; }
+/* Bild-in-Bild: Notizblock als kleines Fenster neben der Karte (Tablet/PC); an der Leiste verschiebbar */
+.notepad.pip {
+  inset: auto; top: 60px; right: 76px; width: min(380px, 42vw); height: calc(100% - 140px);
+  border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.35); resize: both; min-width: 240px; min-height: 260px;
+}
+.notepad.pip .padbar { cursor: move; gap: 4px; padding: 4px 6px; touch-action: none; }
+.notepad.pip .padbar button { padding: 5px 7px; font-size: 13px; }
+.notepad.pip .padcolors button { width: 24px; height: 24px; }
+.notepad.pip #pad-title { min-width: 0; font-size: 12px; }
+.notepad.pip .padwrap { padding: 6px; }
 @media (min-width: 900px) { #ms-summary { min-height: 52vh; } }
 
 .mailto .mrow { border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin: 6px 0; }
