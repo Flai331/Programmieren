@@ -32,6 +32,7 @@ import {
   PUBLIC_URL, pack, unpack, parseShared, shareLink, buildAssignment, projectFromAssignment, buildResult, applyResult,
 } from './share.js';
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
+import { buildReport, createLog, throttle, describeTarget } from './report.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
@@ -41,7 +42,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v75';
+const APP_VERSION = 'v76';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -55,6 +56,47 @@ const COLOR_NAMES = {
 
 const $ = (id) => document.getElementById(id);
 const bridge = window.AndroidBridge || null; // gesetzt in der Android-App
+
+// ---------- 🐛 Fehler melden (nur Android-APK, siehe report.js / BugReporter.kt) ----------
+const canReport = !!(bridge && bridge.reportBug);
+const stepLog = createLog();
+const reportSeen = new Map();
+function reportPage() {
+  const parts = [];
+  try {
+    const p = [...document.querySelectorAll('.panel')].find((x) => !x.hidden);
+    parts.push(p ? p.id : 'Karte');
+    if (!document.getElementById('dlg').hidden) parts.push('Dialog offen');
+    parts.push(`Werkzeug ${tool}`);
+  } catch { /* beim Start noch nicht alles da */ }
+  return parts.join(', ');
+}
+function sendReport(kind, { message = '', stack = '', description = '' } = {}) {
+  if (!canReport) return '';
+  let role = 'el';
+  try { role = db.mode; } catch { /* noch nicht geladen */ }
+  const r = buildReport({ kind, description, message, stack, log: stepLog.list(), page: reportPage(), role, version: APP_VERSION });
+  if (kind !== 'manual' && !throttle(reportSeen, r.fingerprint)) return '';
+  try { return bridge.reportBug(JSON.stringify(r)) || ''; } catch { return ''; }
+}
+// Netzfehler offline sind normal und kein Programmfehler
+const NOT_A_BUG = /Failed to fetch|NetworkError|Load failed|AbortError|aborted|Script error/i;
+function autoReport(message, stack) {
+  if (!message || NOT_A_BUG.test(message)) return;
+  if (sendReport('auto', { message, stack })) {
+    try { toast('🐛 Fehler wurde gemeldet'); } catch { /* egal */ }
+  }
+}
+if (canReport) {
+  window.addEventListener('error', (e) => {
+    autoReport(e.message || (e.error && String(e.error)), (e.error && e.error.stack) || `${e.filename || ''}:${e.lineno || 0}:${e.colno || 0}`);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const r = e.reason;
+    autoReport(r && r.message ? `${r.name || 'Error'}: ${r.message}` : String(r), (r && r.stack) || '');
+  });
+  document.addEventListener('click', (e) => stepLog.add(`Tippen ${describeTarget(e.target)}`), true);
+}
 
 // ---------- Zustand ----------
 // db: alle Suchgebiete; P: das aktuelle; grid wird aus P.area + P.cellM berechnet
@@ -513,6 +555,7 @@ function setTool(t) {
     t = 'pan';
   }
   tool = t;
+  stepLog.add(`Werkzeug ${t}`);
   document.querySelectorAll('.toolbar [data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === t));
   canvas.classList.toggle('active', t !== 'pan');
   $('palette').hidden = !['pen', 'text', 'fill', 'track'].includes(t);
@@ -2988,6 +3031,34 @@ async function askDeviceName(joined) {
 }
 $('dev-edit').addEventListener('click', () => askDeviceName(false));
 
+// Manuelle Fehlermeldung (EL: „⚙️ Mehr“, HF: „☰ Menü“)
+async function reportBugDialog() {
+  const text = await openDlg((box, close) => {
+    dlgHead(box, '🐛 Fehler melden', 'Was ist passiert, was hast du erwartet? Bitte keine Namen, Telefonnummern oder Personendaten eintragen. Version, Gerät und die letzten Bedienschritte gehen automatisch mit.');
+    const ta = document.createElement('textarea');
+    ta.rows = 5;
+    ta.id = 'bug-text';
+    ta.placeholder = 'z. B. Beim Antippen von „Senden“ passiert nichts.';
+    box.appendChild(ta);
+    dlgButton(box, 'Senden', 'primary', () => {
+      if (!ta.value.trim()) { toast('Bitte kurz beschreiben, was nicht geht'); return; }
+      close(ta.value.trim());
+    });
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+    setTimeout(() => ta.focus(), 50);
+  });
+  if (!text) return;
+  const res = sendReport('manual', { description: text });
+  if (res === 'mail') toast('Mail-App geöffnet – bitte dort senden');
+  else if (res) toast('Danke! Meldung wird gesendet (ohne Netz später).');
+  else toast('Meldung konnte nicht gesendet werden');
+}
+$('bug-row').hidden = !canReport;
+$('hfm-bug').hidden = !canReport;
+for (const id of ['bug-report', 'hfm-bug']) {
+  $(id).addEventListener('click', () => { closePanels(); reportBugDialog(); });
+}
+
 // Link mit Auftrag/Rückmeldung (Kamera-App, WhatsApp …) – beim Start und wenn er sich ändert
 async function handleHash() {
   const sh = parseShared(location.hash);
@@ -3918,6 +3989,7 @@ function dropOverlay() {
   if (history.state && history.state.overlay) history.back();
 }
 function openPanel(id) {
+  stepLog.add(`Fenster ${id}`);
   document.querySelectorAll('.panel').forEach((p) => { p.hidden = true; });
   closeSearch();
   $(id).hidden = false;

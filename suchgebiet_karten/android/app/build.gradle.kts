@@ -14,6 +14,14 @@ android {
         // Fortlaufende Versionsnummer aus dem CI (-PversionCode=...), damit jede APK ein Update ist
         versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 1
         versionName = "1.0." + versionCode
+        // Für „🐛 Fehler melden“ (BugReporter): Notion-Token aus dem GitHub-Secret NOTION_TOKEN.
+        // Fehlt er (lokal), landen Meldungen in der Warteschlange bzw. gehen per Mail.
+        val notionToken = (System.getenv("NOTION_TOKEN") ?: "").replace("\\", "").replace("\"", "")
+        buildConfigField("String", "NOTION_TOKEN", "\"$notionToken\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     // Die App zeigt die Web-App aus suchgebiet_karten/web – keine doppelte Pflege.
