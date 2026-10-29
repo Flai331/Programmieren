@@ -39,7 +39,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v63';
+const APP_VERSION = 'v64';
 const STORE_KEY = 'suchgebiet-karten-v2';
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -2139,7 +2139,6 @@ $('hfinfo').addEventListener('click', () => { db.hfInfoMin = !db.hfInfoMin; save
 $('btn-hfmenu').addEventListener('click', () => { renderHfInfo(); openPanel('panel-hfmenu'); });
 $('hfm-rp').addEventListener('click', showNearestRescue);
 $('hfm-notes').addEventListener('click', () => { closePanels(); $('btn-notes').click(); });
-$('hfm-contacts').addEventListener('click', () => { closePanels(); $('btn-contacts').click(); });
 $('hfm-projects').addEventListener('click', () => { closePanels(); $('btn-projects').click(); });
 $('hfm-meet').addEventListener('click', () => {
   if (!P.meet) return;
