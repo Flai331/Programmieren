@@ -566,3 +566,10 @@ body.hf .el-only { display: none !important; }
 .wm-box > label:not(.check) { display: block; font-size: 14px; font-weight: 600; margin-top: 4px; }
 #dev-edit.mini { padding: 4px 10px; font-size: 13px; margin-left: 6px; }
 #dlg-box textarea { width: 100%; font: inherit; box-sizing: border-box; }
+
+/* Abgeschlossener Einsatz: nur ansehen (Ändern erst nach „Wieder öffnen“) */
+.closed-bar { background: #e8f5e9; color: #1b5e20; border-color: #81c784; }
+body.closed .toolbar, body.closed .bottomstack { display: none !important; }
+body.closed :is(#panel-mission, #panel-grid, #panel-teams, #panel-notes, #panel-send, #panel-wizard, #pc-list)
+  :is(input, textarea, select, button):not(.keep):not(.close):not([data-tab]):not(.send),
+body.closed :is(#pc-add, #pc-new) { pointer-events: none; opacity: 0.45; }

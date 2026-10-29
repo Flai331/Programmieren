@@ -33,6 +33,7 @@
 
   <div id="hint" class="hint" hidden></div>
   <div id="handed" class="handed" hidden></div>
+  <div id="closed-bar" class="handed closed-bar" hidden></div>
 
   <!-- Wetter-Overlay (zuschaltbar): DWD-Wind + gemessener Wind, Ansatz, Vorhersage -->
   <div id="wx" class="wx" hidden>
@@ -213,7 +214,7 @@
     <div class="row"><button id="view-none">Alles ausblenden</button><button id="view-all">Alles einblenden</button></div>
     <label class="check"><input type="checkbox" id="show-utm"> UTM-Koordinaten anzeigen (Gitter, UTMREF bei GPS und im PDF)</label>
     <label>Feld suchen
-      <span class="row"><input id="cell-search" type="text" placeholder="z. B. C4"><button id="cell-go">Zeigen</button></span>
+      <span class="row"><input id="cell-search" class="keep" type="text" placeholder="z. B. C4"><button id="cell-go" class="keep">Zeigen</button></span>
     </label>
     <div class="row">
       <button id="clear-fills">Feldfarben löschen</button>
@@ -635,13 +636,13 @@
       <div class="endgrid">
         <div class="viewer">
           <div class="viewbar">
-            <button id="ms-prev">◀</button><span id="ms-view-title">–</span><button id="ms-next">▶</button>
+            <button id="ms-prev" class="keep">◀</button><span id="ms-view-title">–</span><button id="ms-next" class="keep">▶</button>
           </div>
           <div class="viewbar zoombar">
-            <button id="ms-zoom-out" title="Verkleinern">−</button>
-            <button id="ms-zoom-fit" title="Ganz zeigen">100 %</button>
-            <button id="ms-zoom-in" title="Vergrößern">+</button>
-            <button id="ms-zoom-full" title="Vollbild">⛶ Vollbild</button>
+            <button id="ms-zoom-out" class="keep" title="Verkleinern">−</button>
+            <button id="ms-zoom-fit" class="keep" title="Ganz zeigen">100 %</button>
+            <button id="ms-zoom-in" class="keep" title="Vergrößern">+</button>
+            <button id="ms-zoom-full" class="keep" title="Vollbild">⛶ Vollbild</button>
           </div>
           <div id="ms-view" class="viewbox"></div>
         </div>
@@ -662,18 +663,18 @@
       <p class="small">„Senden“ öffnet das Mailprogramm mit den Anhängen dieser Zeile. Mehrere Adressen in einer Zeile mit Komma trennen.</p>
       <label>Abschlussbericht (Zeiten, Person, Kräfte, Zusammenfassung, Notizen, Notizblock, Fotos)</label>
       <div class="row">
-        <button id="ms-share">📤 Teilen</button>
-        <button id="ms-save">💾 Speichern</button>
+        <button id="ms-share" class="keep">📤 Teilen</button>
+        <button id="ms-save" class="keep">💾 Speichern</button>
       </div>
       <label>JUH-Formular (so weit wie möglich vorausgefüllt – alle Felder bleiben ausfüllbar)</label>
       <div class="row">
-        <button id="ms-juh-share">📤 Teilen</button>
-        <button id="ms-juh-save">💾 Speichern</button>
+        <button id="ms-juh-share" class="keep">📤 Teilen</button>
+        <button id="ms-juh-save" class="keep">💾 Speichern</button>
       </div>
       <p id="ms-msg" class="info"></p>
       <label>Einsatz abschließen</label>
       <p id="ms-closed" class="small"></p>
-      <div class="row"><button id="ms-close" class="primary">✅ Einsatz abschließen</button></div>
+      <div class="row"><button id="ms-close" class="primary keep">✅ Einsatz abschließen</button></div>
     </div>
     <button class="close">Schließen</button>
   </section>

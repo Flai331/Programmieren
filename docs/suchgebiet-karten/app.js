@@ -36,13 +36,13 @@ import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
-  newProject, normalizeProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
+  newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
   exportProject, importProject, uid, TEAM_COLORS, assignTargets, assigneeName,
   allGrids, activateGrid, startNewGrid, removeActiveGrid, gridView, gridLabel,
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v76';
+const APP_VERSION = 'v77';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -165,6 +165,7 @@ function undo() {
 function changed() {
   P.updated = Date.now();
   renderHanded();
+  applyClosed();
   updateGridInfo();
   renderPalette();
   if (!$('panel-teams').hidden) renderMarks();
@@ -507,6 +508,7 @@ const HINTS = {
 
 let hintTimer = null;
 function setTool(t) {
+  if (t !== 'pan' && isLocked()) { lockedToast(); t = 'pan'; }
   if (t !== tool) repLog.add(`Werkzeug ${t}`);
   // Offene Zeichnung/Umriss bleibt beim Werkzeugwechsel erhalten (bis „Fertig“ oder „Abbrechen“)
   if (tool === 'track' && t !== 'track') {
@@ -863,6 +865,7 @@ $('undo').addEventListener('click', undo);
 function renameItem(i) {
   const it = P.items[i];
   if (!it) return;
+  if (isLocked()) return lockedToast();
   if (it.kind === 'text') {
     const t = prompt('Text für diesen Punkt:', it.text);
     if (t === null || !t.trim() || t.trim() === it.text) return;
@@ -2188,6 +2191,7 @@ function applyMode() {
   if (hf && !['pan', 'hffield'].includes(tool)) setTool('pan');
   renderHfInfo();
   renderHanded();
+  applyClosed();
   renderDeviceName();
   map.invalidateSize();
   resizeCanvas();
@@ -2774,6 +2778,7 @@ async function handleShared(text) {
     if (!go) return;
   }
   if (target && target !== P) switchProject(target.id);
+  if (isLocked() && !(await reopenClosed())) return;
   const res = applyResult(P, data);
   const sent = (P.sent || []).find((x) => x.id === data.a);
   if (sent) sent.last = Date.now();
@@ -2888,11 +2893,48 @@ $('hfm-scan').addEventListener('click', () => { closePanels(); startScan(); });
 
 // ---- Einsatz an ein weiteres Gerät der Einsatzleitung übergeben (Handy -> Tablet/PC) ----
 const PART_MAX = 16; // mehr Teile dauern beim Scannen zu lange
+// Abgeschlossener Einsatz: nur ansehen und exportieren, Ändern erst nach „Wieder öffnen“
+function isLocked() { return !!(P && P.closed) && db.mode === 'el'; }
+function applyClosed() {
+  const on = isLocked();
+  document.body.classList.toggle('closed', on);
+  $('closed-bar').hidden = !on;
+  if (on) $('closed-bar').textContent = `✅ „${P.title || 'Suchgebiet'}“ ist abgeschlossen – nur ansehen`;
+}
+function lockedToast() {
+  toast('✅ Einsatz ist abgeschlossen – zum Ändern unter „Einsatz → Einsatzende“ wieder öffnen.', 5000);
+}
+async function reopenClosed() {
+  const ok = await openDlg((box, close) => {
+    dlgHead(box, '✅ Abgeschlossener Einsatz', `„${P.title || 'Suchgebiet'}“ ist abgeschlossen und lässt sich nur ansehen und exportieren. Zum Ändern wieder öffnen.`);
+    dlgButton(box, '↩️ Wieder öffnen', '', () => close(true));
+    dlgButton(box, 'Nur ansehen', 'primary', () => close(false));
+  });
+  if (!ok) return false;
+  delete P.closed;
+  changed();
+  saveNow();
+  if (!$('panel-mission').hidden) renderClosed();
+  toast('Einsatz wieder geöffnet');
+  return true;
+}
+// Tastatur (Tablet/PC): gesperrte Felder nicht bearbeitbar
+document.addEventListener('focusin', (e) => {
+  if (!isLocked()) return;
+  const t = e.target;
+  if (!t.matches || !t.matches('input, textarea, select')) return;
+  if (t.closest('#panel-mission, #panel-grid, #panel-teams, #panel-notes, #panel-send, #panel-wizard, #pc-list') && !t.classList.contains('keep')) {
+    t.blur();
+    lockedToast();
+  }
+});
+
 function renderHanded() {
   const h = P && P.handedOver;
   $('handed').hidden = !h || db.mode !== 'el';
   if (h) $('handed').textContent = `📲 an weiteres Gerät übergeben (${new Date(h).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}) – dort weiterarbeiten`;
 }
+$('closed-bar').addEventListener('click', reopenClosed);
 $('handed').addEventListener('click', async () => {
   const ok = await openDlg((box, close) => {
     dlgHead(box, '📲 Übergeben', `Dieser Einsatz wurde um ${hhmm(P.handedOver)} an ein weiteres Gerät übergeben. Dort laufen jetzt die Rückmeldungen ein. Hier geht alles weiter, wird aber nicht mehr abgeglichen.`);
@@ -3507,6 +3549,15 @@ function renderProjects() {
 }
 
 function createProject(title) {
+  // eine leere freie Karte wird weiterverwendet statt eine zweite anzulegen
+  if (isBlankProject(P)) {
+    P.title = title;
+    P.updated = Date.now();
+    fillProjectForm();
+    renderProjects();
+    save();
+    return P;
+  }
   const p = newProject(title);
   p.layerId = P.layerId;
   p.cellM = P.cellM;
@@ -3889,6 +3940,7 @@ window.onSharedFile = async () => {
 
 // GPX (z. B. aus BaseCamp) bzw. KML ins aktuelle Suchgebiet: Tracks/Routen als Umrisse, Wegpunkte als Text
 function importGeo(g, fileName) {
+  if (isLocked()) return lockedToast();
   const base = fileName.replace(/\.(gpx|kml|xml)$/i, '');
   const added = [];
   for (const t of g.tracks) {
@@ -4675,12 +4727,13 @@ function renderClosed() {
     ? `✅ Abgeschlossen am ${new Date(P.closed).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}.`
     : 'Trägt das Einsatzende ein (falls noch leer) und markiert den Einsatz in der Liste als abgeschlossen. Alles bleibt bearbeitbar.';
   $('ms-close').textContent = P.closed ? '↩️ Wieder öffnen' : '✅ Einsatz abschließen';
-  $('ms-close').className = P.closed ? '' : 'primary';
+  $('ms-close').className = P.closed ? 'keep' : 'primary keep';
 }
 $('ms-close').addEventListener('click', async () => {
   if (P.closed) {
     delete P.closed;
-    touch();
+    changed();
+    saveNow();
     renderClosed();
     return toast('Einsatz wieder geöffnet');
   }
@@ -4697,19 +4750,34 @@ $('ms-close').addEventListener('click', async () => {
   if (!ok) return;
   if (!t.end) t.end = hm;
   P.closed = now.getTime();
-  touch();
+  changed();
+  saveNow();
   renderTimes();
   renderClosed();
   renderProjects();
   const next = await openDlg((box, close) => {
-    dlgHead(box, '✅ Einsatz abgeschlossen', 'Abschlussbericht und JUH-Formular stehen weiter oben bereit.');
-    dlgButton(box, '📤 Abschlussbericht teilen', 'primary', () => close('share'));
+    dlgHead(box, '✅ Einsatz abgeschlossen', `„${P.title || 'Suchgebiet'}“ bleibt unter „📁 Einsätze“ gespeichert. Die Karte wird jetzt geleert.`);
+    dlgButton(box, '📤 Vorher Abschlussbericht teilen', '', () => close('share'));
+    dlgButton(box, '🗺️ Freie Karte', 'primary', () => close('free'));
     dlgButton(box, '+ Neuer Einsatz', '', () => close('new'));
-    dlgButton(box, 'Fertig', '', () => close(null));
   });
-  if (next === 'share') $('ms-share').click();
-  if (next === 'new') { closePanels(); $('proj-new').click(); }
+  if (next === 'share') await runExport('report', $('ms-share'), reportKey(), buildReportFile, 'share');
+  freeMap();
+  if (next === 'new') $('proj-new').click();
 });
+// Abgeschlossenen Einsatz vom Bildschirm nehmen: leere Karte am selben Ort (Einsatz bleibt gespeichert)
+function freeMap() {
+  closePanels();
+  const blank = Object.values(db.projects).find((p) => p.id !== P.id && isBlankProject(p));
+  if (blank) {
+    const c = map.getCenter();
+    blank.view = { lat: c.lat, lon: c.lng, z: map.getZoom() };
+    blank.layerId = P.layerId;
+    switchProject(blank.id);
+    renderProjects();
+  } else createProject('');
+  toast('🗺️ Freie Karte – der abgeschlossene Einsatz liegt unter „📁 Einsätze“.', 5000);
+}
 $('btn-mission').addEventListener('click', () => { renderMission(); openPanel('panel-mission'); });
 // Notizen-Fenster: getippte Notizen (P.notes, wie im Einsatz-Fenster), Notizblock, Fotos
 $('btn-notes').addEventListener('click', () => {
@@ -4798,6 +4866,7 @@ function padDraw() {
   $('pad-undo').disabled = !page.strokes.length;
 }
 function openPad(i) {
+  if (isLocked()) return lockedToast();
   pushOverlay();
   if (!M().pages.length) M().pages.push({ t: Date.now(), strokes: [] });
   padIdx = Math.max(0, Math.min(i ?? M().pages.length - 1, M().pages.length - 1));

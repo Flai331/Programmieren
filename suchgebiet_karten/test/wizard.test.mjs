@@ -46,3 +46,15 @@ test('Umriss-Zuteilung: Teams und Einheiten aus den Kräften', async () => {
   assert.equal(assigneeName(p, 'weg'), '');
   assert.equal(assigneeName(p, undefined), '');
 });
+
+test('isBlankProject: nur wirklich leere Suchgebiete', async () => {
+  const { isBlankProject, newProject } = await import('../web/store.js');
+  assert.equal(isBlankProject(newProject('')), true);
+  assert.equal(isBlankProject(newProject('Übung')), false);
+  const a = newProject(''); a.items.push({ kind: 'text', lat: 1, lon: 1, text: 'x' });
+  assert.equal(isBlankProject(a), false);
+  const b = newProject(''); b.mission.times.alarm = '10:00';
+  assert.equal(isBlankProject(b), false);
+  const c = newProject(''); c.closed = 1;
+  assert.equal(isBlankProject(c), false);
+});
