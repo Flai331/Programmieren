@@ -6,7 +6,7 @@ import { poiCat, poiName } from './pois.js';
 import { colName, cellLabel, cellBounds, gridBounds } from './grid.js';
 import { toUtm, fromUtm, utmZone } from './utm.js';
 import { cellComponents, cellOutlines, formatArea, hasArea, polygonArea } from './gpx.js';
-import { cellsText } from './store.js';
+import { cellsText, NO_TEAM_COLOR, isNoTeamOutline, outlineColor } from './store.js';
 
 const GRID_COLOR = 'rgba(200, 0, 0, 0.85)';
 
@@ -47,6 +47,7 @@ export function labelDetail(zoom) {
   zoom = Math.round(zoom);
   return zoom <= 14 ? 0 : zoom === 15 ? 1 : zoom === 16 ? 2 : 3;
 }
+export { isNoTeamOutline, outlineColor };
 // Text am Umriss je nach Stufe (Zeilen mit \n getrennt)
 export function trackLabel(it, who, d = 3) {
   if (d <= 0) return '';
@@ -71,7 +72,7 @@ export function drawOverlay(ctx, toPx, state, opt) {
       if (a) areas.push(...a);
     } else drawGrid(ctx, toPx, st, g.grid, opt, s);
   }
-  drawItems(ctx, toPx, state.items || [], s, state.teamNames, state.detail ?? 3);
+  drawItems(ctx, toPx, state.items || [], s, state.teamNames, state.detail ?? 3, state.noTeamGrey !== false);
   if (state.rescue && state.rescue.length) drawRescue(ctx, toPx, state.rescue, s);
   if (state.pois && state.pois.length) drawPois(ctx, toPx, state.pois, s);
   if (state.meet) drawMeet(ctx, toPx, state.meet, s);
@@ -185,6 +186,7 @@ function drawAreas(ctx, toPx, state, grid, opt, s) {
     }
     areaPath(keys);
     ctx.lineJoin = 'miter';
+    if (color === NO_TEAM_COLOR) ctx.setLineDash([10 * s, 6 * s]); // ohne Team: gestrichelt
     ctx.lineWidth = 2 * (width + 1.5 * s);
     ctx.strokeStyle = 'rgba(255,255,255,0.95)';
     ctx.stroke();
@@ -392,7 +394,11 @@ function drawGrid(ctx, toPx, state, grid, opt, s) {
     ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
     ctx.globalAlpha = 1;
     // kräftiger Rand mit weißer Kontur, damit das Feld auch auf Luftbildern auffällt
+    // „ohne Team“ (Grau): gestrichelter Innenrand
+    const noTeam = color === NO_TEAM_COLOR;
+    if (noTeam) ctx.setLineDash([8 * s, 5 * s]);
     outlineRect(ctx, x0, y0, x1 - x0, y1 - y0, color, s, 2.5);
+    if (noTeam) ctx.setLineDash([]);
   }
 
   // Status (abgesucht …) schraffiert darüber – die Teamfarbe bleibt sichtbar
@@ -569,7 +575,7 @@ function gridLon(grid, c) {
   return grid.originLon + c * grid.dLon;
 }
 
-function drawItems(ctx, toPx, items, s, teamNames = {}, d = 3) {
+function drawItems(ctx, toPx, items, s, teamNames = {}, d = 3, grey = true) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   const named = new Set(); // Zeichnung aus mehreren Strichen: Name nur am ersten
@@ -598,7 +604,7 @@ function drawItems(ctx, toPx, items, s, teamNames = {}, d = 3) {
         halo(ctx, it.name, x + (it.w / 2 + 5) * s, y - (it.w / 2 + 3) * s, it.color, s);
       }
     } else if (it.kind === 'track' && it.pts.length) {
-      drawTrack(ctx, toPx, it, s, it.to ? (it.to.startsWith('u:') ? it.to.slice(2) : (teamNames || {})[it.to] || '') : '', d);
+      drawTrack(ctx, toPx, it, s, it.to ? (it.to.startsWith('u:') ? it.to.slice(2) : (teamNames || {})[it.to] || '') : '', d, grey);
     } else if (it.kind === 'text') {
       const [x, y] = toPx(it.lat, it.lon);
       ctx.fillStyle = it.color;
@@ -617,7 +623,9 @@ function drawItems(ctx, toPx, items, s, teamNames = {}, d = 3) {
 }
 
 // Track (Punkt für Punkt gesetzt): Linie mit weißem Rand, Knotenpunkte, Name am Start
-function drawTrack(ctx, toPx, it, s, who = '', d = 3) {
+function drawTrack(ctx, toPx, it, s, who = '', d = 3, grey = true) {
+  const color = outlineColor(it, grey);
+  const dashed = isNoTeamOutline(it, grey); // „noch offen“ auch ohne Farbsehen erkennbar
   const pts = it.pts.map(([lat, lon]) => toPx(lat, lon));
   const line = (w, color) => {
     ctx.strokeStyle = color;
@@ -626,14 +634,17 @@ function drawTrack(ctx, toPx, it, s, who = '', d = 3) {
     pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
     ctx.stroke();
   };
+  ctx.save();
+  if (dashed) ctx.setLineDash([10 * s, 6 * s]);
   line((it.w + 3) * s, 'rgba(255,255,255,0.9)');
-  line(it.w * s, it.color);
+  line(it.w * s, color);
+  ctx.restore();
   // ab 3 Punkten gestrichelt zurück zum Start: so wird die Fläche berechnet
   const [a, z] = [pts[0], pts[pts.length - 1]];
   if (hasArea(it) && Math.hypot(a[0] - z[0], a[1] - z[1]) > 1) {
     ctx.save();
     ctx.setLineDash([6 * s, 5 * s]);
-    ctx.strokeStyle = it.color;
+    ctx.strokeStyle = color;
     ctx.lineWidth = Math.max(1.5, it.w * 0.6) * s;
     ctx.beginPath();
     ctx.moveTo(z[0], z[1]);
@@ -642,7 +653,7 @@ function drawTrack(ctx, toPx, it, s, who = '', d = 3) {
     ctx.restore();
   }
   ctx.fillStyle = '#fff';
-  ctx.strokeStyle = it.color;
+  ctx.strokeStyle = color;
   ctx.lineWidth = 2 * s;
   // aufgezeichnete Wege (viele Punkte): nur Anfang und Ende markieren
   const many = pts.length > 150;
@@ -661,14 +672,14 @@ function drawTrack(ctx, toPx, it, s, who = '', d = 3) {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
     const ls = label.split('\n');
-    ls.forEach((l, i) => halo(ctx, l, pts[0][0] + 7 * s, pts[0][1] - (5 + (ls.length - 1 - i) * 16) * s, it.color, s));
+    ls.forEach((l, i) => halo(ctx, l, pts[0][0] + 7 * s, pts[0][1] - (5 + (ls.length - 1 - i) * 16) * s, color, s));
   }
   // Notiz (z. B. vom Hundeführer zum umkreisten Bereich) klein darunter
   if (it.note && d >= 3) {
     ctx.font = `${12 * s}px sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    halo(ctx, it.note.length > 60 ? `${it.note.slice(0, 59)}…` : it.note, pts[0][0] + 7 * s, pts[0][1] - 3 * s, it.color, s);
+    halo(ctx, it.note.length > 60 ? `${it.note.slice(0, 59)}…` : it.note, pts[0][0] + 7 * s, pts[0][1] - 3 * s, color, s);
   }
 }
 
