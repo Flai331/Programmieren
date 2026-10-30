@@ -1,7 +1,7 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v80**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v81**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
@@ -47,7 +47,22 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
   - Gehen bei der Übergabe an ein weiteres EL-Gerät (`#e=`) mit.
   - Neue Logik in `web/pois.js` mit Unit-Tests.
 
-- [ ] **v81 – 📤 Infos an EL senden** (in „📤 Weitergeben“ einbauen) (`#i=`, Abschnitt D)
+- [ ] **v82 – 🛰️ Standort: weniger Springen** (Wunsch von Klaas)
+  - **Wind messen ohne aktuellen Standort**: vor dem Speichern den Standort neu holen
+    (`getCurrentPosition`, kurz warten), statt die Kartenmitte zu nehmen; nur wenn das scheitert, Kartenmitte mit Hinweis.
+  - **HF-Modus**: Karte folgt dem Standort nur, solange ein Weg aufgezeichnet wird (⏺ Weg).
+    Ohne Aufzeichnung kein automatisches Springen – auch nicht, wenn der Standort für „Punkt melden“ eingeschaltet wird.
+  - **EL-Modus**: nie automatisch zum Standort springen oder folgen; nur beim Tippen auf „GPS“
+    (einmal hinspringen; ist GPS schon an, springt ein Tipp wieder hin, liegt man schon in der Mitte, schaltet er aus).
+  - **Weg-Aufzeichnung nach dem Schließen fortsetzen**: Wird die App während „⏺ Weg“ geschlossen
+    (oder vom Handy beendet), läuft die Aufzeichnung beim nächsten Öffnen automatisch weiter –
+    aber erst, wenn wieder ein genauer Standort da ist (Genauigkeit ≤ 20 m), damit kein falscher Strich entsteht.
+    Bis dahin Knopf „⏳ wartet auf GPS …“. Neues Wegstück (keine Linie quer über die Lücke).
+    Umsetzung: `P.hf.recOn` speichern, beim Start `startRec({ resume: true })`.
+  - Umsetzung: `btn-gps`-Handler in `startGps({ jump })` aufteilen; Mitführen nur bei `db.mode === 'hf' && recWatch !== null`;
+    Wind: in `.wm-str`-Klick `lastPos` prüfen, sonst Position holen.
+- [x] **v81 – 📑 Unterabschnitt an andere EL**: Gebiet/Umriss per QR an EL/ELW → Frage „ganzer Einsatz“ oder „Unterabschnitt“ (nur das Gebiet + B-Ort, Lage-Orte, Stammdaten, Protokoll; Infos fließen zum Grund-Einsatz zurück).
+- [x] **v81 – 📍 Infos an EL senden** (in „📤 Weitergeben“, `#i=`, Logik in `web/infos.js`; ergänzt beim Einsatzleiter nur – löschen nur er selbst; direkt mit Klaas gebaut)
   - „📤 Infos senden“: neue/geänderte/gelöschte Lage-Orte (optional Kontakte) per QR-Code
     oder Link, mit Gerätename (`db.deviceName`) als Absender; beide Richtungen.
   - Zusammenführen ohne Duplikate (feste IDs + Änderungszeit), gelöschte verschwinden auch

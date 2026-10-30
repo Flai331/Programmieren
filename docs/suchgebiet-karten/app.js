@@ -11,6 +11,7 @@ import { buildGpx, mergeGpx, parseGpx, parseKml, pointInPolygon, selectionGpx, g
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import { buildReport, describeTarget, makeDedup, makeLog } from './report.js';
 import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
+import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './infos.js';
 import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject } from './scope.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -44,7 +45,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v80';
+const APP_VERSION = 'v81';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -154,7 +155,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveN
 
 function snapshot() {
   undoStack.push(JSON.stringify({
-    area: P.area, cellM: P.cellM, fills: P.fills, status: P.status, items: P.items, marks: P.marks, meet: P.meet, pois: P.pois,
+    area: P.area, cellM: P.cellM, fills: P.fills, status: P.status, items: P.items, marks: P.marks, meet: P.meet, pois: P.pois, poiDel: P.poiDel,
     gridId: P.gridId, gridName: P.gridName, otherGrids: P.otherGrids,
   }));
   if (undoStack.length > 60) undoStack.shift();
@@ -861,7 +862,7 @@ function eraseAt(x, y) {
     P.items.splice(i, 1);
   } else if (poiAt(x, y) >= 0) {
     before();
-    P.pois.splice(poiAt(x, y), 1);
+    deletePoi(P, P.pois[poiAt(x, y)]);
     renderPois();
   } else if (P.meet && Math.hypot(toPx(P.meet.lat, P.meet.lon)[0] - x, toPx(P.meet.lat, P.meet.lon)[1] - y) <= 16) {
     before();
@@ -2810,7 +2811,7 @@ async function handleShared(text) {
   try { data = await unpack(sh.data); } catch { return toast('Code beschädigt oder unvollständig'); }
   if (data.k === 'a') return takeAssignment(data);
   if (data.k === 'e') return takeHandover(data);
-  if (data.k === 'i') return toast('Dieser Link braucht eine neuere Version der App – bitte aktualisieren');
+  if (data.k === 'i') return takeInfos(data);
   if (data.k !== 'r') return toast('Unbekannter Inhalt');
   // Rückmeldungen gehören zur Einsatzleitung: Modus umschalten (vom Hundeführer-Modus nur mit PIN)
   if (db.mode === 'hf' && !(await toElMode())) return;
@@ -3001,7 +3002,7 @@ $('handed').addEventListener('click', async () => {
   if (ok) { delete P.handedOver; changed(); }
 });
 $('ho-send').addEventListener('click', () => handoverQr(P, true));
-// Einsatz (ganz oder Teil-Einsatz aus „Weitergeben“) per QR-Code an ein Gerät der Einsatzleitung
+// Einsatz (ganz oder Unterabschnitt aus „Weitergeben“) per QR-Code an ein Gerät der Einsatzleitung
 async function handoverQr(proj, whole) {
   saveNow();
   // erst ein QR-Code mit wenig Vereinfachung, sonst mehrere im Wechsel
@@ -3029,7 +3030,7 @@ async function handoverQr(proj, whole) {
   const pc = ' Zum PC: „Teilen“ oder „Link kopieren“ (z. B. WhatsApp Web, Mail).';
   const lost = miss.length ? ` Nicht dabei: ${miss.join(', ')} – dafür „Suchgebiet als Datei senden“.` : '';
   if (whole) qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
-  showQr(link, `📲 ${whole ? 'Einsatz' : 'Teil-Einsatz'} „${proj.title || 'Suchgebiet'}“ übergeben`, how + pc + lost, parts);
+  showQr(link, `📲 ${whole ? 'Einsatz' : 'Unterabschnitt'} „${proj.title || 'Suchgebiet'}“ übergeben`, how + pc + lost, parts);
 }
 $('ho-scan').addEventListener('click', () => { closePanels(); startScan(); });
 
@@ -3062,7 +3063,65 @@ async function takeHandover(e) {
   renderProjects();
   applyMode();
   await askDeviceName(true);
-  toast(`📥 Einsatz „${p.title || 'Suchgebiet'}“ übernommen – Rückmeldungen jetzt hier scannen${e.np ? ` (ohne ${e.np} Foto${e.np === 1 ? '' : 's'})` : ''}`, 8000);
+  toast(`📥 ${p.parentEid ? 'Unterabschnitt' : 'Einsatz'} „${p.title || 'Suchgebiet'}“ übernommen – Rückmeldungen jetzt hier scannen${e.np ? ` (ohne ${e.np} Foto${e.np === 1 ? '' : 's'})` : ''}`, 8000);
+}
+
+// ---- Lage-Infos (Lage-Orte, optional Kontakte) zwischen Geräten der Einsatzleitung abgleichen ----
+async function sendInfos() {
+  if (isFree()) return lockedToast();
+  if (!P.pois.length && !P.contacts.length) return toast('Noch keine Lage-Orte – erst unter „Einsatz → Stammdaten“ oder mit 📍 anlegen');
+  if (!db.deviceName) await askDeviceName(false);
+  const how = await openDlg((box, close) => {
+    dlgHead(box, '📍 Lage-Infos an EL senden', `${P.pois.length} Lage-Ort${P.pois.length === 1 ? '' : 'e'} von „${db.deviceName || 'diesem Gerät'}“. Beim Einsatzleiter wird nur ergänzt: Neues kommt dazu, eigene Änderungen werden übernommen, gelöscht wird dort nichts. Mehrfach scannen schadet nicht.`);
+    let ct = null;
+    if (P.contacts.length) {
+      const l = document.createElement('label');
+      l.className = 'check';
+      l.innerHTML = `<input type="checkbox"> Kontakte mitsenden (${P.contacts.length})`;
+      ct = l.querySelector('input');
+      box.appendChild(l);
+    }
+    const go = (w) => () => close({ w, ct: !!(ct && ct.checked) });
+    dlgButton(box, '📲 QR-Code', 'primary', go('qr'));
+    dlgButton(box, '📤 Link teilen (WhatsApp, Mail …)', '', go('share'));
+    dlgButton(box, '📋 Link kopieren', '', go('copy'));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!how) return;
+  const data = await pack(buildInfos(P, { from: db.deviceName || '', contacts: how.ct }));
+  const link = shareLink('i', data, PUBLIC_URL);
+  const title = `📍 Lage-Infos von ${db.deviceName || 'Einsatzleitung'}`;
+  if (how.w === 'copy') return copyText(link);
+  if (how.w === 'share') return shareLinkText(link, 'Lage-Infos', `Lage-Infos (${P.title || 'Einsatz'}) von ${db.deviceName || 'Einsatzleitung'} – Link in der Suchgebiet-Karten-App öffnen:`);
+  const parts = link.length > QR_MAX ? splitParts(data, 800).map((x) => shareLink('m', x, PUBLIC_URL)) : null;
+  showQr(link, title, `Auf dem anderen Gerät der Einsatzleitung mit „📷 Einsatz übernehmen“ oder „📷 Rückmeldung scannen“ einlesen${parts ? ' (mehrere Codes wechseln sich ab, Kamera ruhig halten)' : ''}.`, parts);
+}
+$('share-info').addEventListener('click', sendInfos);
+
+async function takeInfos(inf) {
+  if (db.mode === 'hf' && !(await toElMode())) return;
+  if (db.mode !== 'el') { db.mode = 'el'; applyMode(); }
+  const from = inf.from || 'Einsatzleitung';
+  let target = infoTarget(db.projects, inf);
+  if (!target) {
+    if (isFree()) return toast(`Der Einsatz „${inf.ti || '?'}“ ist auf diesem Gerät nicht vorhanden – erst den Einsatz übernehmen oder anlegen`, 8000);
+    const ok = await openDlg((box, close) => {
+      dlgHead(box, `📥 Lage-Infos von ${from}`, `Sie gehören zum Einsatz „${inf.ti || '?'}“, der hier nicht bekannt ist. In den offenen Einsatz „${P.title || 'Suchgebiet'}“ übernehmen?`);
+      dlgButton(box, 'Übernehmen', 'primary', () => close(true));
+      dlgButton(box, 'Abbrechen', '', () => close(false));
+    });
+    if (!ok) return;
+    target = P;
+  }
+  if (target !== P) switchProject(target.id);
+  if (isClosed() && !(await reopenClosed())) return;
+  snapshot();
+  const r = mergeInfos(P, inf);
+  changed();
+  renderPois();
+  saveNow();
+  const sum = infoSummary(r);
+  toast(sum ? `📥 Infos von ${from}: ${sum}` : `📥 Infos von ${from}: nichts Neues`, 6000);
 }
 
 // Name dieses Geräts (z. B. „ELW 11-1“, „Tablet EL“) – wird beim Übernehmen eines Einsatzes abgefragt
@@ -4047,7 +4106,7 @@ async function editPoi(p) {
   if (r === 'delete') {
     if (!confirm(`„${poiName(p)}“ löschen?`)) return;
     snapshot();
-    P.pois = P.pois.filter((x) => x !== p);
+    deletePoi(P, p);
   } else if (r === 'cat') {
     const cat = await pickPoiCat(p.cat);
     if (!cat) return;
@@ -4339,10 +4398,12 @@ $('share-qr').addEventListener('click', () => shareRun(async () => {
   const to = await openDlg((box, close) => {
     dlgHead(box, '📲 QR-Code für …', `„${shareLabel()}“: ${selSummary(P, shareSel)}`);
     dlgButton(box, '🐕 Hundeführer<small>öffnet als Auftrag, Rückmeldung kommt zurück</small>', 'primary', () => close('hf'));
-    dlgButton(box, '🚐 Einsatzleitung / ELW<small>wird dort ein eigener Einsatz mit nur diesem Teil</small>', '', () => close('el'));
+    dlgButton(box, '🚐 EL / ELW: ganzer Einsatz<small>alles, Rückmeldungen laufen dann dort ein</small>', '', () => close('all'));
+    dlgButton(box, '🚐 EL / ELW: Unterabschnitt<small>nur dieses Gebiet, dazu B-Ort, Lage-Orte, Stammdaten und Protokoll des Einsatzes</small>', '', () => close('el'));
     dlgButton(box, 'Abbrechen', '', () => close(null));
   });
-  if (to === 'el') return handoverQr(subsetProject(P, shareSel, `${P.title || 'Einsatz'} – ${shareLabel()}`), false);
+  if (to === 'all') return handoverQr(P, true);
+  if (to === 'el') return handoverQr(subsetProject(P, shareSel, `${P.title || 'Einsatz'} – UA ${shareLabel()}`, { base: true }), false);
   if (to === 'hf') prefillSend(shareSel, shareScope === 'team' ? $('share-team').value : '');
 }));
 $('share-pdf').addEventListener('click', () => shareRun(async () => {

@@ -47,6 +47,7 @@ export function newProject(title = '') {
     radio: [], // weitere Funkrufnamen [{ call, who }]
     contacts: [], // Kontakte dieses Einsatzes (Kopien aus dem Adressbuch), gehen auf Wunsch mit dem Auftrag
     pois: [], // Lage-Orte (ELW-Infos)
+    poiDel: {}, // gelöschte Lage-Orte { id: Zeit } für den Abgleich zwischen Geräten
     eid: '', // Einsatz-ID über Geräte hinweg (Übergabe Handy -> Tablet)
     showUtm: false,
     view: null,
@@ -74,6 +75,7 @@ export function normalizeProject(p) {
   if (!out.lead.name && out.leader) out.lead.name = out.leader;
   for (const k of ['radio', 'contacts', 'pois']) if (!Array.isArray(out[k])) out[k] = [];
   out.pois = normalizePois(out.pois);
+  if (!out.poiDel || typeof out.poiDel !== 'object' || Array.isArray(out.poiDel)) out.poiDel = {};
   out.contacts = out.contacts.map(normalizeContact);
   if (!out.eid) out.eid = out.id;
   // v61: „Treffpunkt“ heißt jetzt „B-Ort“

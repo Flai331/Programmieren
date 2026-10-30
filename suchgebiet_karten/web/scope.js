@@ -62,11 +62,13 @@ export function selCount(sel) {
     + [...sel.cells.values()].reduce((a, s) => a + s.size, 0);
 }
 
-// Teil-Einsatz für ein weiteres Gerät der Einsatzleitung (ELW): nur das Ausgewählte.
+// Teil-Einsatz (PDF) bzw. Unterabschnitt für ein weiteres Gerät der Einsatzleitung (ELW): nur das Ausgewählte.
 // Rastergebiete mit Rand oder Feldern bleiben (mit nur den ausgewählten Feldfarben),
 // Stammdaten (Einsatzleitung, Funk, Kontakte, Person, Zeiten) gehen mit,
 // Notizen, Notizblock, Fotos, Aufträge und Bericht nicht. Neue Einsatz-ID: eigener Einsatz.
-export function subsetProject(p, sel, title) {
+// base: Unterabschnitt – nur das ausgewählte Gebiet, aber alle übrigen Daten des Grund-Einsatzes
+// (B-Ort, alle Lage-Orte, Einsatzprotokoll, Notizen); parentEid verbindet ihn mit dem Grund-Einsatz.
+export function subsetProject(p, sel, title, { base = false } = {}) {
   const keep = (g) => sel.edges.has(g.id) || (sel.cells.get(g.id) || new Set()).size > 0;
   const pick = (map, id) => {
     const set = sel.cells.get(id) || new Set();
@@ -89,6 +91,12 @@ export function subsetProject(p, sel, title) {
   });
   q.mission.person = (p.mission && p.mission.person) || '';
   q.mission.times = clone((p.mission && p.mission.times) || {});
+  if (base) {
+    Object.assign(q, {
+      pois: clone(p.pois || []), meet: p.meet ? { ...p.meet } : null, notes: p.notes || '',
+      mission: clone(p.mission || q.mission), parentEid: p.eid || p.id, parentTitle: p.title || '',
+    });
+  }
   if (grids.length) {
     const [first, ...rest] = grids;
     Object.assign(q, { gridId: first.id, gridName: first.name, area: first.area, cellM: first.cellM, fills: first.fills, status: first.status, otherGrids: rest });
