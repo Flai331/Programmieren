@@ -125,7 +125,7 @@
     <button id="btn-mission" title="Einsatz: Stammdaten, Lage, Einsatzende"><span>📋</span>Einsatz</button>
     <button id="btn-notes" title="Notizen: getippt und handschriftlich"><span>📝</span>Notizen</button>
     <button id="btn-grid" title="Raster"><span>#</span>Raster</button>
-    <button id="btn-teams" title="Teams &amp; Legende"><span>👥</span>Teams</button>
+    <button id="btn-teams" title="Hunde-Teams, Aufträge an Hundeführer"><span>🐕</span>Hunde</button>
     <button id="btn-contacts" title="Kontakte: für diesen Einsatz und Adressbuch"><span>📇</span>Kontakte</button>
     <button id="btn-layers" title="Kartenart, Rettungspunkte, Offline-Karten"><span>🗺️</span>Karte</button>
     <button id="btn-gps" title="Mein Standort"><span>◎</span>GPS</button>
@@ -200,6 +200,9 @@
     <label>Rastergebiete</label>
     <div id="grid-list" class="gridlist"></div>
     <button id="grid-add">+ Weiteres Rastergebiet</button>
+    <label>Deckkraft der Team-Farben und Markierungen <span id="mark-alpha-val"></span>
+      <input id="mark-alpha" type="range" min="10" max="90" step="5" style="width:100%">
+    </label>
     <label>Feldgröße
       <select id="cell-size">
         <option value="25">25 m</option>
@@ -332,15 +335,11 @@
 
   <!-- Teams & Legende -->
   <section id="panel-teams" class="panel" hidden>
-    <h2>Teams &amp; Legende</h2>
-    <p class="small">Farbe antippen zum Einfärben auswählen, dann mit dem Werkzeug „Feld“ Felder zuteilen. Alles erscheint im PDF als Liste und Legende.</p>
-    <label>Deckkraft der Markierungen <span id="mark-alpha-val"></span>
-      <input id="mark-alpha" type="range" min="10" max="90" step="5" style="width:100%">
-    </label>
+    <h2>👥 Teams</h2>
+    <p class="small">Felder zuteilen: Feld auf der Karte lange drücken – dort lassen sich auch Markierungen (abgesucht, Fundstelle …) setzen und ändern. Für viele Felder: Farbe antippen, dann mit dem Werkzeug „Feld“ wischen.</p>
     <div id="mark-list"></div>
     <div class="row">
       <button id="team-add" class="primary">+ Team</button>
-      <button id="mark-add">+ Markierung (z. B. „Fundstelle“)</button>
     </div>
     <h2 class="sub">📲 Hundeführer (ohne App, per QR-Code)</h2>
     <p class="small">Auftrag aufs Handy des Hundeführers: QR-Code mit der Handy-Kamera scannen – öffnet die vereinfachte Hundeführer-Ansicht im Browser. Zurück kommen gelaufener Weg, Markierungen und abgesuchte Felder.</p>
