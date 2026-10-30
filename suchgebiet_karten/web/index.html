@@ -59,6 +59,7 @@
     <button id="hf-field"><span>✅</span><b>Feld</b></button>
     <button id="hf-draw"><span>✏️</span><b>Bereich</b></button>
     <button id="hf-wind"><span>🧭</span><b>Wind</b></button>
+    <button id="hf-status" hidden><span>📣</span><b>Status</b></button>
     <button id="hf-back" class="primary"><span>📤</span><b>Zurück­geben</b></button>
   </div>
 
@@ -302,6 +303,10 @@
     <p>Name: <b id="dev-name">–</b> <button id="dev-edit" class="mini">✏️ Name</button></p>
     <label>🗺️ Standard-Kartenart <select id="dev-layer"></select></label>
     <p class="small">Gilt auf diesem Gerät für neue Einsätze, übernommene Aufträge und Übergaben. Im laufenden Einsatz lässt sich die Karte unter „Karte“ jederzeit wechseln.</p>
+    <div class="el-only">
+    <label>📣 Status-Server (Web-App-Adresse) <input id="dev-status-url" type="text" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"></label>
+    <p class="small">Nur auf Geräten der Einsatzleitung nötig. Mit Adresse tragen neue Aufträge die Verbindung mit: Hundeführer melden dann bei Internet ihren Status und wichtige Standorte. Einrichtung: Ordner „apps-script“, ANLEITUNG.md. Leer lassen = nur QR-Rückmeldung.</p>
+    </div>
     <h2 class="sub">App-Modus</h2>
     <p class="small">Einsatzleitung: alles. Hundeführer: stark vereinfacht (große Knöpfe, nur der eigene Auftrag). Zurück zur Einsatzleitung nur mit der PIN der Einsatzleitung.</p>
     <div class="row">
@@ -428,6 +433,7 @@
     <div id="overlay-list"></div>
     <p class="small">Legt Wege (auch Waldwege), Straßen und Ortsnamen aus der amtlichen Karte TopPlusOpen auf das Luftbild.</p>
     <p class="small">Alle Karten sind amtliche, frei nutzbare Daten (auch kommerziell) von BKG, LGLN und Geobasis NRW.</p>
+    <label class="check" id="msg-show-row" hidden><input type="checkbox" id="msg-show" checked> 📣 Meldungen der Teams anzeigen</label>
     <div class="el-only">
     <h2 class="sub">🚑 Rettungspunkte</h2>
     <p id="rp-info" class="info"></p>

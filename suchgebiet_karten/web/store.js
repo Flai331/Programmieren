@@ -78,6 +78,17 @@ export function normalizeProject(p) {
   if (!out.poiDel || typeof out.poiDel !== 'object' || Array.isArray(out.poiDel)) out.poiDel = {};
   out.contacts = out.contacts.map(normalizeContact);
   if (!out.eid) out.eid = out.id;
+  // v89: Status-Meldungen – EL: live { url, key, since, ack, msgs }, HF: hf.ls = [url, key], Warteschlange hf.outbox, eigene Meldungen hf.log
+  if (out.live && typeof out.live === 'object' && out.live.url && out.live.key) {
+    const l = out.live;
+    out.live = { url: String(l.url), key: String(l.key), since: Number(l.since) || 0, ack: Array.isArray(l.ack) ? l.ack : [], msgs: Array.isArray(l.msgs) ? l.msgs.slice(-500) : [] };
+  } else delete out.live;
+  if (out.hf && typeof out.hf === 'object') {
+    out.hf = { ...out.hf };
+    if (!(Array.isArray(out.hf.ls) && out.hf.ls.length === 2 && out.hf.ls.every((x) => typeof x === 'string' && x))) delete out.hf.ls;
+    for (const k of ['outbox', 'log']) if (!Array.isArray(out.hf[k])) out.hf[k] = [];
+    out.hf.log = out.hf.log.slice(-100);
+  }
   // v61: „Treffpunkt“ heißt jetzt „B-Ort“
   if (out.meet && out.meet.text === 'Treffpunkt') out.meet = { ...out.meet, text: 'B-Ort' };
   // v31: nur „Raster ausblenden“ -> allgemeine Anzeige-Schalter

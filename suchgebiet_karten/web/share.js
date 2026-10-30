@@ -4,6 +4,7 @@
 
 import { newProject, normalizeProject, uid, allGrids, gridLabel } from './store.js';
 import { compactContact, fromCompact } from './contacts.js';
+import { newLiveKey } from './status.js';
 
 export const PUBLIC_URL = 'https://flai331.github.io/Programmieren/suchgebiet-karten/';
 
@@ -134,7 +135,8 @@ export function sinceText(t, now = Date.now()) {
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
 }
 
-// sel: { teamId, gridIds: [], fields: 'team'|'all'|'pick', picked: {gridId: ["c,r"]}, itemIdx: [], meet, poiIds: [], rescue: [pts], hint, person }
+// sel: { teamId, gridIds: [], fields: 'team'|'all'|'pick', picked: {gridId: ["c,r"]}, itemIdx: [], meet, poiIds: [], rescue: [pts], hint, person, liveUrl }
+// liveUrl: Adresse des Status-Servers (Einstellung dieses Geräts) -> Auftrag trägt Adresse und Schlüssel (ls), Einsatz bekommt p.live
 export function buildAssignment(p, sel) {
   const team = p.marks.find((m) => m.id === sel.teamId && m.kind === 'team') || null;
   const statusById = Object.fromEntries(p.marks.filter((m) => m.kind === 'status').map((m) => [m.id, STATUS_CODES[m.label] || '']));
@@ -163,6 +165,11 @@ export function buildAssignment(p, sel) {
   if (sel.rescue && sel.rescue.length) out.rp = sel.rescue.map((r) => [r.n, r6(r.lat), r6(r.lon)]);
   if (sel.person && p.mission && p.mission.person) out.vp = p.mission.person.trim().slice(0, 400);
   if (sel.contacts && sel.contacts.length) out.ct = sel.contacts.map(compactContact);
+  if (sel.liveUrl) {
+    if (!p.live) p.live = { url: sel.liveUrl, key: newLiveKey(), since: 0, ack: [], msgs: [] };
+    p.live.url = sel.liveUrl;
+    out.ls = [p.live.url, p.live.key];
+  }
   return out;
 }
 
@@ -191,6 +198,8 @@ export function projectFromAssignment(a) {
   p.hf = {
     id: a.id, at: a.at, received: Date.now(), team: team.label, hint: a.h || '', grids: a.g.map((g) => g.i),
     track: [], // aufgezeichnete Wege: [{ t0, pts: [[lat, lon]] }]
+    outbox: [], log: [], // Status-Meldungen: noch nicht gesendet / alle eigenen
+    ...(Array.isArray(a.ls) && a.ls.length === 2 && /^https:\/\/script\.google\.com\//.test(String(a.ls[0])) ? { ls: [String(a.ls[0]), String(a.ls[1])] } : {}), // Status-Server: [Adresse, Schlüssel]
   };
   p.hfRescue = (a.rp || []).map(([n, lat, lon]) => ({ n, lat, lon }));
   return normalizeProject(p);
