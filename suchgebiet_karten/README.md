@@ -119,6 +119,9 @@ Karteninformationen* ein- und ausschalten. Wer die eigene Wanderkarte sehen will
 - **Jedes PDF aus der App enthält das Suchgebiet ebenfalls.** Wer das PDF
   bekommt, kann es unter „Einsätze → Datei öffnen“ laden und mit Raster,
   Teams und Zeichnungen weiterarbeiten.
+- **📍 Lage-Orte** (Einsatz → Stammdaten): ELW, Bereitstellungsraum, Parkplatz,
+  Toilette, Verpflegung, Sanität … per GPS oder Kartentipp; auf der Karte
+  antippen zum Bearbeiten. Erscheinen im PDF (Karte und Infoseite) und im GPX.
 - **GPX/KML aus WhatsApp & Co.** (Android-App): Datei in WhatsApp antippen →
   „Teilen“ bzw. im Dateimanager „Öffnen mit“ → „Suchgebiet-Karten“. Nach einer
   Nachfrage landen Wege, Umrisse und Wegpunkte im laufenden Einsatz.

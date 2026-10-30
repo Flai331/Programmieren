@@ -10,6 +10,7 @@ import { formatMgrs } from './utm.js';
 import { buildGpx, mergeGpx, parseGpx, parseKml, trackDesc, trackLength, outlineName } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import { buildReport, describeTarget, makeDedup, makeLog } from './report.js';
+import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
   MAIL_PARTS, REPORT_SECTIONS, MAP_PARTS, EXTRA_PARTS, hasReportText, newMailTo, mailAddresses,
@@ -42,7 +43,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v77';
+const APP_VERSION = 'v78';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -70,6 +71,7 @@ let tool = 'pan';
 let draftTrack = null; // Umriss, der gerade Punkt für Punkt gesetzt wird
 let draftPen = null; // Stift-Zeichnung in Arbeit: { strokes: [...] } – bis „Fertig“ oder „Abbrechen“
 let undoStack = [];
+let searchPin = null; // Nadel des letzten Suchergebnisses (gehört zu keinem Einsatz)
 
 function load() {
   try {
@@ -148,7 +150,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveN
 
 function snapshot() {
   undoStack.push(JSON.stringify({
-    area: P.area, cellM: P.cellM, fills: P.fills, status: P.status, items: P.items, marks: P.marks, meet: P.meet,
+    area: P.area, cellM: P.cellM, fills: P.fills, status: P.status, items: P.items, marks: P.marks, meet: P.meet, pois: P.pois,
     gridId: P.gridId, gridName: P.gridName, otherGrids: P.otherGrids,
   }));
   if (undoStack.length > 60) undoStack.shift();
@@ -330,6 +332,7 @@ function redraw() {
     items: items.filter((it) => !it.hidden || it === current || it === draftTrack || drafts.includes(it)),
   };
   if (hide.meet) st.meet = null;
+  if (hide.pois) st.pois = [];
   st.rescue = rescueInView();
   // Raster aus: Markierungen als Flächen mit Namen darauf
   drawOverlay(ctx, toPx, st, {
@@ -503,12 +506,14 @@ const HINTS = {
   sendpick: 'Felder für den Auftrag antippen (blau umrandet). Dann „Weiter“.',
   offsquares: 'Quadrate antippen (blau = gewählt, grün = schon gespeichert). Ziehen verschiebt die Karte.',
   meet: 'Auf die Karte tippen, um den B-Ort zu setzen.',
+  poi: 'Auf die Karte tippen, um den Lage-Ort zu setzen.',
   track: 'Umriss: Punkte antippen. Karte mit dem Finger verschieben, Zoom mit +/−.',
 };
 
 let hintTimer = null;
 function setTool(t) {
-  if (t !== 'pan' && isLocked()) { lockedToast(); t = 'pan'; }
+  // Einzeichnen nur in einem offenen Einsatz (Offline-Bereich wählen u. Ä. geht immer)
+  if (['pen', 'text', 'fill', 'track', 'erase', 'meet', 'poi', 'grid'].includes(t) && isLocked()) { lockedToast(); t = 'pan'; }
   if (t !== tool) repLog.add(`Werkzeug ${t}`);
   // Offene Zeichnung/Umriss bleibt beim Werkzeugwechsel erhalten (bis „Fertig“ oder „Abbrechen“)
   if (tool === 'track' && t !== 'track') {
@@ -812,6 +817,9 @@ function finishPointer(e, cancelled) {
       P.items.push({ kind: 'text', color: db.color, lat: ll.lat, lon: ll.lng, text: text.trim() });
       changed();
     }
+  } else if (tool === 'poi' && !panning && Math.hypot(x - downPt.x, y - downPt.y) < 10) {
+    setTool('pan');
+    placePoi(ll.lat, ll.lng);
   } else if (tool === 'meet') {
     const text = prompt('Bezeichnung des B-Orts:', (P.meet && P.meet.text) || 'B-Ort');
     if (text !== null) {
@@ -839,6 +847,10 @@ function eraseAt(x, y) {
   if (i >= 0) {
     before();
     P.items.splice(i, 1);
+  } else if (poiAt(x, y) >= 0) {
+    before();
+    P.pois.splice(poiAt(x, y), 1);
+    renderPois();
   } else if (P.meet && Math.hypot(toPx(P.meet.lat, P.meet.lon)[0] - x, toPx(P.meet.lat, P.meet.lon)[1] - y) <= 16) {
     before();
     P.meet = null;
@@ -1302,6 +1314,7 @@ function renderViewToggles() {
   row('Rasterlinien und Feldnamen', !hide.grid, setHide('grid'));
   row('Randbeschriftung (A, B … / 1, 2 …)', !hide.edge, setHide('edge'));
   if (P.meet) row(`B-Ort${P.meet.text ? `: ${P.meet.text}` : ''}`, !hide.meet, setHide('meet'), '#0d47a1');
+  if (P.pois.length) row(`Lage-Orte (${P.pois.length})`, !hide.pois, setHide('pois'), '#c62828');
   const used = new Set(allGrids(P).flatMap((g) => [...Object.values(g.fills), ...Object.values(g.status)]));
   const marks = P.marks.filter((m) => used.has(m.id));
   if (marks.length) head('Teams und Markierungen');
@@ -1425,6 +1438,13 @@ $('cell-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') goT
 map.on('click', (e) => {
   // Linie eines Umrisses angetippt (Einsatzleitung): Name, Zuteilung, Notiz bearbeiten
   if (db.mode === 'el' && tool === 'pan') {
+    const pi = poiAt(e.containerPoint.x, e.containerPoint.y);
+    if (pi >= 0) {
+      const p = P.pois[pi];
+      if (isLocked()) return toast(`${poiLabel(p)}${p.desc ? ` – ${p.desc}` : ''}`, 6000);
+      editPoi(p);
+      return;
+    }
     const i = hitItem(P.items, toPx, e.containerPoint.x, e.containerPoint.y, 12);
     if (i >= 0 && P.items[i].kind === 'track') { renameItem(i); return; }
   }
@@ -2778,7 +2798,8 @@ async function handleShared(text) {
     if (!go) return;
   }
   if (target && target !== P) switchProject(target.id);
-  if (isLocked() && !(await reopenClosed())) return;
+  if (isClosed() && !(await reopenClosed())) return;
+  if (isFree()) createProject(wizTitle());
   const res = applyResult(P, data);
   const sent = (P.sent || []).find((x) => x.id === data.a);
   if (sent) sent.last = Date.now();
@@ -2894,15 +2915,22 @@ $('hfm-scan').addEventListener('click', () => { closePanels(); startScan(); });
 // ---- Einsatz an ein weiteres Gerät der Einsatzleitung übergeben (Handy -> Tablet/PC) ----
 const PART_MAX = 16; // mehr Teile dauern beim Scannen zu lange
 // Abgeschlossener Einsatz: nur ansehen und exportieren, Ändern erst nach „Wieder öffnen“
-function isLocked() { return !!(P && P.closed) && db.mode === 'el'; }
+// Freie Karte (kein Einsatz offen): nur ansehen, Einzeichnen erst nach „+ Neuer Einsatz“
+function isClosed() { return !!(P && P.closed) && db.mode === 'el'; }
+function isFree() { return !!P && db.mode === 'el' && !P.closed && isBlankProject(P); }
+function isLocked() { return isClosed() || isFree(); }
 function applyClosed() {
-  const on = isLocked();
-  document.body.classList.toggle('closed', on);
-  $('closed-bar').hidden = !on;
-  if (on) $('closed-bar').textContent = `✅ „${P.title || 'Suchgebiet'}“ ist abgeschlossen – nur ansehen`;
+  const closed = isClosed();
+  const free = isFree();
+  document.body.classList.toggle('closed', closed || free);
+  $('closed-bar').hidden = !(closed || free);
+  $('closed-bar').classList.toggle('free-bar', free);
+  if (closed) $('closed-bar').textContent = `✅ „${P.title || 'Suchgebiet'}“ ist abgeschlossen – nur ansehen`;
+  if (free) $('closed-bar').textContent = '🗺️ Kein Einsatz offen – hier tippen: + Neuer Einsatz';
 }
 function lockedToast() {
-  toast('✅ Einsatz ist abgeschlossen – zum Ändern unter „Einsatz → Einsatzende“ wieder öffnen.', 5000);
+  if (isFree()) toast('Kein Einsatz offen – erst „+ Neuer Einsatz“ anlegen (Leiste oben antippen).', 5000);
+  else toast('✅ Einsatz ist abgeschlossen – zum Ändern unter „Einsatz → Einsatzende“ wieder öffnen.', 5000);
 }
 async function reopenClosed() {
   const ok = await openDlg((box, close) => {
@@ -2934,7 +2962,7 @@ function renderHanded() {
   $('handed').hidden = !h || db.mode !== 'el';
   if (h) $('handed').textContent = `📲 an weiteres Gerät übergeben (${new Date(h).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}) – dort weiterarbeiten`;
 }
-$('closed-bar').addEventListener('click', reopenClosed);
+$('closed-bar').addEventListener('click', () => (isFree() ? $('proj-new').click() : reopenClosed()));
 $('handed').addEventListener('click', async () => {
   const ok = await openDlg((box, close) => {
     dlgHead(box, '📲 Übergeben', `Dieser Einsatz wurde um ${hhmm(P.handedOver)} an ein weiteres Gerät übergeben. Dort laufen jetzt die Rückmeldungen ein. Hier geht alles weiter, wird aber nicht mehr abgeglichen.`);
@@ -3138,7 +3166,7 @@ async function chooseModeIfNeeded() {
   if (m === 'hf') await toHfMode(); else { db.mode = 'el'; saveNow(); }
   if (m === 'scan') startScan();
   // frisches Gerät der Einsatzleitung: gleich mit dem Assistenten beginnen
-  if (m === 'el' && !P.title && !P.area) { P.title = wizTitle(); $('title').value = P.title; openWizard(0); }
+  if (m === 'el' && !P.title && !P.area) { P.title = wizTitle(); $('title').value = P.title; applyClosed(); openWizard(0); }
 }
 
 // ---------- Nachtmodus ----------
@@ -3473,6 +3501,8 @@ function switchProject(id) {
   restoreDrafts();
   setTool('pan');
   undoStack = [];
+  // Suchnadel (z. B. Adresse des alten B-Orts) gehört nicht zum neuen Einsatz
+  if (searchPin) { map.removeLayer(searchPin); searchPin = null; }
   if (P.view) map.setView([P.view.lat, P.view.lon], P.view.z);
   else if (grid) map.fitBounds([[P.area.south, P.area.west], [P.area.north, P.area.east]]);
   setLayer(P.layerId);
@@ -3490,6 +3520,7 @@ function fillProjectForm() {
   renderProjectContacts();
   renderWizBtn();
   renderMeet();
+  renderPois();
 }
 
 function renderMeet() {
@@ -3552,9 +3583,9 @@ function createProject(title) {
   // eine leere freie Karte wird weiterverwendet statt eine zweite anzulegen
   if (isBlankProject(P)) {
     P.title = title;
-    P.updated = Date.now();
     fillProjectForm();
     renderProjects();
+    changed();
     save();
     return P;
   }
@@ -3578,7 +3609,7 @@ $('proj-new').addEventListener('click', async () => {
   if (!how) return;
   if (how === 'plain') {
     const t = prompt('Name des neuen Suchgebiets:', '');
-    if (t !== null) createProject(t.trim());
+    if (t !== null) createProject(t.trim() || wizTitle());
     return;
   }
   const p = createProject(wizTitle());
@@ -3848,6 +3879,160 @@ for (const [id, k] of [['lead-phone', 'phone'], ['lead-call', 'call'], ['lead-el
 }
 $('pdf-caption').addEventListener('input', () => { P.caption = $('pdf-caption').value; P.updated = Date.now(); save(); });
 $('meet-set').addEventListener('click', () => { closePanels(); setTool('meet'); });
+
+// ---------- Lage-Orte ----------
+let poiDraft = null; // { cat } bzw. { move: Lage-Ort } – wartet auf den Kartentipp
+function poiAt(x, y) {
+  if ((P.hide || {}).pois) return -1;
+  let best = -1;
+  let bd = 18;
+  P.pois.forEach((p, i) => {
+    const [px, py] = toPx(p.lat, p.lon);
+    const d = Math.hypot(px - x, py - y);
+    if (d <= bd) { bd = d; best = i; }
+  });
+  return best;
+}
+function renderPois() {
+  const box = $('poi-list');
+  box.innerHTML = '';
+  if (!P.pois.length) { box.innerHTML = '<p class="small">Noch keine Lage-Orte.</p>'; return; }
+  for (const p of sortPois(P.pois)) {
+    const row = document.createElement('div');
+    row.className = 'ct';
+    row.innerHTML = '<div class="ctmain"><b></b><span class="small"></span></div><button title="Auf der Karte zeigen">🎯</button><button title="Bearbeiten">✏️</button>';
+    row.querySelector('b').textContent = poiLabel(p);
+    row.querySelector('span').textContent = p.desc || '';
+    const [go, ed] = row.querySelectorAll('button');
+    go.classList.add('keep');
+    go.addEventListener('click', () => { closePanels(); map.setView([p.lat, p.lon], Math.max(map.getZoom(), 16)); });
+    ed.addEventListener('click', () => editPoi(p));
+    box.appendChild(row);
+  }
+}
+function pickPoiCat(current) {
+  return openDlg((box, close) => {
+    dlgHead(box, '📍 Lage-Ort', 'Was ist dort?');
+    const grid = document.createElement('div');
+    grid.className = 'poi-cats';
+    for (const c of POI_CATS) {
+      const b = document.createElement('button');
+      b.innerHTML = `<span>${c.icon}</span>${c.label}`;
+      if (c.id === current) b.className = 'primary';
+      b.addEventListener('click', () => close(c.id));
+      grid.appendChild(b);
+    }
+    box.appendChild(grid);
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+}
+// Name und Hinweis; Rückgabe null = abgebrochen, 'cat' / 'move' / 'delete' = andere Aktion
+function poiTextDlg(p, isNew) {
+  return openDlg((box, close) => {
+    const c = poiCat(p.cat);
+    dlgHead(box, `${c.icon} ${c.label}`, isNew ? 'Name und Hinweis sind freiwillig.' : (p.by ? `Zuletzt geändert von ${p.by}` : ''));
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.placeholder = `Name (z. B. „${c.id === 'elw' ? 'ELW 11-1' : `${c.label} Nord`}“)`;
+    name.value = p.name || '';
+    const desc = document.createElement('textarea');
+    desc.rows = 3;
+    desc.placeholder = 'Hinweis (z. B. Zufahrt über Waldweg, Ansprechpartner …)';
+    desc.value = p.desc || '';
+    box.append(name, desc);
+    dlgButton(box, isNew ? 'Speichern' : 'Übernehmen', 'primary', () => close({ name: name.value.trim(), desc: desc.value.trim() }));
+    if (!isNew) {
+      dlgButton(box, '🔁 Art ändern', '', () => close('cat'));
+      dlgButton(box, '📍 Verschieben', '', () => close('move'));
+      dlgButton(box, '🗑️ Löschen', '', () => close('delete'));
+    }
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+    setTimeout(() => name.focus(), 50);
+  });
+}
+async function addPoi() {
+  if (isLocked()) return lockedToast();
+  const cat = await pickPoiCat();
+  if (!cat) return;
+  const c = poiCat(cat);
+  const where = await openDlg((box, close) => {
+    dlgHead(box, `${c.icon} ${c.label}`, 'Wo ist der Ort? Für eine Adresse erst oben suchen, dann „Auf der Karte tippen“.');
+    dlgButton(box, '📍 Mein Standort (GPS)', 'primary', () => close('gps'));
+    dlgButton(box, '🗺️ Auf der Karte tippen', '', () => close('map'));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!where) return;
+  poiDraft = { cat };
+  closePanels(); // danach zeigt die Karte den neuen Ort
+  if (where === 'map') {
+    setTool('poi');
+    return;
+  }
+  if (lastPos) return placePoi(lastPos[0], lastPos[1]);
+  if (!navigator.geolocation) { poiDraft = null; return toast('Standort wird nicht unterstützt'); }
+  toast('Standort wird gesucht …', 20000);
+  navigator.geolocation.getCurrentPosition(
+    (pos) => placePoi(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+    (err) => { poiDraft = null; toast(`Standort nicht verfügbar: ${err.message}`); },
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 },
+  );
+}
+async function placePoi(lat, lon, acc = null) {
+  const d = poiDraft;
+  poiDraft = null;
+  if (!d) return;
+  if (d.move) {
+    snapshot();
+    d.move.lat = Math.round(lat * 1e6) / 1e6;
+    d.move.lon = Math.round(lon * 1e6) / 1e6;
+    d.move.t = Date.now();
+    d.move.by = db.deviceName || '';
+    changed();
+    renderPois();
+    return toast(`${poiLabel(d.move)} verschoben`);
+  }
+  const p = newPoi({ cat: d.cat, lat, lon, by: db.deviceName || '' });
+  const r = await poiTextDlg(p, true);
+  if (!r) return;
+  p.name = r.name;
+  p.desc = r.desc;
+  snapshot();
+  P.pois.push(p);
+  map.setView([lat, lon], Math.max(map.getZoom(), 15));
+  changed();
+  renderPois();
+  toast(`${poiLabel(p)} gesetzt${acc ? ` (± ${Math.round(acc)} m)` : ''}`);
+}
+async function editPoi(p) {
+  if (isLocked()) return lockedToast();
+  const r = await poiTextDlg(p, false);
+  if (!r) return;
+  if (r === 'move') {
+    poiDraft = { move: p };
+    closePanels();
+    setTool('poi');
+    return;
+  }
+  if (r === 'delete') {
+    if (!confirm(`„${poiName(p)}“ löschen?`)) return;
+    snapshot();
+    P.pois = P.pois.filter((x) => x !== p);
+  } else if (r === 'cat') {
+    const cat = await pickPoiCat(p.cat);
+    if (!cat) return;
+    snapshot();
+    p.cat = cat;
+  } else {
+    snapshot();
+    p.name = r.name;
+    p.desc = r.desc;
+  }
+  p.t = Date.now();
+  p.by = db.deviceName || '';
+  changed();
+  renderPois();
+}
+$('poi-add').addEventListener('click', addPoi);
 $('meet-remove').addEventListener('click', () => {
   if (!P.meet) return;
   snapshot();
@@ -3899,8 +4084,10 @@ async function importFile(name, buf, shared = false) {
         const n = g.tracks.length + g.waypoints.length;
         if (!n) return toast(`„${name}“: keine Wege oder Punkte gefunden`);
         const ok = await openDlg((box, close) => {
-          dlgHead(box, '📥 Datei übernehmen', `„${name}“ (${countText(g)}) in den Einsatz „${P.title || 'Suchgebiet'}“ übernehmen?`);
-          dlgButton(box, 'In diesen Einsatz', 'primary', () => close(true));
+          dlgHead(box, '📥 Datei übernehmen', isFree()
+            ? `„${name}“ (${countText(g)}) übernehmen? Dafür wird ein neuer Einsatz angelegt.`
+            : `„${name}“ (${countText(g)}) in den Einsatz „${P.title || 'Suchgebiet'}“ übernehmen?`);
+          dlgButton(box, isFree() ? 'Neuer Einsatz' : 'In diesen Einsatz', 'primary', () => close(true));
           dlgButton(box, 'Abbrechen', '', () => close(false));
         });
         if (!ok) return;
@@ -3940,7 +4127,8 @@ window.onSharedFile = async () => {
 
 // GPX (z. B. aus BaseCamp) bzw. KML ins aktuelle Suchgebiet: Tracks/Routen als Umrisse, Wegpunkte als Text
 function importGeo(g, fileName) {
-  if (isLocked()) return lockedToast();
+  if (isClosed()) return lockedToast();
+  if (isFree()) createProject(wizTitle()); // Datei ohne offenen Einsatz: dafür einen neuen anlegen
   const base = fileName.replace(/\.(gpx|kml|xml)$/i, '');
   const added = [];
   for (const t of g.tracks) {
@@ -3987,6 +4175,19 @@ function closePanels() {
   if ($('notepad').hidden) dropOverlay();
 }
 document.querySelectorAll('.panel .close').forEach((b) => b.addEventListener('click', closePanels));
+// Freie Karte: Einsatz-Fenster erst nach „+ Neuer Einsatz“
+for (const btn of ['btn-mission', 'btn-notes', 'btn-grid', 'btn-teams']) {
+  $(btn).addEventListener('click', async (e) => {
+    if (!isFree()) return;
+    e.stopImmediatePropagation();
+    const ok = await openDlg((box, close) => {
+      dlgHead(box, '🗺️ Kein Einsatz offen', 'Raster, Teams, Notizen und Einsatzdaten gehören zu einem Einsatz. Erst einen neuen anlegen – oder unter „📁 Einsätze“ einen bestehenden öffnen.');
+      dlgButton(box, '+ Neuer Einsatz', 'primary', () => close(true));
+      dlgButton(box, 'Abbrechen', '', () => close(false));
+    });
+    if (ok) $('proj-new').click();
+  }, { capture: true });
+}
 // Seitenknopf nochmal antippen, während sein Fenster offen ist: Fenster schließen
 const SIDE_PANELS = {
   'btn-projects': 'panel-projects', 'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',
@@ -5149,7 +5350,6 @@ async function sendMailRow(row, btn) {
 }
 
 // ---------- Suche (Adresse, Feld, Koordinaten) ----------
-let searchPin = null;
 
 function showSearchPin(lat, lon, label) {
   if (searchPin) map.removeLayer(searchPin);

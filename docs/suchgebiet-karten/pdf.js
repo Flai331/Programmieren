@@ -2,6 +2,7 @@
 // Canvas gerendert und als Bild ins PDF gesetzt. Übersicht und Detailblätter
 // nutzen dasselbe Raster, daher stimmt "A1" überall überein.
 
+import { poiCat, poiName, sortPois } from './pois.js';
 import { addReportPages, forceLine, lineLegend, totalLine } from './mission.js';
 import {
   blocks, cellBounds, gridBounds, makeGrid, rangeBounds, rangeLabel, fitBox,
@@ -333,6 +334,14 @@ function infoPage(doc, project, grid, W, H, top) {
     row('B-Ort:', project.meet.text || 'B-Ort');
     row('Koordinaten:', coordText(project.meet.lat, project.meet.lon, project.showUtm));
   }
+  const pois = sortPois(project.pois || []);
+  if (pois.length) {
+    row('Lage-Orte:', pois.map((p) => {
+      const c = poiCat(p.cat);
+      const head = p.name && p.name !== c.label ? `${c.label}: ${p.name}` : c.label;
+      return `${head}${p.desc ? ` – ${p.desc}` : ''} (${coordText(p.lat, p.lon, project.showUtm)})`;
+    }).join('\n'));
+  }
   if (grid) {
     row('Raster:', `${grid.cols} × ${grid.rows} Felder à ${formatMeters(grid.cellM)}, A1 bis ${rangeLabel(grid.cols - 1, grid.rows - 1, grid.cols - 1, grid.rows - 1)}`);
     row('A1 (NW-Ecke):', coordText(grid.originLat, grid.originLon, project.showUtm));
@@ -412,6 +421,7 @@ export function renderState(project, grid) {
     statusLabels: label(project.status),
     items: project.items,
     meet: project.meet,
+    pois: project.pois || [],
     teamNames: Object.fromEntries(project.marks.filter((m) => m.kind === 'team').map((m) => [m.id, m.label])),
   };
 }
@@ -470,6 +480,10 @@ export function contentBounds(state, aspect, mmW, pad = 0.06) {
       if (text) labels.push([it.pts[0][0], it.pts[0][1], text]);
     }
   }
+  for (const p of state.pois || []) {
+    pts.push([p.lat, p.lon]);
+    labels.push([p.lat, p.lon, poiName(p)]);
+  }
   const m = state.meet;
   if (m) {
     pts.push([m.lat, m.lon]);
@@ -501,7 +515,7 @@ export function contentBounds(state, aspect, mmW, pad = 0.06) {
 
 // Ausschnitt b so erweitern, dass auch alle Zeichnungen, Texte und der B-Ort drauf sind
 export function withItems(b, state) {
-  const ib = contentBounds({ items: state.items, meet: state.meet });
+  const ib = contentBounds({ items: state.items, meet: state.meet, pois: state.pois });
   if (!ib) return b;
   return {
     north: Math.max(b.north, ib.north), south: Math.min(b.south, ib.south),

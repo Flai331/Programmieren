@@ -4,6 +4,7 @@
 import { newMission, normalizeMission } from './mission.js';
 import { normalizeContact } from './contacts.js';
 import { rangeLabel } from './grid.js';
+import { normalizePois } from './pois.js';
 
 export const TEAM_COLORS = ['#d50000', '#1565c0', '#ef6c00', '#6a1b9a', '#00838f', '#ad1457', '#4e342e', '#558b2f'];
 
@@ -72,6 +73,7 @@ export function normalizeProject(p) {
   out.lead = { ...base.lead, ...(out.lead && typeof out.lead === 'object' ? out.lead : {}) };
   if (!out.lead.name && out.leader) out.lead.name = out.leader;
   for (const k of ['radio', 'contacts', 'pois']) if (!Array.isArray(out[k])) out[k] = [];
+  out.pois = normalizePois(out.pois);
   out.contacts = out.contacts.map(normalizeContact);
   if (!out.eid) out.eid = out.id;
   // v61: „Treffpunkt“ heißt jetzt „B-Ort“

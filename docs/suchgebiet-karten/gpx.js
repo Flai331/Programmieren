@@ -1,6 +1,7 @@
 // GPX-Export für Garmin-Geräte und BaseCamp: Tracks, Team-Bereiche, Raster, Wegpunkte.
 // Farben über die Garmin-Erweiterung (gpxx:DisplayColor), die BaseCamp und die Geräte anzeigen.
 
+import { poiCat, poiName } from './pois.js';
 import { cellLabel, gridBounds } from './grid.js';
 import { markLabel, mapFor, cellsText } from './store.js';
 import { CAP, textPath } from './font.js';
@@ -290,6 +291,10 @@ export function buildGpx(project, grid, opts, part = '') {
 
   if (opts.points) {
     if (project.meet) wpts += wpt(project.meet.lat, project.meet.lon, project.meet.text || 'B-Ort', 'Flag, Blue', 'B-Ort');
+    for (const p of project.pois || []) {
+      const c = poiCat(p.cat);
+      wpts += wpt(p.lat, p.lon, poiName(p), c.gpx, [c.label, p.desc].filter(Boolean).join(' – '));
+    }
     for (const it of project.items) {
       if (it.kind === 'text') wpts += wpt(it.lat, it.lon, it.text, 'Pin, Red');
     }
