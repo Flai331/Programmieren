@@ -69,3 +69,28 @@ test('Quadrate: Schlüssel, Grenzen, Schätzung über mehrere Quadrate', async (
   assert.equal(areasOf({ bounds: u }).length, 1);
   assert.equal(nativeJob({ id: 'a', bounds: u, areas, zMin: 15, zMax: 18 }, [dop]).areas.length, 2);
 });
+
+test('missionBounds: alles vom Einsatz mit Rand, null ohne Inhalt', async () => {
+  const { missionBounds } = await import('../web/offline.js');
+  assert.equal(missionBounds({ items: [], pois: [] }), null);
+  const p = {
+    area: { north: 52.2, south: 52.19, west: 8.19, east: 8.2 },
+    otherGrids: [], items: [{ kind: 'track', pts: [[52.21, 8.18], [52.205, 8.185]] }, { kind: 'text', lat: 52.18, lon: 8.21 }],
+    meet: { lat: 52.185, lon: 8.205 }, pois: [{ lat: 52.215, lon: 8.2 }],
+  };
+  const m = missionBounds(p, 0);
+  assert.deepEqual(m, { north: 52.215, south: 52.18, west: 8.18, east: 8.21 });
+  const r = missionBounds(p, 500);
+  assert.ok(Math.abs(r.north - 52.215 - 0.00449) < 0.0001);
+  assert.ok(r.west < 8.18 - 0.007);
+});
+
+test('packageZooms: so scharf wie das Budget erlaubt', async () => {
+  const { packageZooms } = await import('../web/offline.js');
+  const big = packageZooms([topo], b, { budgetMB: 1e6 });
+  assert.equal(big.zMax, Math.min(17, topo.maxNative || 18));
+  const small = packageZooms([topo], b, { budgetMB: 0.001 });
+  assert.equal(small.zMax, 14);
+  const mid = packageZooms([topo], b, { budgetMB: estimate([topo], b, 12, 15).mb + 0.01 });
+  assert.equal(mid.zMax, 15);
+});

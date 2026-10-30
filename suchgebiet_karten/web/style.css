@@ -531,6 +531,7 @@ html.night.red .hfbar, html.night.red .hfinfo { filter: invert(1) grayscale(1) s
 .dlg-btns { display: flex; flex-direction: column; gap: 6px; }
 .dlg-btns button small { display: block; font-size: 12px; color: #555; font-weight: 400; }
 #dlg-box > button small { display: block; font-size: 12px; font-weight: 400; opacity: .85; }
+#dlg-box > p.small { white-space: pre-line; }
 .wm-box input[type=password], .wm-box input[type=text], .wm-box textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #bbb; border-radius: 8px; font-size: 16px; }
 .wm-box input.pin { font-size: 26px; letter-spacing: 8px; text-align: center; }
 

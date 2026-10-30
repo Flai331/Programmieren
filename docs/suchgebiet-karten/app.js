@@ -21,7 +21,7 @@ import {
 import { buildCustomMap, planCustomMap } from './kmz.js';
 import {
   STATES, estimate, downloadRegion, deleteRegion, storageInfo, persistStorage, setHasOffline, cachedTileUrl, maxZoom, nativeJob,
-  SQ_LAT, SQ_LON, squareKey, squareBounds, unionBounds,
+  SQ_LAT, SQ_LON, squareKey, squareBounds, unionBounds, missionBounds, packageZooms,
 } from './offline.js';
 import {
   FIELDS as CT_FIELDS, normalizeContact, sortContacts, matches as ctMatches, telHref, toVcf, parseContacts, mergeContacts,
@@ -46,7 +46,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v84';
+const APP_VERSION = 'v85';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -1840,6 +1840,51 @@ $('off-start').addEventListener('click', () => {
   runOffline(r);
 });
 $('off-redraw').addEventListener('click', () => { closePanels(); setTool('offrect'); });
+
+// 📦 Offline-Paket: ein Tipp lädt Karte (aktuelle Kartenart, so scharf wie der Speicher erlaubt) fürs ganze
+// Einsatzgebiet und speichert das Wetter – vor der Anfahrt ins Funkloch. Rettungspunkte sind ohnehin offline.
+async function offlinePackage() {
+  const b = missionBounds(P);
+  if (!b) return toast('Noch kein Einsatzgebiet – erst Raster, Umriss, B-Ort oder Lage-Ort anlegen');
+  if (offJob) return toast('Es lädt bereits eine Offline-Karte – bitte warten.');
+  const def = layerById(P.layerId);
+  const layerIds = def.aerial ? [def.id, ...OVERLAYS.map((o) => o.id)] : [def.id];
+  const defs = layerIds.map(offDef).filter(Boolean);
+  const s = await offStorage();
+  const budget = Math.min(400, s && s.freeMB ? s.freeMB * 0.5 : 400);
+  const z = packageZooms(defs, b, { budgetMB: budget });
+  const km = (distance(b.north, b.west, b.north, b.east) / 1000) * (distance(b.north, b.west, b.south, b.west) / 1000);
+  const rp = rescuePts.filter((q) => q.lat <= b.north && q.lat >= b.south && q.lon >= b.west && q.lon <= b.east).length;
+  const short = def.name.replace(/ \(.*/, '');
+  const go = await openDlg((box, close) => {
+    dlgHead(box, `📦 Offline-Paket „${P.title || 'Einsatz'}“`, [
+      `🗺️ Karte „${short}“ für das Einsatzgebiet mit 500 m Rand (≈ ${km.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km²), Stufe ${z.zMin}–${z.zMax} (${ZOOMS[z.zMax] || ''})`,
+      `≈ ${fmtMB(z.mb)} · Dauer ${fmtMin(z.minutes)} (je nach Netz)`,
+      '🌦️ Wetter wird gespeichert',
+      rp ? `🚑 ${rp} Rettungspunkt${rp === 1 ? '' : 'e'} im Gebiet – schon offline` : rescuePts.length ? '🚑 Keine Rettungspunkte im Gebiet' : '🚑 Noch keine Rettungspunkte importiert (Karte → Rettungspunkte)',
+      'Andere Kartenart? Vorher unter „Karte“ umstellen.',
+    ].join('\n'));
+    dlgButton(box, '📦 Jetzt laden', 'primary', () => close(true));
+    dlgButton(box, 'Abbrechen', '', () => close(false));
+  });
+  if (!go) return;
+  const r = {
+    id: uid(), name: `📦 ${P.title || 'Einsatz'} – ${short}, Stufe ${z.zMin}–${z.zMax}`, eid: P.eid,
+    bounds: b, layerIds, zMin: z.zMin, zMax: z.zMax, done: 0, total: 0, failed: 0, finished: false,
+  };
+  db.offline.push(r);
+  saveNow();
+  closePanels();
+  runOffline(r);
+  try {
+    const pt = wxPoint();
+    db.wxLast = await fetchWeather(pt.lat, pt.lon);
+    saveNow();
+    renderWx();
+  } catch { /* ohne Netz: Wetter bleibt beim letzten Stand */ }
+}
+$('layers-package').addEventListener('click', offlinePackage);
+$('hfm-package').addEventListener('click', offlinePackage);
 // So sieht die gewählte Stufe aus: Karte dieser Art in genau dieser Zoomstufe zeigen
 $('off-preview').addEventListener('click', () => {
   const z = Number($('off-zmax').value);
