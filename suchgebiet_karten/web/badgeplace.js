@@ -37,11 +37,12 @@ export function placeBadges(list, obstacles, view, ui = []) {
   return list.map((b, i) => {
     const a = b.area;
     let best = null;
+    const seen = overlap(a, screen) > 0;
     candidates(a, b.w, b.h).forEach(([x, y], k) => {
       // Nie in den Bildschirm schieben: die Plakette bleibt am Gebiet (liegt das Gebiet außerhalb, dann auch sie).
       // Ist das Gebiet teils sichtbar, wird eine Seite bevorzugt, auf der die Plakette im Bild liegt.
       const r = boxOf(x, y, b.w, b.h);
-      let score = k * 0.5 + (b.w * b.h - overlap(r, screen)) * 0.3;
+      let score = k * 0.5 + (b.w * b.h - overlap(r, screen)) * (seen ? 25 : 0.3); // sichtbares Gebiet: Plakette im Bild
       score += overlap(r, a) * 3; // eigenes Gebiet nur, wenn es nicht anders geht
       for (const p of placed) score += overlap(r, p) * 20;
       for (const o of obstacles) score += overlap(r, o) * 8;

@@ -1,13 +1,14 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v103**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v104**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v104 – 📋 Handy: Auftrags-Stand als eigener Reiter**: Auf dem Handy stehen keine Plaketten mehr an den Gebieten. Neben „📣 Teams“ klappt „📋 Aufträge“ eine Liste auf (Team · Gebiet, letzter Status, Stand %); Antippen zeigt das Gebiet. Teams- und Aufträge-Liste schließen sich gegenseitig, Tipp auf die Karte schließt. Tablet: Plaketten bleiben am Gebiet und jetzt sicher im Bild (nicht mehr hinter Knöpfen/außerhalb).
 - [~] **v103 – 🔄 APK-Selbst-Update · 👆 Tippen schließt · 📍 Texte ändern/löschen · Plaketten nur am Gebiet**:
   - APK prüft beim Start (und unter ☰ Mehr → „Nach Update suchen“) auf eine neue Version, lädt sie und startet die Installation – nie mitten in einem offenen Einsatz ohne Rückfrage. Gilt ab der nächsten APK, v103 einmal von Hand installieren.
   - Tipp auf leere Karte schließt offene Fenster/Leisten (ohne dabei zu zeichnen); Tipp auf den dunklen Hintergrund schließt Dialoge (nicht bei Eingaben/wichtigen Rückfragen).
