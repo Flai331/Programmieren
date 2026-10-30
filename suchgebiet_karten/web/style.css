@@ -570,7 +570,7 @@ body.hf .el-only { display: none !important; }
 /* Abgeschlossener Einsatz: nur ansehen (Ändern erst nach „Wieder öffnen“) */
 .closed-bar { background: #e8f5e9; color: #1b5e20; border-color: #81c784; }
 .closed-bar.free-bar { background: #e3f2fd; color: #0d47a1; border-color: #64b5f6; }
-body.closed .toolbar, body.closed .bottomstack { display: none !important; }
+body.closed .toolbar, body.closed .bottomstack > :not(#gpxselbar) { display: none !important; }
 body.closed :is(#panel-mission, #panel-grid, #panel-teams, #panel-notes, #panel-send, #panel-wizard, #pc-list)
   :is(input, textarea, select, button):not(.keep):not(.close):not([data-tab]):not(.send),
 body.closed :is(#pc-add, #pc-new) { pointer-events: none; opacity: 0.45; }

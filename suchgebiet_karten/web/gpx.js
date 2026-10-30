@@ -376,6 +376,10 @@ export function buildGpx(project, grid, opts, part = '') {
     }
   }
 
+  return gpxDoc(docName, wpts, trks);
+}
+
+function gpxDoc(docName, wpts, trks) {
   return '<?xml version="1.0" encoding="UTF-8"?>\n'
     + '<gpx version="1.1" creator="Suchgebiet-Karten" xmlns="http://www.topografix.com/GPX/1/1"'
     + ' xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3"'
@@ -384,6 +388,45 @@ export function buildGpx(project, grid, opts, part = '') {
     + ' http://www.garmin.com/xmlschemas/GpxExtensions/v3 http://www8.garmin.com/xmlschemas/GpxExtensionsv3.xsd">\n'
     + ` <metadata>\n  <name>${esc(docName)}</name>\n  <time>${new Date().toISOString()}</time>\n </metadata>\n`
     + wpts + trks + '</gpx>\n';
+}
+
+// Punkt [lat, lon] in einem geschlossenen Umriss? (Strahlverfahren, für kleine Gebiete genau genug)
+export function pointInPolygon([lat, lon], poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [ai, bi] = poly[i];
+    const [aj, bj] = poly[j];
+    if ((bi > lon) !== (bj > lon) && lat < ((aj - ai) * (lon - bi)) / (bj - bi) + ai) inside = !inside;
+  }
+  return inside;
+}
+
+// Ausgewählte Dinge als eine GPX-Datei (z. B. für die Garmin-App an das Handgerät).
+// sel: { items: Umrisse/Striche/Texte, pois, meet, areas: [{ name, color, loops: [[lat, lon] …] }],
+//        lines: [{ name, color, pts }] } – Felder und Rasterlinien kommen schon als Koordinaten
+export function selectionGpx(sel, docName) {
+  let wpts = '';
+  let trks = '';
+  if (sel.meet) wpts += wpt(sel.meet.lat, sel.meet.lon, sel.meet.text || 'B-Ort', 'Flag, Blue', 'B-Ort');
+  for (const p of sel.pois || []) {
+    const c = poiCat(p.cat);
+    wpts += wpt(p.lat, p.lon, poiName(p), c.gpx, [c.label, p.desc].filter(Boolean).join(' – '));
+  }
+  let n = 0;
+  for (const it of sel.items || []) {
+    if (it.kind === 'text') wpts += wpt(it.lat, it.lon, it.text, 'Pin, Red');
+    else if (it.kind === 'track') trks += trk(it.name || 'Umriss', it.color, [hasArea(it) ? [...it.pts, it.pts[0]] : it.pts], [it.note, trackDesc(it.pts, it.open)].filter(Boolean).join(' · '));
+    else if (it.kind === 'stroke' && it.pts && it.pts.length > 1) {
+      n++;
+      const color = COLOR_DE[garminColor(it.color)] || '';
+      trks += trk(it.name || `Stift ${n}${color ? ` (${color})` : ''}`, it.color, [it.pts], formatLength(trackLength(it.pts)));
+    }
+  }
+  for (const a of sel.areas || []) {
+    a.loops.forEach((loop, i) => { trks += trk(i ? `${a.name} (Innenrand)` : a.name, a.color, [loop]); });
+  }
+  for (const l of sel.lines || []) trks += trk(l.name, l.color, [l.pts], l.desc || '');
+  return gpxDoc(docName, wpts, trks);
 }
 
 // ---------- Import (z. B. aus BaseCamp) ----------
