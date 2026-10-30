@@ -63,7 +63,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v109';
+const APP_VERSION = 'v110';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -578,6 +578,16 @@ const HINTS = {
 };
 
 let hintTimer = null;
+// v110: wer eine Markierung zum Malen auswählt, will sie sehen – ausgeblendete Markierung (bzw. Raster) wieder einblenden
+function showForPaint(m) {
+  const back = [];
+  if (m && m.hidden) { delete m.hidden; back.push(`„${m.label || 'Markierung'}“`); }
+  if (P.hide && P.hide.grid && tool === 'fill') { P.hide = { ...P.hide, grid: false }; back.push('Raster'); }
+  if (!back.length) return;
+  updateQuick();
+  changed();
+  toast(`${back.join(' und ')} wieder eingeblendet`);
+}
 function setTool(t) {
   endVertex();
   // Einzeichnen nur in einem offenen Einsatz (Offline-Bereich wählen u. Ä. geht immer)
@@ -596,6 +606,7 @@ function setTool(t) {
     t = 'pan';
   }
   tool = t;
+  if (t === 'fill') showForPaint(activeMark());
   document.querySelectorAll('.toolbar [data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === t));
   canvas.classList.toggle('active', t !== 'pan');
   $('palette').hidden = !['pen', 'text', 'fill', 'track'].includes(t);
@@ -1354,7 +1365,7 @@ function renderPalette() {
     b.querySelector('i').style.background = m.color;
     b.querySelector('span').textContent = m === NO_TEAM_MARK ? 'ohne Team' : m.label || '(ohne Namen)';
     b.classList.toggle('active', act && act.id === m.id);
-    b.addEventListener('click', () => { db.activeMark = m.id; renderPalette(); save(); });
+    b.addEventListener('click', () => { db.activeMark = m.id; showForPaint(m); renderPalette(); save(); });
     box.appendChild(b);
   }
   const add = document.createElement('button');
@@ -1833,7 +1844,7 @@ fillBtn.addEventListener('click', (e) => {
 function markDialog() {
   let edit = null; // Markierung, die gerade geändert wird
   return openDlg((box, close) => {
-    const pick = (m) => { db.activeMark = m.id; renderPalette(); save(); close(true); setTool('fill'); };
+    const pick = (m) => { db.activeMark = m.id; renderPalette(); save(); close(true); setTool('fill'); showForPaint(m); };
     const render = () => {
       box.innerHTML = '';
       if (edit) {
