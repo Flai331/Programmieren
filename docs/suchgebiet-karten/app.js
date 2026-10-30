@@ -46,7 +46,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v85';
+const APP_VERSION = 'v86';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -2926,6 +2926,7 @@ async function takeAssignment(a) {
   let p = known;
   if (!p) {
     p = projectFromAssignment(a);
+    if (devLayer()) p.layerId = devLayer();
     db.projects[p.id] = p;
     if (p.hfRescue.length) {
       rescuePts = mergeRescue(rescuePts, p.hfRescue);
@@ -3134,6 +3135,7 @@ async function takeHandover(e) {
   // leeres Start-Suchgebiet eines frischen Geräts nicht stehen lassen
   const empty = P && !P.area && !P.items.length && !(P.otherGrids || []).length && !P.title && P.id !== p.id;
   if (empty) delete db.projects[P.id];
+  if (devLayer()) p.layerId = devLayer();
   p.updated = Date.now();
   db.projects[p.id] = p;
   switchProject(p.id);
@@ -3205,7 +3207,23 @@ async function takeInfos(inf) {
 // Name dieses Geräts (z. B. „ELW 11-1“, „Tablet EL“) – wird beim Übernehmen eines Einsatzes abgefragt
 function renderDeviceName() {
   $('dev-name').textContent = db.deviceName || '–';
+  const sel = $('dev-layer');
+  if (!sel.options.length) {
+    sel.add(new Option('wie zuletzt benutzt', ''));
+    for (const l of LAYERS) sel.add(new Option(l.name, l.id));
+  }
+  sel.value = devLayer() || '';
 }
+// Standard-Kartenart dieses Geräts (oder null): gilt für neue, übernommene und geladene Einsätze
+function devLayer() {
+  return db.defaultLayer && LAYERS.some((l) => l.id === db.defaultLayer) ? db.defaultLayer : null;
+}
+$('dev-layer').addEventListener('change', () => {
+  db.defaultLayer = $('dev-layer').value || null;
+  if (db.defaultLayer) setLayer(db.defaultLayer);
+  saveNow();
+  toast(db.defaultLayer ? `Standard-Kartenart: ${layerById(db.defaultLayer).name.replace(/ \(.*/, '')} – gilt ab jetzt für neue und übernommene Einsätze` : 'Keine Standard-Kartenart – neue Einsätze nehmen die zuletzt benutzte');
+});
 async function askDeviceName(joined) {
   const name = await openDlg((box, close) => {
     dlgHead(box, '📛 Name dieses Geräts', joined
@@ -3795,7 +3813,7 @@ function createProject(title) {
     return P;
   }
   const p = newProject(title);
-  p.layerId = P.layerId;
+  p.layerId = devLayer() || P.layerId;
   p.cellM = P.cellM;
   const c = map.getCenter();
   p.view = { lat: c.lat, lon: c.lng, z: map.getZoom() };
@@ -4298,6 +4316,7 @@ async function importFile(name, buf, shared = false) {
     if (/\.xml$/i.test(name) || /^\s*<\?xml/i.test(head)) throw new Error('XML-Datei ist weder GPX noch KML');
     // JSON-Dateien sind UTF-8, PDFs werden nur nach dem eingebetteten Block durchsucht
     const p = importProject(text.trimStart().startsWith('{') ? new TextDecoder().decode(buf) : text);
+    if (devLayer()) p.layerId = devLayer();
     p.updated = Date.now();
     db.projects[p.id] = p;
     switchProject(p.id);
@@ -5533,7 +5552,7 @@ function freeMap() {
   if (blank) {
     const c = map.getCenter();
     blank.view = { lat: c.lat, lon: c.lng, z: map.getZoom() };
-    blank.layerId = P.layerId;
+    blank.layerId = devLayer() || P.layerId;
     switchProject(blank.id);
     renderProjects();
   } else createProject('');
