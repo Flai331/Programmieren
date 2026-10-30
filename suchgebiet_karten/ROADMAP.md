@@ -1,13 +1,14 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v97** (v98 gebaut, noch nicht ausgeliefert). Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v97** (v98 und v99 gebaut, noch nicht ausgeliefert). Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v99 – 📤 Teilen: erst „An wen?“, dann „Was?“, dann „Wie?“** (nur Einsatzleitung, Plan: `PLAN-v99-teilen-an-wen.md`): Empfänger zuerst wählen – Hundeführer/Team (Teamauswahl, Felder und Umrisse des Teams vorausgewählt, QR-Code = Auftrag, alle Wege), Unterabschnitt (Gebiet wählen, nur QR-Code = UA), EL/ELW (ganzer Einsatz, nur QR-Code), Sonstige (alle Wege außer QR). Zwischendialog „QR-Code für …“ entfällt. Zuletzt gewählter Empfänger wird pro Gerät gemerkt. Wartet auf Klaas' Test.
 - [~] **v98 – 📣 Team-Stati auf der Karte, Status-Verlauf** (nur Einsatzleitung, Plan: `PLAN-v98-status-reiter.md`): Chips je Team mit laufendem Auftrag (Team, Hund, Gebiet, letzter Status mit Uhrzeit; Fund/Hilfe rot; weg nach QR-Rückmeldung, wieder da bei neuerer Meldung). Tablet: Chips in der Kopfleiste, Suchfeld als 🔍 eingeklappt, „+n“ bei Platzmangel; Handy: Knopf „📣 Teams“ mit aufklappbarer Liste. Chip antippen: Karte springt aufs Gebiet, Infofenster mit den letzten 3 Meldungen. Neue Meldungen ohne Toast: Chip blinkt, ungelesen-Liste bei mehreren, Tipp irgendwohin = gelesen; Erinnerung nach 5 min (Banner) und 7 min (Piepton, dann alle 2 min); 💤 Schlummern (Minuten frei oder 5/10/15/30, pro Gerät; Fund/Hilfe nie betroffen). Neue Kachel „📣 Status“ mit Verlauf, Filter, Sprung zur Karte, Löschen mit Warnung und Zahl ungelesener.
 - [x] **v97 – 📣 Status-Fenster neu sortiert**: erstes Fenster nur Suchstand ohne Standort (🅿️ Parkplatz Auto, ▶️ Suche begonnen, ⏹ Suche beendet, ⏸ Pause, 📊 Stand / fertig, 🏁 Zurück am B-Ort); „Suche begonnen/beendet“ bei mehreren Gebieten mit Auswahl (eins, mehrere, alle); Hund zeigt an, Person gefunden, Brauche Hilfe unter „📍 Standort melden“ (mit Standort). EL-Karte: Prozent des Stands direkt am jeweiligen Umriss/Raster.
 - [x] **v95 – 📲 Auftrag erst bei Übernahme · 🔒 Schutz übernommener Aufträge · 🗑 Meldungen löschen**: Ein Auftrag gilt erst als vergeben, wenn das Team ihn übernommen hat (automatische Quittung „📲 Auftrag übernommen“ vom Hundeführer-Handy, oder erste Meldung/QR-Rückmeldung, oder manuell „✓ Team hat übernommen“; nicht übernommene Aufträge stehen grau „wartet auf Übernahme“ und lassen sich verwerfen). Felder und Zeichnungen übernommener Aufträge ändern/löschen in der EL nur nach Warnung mit „Ändern freigeben“ (5 Minuten). Status-/Standort-Meldungen auf der EL-Karte antippen → löschen nach Warnung (Löschvermerke gehen mit dem Fortschritt an andere EL-Geräte). Fehler behoben: „☰ Menü“ im Hundeführer-Modus schließt beim zweiten Tipp (Plan: `PLAN-v95-auftrag-uebernommen.md`).

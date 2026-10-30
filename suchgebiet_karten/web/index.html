@@ -274,21 +274,31 @@
   </section>
 
 
-  <!-- Weitergeben: erst „Was?“, dann „Wie?“ -->
+  <!-- Teilen: 1. An wen? 2. Was? 3. Wie? -->
   <section id="panel-share" class="panel" hidden>
-    <h2>📤 Weitergeben</h2>
-    <h2 class="sub first">1. Was?</h2>
-    <div class="share-grid" id="share-scopes">
-      <button data-scope="all"><span>🗂️</span><b>Ganzer Einsatz</b><small>alle Daten</small></button>
-      <button data-scope="team"><span>👥</span><b>Für ein Team</b><small>seine Felder und Umrisse</small></button>
-      <button data-scope="area"><span>🗺️</span><b>Ein Gebiet</b><small>Raster oder Umriss antippen</small></button>
-      <button data-scope="pick"><span>🎯</span><b>Eigene Auswahl</b><small>einzeln antippen</small></button>
+    <h2>📤 Teilen</h2>
+    <h2 class="sub first">1. An wen?</h2>
+    <div class="share-grid" id="share-to">
+      <button data-to="team"><span>🐕</span><b>Hundeführer / Team</b><small>Auftrag fürs Handy</small></button>
+      <button data-to="ua"><span>🚐</span><b>Unterabschnitt (UA)</b><small>ein Gebiet bearbeiten</small></button>
+      <button data-to="el"><span>🚐</span><b>EL / ELW</b><small>ganzer Einsatz</small></button>
+      <button data-to="other"><span>👥</span><b>Sonstige</b><small>ohne App: Polizei, Druck, Garmin …</small></button>
     </div>
     <select id="share-team" hidden></select>
-    <p id="share-summary" class="info"></p>
-    <div class="row"><button id="share-edit" class="keep">✏️ Auswahl auf der Karte ändern</button></div>
+    <p id="share-tohint" class="small"></p>
+    <div id="share-what" hidden>
+      <h2 class="sub">2. Was?</h2>
+      <div class="share-grid" id="share-scopes">
+        <button data-scope="all"><span>🗂️</span><b>Ganzer Einsatz</b><small>alle Daten</small></button>
+        <button data-scope="area"><span>🗺️</span><b>Ein Gebiet</b><small>Raster oder Umriss antippen</small></button>
+        <button data-scope="pick"><span>🎯</span><b>Eigene Auswahl</b><small>einzeln antippen</small></button>
+      </div>
+      <p id="share-summary" class="info"></p>
+      <div class="row"><button id="share-edit" class="keep">✏️ Auswahl auf der Karte ändern</button></div>
+    </div>
+    <div id="share-how" hidden>
+    <h2 class="sub">3. Wie?</h2>
     <label class="check"><input type="checkbox" id="share-gridlines" class="keep" checked> Rasterlinien und Feldnamen ins GPX</label>
-    <h2 class="sub">2. Wie?</h2>
     <div class="share-grid share-ways">
       <button id="share-qr" class="keep"><span>📲</span><b>QR-Code</b><small>an ein Gerät mit dieser App</small></button>
       <button id="share-garmin" class="keep"><span>🧭</span><b>Garmin-App</b><small>GPX → Handgerät</small></button>
@@ -296,6 +306,7 @@
       <button id="share-save" class="keep"><span>💾</span><b>Speichern</b><small>GPX-Datei</small></button>
       <button id="share-pdf" class="keep"><span>🖨️</span><b>PDF</b><small>Karte</small></button>
       <button id="share-file" class="keep"><span>🗂️</span><b>Einsatz-Datei</b><small>alles inkl. Fotos</small></button>
+    </div>
     </div>
     <p id="share-msg" class="info"></p>
     <h2 class="sub">📍 Lage-Infos abgleichen</h2>
