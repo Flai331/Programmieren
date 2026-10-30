@@ -255,8 +255,9 @@ test('Suche begonnen/beendet für ausgewählte Gebiete', async () => {
 
 test('Suchstand ohne Standort, Markierungen mit', async () => {
   const { NO_POS } = await import('../web/status.js');
-  for (const c of ['da', 'start', 'ende', 'pause', 'fertig', 'zurueck']) assert.ok(NO_POS.includes(c), c);
+  for (const c of ['start', 'ende', 'pause', 'fertig', 'zurueck']) assert.ok(NO_POS.includes(c), c);
   assert.ok(!NO_POS.includes('ort'));
+  assert.ok(!NO_POS.includes('da')); // Parkplatz geht mit Standort
   const { STATUS_LIST, SPOT_LIST, isUrgent } = await import('../web/status.js');
   assert.deepEqual(STATUS_LIST.map((s) => s.code), ['da', 'start', 'ende', 'pause', 'fertig', 'zurueck']);
   assert.deepEqual(SPOT_LIST.slice(0, 3).map((s) => s.code), ['anzeige', 'fund', 'hilfe']);

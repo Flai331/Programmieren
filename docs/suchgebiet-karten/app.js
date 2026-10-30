@@ -57,7 +57,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v99';
+const APP_VERSION = 'v100';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -841,7 +841,7 @@ function finishPointer(e, cancelled) {
       setTool('pan');
       const sp = pendingSpot;
       pendingSpot = null;
-      if (sp) sendStatus({ s: 'ort', cat: sp.cat, txt: sp.txt, pos: { lat: ll.lat, lon: ll.lng } });
+      if (sp) sendStatus({ s: sp.s || 'ort', cat: sp.cat, txt: sp.txt, pos: { lat: ll.lat, lon: ll.lng } });
     }
   } else if (tool === 'windpt') {
     if (!cancelled && !panning) {
@@ -3533,6 +3533,7 @@ async function openStatusDialog() {
   if (!code) return;
   if (code === 'ort') return spotDialog();
   if (code === 'fertig') return doneDialog();
+  if (code === 'da') return parkDialog();
   if (isUrgent({ s: code }) && !(await confirmSend(statusLabel(code)))) return;
   // Suche begonnen/beendet: bei mehreren Gebieten wählen, für welche (eins, mehrere oder alle)
   let gb;
@@ -3589,6 +3590,22 @@ async function spotDialog() {
     return toast('Auf die Karte tippen: dort wird der Standort gemeldet', 6000);
   }
   sendStatus({ s: 'ort', cat: r.cat, txt: r.txt });
+}
+// 🅿️ Parkplatz Auto: geht mit Ort – eigener Standort oder auf der Karte angetippt
+async function parkDialog() {
+  const here = await openDlg((box, close) => {
+    dlgHead(box, '🅿️ Parkplatz Auto', 'Wo steht das Auto? Der Ort geht mit der Meldung an die Einsatzleitung.');
+    dlgButton(box, '📍 Mein Standort (hier)', 'primary', () => close(true));
+    dlgButton(box, '👆 Auf der Karte setzen', '', () => close(false));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (here == null) return;
+  if (!here) {
+    pendingSpot = { s: 'da' };
+    setTool('hfspotpt');
+    return toast('Auf die Karte tippen: dort steht das Auto', 6000);
+  }
+  sendStatus({ s: 'da' });
 }
 // Gebiete des Auftrags (Hundeführer): Rastergebiete und geschlossene Umrisse der Einsatzleitung
 function hfAreas() {

@@ -23,8 +23,8 @@ export const SPOT_LIST = [
   { code: 'sonst', ico: '📌', label: 'Sonstiges' },
 ];
 export const URGENT = ['fund', 'hilfe'];
-// Suchstand-Meldungen gehen ohne Standort; nur Markierungen („📍 Standort melden“) mit
-export const NO_POS = ['da', 'start', 'ende', 'pause', 'fertig', 'zurueck', 'ok'];
+// Suchstand-Meldungen gehen ohne Standort; nur Markierungen („📍 Standort melden“) und der Parkplatz mit
+export const NO_POS = ['start', 'ende', 'pause', 'fertig', 'zurueck', 'ok'];
 
 const find = (list, code) => list.find((x) => x.code === code);
 // ältere Meldungen, die es als Taste nicht mehr gibt
