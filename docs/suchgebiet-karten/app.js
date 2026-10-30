@@ -13,7 +13,7 @@ import { buildReport, describeTarget, makeDedup, makeLog } from './report.js';
 import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
 import { fileName } from './files.js';
 import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './infos.js';
-import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject } from './scope.js';
+import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids } from './scope.js';
 import { MSG_VIEW, MSG_DELETE, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock } from './locks.js';
 import { buildProgress, mergeProgress, progressSummary, progressPreview, progressTarget, snapshotBase, stampChanges, setPeer, peerOf } from './progress.js';
 import {
@@ -52,7 +52,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v91';
+const APP_VERSION = 'v92';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -2866,6 +2866,14 @@ function renderSend() {
   const ichecked = was(ib);
   ib.innerHTML = '';
   const seen = new Set();
+  // vorausgewählt: die dem Team zugeteilten Umrisse (ohne Team: die nicht zugeteilten geschlossenen)
+  // und Texte/Zeichnungen, die darin oder in den Feldern des Teams liegen
+  const team = $('send-team').value;
+  const pre = new Set(P.items.filter((it) => it.kind === 'track' && (team ? it.to === team : !it.to && !it.open)));
+  for (const it of itemsWithin(P, pre, team ? (g, k) => g.fills[k] === team : null)) pre.add(it);
+  // angehakte Raster: alles darin
+  const gids = [...$('send-grids').querySelectorAll('input:checked')].map((x) => x.value);
+  for (const it of itemsInGrids(P, gids, team)) pre.add(it);
   P.items.forEach((it, i) => {
     if (it.resultKey) return; // Rückmeldungen der Hundeführer nicht zurückschicken
     const label = it.kind === 'text' ? `Text: ${it.text}` : it.name || (it.kind === 'track' ? 'Umriss' : 'Zeichnung');
@@ -2875,9 +2883,7 @@ function renderSend() {
     l.className = 'check';
     l.innerHTML = '<input type="checkbox"><span></span>';
     l.firstChild.value = String(i);
-    // vorausgewählt: die dem Team zugeteilten Umrisse (ohne Team: die nicht zugeteilten geschlossenen)
-    const team = $('send-team').value;
-    l.firstChild.checked = String(i) in ichecked ? ichecked[String(i)] : (it.kind === 'track' && (team ? it.to === team : !it.to && !it.open));
+    l.firstChild.checked = String(i) in ichecked ? ichecked[String(i)] : pre.has(it);
     l.lastChild.textContent = label;
     ib.appendChild(l);
   });
@@ -2975,7 +2981,14 @@ async function updateSendSize() {
 function syncSendFields() {
   $('send-fields-sub').hidden = !$('send-grids').querySelector('input:checked');
 }
-$('send-grids').addEventListener('change', () => { syncSendFields(); sendCache = null; updateSendSize(); });
+$('send-grids').addEventListener('change', (e) => {
+  // Raster angehakt: alles, was darin liegt, gleich mit auswählen
+  if (e.target.checked) {
+    const inside = itemsInGrids(P, [e.target.value], $('send-team').value);
+    for (const inp of $('send-items').querySelectorAll('input')) if (inside.has(P.items[Number(inp.value)])) inp.checked = true;
+  }
+  syncSendFields(); sendCache = null; updateSendSize();
+});
 $('send-items').addEventListener('change', () => { sendCache = null; updateSendSize(); });
 $('send-pois').addEventListener('change', () => { sendCache = null; updateSendSize(); });
 $('send-ct-list').addEventListener('change', () => { sendCache = null; updateSendSize(); });

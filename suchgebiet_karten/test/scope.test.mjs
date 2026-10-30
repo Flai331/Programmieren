@@ -99,3 +99,26 @@ test('Unterabschnitt: nur das Gebiet, aber alle übrigen Daten des Grund-Einsatz
   assert.equal(infoTarget({ b: q }, buildInfos(p)), q);
   assert.equal(infoTarget(projects, { eid: 'nix' }), null);
 });
+
+test('selectTeam: Texte im Umriss oder in Feldern des Teams gehen mit, andere nicht', async () => {
+  const { makeGrid, cellBounds } = await import('../web/grid.js');
+  const p = demo();
+  p.items.push({ kind: 'text', lat: 52.617, lon: 10.078, text: 'im Umriss', color: '#000' });
+  const b = cellBounds(makeGrid(p.area, p.cellM), 1, 1);
+  p.items.push({ kind: 'text', lat: (b.north + b.south) / 2, lon: (b.east + b.west) / 2, text: 'im Feld', color: '#000' });
+  p.items.push({ kind: 'text', lat: 52.595, lon: 10.065, text: 'draußen', color: '#000' });
+  const names = [...selectTeam(p, 'T1').items].map((i) => i.name || i.text);
+  assert.ok(names.includes('im Umriss'));
+  assert.ok(names.includes('im Feld'));
+  assert.ok(!names.includes('draußen'));
+  assert.ok(!names.includes('U2'));
+});
+
+test('itemsInGrids: alles im Raster, außer Umrissen anderer Teams', async () => {
+  const { itemsInGrids } = await import('../web/scope.js');
+  const p = demo();
+  p.items.push({ kind: 'stroke', color: '#000', pts: [[52.615, 10.065], [52.616, 10.066]] });
+  p.items.push({ kind: 'text', lat: 52.595, lon: 10.065, text: 'Süd', color: '#000' });
+  const names = [...itemsInGrids(p, ['g1'], 'T1')].map((i) => i.name || i.text || i.kind);
+  assert.deepEqual(names.sort(), ['Fund', 'U1', 'stroke']);
+});
