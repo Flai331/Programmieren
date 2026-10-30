@@ -1,7 +1,7 @@
 import {
   makeGrid, cellCount, cellAt, cellBounds, cellLabel, parseCell, formatMeters, MAX_CELLS, remapCells,
 } from './grid.js';
-import { drawOverlay, hitItem } from './render.js';
+import { drawOverlay, hitItem as hitItemAll, labelDetail, trackLabel, markHidden } from './render.js';
 import {
   LAYERS, OVERLAYS, DEFAULT_OVERLAYS, layerById, layerStack, tileUrl,
 } from './layers.js';
@@ -61,7 +61,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v104';
+const APP_VERSION = 'v105';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -372,6 +372,9 @@ function redraw() {
     }, grid),
     items: items.filter((it) => !it.hidden || it === current || it === draftTrack || drafts.includes(it)),
   };
+  // weit herausgezoomt: nur Umrandungen – Texte und Zeichnungen weg (außer dem, was gerade gezeichnet wird)
+  const dz = labelDetail(map.getZoom());
+  if (dz === 0) st.items = st.items.filter((it) => !markHidden(it, 0) || it === current || drafts.includes(it));
   // v101: Spuren des vorherigen Teams (beim neuen Hundeführer): gedämpft, nur zum Ansehen
   if (st.items.some((it) => it.prev)) st.items = st.items.map((it) => (it.prev ? { ...it, color: '#9e9e9e', name: it.name ? `${it.name} 🔒` : '🔒' } : it));
   if (isUA(P)) {
@@ -385,6 +388,7 @@ function redraw() {
   if (hide.meet) st.meet = null;
   if (hide.pois) st.pois = [];
   st.rescue = rescueInView();
+  st.detail = labelDetail(map.getZoom()); // je weiter weg, desto weniger Beschriftung
   // Raster aus: Markierungen als Flächen mit Namen darauf
   drawOverlay(ctx, toPx, st, {
     s: 1, width: W, height: H, view, utm: P.showUtm, noGrid: !!hide.grid, noEdge: !!hide.edge, areaLabels: 'on',
@@ -574,6 +578,8 @@ function setTool(t) {
   // Einzeichnen nur in einem offenen Einsatz (Offline-Bereich wählen u. Ä. geht immer)
   if (['pen', 'text', 'fill', 'track', 'erase', 'meet', 'poi', 'grid'].includes(t) && isLocked()) { lockedToast(); t = 'pan'; }
   if (t !== tool) repLog.add(`Werkzeug ${t}`);
+  // Texte/Zeichnungen sind erst ab Stufe 15 zu sehen: zum Einzeichnen dorthin zoomen
+  if (['pen', 'text', 'erase', 'hfmarkpt', 'textmove'].includes(t) && labelDetail(map.getZoom()) === 0) map.setZoom(15);
   // Offene Zeichnung/Umriss bleibt beim Werkzeugwechsel erhalten (bis „Fertig“ oder „Abbrechen“)
   if (tool === 'track' && t !== 'track') {
     if (draftTrack && !draftTrack.pts.length) draftTrack = null;
@@ -975,6 +981,9 @@ document.querySelectorAll('.toolbar [data-tool]').forEach((b) => b.addEventListe
   setTool(b.dataset.tool === tool ? 'pan' : b.dataset.tool);
 }));
 $('undo').addEventListener('click', undo);
+
+// Treffer nur auf sichtbare Dinge (weit herausgezoomt keine Texte/Zeichnungen)
+const hitItem = (items, toPx, x, y, tol) => hitItemAll(items, toPx, x, y, tol, labelDetail(map.getZoom()));
 
 // Textpunkt angetippt: Text ändern oder löschen
 function textDialog(i) {
@@ -3537,10 +3546,11 @@ function badgeObstacles(c) {
     c.font = `bold ${px}px sans-serif`;
     out.push(boxOf(x - r, y - Math.max(r, px / 2 + 3), 2 * r + 5 + (text ? c.measureText(text).width + 6 : 0), 2 * Math.max(r, px / 2 + 3)));
   };
+  const d = labelDetail(map.getZoom());
   for (const it of P.items) {
     if (it.hidden || it.kind !== 'text') continue;
     const [x, y] = toPx(it.lat, it.lon);
-    label(x, y, 7, it.text, 15);
+    label(x, y, 7, d ? (d >= 3 || it.text.length <= 16 ? it.text : `${it.text.slice(0, 15)}…`) : '', 15);
   }
   const hide = P.hide || {};
   if (!hide.pois) for (const p of P.pois || []) { const [x, y] = toPx(p.lat, p.lon); label(x, y, 14, poiName(p), 13); }
@@ -3552,9 +3562,10 @@ function badgeObstacles(c) {
     if (it.hidden || it.kind !== 'track' || !(it.pts || []).length) continue;
     const [x, y] = toPx(it.pts[0][0], it.pts[0][1]);
     const who = it.to ? assigneeName(P, it.to) || '' : '';
-    const w = c.measureText(`${it.name || ''}${who ? ` → ${who}` : ''} · 000,0 ha`).width;
-    out.push(boxOf(x + 4, y - 24, w + 8, 22));
-    if (it.note) out.push(boxOf(x + 4, y - 4, Math.min(it.note.length, 60) * 6.5 + 8, 18));
+    const t = trackLabel(it, who, d);
+    const ls = t ? t.split('\n') : [];
+    if (ls.length) out.push(boxOf(x + 4, y - 8 - 16 * ls.length, Math.max(...ls.map((l) => c.measureText(l).width)) + 8, 16 * ls.length + 6));
+    if (it.note && d >= 3) out.push(boxOf(x + 4, y - 4, Math.min(it.note.length, 60) * 6.5 + 8, 18));
   }
   return out;
 }
@@ -3631,6 +3642,7 @@ function statusMarks() {
   else if (!db.msgOff) list = allMsgs().map((m) => ({ m, color: teamColorOf(m.a) }));
   else return [];
   list = list.filter((x) => x.m.lat != null);
+  if (labelDetail(map.getZoom()) === 0) list = list.filter((x) => isUrgent(x.m)); // weit weg: nur Fund/Hilfe
   const newest = new Map();
   for (const x of list) newest.set(x.m.a, x.m.id); // Liste ist nach Zeit sortiert
   for (const x of list) x.big = newest.get(x.m.a) === x.m.id;

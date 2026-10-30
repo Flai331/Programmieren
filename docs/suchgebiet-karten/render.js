@@ -40,6 +40,23 @@ function pill(ctx, text, cx, cy, s) {
 //          fillLabels: "c,r" -> Text, items, meet }
 // state.others: weitere Rastergebiete [{ grid, name, fills, status, fillLabels, statusLabels }],
 // state.gridName: Name des Hauptrasters (steht nur da, wenn es mehrere Gebiete gibt)
+// Beschriftungen je nach Zoomstufe: 0 = keine (bis 14, dann auch keine Markierungen – nur Umrandungen), 1 = nur Namen (15, Texte gekürzt),
+// 2 = Gebietsname und Team untereinander (16), 3 = dazu Fläche und Notiz (ab 17)
+export function labelDetail(zoom) {
+  if (zoom == null) return 3;
+  zoom = Math.round(zoom);
+  return zoom <= 14 ? 0 : zoom === 15 ? 1 : zoom === 16 ? 2 : 3;
+}
+// Text am Umriss je nach Stufe (Zeilen mit \n getrennt)
+export function trackLabel(it, who, d = 3) {
+  if (d <= 0) return '';
+  const name = (it.name || '').trim();
+  if (d === 1) return name;
+  const second = [who ? `→ ${who}` : '', d >= 3 && hasArea(it) ? formatArea(polygonArea(it.pts)) : ''].filter(Boolean).join(' · ');
+  return [name, second].filter(Boolean).join('\n');
+}
+const shortText = (t, d) => (d >= 3 || t.length <= 16 ? t : `${t.slice(0, 15)}…`);
+
 export function drawOverlay(ctx, toPx, state, opt) {
   const s = opt.s || 1;
   const grid = state.grid;
@@ -54,7 +71,7 @@ export function drawOverlay(ctx, toPx, state, opt) {
       if (a) areas.push(...a);
     } else drawGrid(ctx, toPx, st, g.grid, opt, s);
   }
-  drawItems(ctx, toPx, state.items || [], s, state.teamNames);
+  drawItems(ctx, toPx, state.items || [], s, state.teamNames, state.detail ?? 3);
   if (state.rescue && state.rescue.length) drawRescue(ctx, toPx, state.rescue, s);
   if (state.pois && state.pois.length) drawPois(ctx, toPx, state.pois, s);
   if (state.meet) drawMeet(ctx, toPx, state.meet, s);
@@ -552,7 +569,7 @@ function gridLon(grid, c) {
   return grid.originLon + c * grid.dLon;
 }
 
-function drawItems(ctx, toPx, items, s, teamNames = {}) {
+function drawItems(ctx, toPx, items, s, teamNames = {}, d = 3) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   const named = new Set(); // Zeichnung aus mehreren Strichen: Name nur am ersten
@@ -571,7 +588,7 @@ function drawItems(ctx, toPx, items, s, teamNames = {}) {
         ctx.lineTo(x + 0.1, y);
       }
       ctx.stroke();
-      if (it.name && !(it.group && named.has(it.group))) {
+      if (d > 0 && it.name && !(it.group && named.has(it.group))) {
         if (it.group) named.add(it.group);
         // Name am Anfang der Zeichnung, wie bei Tracks
         const [x, y] = toPx(it.pts[0][0], it.pts[0][1]);
@@ -581,7 +598,7 @@ function drawItems(ctx, toPx, items, s, teamNames = {}) {
         halo(ctx, it.name, x + (it.w / 2 + 5) * s, y - (it.w / 2 + 3) * s, it.color, s);
       }
     } else if (it.kind === 'track' && it.pts.length) {
-      drawTrack(ctx, toPx, it, s, it.to ? (it.to.startsWith('u:') ? it.to.slice(2) : (teamNames || {})[it.to] || '') : '');
+      drawTrack(ctx, toPx, it, s, it.to ? (it.to.startsWith('u:') ? it.to.slice(2) : (teamNames || {})[it.to] || '') : '', d);
     } else if (it.kind === 'text') {
       const [x, y] = toPx(it.lat, it.lon);
       ctx.fillStyle = it.color;
@@ -594,13 +611,13 @@ function drawItems(ctx, toPx, items, s, teamNames = {}) {
       ctx.font = `bold ${15 * s}px sans-serif`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      halo(ctx, it.text, x + 9 * s, y, it.color, s);
+      if (d > 0) halo(ctx, shortText(it.text, d), x + 9 * s, y, it.color, s);
     }
   }
 }
 
 // Track (Punkt für Punkt gesetzt): Linie mit weißem Rand, Knotenpunkte, Name am Start
-function drawTrack(ctx, toPx, it, s, who = '') {
+function drawTrack(ctx, toPx, it, s, who = '', d = 3) {
   const pts = it.pts.map(([lat, lon]) => toPx(lat, lon));
   const line = (w, color) => {
     ctx.strokeStyle = color;
@@ -638,15 +655,16 @@ function drawTrack(ctx, toPx, it, s, who = '') {
     ctx.stroke();
   });
   // Name und Fläche (ab 3 Punkten) am Startpunkt
-  const label = [`${it.name || ''}${who ? ` → ${who}` : ''}`.trim(), hasArea(it) ? formatArea(polygonArea(it.pts)) : ''].filter(Boolean).join(' · ');
+  const label = trackLabel(it, who, d);
   if (label) {
     ctx.font = `bold ${13 * s}px sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
-    halo(ctx, label, pts[0][0] + 7 * s, pts[0][1] - 5 * s, it.color, s);
+    const ls = label.split('\n');
+    ls.forEach((l, i) => halo(ctx, l, pts[0][0] + 7 * s, pts[0][1] - (5 + (ls.length - 1 - i) * 16) * s, it.color, s));
   }
   // Notiz (z. B. vom Hundeführer zum umkreisten Bereich) klein darunter
-  if (it.note) {
+  if (it.note && d >= 3) {
     ctx.font = `${12 * s}px sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
@@ -664,10 +682,12 @@ export function distToSegment(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-export function hitItem(items, toPx, x, y, tol) {
+// Weit herausgezoomt (bis Stufe 14) sind Texte und Zeichnungen nicht zu sehen
+export const markHidden = (it, d) => d === 0 && (it.kind === 'text' || it.kind === 'stroke');
+export function hitItem(items, toPx, x, y, tol, d = 3) {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
-    if (it.hidden) continue; // ausgeblendet: nicht radieren/benennen
+    if (it.hidden || markHidden(it, d)) continue; // ausgeblendet: nicht radieren/benennen
     if (it.kind === 'text') {
       const [px, py] = toPx(it.lat, it.lon);
       if (Math.hypot(px - x, py - y) <= tol + 6) return i;
