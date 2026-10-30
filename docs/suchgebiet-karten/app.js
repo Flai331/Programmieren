@@ -34,7 +34,7 @@ import {
   fetchWeather, fetchStations, dirName, beaufort, approach, circularMean, sunTimes, windChanged, STRENGTHS, ICONS as WX_ICONS, CONDITIONS,
 } from './weather.js';
 import {
-  PUBLIC_URL, pack, unpack, parseShared, shareLink, appIntentUrl, buildAssignment, projectFromAssignment, buildResult, applyResult,
+  PUBLIC_URL, pack, unpack, parseShared, shareLink, appIntentUrl, assignmentSummary, sinceText, buildAssignment, projectFromAssignment, buildResult, applyResult,
 } from './share.js';
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
@@ -46,7 +46,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v86';
+const APP_VERSION = 'v87';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -2847,7 +2847,10 @@ async function prepareSend() {
   P.sent = P.sent || [];
   if (!P.sent.some((x) => x.id === c.a.id)) {
     const team = P.marks.find((m) => m.id === c.sel.teamId);
-    P.sent.push({ id: c.a.id, teamId: c.sel.teamId, team: team ? team.label : 'ohne Team', grids: c.a.g.map((g) => g.i), at: Date.now() });
+    P.sent.push({
+      id: c.a.id, teamId: c.sel.teamId, team: team ? team.label : 'ohne Team', grids: c.a.g.map((g) => g.i), at: Date.now(),
+      what: assignmentSummary(c.a), n: 0,
+    });
     touch();
     renderSentList();
   }
@@ -2867,12 +2870,33 @@ $('send-copy').addEventListener('click', async () => {
   const c = await prepareSend();
   if (c) copyText(c.link);
 });
+// Übersicht der Einsatzleitung: welches Team hat welchen Auftrag, seit wann, kamen Rückmeldungen?
+const SENT_QUIET = 60 * 60e3; // so lange ohne Rückmeldung: orange markieren
 function renderSentList() {
   const box = $('sent-list');
   box.innerHTML = '';
-  for (const x of [...(P.sent || [])].reverse()) {
+  const list = [...(P.sent || [])].reverse();
+  if (!list.length) return;
+  const h = document.createElement('h2');
+  h.className = 'sub';
+  h.textContent = `📋 Aufträge (${list.length})`;
+  box.appendChild(h);
+  const now = Date.now();
+  for (const x of list) {
+    const team = P.marks.find((m) => m.id === x.teamId);
+    const quiet = now - (x.last || x.at) > SENT_QUIET;
     const d = document.createElement('div');
-    d.textContent = `📲 ${hhmm(x.at)} Auftrag an ${x.team}${x.last ? ` · Rückmeldung ${hhmm(x.last)}` : ' · noch keine Rückmeldung'}`;
+    d.className = 'sent-card' + (quiet ? ' quiet' : '');
+    d.innerHTML = '<b><i></i><span></span></b><div class="what"></div><div class="since"></div><div class="back"></div>';
+    d.querySelector('i').style.background = team ? team.color : '#999';
+    d.querySelector('b span').textContent = `${team ? team.label : x.team}${team && team.dog ? ` – ${team.dog}` : ''}`;
+    const what = x.what || allGrids(P).filter((g) => (x.grids || []).includes(g.id)).map((g) => gridLabel(P, g)).join(', ');
+    d.querySelector('.what').textContent = what || 'Auftrag';
+    d.querySelector('.since').textContent = `📲 Auftrag seit ${hhmm(x.at)} (${sinceText(x.at, now)})`;
+    const n = x.n || (x.last ? 1 : 0);
+    d.querySelector('.back').textContent = x.last
+      ? `📥 ${n} Rückmeldung${n === 1 ? '' : 'en'}, zuletzt ${hhmm(x.last)} (vor ${sinceText(x.last, now)})${x.lastSum ? ` – ${x.lastSum}` : ''}`
+      : `⏳ noch keine Rückmeldung${quiet ? ' – nachfragen?' : ''}`;
     box.appendChild(d);
   }
 }
@@ -2908,7 +2932,12 @@ async function handleShared(text) {
   if (isFree()) createProject(wizTitle());
   const res = applyResult(P, data);
   const sent = (P.sent || []).find((x) => x.id === data.a);
-  if (sent) sent.last = Date.now();
+  if (sent) {
+    sent.last = Date.now();
+    sent.n = (sent.n || 0) + 1;
+    const km = (P.items.filter((it) => it.resultKey && it.resultKey.startsWith(`${data.a}|t`)).reduce((a, it) => a + pathLen(it.pts), 0) / 1000);
+    sent.lastSum = [km && `${km.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km gelaufen`, res.fields && `${res.fields} Feld${res.fields === 1 ? '' : 'er'} gemeldet`].filter(Boolean).join(', ');
+  }
   changed();
   renderSentList();
   toast(`📥 Rückmeldung ${res.who}: ${res.ways} Weg${res.ways === 1 ? '' : 'e'}, ${res.marks} Markierung${res.marks === 1 ? '' : 'en'}, ${res.fields} Feld${res.fields === 1 ? '' : 'er'}${res.winds ? `, ${res.winds} Wind-Messung${res.winds === 1 ? '' : 'en'}` : ''}${res.known ? '' : ' (Auftrag hier unbekannt – ins aktuelle Suchgebiet übernommen)'}${res.ways + res.marks + res.fields + res.winds ? '' : ' – nichts Neues'}`, 9000);

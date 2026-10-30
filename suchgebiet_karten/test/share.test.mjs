@@ -152,3 +152,12 @@ test('appIntentUrl: Link mit #-Teil an die Android-App', async () => {
   // index.html fällt weg (Pfad muss zum Intent-Filter der App passen)
   assert.match(appIntentUrl('https://flai331.github.io/Programmieren/suchgebiet-karten/index.html#e=x', 'p'), /^intent:\/\/flai331\.github\.io\/Programmieren\/suchgebiet-karten\/\?h=e%3Dx#/);
 });
+
+test('assignmentSummary und sinceText für die Auftrags-Übersicht', async () => {
+  const { assignmentSummary, sinceText } = await import('../web/share.js');
+  assert.equal(assignmentSummary({ g: [{ n: 'Gebiet 1', f: ['1,1', '2,1'] }, { n: 'Süd', f: [] }], i: [{ k: 't', n: 'Nordhang' }, { k: 'x', n: 'Fund' }], h: 'Bachlauf zuerst' }),
+    'Gebiet 1: 2 Felder · Süd (ganzes Gebiet) · Nordhang · „Bachlauf zuerst“');
+  assert.equal(assignmentSummary({ g: [{ n: 'A', f: ['0,0'] }], i: [] }), 'A: 1 Feld');
+  assert.equal(sinceText(0, 59 * 60e3), '59 min');
+  assert.equal(sinceText(0, 65 * 60e3), '1 h 05 min');
+});
