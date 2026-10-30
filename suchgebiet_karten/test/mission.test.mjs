@@ -71,3 +71,16 @@ test('Zeiten: Zeilen und Dauer über Mitternacht', async () => {
   assert.equal(missionHours(m), 3.5);
   assert.equal(missionHours(normalizeMission({})), 0);
 });
+
+test('normTime: Uhrzeit von Hand', async () => {
+  const { normTime } = await import('../web/mission.js');
+  assert.equal(normTime('1430'), '14:30');
+  assert.equal(normTime('930'), '09:30');
+  assert.equal(normTime('9:5'), '09:05');
+  assert.equal(normTime('14'), '14:00');
+  assert.equal(normTime('14.30'), '14:30');
+  assert.equal(normTime(''), '');
+  assert.equal(normTime('2460'), null);
+  assert.equal(normTime('25:00'), null);
+  assert.equal(normTime('12345'), null);
+});

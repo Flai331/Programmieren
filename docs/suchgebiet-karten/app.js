@@ -19,6 +19,7 @@ import { buildProgress, mergeProgress, progressSummary, progressPreview, progres
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
   MAIL_PARTS, REPORT_SECTIONS, MAP_PARTS, EXTRA_PARTS, hasReportText, newMailTo, mailAddresses,
+  normTime,
 } from './mission.js';
 import { buildCustomMap, planCustomMap } from './kmz.js';
 import {
@@ -51,7 +52,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v90';
+const APP_VERSION = 'v91';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -4625,6 +4626,31 @@ $('wz-exit').addEventListener('click', () => {
   renderWizBtn();
 });
 
+// Uhrzeit-Feld ohne den Android-Uhrzeit-Dialog (dort fehlte teils „Festlegen“): Ziffern tippen, z. B. 1430
+function timeField(inp, value, onSet) {
+  inp.type = 'text';
+  inp.inputMode = 'numeric';
+  inp.placeholder = 'hh:mm';
+  inp.maxLength = 5;
+  inp.autocomplete = 'off';
+  inp.className = 'tfield';
+  inp.value = value || '';
+  inp.addEventListener('input', () => {
+    const d = inp.value.replace(/\D/g, '').slice(0, 4);
+    if (!inp.value.includes(':') && d.length === 4) inp.value = `${d.slice(0, 2)}:${d.slice(2)}`;
+    const v = normTime(inp.value);
+    if (v && inp.value.length >= 4) onSet(v);
+  });
+  const fin = () => {
+    const v = normTime(inp.value);
+    if (v === null) { toast('Uhrzeit bitte als hh:mm eingeben, z. B. 14:30'); inp.value = value || ''; return; }
+    inp.value = v;
+    if (v !== value) { value = v; onSet(v); }
+  };
+  inp.addEventListener('change', fin);
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+  return inp;
+}
 function wizField(box, label, value, onInput, type = 'text', extra = {}) {
   const l = document.createElement('label');
   l.textContent = label;
@@ -4777,9 +4803,7 @@ const WIZ = {
       const r = document.createElement('div');
       r.className = 'wz-radio';
       const inp = document.createElement('input');
-      inp.type = 'time';
-      inp.value = t[k] || '';
-      inp.addEventListener('input', () => { t[k] = inp.value; if (k === 'alarm' && !t.alarmDate) t.alarmDate = isoDate(new Date()); touch(); });
+      timeField(inp, t[k], (v) => { if (v) t[k] = v; else delete t[k]; if (k === 'alarm' && v && !t.alarmDate) { t.alarmDate = isoDate(new Date()); const di = inp.closest('.wz-body, #ms-times, #panel-wizard')?.querySelector('input[type=date]'); if (di) di.value = t.alarmDate; } touch(); });
       r.appendChild(inp);
       wizBtn(r, 'Jetzt', () => {
         const d = new Date();
@@ -5978,11 +6002,10 @@ function renderTimes() {
   for (const [k, label] of TIME_KEYS) {
     const row = document.createElement('div');
     row.className = 'trow';
-    row.innerHTML = '<span></span><input type="time"><button class="now">Jetzt</button><button class="clr" title="Löschen">✕</button>';
+    row.innerHTML = '<span></span><input><button class="now">Jetzt</button><button class="clr" title="Löschen">✕</button>';
     row.querySelector('span').textContent = label;
     const inp = row.querySelector('input');
-    inp.value = t[k] || '';
-    inp.addEventListener('input', () => { t[k] = inp.value; touch(); });
+    timeField(inp, t[k], (v) => { if (v) t[k] = v; else delete t[k]; if (k === 'alarm' && v && !t.alarmDate) { t.alarmDate = isoDate(new Date()); const di = inp.closest('.wz-body, #ms-times, #panel-wizard')?.querySelector('input[type=date]'); if (di) di.value = t.alarmDate; } touch(); });
     row.querySelector('.now').addEventListener('click', () => {
       const d = new Date();
       t[k] = `${pad(d.getHours())}:${pad(d.getMinutes())}`;

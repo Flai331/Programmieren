@@ -1,7 +1,7 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v90**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v91**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
@@ -88,6 +88,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
 
 (Der Autopilot trägt hier behobene Meldungen aus der 🐞 Fehlerzentrale ein: Datum, Version, Kurzbeschreibung.)
 
+- 30.10.2026, v91: Uhrzeiten (Alarmierung, Eintreffen …) im Assistenten und im Fenster „Einsatz“ als eigenes Feld mit Ziffern-Tastatur (z. B. 1430) statt Android-Uhrzeit-Dialog, dem der Bestätigen-Knopf fehlte.
 - 30.10.2026, v86: Einsatz-/Auftragsliste zeigt Namen vollständig (Knöpfe darunter); doppelter Zoom (+/−) unten rechts entfernt – die rechte Leiste verdeckte ihn, der Zoom-Regler links bleibt.
 
 ## Rückfragen an Klaas

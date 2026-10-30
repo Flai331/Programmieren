@@ -350,6 +350,7 @@ button, input, select { font: inherit; }
 .times .trow { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; align-items: center; margin: 4px 0; font-size: 14px; }
 .times .trow input { padding: 6px; border: 1px solid #bbb; border-radius: 8px; font: inherit; }
 .times .trow .now { padding: 6px 10px; }
+input.tfield { width: 5.5em; text-align: center; font-variant-numeric: tabular-nums; }
 .times .trow .clr { padding: 6px 8px; color: var(--red); }
 .times .trow input[type=date] { grid-column: 2 / 3; }
 .viewlist h4 { margin: 10px 0 2px; font-size: 13px; color: var(--muted); }
