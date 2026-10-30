@@ -760,3 +760,15 @@ html.night .tm-btn, html.night .tm-drop, html.night .tm-pop { filter: invert(1) 
 #sent-list .sent-done { margin-top: 6px; }
 #sent-list .sent-done summary { cursor: pointer; font-weight: bold; padding: 6px 0; }
 html.night .sent-card.done { background: transparent; }
+
+/* v113: Sperrbildschirm der Freigabe – über allem, nichts dahinter bedienbar */
+#lic-lock { position: fixed; inset: 0; z-index: 100000; background: #fff; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: auto; }
+#lic-lock .lic-box { max-width: 460px; width: 100%; text-align: center; }
+#lic-lock h1 { font-size: 22px; margin: 0 0 12px; color: var(--red); }
+#lic-lock p { margin: 8px 0; line-height: 1.4; }
+#lic-lock .small { color: var(--muted); font-size: 13px; margin-bottom: 0; }
+#lic-lock code { display: inline-block; padding: 6px 10px; background: var(--btn); border: 1px solid var(--line); border-radius: 8px; font-size: 16px; letter-spacing: 0.5px; user-select: all; word-break: break-all; }
+#lic-lock a { color: #1565c0; font-weight: 700; word-break: break-all; }
+#lic-lock .lic-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+#lic-lock button { border: 1px solid #ccc; background: var(--btn); border-radius: 10px; padding: 12px 16px; font-size: 16px; cursor: pointer; }
+#lic-lock button.primary { background: var(--red); color: #fff; border-color: var(--red); }

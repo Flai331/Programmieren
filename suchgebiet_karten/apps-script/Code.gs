@@ -53,9 +53,99 @@ function doPost(e) {
   }
 }
 
+// ---------- Freigabe (v113): Geräte sperren, Hauptschalter ----------
+var BLATT_GERAETE = 'Geräte';
+var BLATT_EINST = 'Einstellungen';
+var STANDARD_KONTAKT = 'error.404.found@outlook.de';
+var ZEIT_FORMAT = 'dd.mm.yyyy hh:mm:ss';
+
+function geraeteBlatt_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(BLATT_GERAETE);
+  if (!sh) {
+    sh = ss.insertSheet(BLATT_GERAETE);
+    sh.getRange(1, 1, 1, 9).setValues([['Geräte-ID', 'Name', 'Modus', 'Plattform', 'Version', 'Modell', 'zuerst gesehen', 'zuletzt gesehen', 'Gesperrt']]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function einstellungenBlatt_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(BLATT_EINST);
+  if (!sh) {
+    sh = ss.insertSheet(BLATT_EINST);
+    sh.getRange(1, 1, 2, 2).setValues([['App aktiv', 'JA'], ['Kontakt', STANDARD_KONTAKT]]);
+    sh.getRange(1, 1, 2, 1).setFontWeight('bold');
+  }
+  return sh;
+}
+
+function kuerzen_(v) {
+  return String(v === undefined || v === null ? '' : v).replace(/[\r\n\t]+/g, ' ').substring(0, 60);
+}
+
+// Gesperrt ist die Zeile bei jedem nicht leeren Wert außer „nein“, „0“, „false“
+function istGesperrt_(wert) {
+  var t = String(wert === undefined || wert === null ? '' : wert).replace(/^\s+|\s+$/g, '').toLowerCase();
+  return t !== '' && t !== 'nein' && t !== '0' && t !== 'false';
+}
+
+// Aktiv, solange B1 nicht „NEIN“, „FALSE“ oder „0“ enthält
+function istAktiv_(wert) {
+  var t = String(wert === undefined || wert === null ? '' : wert).replace(/^\s+|\s+$/g, '').toLowerCase();
+  return !(t === 'nein' || t === 'false' || t === '0');
+}
+
+// Gerät melden: ?lic=<Geräte-ID>&m=&v=&p=&n=&ua= -> { ok, lic: true, aktiv, gesperrt, kontakt, now }
+function lizenz_(p) {
+  var id = String(p.lic || '');
+  if (!/^[A-Za-z0-9_-]{8,40}$/.test(id)) return antwort_({ ok: false, fehler: 'Geräte-ID' });
+  var name = kuerzen_(p.n);
+  var modus = kuerzen_(p.m);
+  var plattform = kuerzen_(p.p);
+  var version = kuerzen_(p.v);
+  var modell = kuerzen_(p.ua);
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+    var jetzt = Date.now();
+    var sh = geraeteBlatt_();
+    var n = sh.getLastRow();
+    var zeile = 0;
+    var gesperrt = false;
+    if (n > 1) {
+      var w = sh.getRange(2, 1, n - 1, 9).getValues();
+      for (var i = 0; i < w.length; i++) {
+        if (String(w[i][0]) !== id) continue;
+        zeile = i + 2;
+        gesperrt = istGesperrt_(w[i][8]);
+        // Name nur überschreiben, wenn einer mitkam; zuerst gesehen und Gesperrt bleiben
+        sh.getRange(zeile, 2, 1, 7).setValues([[name || w[i][1], modus, plattform, version, modell, w[i][6], new Date(jetzt)]]);
+        break;
+      }
+    }
+    if (!zeile) {
+      zeile = n + 1;
+      sh.getRange(zeile, 1, 1, 9).setNumberFormats([['@', '@', '@', '@', '@', '@', ZEIT_FORMAT, ZEIT_FORMAT, '@']])
+        .setValues([[id, name, modus, plattform, version, modell, new Date(jetzt), new Date(jetzt), '']]);
+    } else {
+      sh.getRange(zeile, 7, 1, 2).setNumberFormat(ZEIT_FORMAT);
+    }
+    var es = einstellungenBlatt_();
+    var kontakt = String(es.getRange(2, 2).getValue() || '') || STANDARD_KONTAKT;
+    return antwort_({ ok: true, lic: true, aktiv: istAktiv_(es.getRange(1, 2).getValue()), gesperrt: gesperrt, kontakt: kontakt, now: jetzt });
+  } catch (err) {
+    return antwort_({ ok: false, fehler: String(err) });
+  } finally {
+    try { lock.releaseLock(); } catch (x) { /* kein Schloss gehalten */ }
+  }
+}
+
 // Einsatzleitung holt ab: ?r=<Raum>&since=<Serverzeit in ms> -> { ok, now, rows: [[Serverzeit, ID, Daten], ...] }
 function doGet(e) {
   var p = (e && e.parameter) || {};
+  if (p.lic) return lizenz_(p);
   var r = String(p.r || '');
   if (!r) return antwort_({ ok: true, info: 'Suchgebiet-Karten Status-Server läuft.' });
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(r)) return antwort_({ ok: false, fehler: 'Raum' });
@@ -96,6 +186,8 @@ function cleanup() {
 // Einmal von Hand ausführen: legt das Blatt an und richtet das tägliche Aufräumen ein
 function setup() {
   blatt_();
+  geraeteBlatt_();
+  einstellungenBlatt_();
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'cleanup') ScriptApp.deleteTrigger(t);
   });

@@ -337,6 +337,7 @@
     <h2>⚙️ Mehr <span id="app-version" class="version"></span></h2>
     <h2 class="sub first">📛 Dieses Gerät</h2>
     <p>Name: <b id="dev-name">–</b> <button id="dev-edit" class="mini">✏️ Name</button></p>
+    <p class="small">Geräte-ID: <code id="lic-id-more">–</code> (der Name wird beim nächsten Start dem Administrator mitgeteilt)</p>
     <label>🗺️ Standard-Kartenart <select id="dev-layer"></select></label>
     <p class="small">Gilt auf diesem Gerät für neue Einsätze, übernommene Aufträge und Übergaben. Im laufenden Einsatz lässt sich die Karte unter „Karte“ jederzeit wechseln.</p>
     <div class="el-only">
@@ -812,6 +813,19 @@
   </div>
 
   <div id="toast" class="toast" hidden></div>
+
+  <!-- v113: Sperrbildschirm der Freigabe (über allem) -->
+  <div id="lic-lock" role="alertdialog" aria-modal="true" aria-labelledby="lic-title" hidden>
+    <div class="lic-box">
+      <h1 id="lic-title"></h1>
+      <p id="lic-text"></p>
+      <p>Wenn Sie die App weiter nutzen wollen, melden Sie sich beim Administrator: <a id="lic-mail" href="#"></a></p>
+      <p class="small">Geräte-ID</p>
+      <p><code id="lic-id"></code></p>
+      <div class="lic-row"><button id="lic-copy" type="button">📋 ID kopieren</button><button id="lic-retry" type="button" class="primary">🔄 Erneut prüfen</button></div>
+      <p id="lic-msg" class="small" hidden></p>
+    </div>
+  </div>
 
   <script src="lib/leaflet.js"></script>
   <script src="lib/jspdf.umd.min.js"></script>
