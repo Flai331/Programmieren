@@ -54,6 +54,11 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
     Ohne Aufzeichnung kein automatisches Springen – auch nicht, wenn der Standort für „Punkt melden“ eingeschaltet wird.
   - **EL-Modus**: nie automatisch zum Standort springen oder folgen; nur beim Tippen auf „GPS“
     (einmal hinspringen; ist GPS schon an, springt ein Tipp wieder hin, liegt man schon in der Mitte, schaltet er aus).
+  - **Weg-Aufzeichnung nach dem Schließen fortsetzen**: Wird die App während „⏺ Weg“ geschlossen
+    (oder vom Handy beendet), läuft die Aufzeichnung beim nächsten Öffnen automatisch weiter –
+    aber erst, wenn wieder ein genauer Standort da ist (Genauigkeit ≤ 20 m), damit kein falscher Strich entsteht.
+    Bis dahin Knopf „⏳ wartet auf GPS …“. Neues Wegstück (keine Linie quer über die Lücke).
+    Umsetzung: `P.hf.recOn` speichern, beim Start `startRec({ resume: true })`.
   - Umsetzung: `btn-gps`-Handler in `startGps({ jump })` aufteilen; Mitführen nur bei `db.mode === 'hf' && recWatch !== null`;
     Wind: in `.wm-str`-Klick `lastPos` prüfen, sonst Position holen.
 - [x] **v81 – 📑 Unterabschnitt an andere EL**: Gebiet/Umriss per QR an EL/ELW → Frage „ganzer Einsatz“ oder „Unterabschnitt“ (nur das Gebiet + B-Ort, Lage-Orte, Stammdaten, Protokoll; Infos fließen zum Grund-Einsatz zurück).
