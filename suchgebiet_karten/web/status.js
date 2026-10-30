@@ -6,7 +6,7 @@ import { allGrids } from './store.js';
 import { makeGrid, cellBounds } from './grid.js';
 
 export const STATUS_LIST = [
-  { code: 'anfahrt', ico: '🚗', label: 'Anfahrt' },
+  { code: 'da', ico: '🅿️', label: 'Parkplatz Auto' }, // am Suchgebiet angekommen, Auto abgestellt
   { code: 'start', ico: '▶️', label: 'Suche begonnen' },
   { code: 'pause', ico: '⏸', label: 'Pause' },
   { code: 'fertig', ico: '📊', label: 'Stand / fertig' }, // HF schätzt, wie viel abgesucht ist (100 % = fertig)
@@ -25,8 +25,10 @@ export const SPOT_LIST = [
 export const URGENT = ['fund', 'hilfe'];
 
 const find = (list, code) => list.find((x) => x.code === code);
+// ältere Meldungen, die es als Taste nicht mehr gibt
+const OLD_LIST = [{ code: 'anfahrt', ico: '🚗', label: 'Anfahrt' }];
 export function statusLabel(code) {
-  const s = find(STATUS_LIST, code);
+  const s = find(STATUS_LIST, code) || find(OLD_LIST, code);
   return s ? `${s.ico} ${s.label}` : code === 'ort' ? '📍 Standort' : code === 'ok' ? '📲 Auftrag übernommen' : String(code || '');
 }
 export function spotLabel(cat) {
@@ -45,7 +47,7 @@ export const msgLabel = (m) => (m.s === 'ort' ? spotLabel(m.cat)
 // Nur das Symbol (für die Karte)
 export function msgIcon(m) {
   if (m.s === 'fertig') return done(m) ? '✅' : '📊';
-  const s = m.s === 'ort' ? find(SPOT_LIST, m.cat) : find(STATUS_LIST, m.s);
+  const s = m.s === 'ort' ? find(SPOT_LIST, m.cat) : find(STATUS_LIST, m.s) || find(OLD_LIST, m.s);
   return s ? s.ico : m.s === 'ok' ? '📲' : '📍';
 }
 export const isUrgent = (m) => URGENT.includes(m.s) || (m.s === 'ort' && m.cat === 'fund');
