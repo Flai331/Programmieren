@@ -33,7 +33,7 @@ import {
   fetchWeather, fetchStations, dirName, beaufort, approach, circularMean, sunTimes, windChanged, STRENGTHS, ICONS as WX_ICONS, CONDITIONS,
 } from './weather.js';
 import {
-  PUBLIC_URL, pack, unpack, parseShared, shareLink, buildAssignment, projectFromAssignment, buildResult, applyResult,
+  PUBLIC_URL, pack, unpack, parseShared, shareLink, appIntentUrl, buildAssignment, projectFromAssignment, buildResult, applyResult,
 } from './share.js';
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
@@ -45,7 +45,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v82';
+const APP_VERSION = 'v83';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -3189,10 +3189,30 @@ async function handleHash() {
   const sh = parseShared(location.hash);
   if (!sh) return;
   const h = location.hash;
+  if (await openInApp(h)) return;
   history.replaceState(null, '', location.pathname + location.search);
   // Rückmeldung: ist die App schon in einem anderen Fenster/Tab offen, dort übernehmen (sonst überschreiben sich die Fenster)
   if (['r', 'e', 'i'].includes(sh.kind) && await handOff(h)) return;
   await handleShared(h);
+}
+
+// Android-Browser: Link an die installierte App weitergeben (falls Android ihn nicht schon selbst
+// an die App gibt). Der Inhalt geht als ?h=… mit, weil ein intent:-Link keinen #-Teil tragen kann.
+const ANDROID_PKG = 'de.klaas.suchgebiet';
+const NO_APP_KEY = 'suchgebiet-no-app';
+async function openInApp(h) {
+  if (bridge || !/Android/i.test(navigator.userAgent) || /[?&]web=1/.test(location.search)) return false;
+  try { if (localStorage.getItem(NO_APP_KEY)) return false; } catch { /* privater Modus */ }
+  const go = await openDlg((box, close) => {
+    dlgHead(box, '📲 In der App öffnen?', 'Ist die Android-App „Suchgebiet-Karten“ installiert, dort öffnen – dann landet alles im laufenden Einsatz der App.');
+    dlgButton(box, '📲 In der App öffnen', 'primary', () => close('app'));
+    dlgButton(box, '🌐 Hier im Browser weiter', '', () => close('web'));
+    dlgButton(box, 'Im Browser weiter und nicht mehr fragen', '', () => close('never'));
+  });
+  if (go === 'never') { try { localStorage.setItem(NO_APP_KEY, '1'); } catch { /* egal */ } }
+  if (go !== 'app') return false;
+  location.href = appIntentUrl(location.href, ANDROID_PKG);
+  return true;
 }
 
 // ---------- Mehrere Fenster/Tabs ----------

@@ -1,7 +1,7 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v82**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v83**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
@@ -47,6 +47,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
   - Gehen bei der Übergabe an ein weiteres EL-Gerät (`#e=`) mit.
   - Neue Logik in `web/pois.js` mit Unit-Tests.
 
+- [x] **v83 – 📲 Links in der App öffnen**: App-Links-Freigabe im Repo Flai331.github.io (`assetlinks.json`); zusätzlich fragt die Webseite im Android-Browser „In der App öffnen?“ (intent:-Link, `?h=…`, braucht APK ≥ v83).
 - [x] **v82 – 🛰️ Standort: kein ungefragtes Springen** (direkt mit Klaas gebaut)
   - **Wind messen ohne aktuellen Standort**: vor dem Speichern den Standort neu holen
     (`getCurrentPosition`, kurz warten), statt die Kartenmitte zu nehmen; nur wenn das scheitert, Kartenmitte mit Hinweis.
