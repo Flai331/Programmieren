@@ -36,6 +36,9 @@ import {
 import {
   PUBLIC_URL, pack, unpack, parseShared, shareLink, appIntentUrl, assignmentSummary, sinceText, buildAssignment, projectFromAssignment, buildResult, applyResult,
 } from './share.js';
+import {
+  STATUS_LIST, SPOT_LIST, msgLabel, msgIcon, isUrgent, buildMsg, mergeStatus, latestFor, flushOutbox, pollMessages, coveragePct, coverageGaps, areaShapes,
+} from './status.js';
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
@@ -46,7 +49,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v88';
+const APP_VERSION = 'v89';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -77,6 +80,12 @@ let undoStack = [];
 let searchPin = null; // Nadel des letzten Suchergebnisses (gehört zu keinem Einsatz)
 let gpxSel = null; // Auswahl auf der Karte (Werkzeug „gpxsel“), siehe unten
 let selMode = null; // 'export' (GPX direkt), 'share' (für „Weitergeben“), 'area' (Gebiet antippen)
+let gapView = null; // „Lücken zeigen“ (Einsatzleitung): { a, step, pts }
+let pendingSpot = null; // „Standort melden“ mit Tippen auf die Karte (Hundeführer): { cat, txt }
+let liveBusy = false; // Abholen der Status-Meldungen läuft
+let urgentOpen = false; // Dringend-Dialog steht
+let flushBusy = false; // Warteschlange wird gesendet
+let flushAgain = false;
 let gpxSelGrid = null; // zuletzt angetipptes Rastergebiet (für „Ganzes Raster“)
 
 function load() {
@@ -174,6 +183,7 @@ function changed() {
   P.updated = Date.now();
   renderHanded();
   applyClosed();
+  renderStatusBtn();
   updateGridInfo();
   renderPalette();
   if (!$('panel-teams').hidden) renderMarks();
@@ -358,6 +368,8 @@ function redraw() {
   }
   drawOffSquares(ctx);
   drawPicked(ctx);
+  drawGaps(ctx);
+  drawStatusMarks(ctx);
   drawWindArrow(ctx);
 }
 
@@ -508,6 +520,7 @@ const HINTS = {
   offrect: 'Bereich für die Offline-Karte als Rechteck aufziehen.',
   windpt: 'Tippe auf die Karte, wo der Wind (DWD) angezeigt werden soll.',
   hfmarkpt: 'Tippe auf die Karte, wo der Punkt hin soll.',
+  hfspotpt: 'Tippe auf die Karte, wo der Standort gemeldet werden soll.',
   hfdraw: 'Mit dem Finger einmal um den Bereich herum malen.',
   hffield: 'Feld antippen: abgesucht → teilweise → nicht begehbar → zurück. „Feld“ nochmal tippen = fertig.',
   sendpick: 'Felder für den Auftrag antippen (blau umrandet). Dann „Weiter“.',
@@ -709,7 +722,7 @@ canvas.addEventListener('pointerdown', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill') {
     fillAt(ll, true);
-  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'gpxsel'].includes(tool)) {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'hfspotpt', 'gpxsel'].includes(tool)) {
     panning = false;
   }
 });
@@ -729,7 +742,7 @@ canvas.addEventListener('pointermove', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill' && fillStroke) {
     fillAt(ll, false);
-  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'gpxsel'].includes(tool)) {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'hfspotpt', 'gpxsel'].includes(tool)) {
     // Im Track-Modus verschiebt Ziehen die Karte, Tippen setzt Punkte
     if (!panning && Math.hypot(x - lastPt.x, y - lastPt.y) < 8) return;
     panning = true;
@@ -788,6 +801,13 @@ function finishPointer(e, cancelled) {
     if (!cancelled && !panning) {
       setTool('pan');
       hfMarkDialog({ lat: ll.lat, lon: ll.lng }, 'Position: auf der Karte angetippt.');
+    }
+  } else if (tool === 'hfspotpt') {
+    if (!cancelled && !panning) {
+      setTool('pan');
+      const sp = pendingSpot;
+      pendingSpot = null;
+      if (sp) sendStatus({ s: 'ort', cat: sp.cat, txt: sp.txt, pos: { lat: ll.lat, lon: ll.lng } });
     }
   } else if (tool === 'windpt') {
     if (!cancelled && !panning) {
@@ -1583,6 +1603,8 @@ function fieldDialog(ll) {
 
 map.on('click', (e) => {
   if (Date.now() - longPressedAt < 1000) return; // gehört zum langen Druck
+  const sm = statusMarkAt(e.containerPoint.x, e.containerPoint.y);
+  if (sm) return toast(statusText(sm), 9000);
   // Linie eines Umrisses angetippt (Einsatzleitung): Name, Zuteilung, Notiz bearbeiten
   if (db.mode === 'el' && tool === 'pan') {
     const pi = poiAt(e.containerPoint.x, e.containerPoint.y);
@@ -2889,6 +2911,7 @@ function sendSelection() {
     picked: Object.fromEntries(Object.entries(sendPicked).map(([k, v]) => [k, [...v]])),
     itemIdx: idx, meet: $('send-meet').checked && !!P.meet, rescue,
     poiIds: [...$('send-pois').querySelectorAll('input:checked')].map((i) => i.value), hint: $('send-hint').value.trim(), person: $('send-person').checked,
+    liveUrl: db.statusUrl || '',
     contacts: $('send-contacts').checked
       ? sendContactsAll().filter((c) => c.id === 'lead' || !$('send-ct-list').querySelector(`input[value="${c.id}"]:not(:checked)`)) : [],
   };
@@ -2982,11 +3005,11 @@ async function prepareSend() {
     const team = P.marks.find((m) => m.id === c.sel.teamId);
     P.sent.push({
       id: c.a.id, teamId: c.sel.teamId, team: team ? team.label : 'ohne Team', grids: c.a.g.map((g) => g.i), at: Date.now(),
-      what: assignmentSummary(c.a), n: 0,
+      what: assignmentSummary(c.a), n: 0, ...(c.a.ls ? { live: true } : {}),
     });
-    touch();
     renderSentList();
   }
+  touch(); // auch den (neuen) Status-Schlüssel des Einsatzes sichern
   return c;
 }
 $('send-qr').addEventListener('click', async () => {
@@ -3017,7 +3040,8 @@ function renderSentList() {
   const now = Date.now();
   for (const x of list) {
     const team = P.marks.find((m) => m.id === x.teamId);
-    const quiet = now - (x.last || x.at) > SENT_QUIET;
+    const { last: lm, done: dm } = latestFor(P.live ? P.live.msgs : [], x.id);
+    const quiet = now - Math.max(x.last || x.at, lm ? lm.t : 0) > SENT_QUIET;
     const d = document.createElement('div');
     d.className = 'sent-card' + (quiet ? ' quiet' : '');
     d.innerHTML = '<b><i></i><span></span></b><div class="what"></div><div class="since"></div><div class="back"></div>';
@@ -3029,11 +3053,404 @@ function renderSentList() {
     const n = x.n || (x.last ? 1 : 0);
     d.querySelector('.back').textContent = x.last
       ? `📥 ${n} Rückmeldung${n === 1 ? '' : 'en'}, zuletzt ${hhmm(x.last)} (vor ${sinceText(x.last, now)})${x.lastSum ? ` – ${x.lastSum}` : ''}`
-      : `⏳ noch keine Rückmeldung${quiet ? ' – nachfragen?' : ''}`;
+      : lm ? 'Weg und Markierungen kommen mit der QR-Rückmeldung' : `⏳ noch keine Rückmeldung${quiet ? ' – nachfragen?' : ''}`;
+    if (lm) {
+      const lv = document.createElement('div');
+      lv.className = 'live';
+      lv.textContent = `📣 ${msgLabel(lm)} · ${hhmm(lm.t)}${lm.lat != null ? ' · 📍' : ''}${lm.pc != null && lm.s === 'fertig' ? ` · HF: ${lm.pc} %` : ''}`;
+      const at = [...P.live.msgs].reverse().find((m) => m.a === x.id && m.lat != null);
+      if (at) lv.addEventListener('click', () => showStatusMark(at));
+      d.appendChild(lv);
+      if (dm && dm !== lm) {
+        const dn = document.createElement('div');
+        dn.className = 'back';
+        dn.textContent = `✅ Gebiet fertig ${hhmm(dm.t)}: HF: ${dm.pc ?? '–'} %${dm.pa != null ? ` · App: ${dm.pa} %` : ''}${dm.txt ? ` – ${dm.txt}` : ''}`;
+        d.appendChild(dn);
+      }
+      if (lm.s === 'fertig' && lm.pa != null) lv.textContent += ` · App: ${lm.pa} %`;
+    }
+    if (P.items.some((it) => it.resultKey && it.resultKey.startsWith(`${x.id}|t`))) {
+      const gb = document.createElement('button');
+      gb.className = 'mini gaps';
+      gb.textContent = gapView && gapView.a === x.id ? '🕳 Lücken ausblenden' : '🕳 Lücken zeigen';
+      gb.addEventListener('click', () => toggleGaps(x));
+      d.appendChild(gb);
+    }
     box.appendChild(d);
   }
 }
 $('btn-teams').addEventListener('click', renderSentList);
+
+// ---------- 📣 Status-Meldungen (v89) ----------
+// Hundeführer (P.hf.ls = [Adresse, Schlüssel]) melden Status und Standorte über die Google-Tabelle; ohne Netz wartet
+// alles in P.hf.outbox. Die Einsatzleitung holt die Meldungen ab (P.live) und zeigt sie auf der Karte und in der Übersicht.
+const teamColorOf = (a) => {
+  const s = (P.sent || []).find((x) => x.id === a);
+  const t = s && P.marks.find((m) => m.id === s.teamId);
+  return t ? t.color : '#455a64';
+};
+// Meldungen mit Standort für die Karte: Einsatzleitung alle Teams, Hundeführer nur die eigenen
+function statusMarks() {
+  let list;
+  if (db.mode === 'hf') list = ((P.hf && P.hf.log) || []).map((m) => ({ m, color: hfColor() }));
+  else if (P.live && !db.msgOff) list = P.live.msgs.map((m) => ({ m, color: teamColorOf(m.a) }));
+  else return [];
+  list = list.filter((x) => x.m.lat != null);
+  const newest = new Map();
+  for (const x of list) newest.set(x.m.a, x.m.id); // Liste ist nach Zeit sortiert
+  for (const x of list) x.big = newest.get(x.m.a) === x.m.id;
+  return list;
+}
+function drawStatusMarks(c) {
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  for (const x of statusMarks()) {
+    const [px, py] = toPx(x.m.lat, x.m.lon);
+    const r = x.big ? 16 : 10;
+    c.globalAlpha = x.big ? 1 : 0.65;
+    c.beginPath();
+    c.arc(px, py, r, 0, Math.PI * 2);
+    c.fillStyle = isUrgent(x.m) ? '#ffcdd2' : '#fff';
+    c.fill();
+    c.lineWidth = x.big ? 4 : 3;
+    c.strokeStyle = x.color;
+    c.stroke();
+    c.font = `${x.big ? 17 : 11}px sans-serif`;
+    c.fillStyle = '#000';
+    c.fillText(msgIcon(x.m), px, py + 1);
+  }
+  c.globalAlpha = 1;
+}
+function statusMarkAt(x, y) {
+  let hit = null;
+  for (const s of statusMarks()) {
+    const [px, py] = toPx(s.m.lat, s.m.lon);
+    if (Math.hypot(px - x, py - y) <= (s.big ? 20 : 14)) hit = s; // später = neuer
+  }
+  return hit;
+}
+function statusText({ m }) {
+  return [`${m.tm || 'Team'}: ${msgLabel(m)}`, hhmm(m.t) + (m.acc != null ? ` (± ${m.acc} m)` : ''), m.txt && `„${m.txt}“`,
+    m.pc != null && `HF: ${m.pc} %`, m.pa != null && `App: ${m.pa} %`].filter(Boolean).join(' · ');
+}
+function showStatusMark(m) {
+  closePanels();
+  map.setView([m.lat, m.lon], Math.max(map.getZoom(), 16));
+  toast(statusText({ m }), 9000);
+}
+
+// ---- Lücken (Einsatzleitung): was der zurückgemeldete Weg nicht abdeckt ----
+function drawGaps(c) {
+  if (!gapView || !gapView.pts.length) return;
+  if (!drawGaps.pat) {
+    const pc = document.createElement('canvas');
+    pc.width = pc.height = 8;
+    const x = pc.getContext('2d');
+    x.strokeStyle = 'rgba(230,81,0,0.85)';
+    x.lineWidth = 1.5;
+    x.beginPath();
+    x.moveTo(0, 8); x.lineTo(8, 0); x.moveTo(-2, 2); x.lineTo(2, -2); x.moveTo(6, 10); x.lineTo(10, 6);
+    x.stroke();
+    drawGaps.pat = c.createPattern(pc, 'repeat');
+  }
+  const m0 = map.getCenter();
+  const [x0, y0] = toPx(m0.lat, m0.lng);
+  const [x1, y1] = toPx(m0.lat + gapView.step / 111320, m0.lng + gapView.step / (111320 * Math.cos((m0.lat * Math.PI) / 180)));
+  const w = Math.abs(x1 - x0) + 0.5;
+  const h = Math.abs(y1 - y0) + 0.5;
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const H = canvas.height / (window.devicePixelRatio || 1);
+  c.fillStyle = drawGaps.pat;
+  for (const [la, lo] of gapView.pts) {
+    const [px, py] = toPx(la, lo);
+    if (px < -w || py < -h || px > W + w || py > H + h) continue;
+    c.fillRect(px - w / 2, py - h / 2, w, h);
+  }
+}
+function toggleGaps(x) {
+  if (gapView && gapView.a === x.id) { gapView = null; redraw(); return renderSentList(); }
+  const track = P.items.filter((it) => it.resultKey && it.resultKey.startsWith(`${x.id}|t`)).map((it) => it.pts);
+  const shapes = areaShapes(P, { gridIds: x.grids || [], teamId: x.teamId || '' });
+  if (!shapes.length) return toast('Kein Gebiet zum Vergleichen (Raster oder Umriss fehlt)');
+  const g = coverageGaps(track, shapes, db.coverR || 30);
+  gapView = { a: x.id, ...g };
+  closePanels();
+  redraw();
+  toast(g.pts.length ? `🕳 Schraffiert: nicht abgedeckt (Reichweite ${db.coverR || 30} m um den Weg)` : 'Keine Lücken – das Gebiet ist abgedeckt', 6000);
+}
+
+// ---- Hundeführer: melden ----
+const hasLive = () => db.mode === 'hf' && !!(P.hf && P.hf.ls);
+function renderStatusBtn() {
+  const b = $('hf-status');
+  b.hidden = !hasLive();
+  if (b.hidden) return;
+  const h = P.hf;
+  const n = (h.outbox || []).length;
+  const ok = [...(h.log || [])].reverse().find((x) => x.ok);
+  b.classList.toggle('pend', n > 0);
+  b.querySelector('b').textContent = n ? `⏳ ${n}` : ok ? `✓ ${hhmm(ok.t)}` : 'Status';
+}
+// Standort im Moment der Meldung: bis 10 s auf ≤ 30 m warten, sonst der beste Wert; ohne GPS null
+function getFix(maxWait = 10000) {
+  return new Promise((res) => {
+    let best = null;
+    let done = false;
+    let id = null;
+    let timer = null;
+    const fin = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (id !== null) navigator.geolocation.clearWatch(id);
+      res(best || (lastPos ? { lat: lastPos[0], lon: lastPos[1] } : null));
+    };
+    if (!navigator.geolocation) return fin();
+    id = navigator.geolocation.watchPosition((pos) => {
+      const c = pos.coords;
+      if (!best || c.accuracy < best.acc) best = { lat: c.latitude, lon: c.longitude, acc: c.accuracy };
+      if (c.accuracy <= 30) fin();
+    }, () => fin(), { enableHighAccuracy: true, maximumAge: 0, timeout: maxWait });
+    timer = setTimeout(fin, maxWait);
+  });
+}
+async function sendStatus(o) {
+  const p = P;
+  const h = p.hf;
+  if (!h || !h.ls) return;
+  let pos = o.pos;
+  if (pos === undefined) {
+    toast('📍 Standort wird bestimmt … (bis 10 s)', 11000);
+    pos = await getFix();
+  }
+  const m = buildMsg({ a: h.id, tm: h.team, s: o.s, cat: o.cat, txt: o.txt, pc: o.pc, pa: o.pa, pos });
+  h.outbox.push(m);
+  h.log = [...h.log, { ...m }].slice(-100);
+  p.updated = Date.now();
+  saveNow();
+  renderStatusBtn();
+  redraw();
+  toast(`${msgLabel(m)} – wird gesendet${pos ? '' : ' (ohne Standort)'} …`, 4000);
+  await flushStatus();
+  toast(h.outbox.some((x) => x.id === m.id) ? `⏳ ${msgLabel(m)}: wartet auf Netz – wird automatisch nachgesendet` : `✓ ${msgLabel(m)} gesendet ${hhmm(Date.now())}`, 5000);
+}
+// Warteschlange aller Aufträge senden (sofort, bei „online“, alle 60 s, beim Start)
+async function flushStatus() {
+  if (flushBusy) { flushAgain = true; return; }
+  flushBusy = true;
+  try {
+    do {
+      flushAgain = false;
+      for (const p of Object.values(db.projects)) {
+        const h = p.hf;
+        if (!h || !h.ls || !h.outbox.length) continue;
+        const r = await flushOutbox(h.ls, h.outbox, (...a) => fetch(...a));
+        if (!r.sent.length) continue;
+        h.outbox = r.left;
+        for (const id of r.sent) { const l = h.log.find((x) => x.id === id); if (l) l.ok = Date.now(); }
+        saveNow();
+      }
+    } while (flushAgain);
+  } catch { /* nächster Versuch */ }
+  flushBusy = false;
+  renderStatusBtn();
+  if (!$('dlg').hidden && $('dlg-box').querySelector('.st-line')) updateStatusLine();
+}
+function statusLine() {
+  const h = P.hf;
+  const n = h.outbox.length;
+  const ok = [...h.log].reverse().find((x) => x.ok);
+  return n ? `⏳ wartet auf Netz (${n})` : ok ? `✓ gesendet ${hhmm(ok.t)}` : 'Noch nichts gemeldet';
+}
+function updateStatusLine() { const l = $('dlg-box').querySelector('.st-line'); if (l) l.textContent = statusLine(); }
+const confirmSend = (label) => openDlg((box, close) => {
+  dlgHead(box, 'Wirklich senden?', `${label} geht sofort mit deinem Standort an die Einsatzleitung.`);
+  dlgButton(box, 'Senden', 'primary', () => close(true));
+  dlgButton(box, 'Abbrechen', '', () => close(false));
+});
+async function openStatusDialog() {
+  if (!hasLive()) return;
+  const code = await openDlg((box, close) => {
+    dlgHead(box, '📣 Status melden', `${P.hf.team} – geht mit Standort an die Einsatzleitung`);
+    const line = document.createElement('p');
+    line.className = 'st-line';
+    line.textContent = statusLine();
+    box.appendChild(line);
+    const list = document.createElement('div');
+    list.className = 'dlg-btns two';
+    box.appendChild(list);
+    for (const s of STATUS_LIST) dlgButton(list, `${s.ico} ${s.label}`, ['fund', 'hilfe'].includes(s.code) ? 'urgent' : '', () => close(s.code));
+    dlgButton(box, '📍 Standort melden', 'primary', () => close('ort'));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!code) return;
+  if (code === 'ort') return spotDialog();
+  if (code === 'fertig') return doneDialog();
+  if (isUrgent({ s: code }) && !(await confirmSend(statusLabel(code)))) return;
+  sendStatus({ s: code });
+}
+const statusLabel = (code) => msgLabel({ s: code });
+async function spotDialog() {
+  const r = await openDlg((box, close) => {
+    dlgHead(box, '📍 Standort melden', 'Art wählen, dann Ort: hier oder auf der Karte.');
+    let cat = 'anzeige';
+    const list = document.createElement('div');
+    list.className = 'dlg-btns two';
+    box.appendChild(list);
+    const btns = SPOT_LIST.map((s) => dlgButton(list, `${s.ico} ${s.label}`, s.code === cat ? 'sel' : '', () => { cat = s.code; btns.forEach((b, i) => b.classList.toggle('sel', SPOT_LIST[i].code === cat)); }));
+    const txt = document.createElement('input');
+    txt.type = 'text';
+    txt.placeholder = 'Kurzer Text (optional)';
+    txt.style.marginTop = '8px';
+    box.appendChild(txt);
+    dlgButton(box, '📍 Hier melden', 'primary', () => close({ cat, txt: txt.value.trim(), here: true }));
+    dlgButton(box, '👆 Auf Karte tippen', '', () => close({ cat, txt: txt.value.trim(), here: false }));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!r) return;
+  if (r.cat === 'fund' && !(await confirmSend('🟢 Fund'))) return;
+  if (!r.here) {
+    pendingSpot = { cat: r.cat, txt: r.txt };
+    setTool('hfspotpt');
+    return toast('Auf die Karte tippen: dort wird der Standort gemeldet', 6000);
+  }
+  sendStatus({ s: 'ort', cat: r.cat, txt: r.txt });
+}
+async function doneDialog() {
+  const h = P.hf;
+  const shapes = areaShapes(P);
+  const segs = h.track.map((sg) => sg.pts);
+  const calc = (r) => (shapes.length ? coveragePct(segs, shapes, r) : null);
+  const r = await openDlg((box, close) => {
+    dlgHead(box, '✅ Gebiet fertig', 'Wie viel vom Gebiet hast du abgesucht?');
+    let radius = db.coverR || 30;
+    let pa = calc(radius);
+    const big = document.createElement('div');
+    big.className = 'st-pct';
+    const rng = document.createElement('input');
+    rng.type = 'range';
+    rng.className = 'st-range';
+    rng.min = 0; rng.max = 100; rng.step = 10;
+    rng.value = pa != null ? Math.round(pa / 10) * 10 : 100;
+    const info = document.createElement('p');
+    info.className = 'small';
+    const show = () => { big.textContent = `${rng.value} %`; info.textContent = pa != null ? `Aus deinem Weg berechnet: ${pa} % (Reichweite des Hundes ${radius} m).` : 'Kein Weg oder Gebiet zum Berechnen – Wert von Hand einstellen.'; };
+    rng.addEventListener('input', show);
+    box.append(big, rng, info);
+    const rr = document.createElement('div');
+    rr.className = 'dlg-btns two';
+    box.appendChild(rr);
+    const rbtn = [20, 30, 50].map((v) => dlgButton(rr, `${v} m`, v === radius ? 'sel' : '', () => {
+      radius = v;
+      db.coverR = v;
+      pa = calc(v);
+      if (pa != null) rng.value = Math.round(pa / 10) * 10;
+      rbtn.forEach((b, i) => b.classList.toggle('sel', [20, 30, 50][i] === v));
+      show();
+    }));
+    rr.style.gridTemplateColumns = '1fr 1fr 1fr';
+    const txt = document.createElement('input');
+    txt.type = 'text';
+    txt.placeholder = 'Grund / Hinweis (optional)';
+    txt.style.marginTop = '8px';
+    box.appendChild(txt);
+    show();
+    dlgButton(box, '✅ Melden', 'primary', () => close({ pc: Number(rng.value), pa, txt: txt.value.trim() }));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!r) return;
+  saveNow();
+  sendStatus({ s: 'fertig', pc: r.pc, pa: r.pa == null ? undefined : r.pa, txt: r.txt });
+}
+$('hf-status').addEventListener('click', openStatusDialog);
+
+// ---- Einsatzleitung: Meldungen abholen ----
+async function pollLive() {
+  const proj = P;
+  const l = proj && proj.live;
+  if (db.mode !== 'el' || !l || proj.closed || liveBusy || document.hidden || !navigator.onLine) return;
+  if (!(proj.sent || []).some((x) => x.live)) return;
+  liveBusy = true;
+  try {
+    const r = await pollMessages(l, (...a) => fetch(...a));
+    const known = new Set(l.msgs.map((m) => m.id));
+    const fresh = r.msgs.filter((m) => !known.has(m.id));
+    if (r.since !== l.since || fresh.length) {
+      l.since = r.since;
+      if (fresh.length) {
+        l.msgs = mergeStatus(l.msgs, fresh).slice(-500);
+        proj.updated = Date.now();
+        if (proj === P) {
+          renderSentList();
+          redraw();
+          const last = fresh[fresh.length - 1];
+          if (!fresh.some(isUrgent)) toast(`📣 ${last.tm || 'Team'}: ${msgLabel(last)}${fresh.length > 1 ? ` (+${fresh.length - 1})` : ''}`, 6000);
+        }
+      }
+      saveNow();
+    }
+  } catch { /* kein Netz oder Server weg: nächster Versuch */ }
+  liveBusy = false;
+  showUrgent();
+}
+function beep() {
+  try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 600]); } catch { /* egal */ }
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.4, 0.8].forEach((d) => {
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.type = 'square';
+      o.frequency.value = 880;
+      o.connect(g);
+      g.connect(ac.destination);
+      g.gain.setValueAtTime(0.15, ac.currentTime + d);
+      g.gain.setValueAtTime(0, ac.currentTime + d + 0.25);
+      o.start(ac.currentTime + d);
+      o.stop(ac.currentTime + d + 0.3);
+    });
+    setTimeout(() => ac.close().catch(() => {}), 2000);
+  } catch { /* Ton nur nach Tipp auf die Seite erlaubt */ }
+}
+// Dringende Meldungen (Fund, Hilfe): Ton, Vibration, Dialog bleibt bis „Gesehen“
+async function showUrgent() {
+  const proj = P;
+  const l = proj && proj.live;
+  if (urgentOpen || db.mode !== 'el' || !l) return;
+  const todo = l.msgs.filter((m) => isUrgent(m) && !l.ack.includes(m.id));
+  if (!todo.length) return;
+  if (!$('dlg').hidden) return setTimeout(showUrgent, 4000); // ein anderes Fenster steht – gleich nochmal
+  urgentOpen = true;
+  beep();
+  const beeper = setInterval(beep, 12000);
+  const r = await openDlg((box, close) => {
+    dlgHead(box, `🆘 Dringend (${todo.length})`, 'Diese Meldung bleibt, bis du sie als gesehen bestätigst.');
+    for (const m of todo) {
+      const d = document.createElement('div');
+      d.className = 'st-urgent';
+      d.textContent = statusText({ m });
+      box.appendChild(d);
+      if (m.lat != null) dlgButton(box, '📍 Auf Karte zeigen', '', () => close(m));
+    }
+    dlgButton(box, '✓ Gesehen', 'primary', () => close(true));
+  });
+  clearInterval(beeper);
+  urgentOpen = false;
+  l.ack.push(...todo.map((m) => m.id));
+  saveNow();
+  if (r && r.lat != null && proj === P) showStatusMark(r);
+  showUrgent();
+}
+function startStatus() {
+  renderStatusBtn();
+  flushStatus();
+  pollLive();
+  showUrgent();
+  setInterval(() => { if (navigator.onLine) flushStatus(); }, 60e3);
+  setInterval(pollLive, 30e3);
+  window.addEventListener('online', () => { flushStatus(); pollLive(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { flushStatus(); pollLive(); } });
+}
 
 // ---- Einsatzleitung: Rückmeldung übernehmen (Kamera oder eingefügter Link) ----
 async function handleShared(text) {
@@ -3375,7 +3792,18 @@ function renderDeviceName() {
     for (const l of LAYERS) sel.add(new Option(l.name, l.id));
   }
   sel.value = devLayer() || '';
+  $('dev-status-url').value = db.statusUrl || '';
 }
+$('dev-status-url').addEventListener('change', () => {
+  const v = $('dev-status-url').value.trim();
+  if (v && !/^https:\/\/script\.google\.com\/\S+$/.test(v)) {
+    $('dev-status-url').value = db.statusUrl || '';
+    return toast('Die Adresse muss mit https://script.google.com/ beginnen (siehe Anleitung im Ordner „apps-script“)', 6000);
+  }
+  db.statusUrl = v || null;
+  saveNow();
+  toast(v ? '📣 Status-Server gespeichert – gilt für neue Aufträge' : 'Status-Server entfernt – neue Aufträge ohne Status-Meldungen');
+});
 // Standard-Kartenart dieses Geräts (oder null): gilt für neue, übernommene und geladene Einsätze
 function devLayer() {
   return db.defaultLayer && LAYERS.some((l) => l.id === db.defaultLayer) ? db.defaultLayer : null;
@@ -3882,6 +4310,7 @@ function switchProject(id) {
   saveNow();
   db.currentId = id;
   P = db.projects[id];
+  gapView = null;
   syncGrid();
   restoreDrafts();
   setTool('pan');
@@ -4584,7 +5013,12 @@ for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
 $('btn-projects').addEventListener('click', () => { fillProjectForm(); renderProjects(); openPanel('panel-projects'); });
 $('btn-grid').addEventListener('click', () => { updateGridInfo(); renderAlpha(); openPanel('panel-grid'); });
 $('btn-teams').addEventListener('click', () => { renderMarks(); openPanel('panel-teams'); });
-$('btn-layers').addEventListener('click', () => openPanel('panel-layers'));
+$('btn-layers').addEventListener('click', () => {
+  $('msg-show-row').hidden = !(P.live && db.mode === 'el');
+  $('msg-show').checked = !db.msgOff;
+  openPanel('panel-layers');
+});
+$('msg-show').addEventListener('change', () => { db.msgOff = !$('msg-show').checked; saveNow(); redraw(); });
 $('layers-offline').addEventListener('click', () => { renderOfflineForm(); openPanel('panel-offline'); });
 $('btn-more').addEventListener('click', () => { renderDeviceName(); openPanel('panel-more'); });
 $('app-version').textContent = `Version ${APP_VERSION}`;
@@ -6361,4 +6795,5 @@ applyMode();
 chooseModeIfNeeded().then(handleHash).then(() => window.onSharedFile()).then(() => {
   // App wurde während der Weg-Aufzeichnung geschlossen: weiter aufzeichnen
   if (db.mode === 'hf' && P.hf && P.hf.recOn && recWatch === null) startRec(true);
+  startStatus();
 });

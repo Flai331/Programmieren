@@ -611,3 +611,17 @@ html.night .sent-card.quiet { background: transparent; }
 #dlg-box .fchip.add { border-style: dashed; }
 #dlg-box .fchip.edit { padding: 8px 8px; }
 #dlg-box select { width: 100%; margin-bottom: 8px; }
+
+/* v89: Status-Meldungen */
+.hfbar #hf-status.pend span { animation: rp-pulse 1s ease-in-out infinite alternate; }
+.hfbar #hf-status b { font-size: 11px; }
+.dlg-btns.two { display: grid; grid-template-columns: 1fr 1fr; }
+.dlg-btns button.sel { background: #ffebee; border-color: var(--red); color: var(--red); font-weight: 600; }
+.dlg-btns button.urgent { border-color: var(--red); }
+.st-line { margin: 0 0 8px; font-size: 14px; }
+.st-range { width: 100%; margin: 6px 0; }
+.st-pct { font-size: 28px; font-weight: 700; text-align: center; }
+.st-urgent { border-left: 6px solid var(--red); background: #ffebee; border-radius: 8px; padding: 8px 10px; margin: 6px 0; font-size: 15px; color: #000; }
+.sent-card .live { margin-top: 2px; cursor: pointer; font-weight: 600; }
+.sent-card .gaps { margin-top: 4px; }
+html.night .st-urgent { background: transparent; color: inherit; }
