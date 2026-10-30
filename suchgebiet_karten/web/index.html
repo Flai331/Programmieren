@@ -12,13 +12,21 @@
 </head>
 <body>
   <header class="topbar">
-    <form id="search-form" class="topsearch" role="search">
+    <form id="search-form" class="topsearch fold" role="search">
       <input id="search-input" class="title" type="search" placeholder="🔍 Adresse, Kreuzung, Feld (C4) …"
         autocomplete="off" enterkeyhint="search" aria-label="Suchen">
       <button type="submit" class="searchbtn" aria-label="Suchen">🔍</button>
     </form>
+    <div id="teamchips" class="teamchips el-only" hidden></div>
     <div id="status" class="status"></div>
   </header>
+
+  <!-- v98: Team-Chips (Handy: Knopf + Liste), Ungelesen-Liste, Erinnerung, Infofenster -->
+  <button id="tm-btn" class="tm-btn el-only" type="button" hidden><span>📣 Teams</span><b id="tm-btn-n" hidden></b></button>
+  <div id="tm-list" class="tm-drop tm-phone-list el-only" hidden></div>
+  <div id="tm-unread" class="tm-drop el-only" hidden></div>
+  <div id="tm-banner" class="tm-banner el-only" hidden></div>
+  <div id="tm-pop" class="tm-pop el-only" hidden></div>
 
   <div id="searchbar" class="searchbar" hidden>
     <div class="searchhead">
@@ -127,6 +135,7 @@
     <button id="btn-notes" title="Notizen: getippt und handschriftlich"><span>📝</span>Notizen</button>
     <button id="btn-grid" title="Raster"><span>#</span>Raster</button>
     <button id="btn-teams" title="Hunde-Teams, Aufträge an Hundeführer"><span>🐕</span>Hunde</button>
+    <button id="btn-status" class="el-only" title="Status-Verlauf: alle Meldungen der Teams"><span>📣</span>Status<i id="st-count" hidden></i></button>
     <button id="btn-contacts" title="Kontakte: für diesen Einsatz und Adressbuch"><span>📇</span>Kontakte</button>
     <button id="btn-layers" title="Kartenart, Rettungspunkte, Offline-Karten"><span>🗺️</span>Karte</button>
     <button id="btn-gps" title="Mein Standort"><span>◎</span>GPS</button>
@@ -357,6 +366,15 @@
       <button id="recv-paste">📋 Rückmeldung einfügen</button>
     </div>
     <div id="sent-list" class="small"></div>
+    <button class="close">Schließen</button>
+  </section>
+
+  <!-- v98: Status-Verlauf -->
+  <section id="panel-status" class="panel" hidden>
+    <h2>📣 Status</h2>
+    <div id="st-snz" class="st-snz" hidden></div>
+    <label>Team <select id="st-filter"></select></label>
+    <div id="st-list" class="st-list"></div>
     <button class="close">Schließen</button>
   </section>
 
