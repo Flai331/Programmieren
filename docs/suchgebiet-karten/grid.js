@@ -212,3 +212,27 @@ export function remapCells(oldGrid, newGrid, cells) {
   }
   return out;
 }
+
+// Neues Raster anpassen: Anfasser k ('n','s','w','e' oder Ecke wie 'nw') nach ll gezogen → neues Gebiet,
+// Ränder auf ganze Felder gerundet, mindestens ein Feld. Gegenüberliegende Ränder bleiben (bis auf
+// Bruchteile eines Felds, weil die Feldbreite in Grad vom Nordrand abhängt) fest.
+export function fitGridArea(grid, k, ll) {
+  const { dLat, dLon, cellM } = grid;
+  let { cols, rows } = grid;
+  let north = grid.originLat;
+  if (k.includes('n')) {
+    const add = Math.max(1 - rows, Math.round((ll.lat - north) / dLat));
+    north += add * dLat; rows += add;
+  }
+  if (k.includes('s')) rows = Math.max(1, Math.round((north - ll.lat) / dLat));
+  const nLon = cellM / (M_PER_DEG_LAT * Math.cos((north * Math.PI) / 180));
+  const east0 = grid.originLon + grid.cols * dLon;
+  let west = grid.originLon;
+  if (k.includes('w')) {
+    cols = Math.max(1, cols - Math.round((ll.lng - west) / dLon));
+    west = east0 - cols * nLon;
+  }
+  if (k.includes('e')) cols = Math.max(1, Math.round((ll.lng - west) / dLon));
+  const eps = 1e-6;
+  return { north, south: north - (rows - eps) * dLat, west, east: west + (cols - eps) * nLon };
+}

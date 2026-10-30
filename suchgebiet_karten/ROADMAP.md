@@ -1,13 +1,14 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v105**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v106**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v106 – ↔ Raster nach dem Anlegen anpassen**: Nach dem Aufziehen (oder „Ausschnitt nehmen“) 2 Minuten lang Anfasser an Rändern und Ecken; Ziehen ändert Breite/Höhe in ganzen Feldern (mind. 1 Feld), gegenüberliegende Seite bleibt. Leiste unten mit Feldzahl, Countdown und „Fertig“. Rückgängig wie gewohnt.
 - [~] **v105 – 🔍 Beschriftung und Markierungen je Zoomstufe**: Bis Stufe 14 nur Umrandungen – kein Text, keine Texte/Zeichnungen, keine Meldungs-Symbole (Fund/Hilfe, B-Ort und Lage-Orte bleiben). Stufe 15: Markierungen und Gebietsname (lange Texte gekürzt), 16: Gebietsname und Team untereinander, ab 17 dazu Fläche und Notiz. Stift/Text/Radierer zoomen bei Bedarf auf Stufe 15. PDF unverändert vollständig.
 - [~] **v104 – 📋 Handy: Auftrags-Stand als eigener Reiter**: Auf dem Handy stehen keine Plaketten mehr an den Gebieten. Neben „📣 Teams“ klappt „📋 Aufträge“ eine Liste auf (Team · Gebiet, letzter Status, Stand %); Antippen zeigt das Gebiet. Teams- und Aufträge-Liste schließen sich gegenseitig, Tipp auf die Karte schließt. Tablet: Plaketten bleiben am Gebiet und jetzt sicher im Bild (nicht mehr hinter Knöpfen/außerhalb).
 - [~] **v103 – 🔄 APK-Selbst-Update · 👆 Tippen schließt · 📍 Texte ändern/löschen · Plaketten nur am Gebiet**:
