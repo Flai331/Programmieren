@@ -74,14 +74,23 @@ function doGet(e) {
 
 // Täglich: Zeilen älter als 7 Tage löschen (die Zeilen stehen in zeitlicher Reihenfolge)
 function cleanup() {
-  var sh = blatt_();
-  var n = sh.getLastRow();
-  if (n < 2) return;
-  var grenze = Date.now() - MAX_TAGE * 24 * 3600 * 1000;
-  var zeiten = sh.getRange(2, 1, n - 1, 1).getValues();
-  var alt = 0;
-  while (alt < zeiten.length && Number(zeiten[alt][0]) < grenze) alt++;
-  if (alt > 0) sh.deleteRows(2, alt);
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var sh = blatt_();
+    var n = sh.getLastRow();
+    if (n < 2) return;
+    var grenze = Date.now() - MAX_TAGE * 24 * 3600 * 1000;
+    var zeiten = sh.getRange(2, 1, n - 1, 1).getValues();
+    var alt = 0;
+    while (alt < zeiten.length && Number(zeiten[alt][0]) < grenze) alt++;
+    if (!alt) return;
+    // Google lässt nicht alle Zeilen unter der Kopfzeile löschen: dann vorher eine leere anhängen
+    if (alt === zeiten.length) sh.insertRowAfter(n);
+    sh.deleteRows(2, alt);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // Einmal von Hand ausführen: legt das Blatt an und richtet das tägliche Aufräumen ein

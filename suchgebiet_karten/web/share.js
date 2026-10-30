@@ -199,7 +199,7 @@ export function projectFromAssignment(a) {
     id: a.id, at: a.at, received: Date.now(), team: team.label, hint: a.h || '', grids: a.g.map((g) => g.i),
     track: [], // aufgezeichnete Wege: [{ t0, pts: [[lat, lon]] }]
     outbox: [], log: [], // Status-Meldungen: noch nicht gesendet / alle eigenen
-    ...(Array.isArray(a.ls) && a.ls.length === 2 ? { ls: [String(a.ls[0]), String(a.ls[1])] } : {}), // Status-Server: [Adresse, Schlüssel]
+    ...(Array.isArray(a.ls) && a.ls.length === 2 && /^https:\/\/script\.google\.com\//.test(String(a.ls[0])) ? { ls: [String(a.ls[0]), String(a.ls[1])] } : {}), // Status-Server: [Adresse, Schlüssel]
   };
   p.hfRescue = (a.rp || []).map(([n, lat, lon]) => ({ n, lat, lon }));
   return normalizeProject(p);
