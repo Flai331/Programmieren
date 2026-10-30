@@ -206,9 +206,14 @@ button, input, select { font: inherit; }
 .plist .proj button { padding: 6px 9px; font-size: 13px; }
 
 .mark {
-  display: grid; grid-template-columns: 40px 1fr auto; gap: 6px; align-items: center;
+  display: grid; grid-template-columns: 22px 40px 1fr auto; gap: 6px; align-items: center;
   padding: 8px; border: 1px solid var(--line); border-radius: 10px; margin: 6px 0;
 }
+/* v111: Griff zum Verschieben der Reihenfolge */
+.grip { display: flex; align-items: center; justify-content: center; width: 22px; min-height: 36px; font-size: 20px; color: var(--muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.grip.off { visibility: hidden; }
+.dragging { opacity: 0.85; box-shadow: 0 4px 14px rgba(0,0,0,0.25); position: relative; z-index: 2; background: var(--bg, #fff); }
+.mkrow { align-items: center; }
 .mark.active { border-color: var(--fg); box-shadow: 0 0 0 2px var(--fg) inset; }
 .mark .swatch { width: 36px; height: 36px; border-radius: 8px; border: 2px solid #fff; box-shadow: 0 0 0 1px #999; cursor: pointer; padding: 0; }
 .mark .fields { display: flex; flex-direction: column; gap: 4px; min-width: 0; }

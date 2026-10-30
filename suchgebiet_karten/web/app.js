@@ -58,12 +58,12 @@ import { placeBadges, boxOf } from './badgeplace.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
   newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor, cellsText,
-  exportProject, importProject, uid, MARK_COLORS, NO_TEAM, NO_TEAM_COLOR, assignTargets, assigneeName,
+  exportProject, importProject, uid, reorderMarks, MARK_COLORS, NO_TEAM, NO_TEAM_COLOR, assignTargets, assigneeName,
   allGrids, activateGrid, startNewGrid, removeActiveGrid, gridView, gridLabel,
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v110';
+const APP_VERSION = 'v111';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1411,6 +1411,44 @@ function deleteMark(m, cnt = null) {
   return true;
 }
 
+// v111: Zeilen am Griff ≡ ziehen (Maus und Finger). rows: Elemente mit data-id und data-kind; nur innerhalb derselben Art.
+function makeSortable(list, onDone) {
+  list.querySelectorAll('.grip').forEach((g) => {
+    g.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.preventDefault();
+      const row = g.closest('[data-id]');
+      const kind = row.dataset.kind;
+      row.classList.add('dragging');
+      // Listener am Fenster: das Umhängen der Zeile im DOM beendet sonst ein setPointerCapture
+      const move = (ev) => {
+        if (ev.pointerId !== e.pointerId) return;
+        const sibs = [...list.querySelectorAll(`[data-kind="${kind}"]`)].filter((x) => x !== row);
+        const next = sibs.find((x) => { const r = x.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; });
+        if (next) list.insertBefore(row, next);
+        else { const last = sibs[sibs.length - 1]; if (last) last.after(row); }
+      };
+      const up = (ev) => {
+        if (ev.pointerId !== e.pointerId) return;
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        row.classList.remove('dragging');
+        const ids = [...list.querySelectorAll(`[data-kind="${kind}"]`)].map((x) => x.dataset.id);
+        const before = P.marks.filter((m) => m.kind === kind).map((m) => m.id);
+        if (ids.join() === before.join()) return;
+        snapshot();
+        P.marks = reorderMarks(P.marks, kind, ids);
+        changed();
+        renderPalette();
+        onDone && onDone();
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
+    });
+  });
+}
 function renderMarks() {
   const box = $('mark-list');
   box.innerHTML = '';
@@ -1421,8 +1459,10 @@ function renderMarks() {
     const el = document.createElement('div');
     el.className = 'mark' + (act && act.id === m.id ? ' active' : '');
     el.dataset.id = m.id;
+    el.dataset.kind = m.kind;
     const a = as[m.id];
     el.innerHTML = `
+      <span class="grip" title="Ziehen zum Verschieben">≡</span>
       <button class="swatch" title="Zum Einfärben auswählen"></button>
       <div class="fields">
         <input type="text" class="name" placeholder="${m.kind === 'team' ? 'Teamname / Hundeführer' : 'Bedeutung'}">
@@ -1466,6 +1506,7 @@ function renderMarks() {
     el.querySelector('.del').addEventListener('click', () => { if (deleteMark(m, a ? a.count : 0)) renderMarks(); });
     box.appendChild(el);
   }
+  makeSortable(box, renderMarks);
 }
 $('team-add').addEventListener('click', () => addMark('team'));
 
@@ -1880,7 +1921,8 @@ function markDialog() {
         const r = document.createElement('div');
         r.className = 'mkrow' + (act && act.id === m.id ? ' on' : '');
         r.dataset.id = m.id;
-        r.innerHTML = '<button class="mkpick"><i></i><span></span><small></small></button>';
+        if (editable) r.dataset.kind = m.kind;
+        r.innerHTML = `${editable ? '<span class="grip" title="Ziehen zum Verschieben">≡</span>' : '<span class="grip off"></span>'}<button class="mkpick"><i></i><span></span><small></small></button>`;
         const pk = r.querySelector('.mkpick');
         pk.querySelector('i').style.background = m.color;
         pk.querySelector('span').textContent = m === NO_TEAM_MARK ? 'ohne Team' : markLabel(m) || '(ohne Namen)';
@@ -1899,6 +1941,7 @@ function markDialog() {
       for (const m of P.marks) row(m, true);
       row(NO_TEAM_MARK, false);
       box.appendChild(list);
+      makeSortable(list, render);
       dlgButton(box, '+ Team', '', () => { const m = addMark('team', true); if (m) render(); });
       dlgButton(box, '+ Markierung', '', () => { const m = addMark('status', true); if (m) render(); });
       dlgButton(box, 'Schließen', 'primary', () => close(true));
