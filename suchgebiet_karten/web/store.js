@@ -48,6 +48,7 @@ export function newProject(title = '') {
     contacts: [], // Kontakte dieses Einsatzes (Kopien aus dem Adressbuch), gehen auf Wunsch mit dem Auftrag
     pois: [], // Lage-Orte (ELW-Infos)
     poiDel: {}, // gelöschte Lage-Orte { id: Zeit } für den Abgleich zwischen Geräten
+    msgDel: {}, // v95: gelöschte Status-Meldungen { id: Zeit }
     eid: '', // Einsatz-ID über Geräte hinweg (Übergabe Handy -> Tablet)
     // v90: Fortschritt senden (progress.js) und UA-Sperren (locks.js)
     itemDel: {}, // gelöschte Zeichnungen { id: Zeit } – blockieren Wiederanlegen durch Fortschritt
@@ -83,6 +84,17 @@ export function normalizeProject(p) {
   for (const k of ['radio', 'contacts', 'pois']) if (!Array.isArray(out[k])) out[k] = [];
   out.pois = normalizePois(out.pois);
   if (!out.poiDel || typeof out.poiDel !== 'object' || Array.isArray(out.poiDel)) out.poiDel = {};
+  if (!out.msgDel || typeof out.msgDel !== 'object' || Array.isArray(out.msgDel)) out.msgDel = {};
+  // v95: Aufträge – acc = Zeit der Übernahme (ältere Aufträge gelten als übernommen), items/cells = was zum Auftrag gehört
+  if (Array.isArray(out.sent)) {
+    out.sent = out.sent.filter((x) => x && x.id).map((x) => {
+      const y = { ...x, acc: x.acc === undefined ? Number(x.at) || 0 : Number(x.acc) || 0 };
+      if (!Array.isArray(y.items)) delete y.items;
+      if (!y.cells || typeof y.cells !== 'object' || Array.isArray(y.cells)) delete y.cells;
+      if (!(Number(y.unlock) > 0)) delete y.unlock;
+      return y;
+    });
+  }
   out.contacts = out.contacts.map(normalizeContact);
   if (!out.eid) out.eid = out.id;
   // v90: Zeichnungen bekommen feste ID, Änderungszeit (t) und Gerät (by); Sperren (lock) nur 'base' | 'ua'
