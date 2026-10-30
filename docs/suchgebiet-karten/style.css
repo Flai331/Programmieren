@@ -601,3 +601,13 @@ body.closed :is(#pc-add, #pc-new) { pointer-events: none; opacity: 0.45; }
 .sent-card .what { margin: 2px 0; overflow-wrap: anywhere; }
 .sent-card .since, .sent-card .back { color: var(--muted, #555); }
 html.night .sent-card.quiet { background: transparent; }
+
+/* Feld lange drücken: Team und Markierung */
+.fchips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.fchip-wrap { display: inline-flex; gap: 2px; }
+#dlg-box .fchip { display: inline-flex; align-items: center; gap: 6px; width: auto; margin: 0; padding: 8px 10px; font-size: 14px; }
+#dlg-box .fchip i { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+#dlg-box .fchip.on { outline: 2px solid var(--red); font-weight: 700; }
+#dlg-box .fchip.add { border-style: dashed; }
+#dlg-box .fchip.edit { padding: 8px 8px; }
+#dlg-box select { width: 100%; margin-bottom: 8px; }

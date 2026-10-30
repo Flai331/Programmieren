@@ -1,7 +1,7 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v87**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v88**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
@@ -35,6 +35,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
     Kürzung, Fingerprint); im CI-Emulator-Test darf kein Bericht ausgelöst werden.
 
 - [x] **v80 – 📤 Weitergeben** statt Export: „Was?“ (ganzer Einsatz, Team, Gebiet, eigene Auswahl) und „Wie?“ (QR an HF oder EL/ELW, Garmin-App, Mail/BaseCamp, Speichern, PDF, Einsatz-Datei) (direkt mit Klaas gebaut).
+- [x] **v88 – ▦ Feld lange drücken**: Team zuteilen, Markierung setzen, neue Teams/Markierungen anlegen, Markierungen umbenennen/umfärben/löschen. Teams-Fenster nur noch für Teams (keine Legende); Deckkraft-Regler ins Raster-Fenster.
 - [x] **v87 – 📋 Auftrags-Übersicht für die EL** (Teams-Fenster): je Auftrag Team (Farbe, Hund), was (Gebiete/Felder, Umrisse, Hinweis), seit wann, Zahl und Zeit der Rückmeldungen mit gelaufenen km; > 60 min ohne Rückmeldung orange „nachfragen?“.
 - [x] **v86 – 🗺️ Standard-Kartenart pro Gerät** (⚙️ Mehr → Dieses Gerät): gilt für neue Einsätze, übernommene Aufträge, Übergaben und geladene Dateien (`db.defaultLayer`).
 - [x] **v85 – 📦 Offline-Paket fürs Einsatzgebiet** (Idee 9): ein Tipp unter „Karte“ bzw. im HF-Menü lädt die aktuelle Kartenart fürs ganze Einsatzgebiet (Raster, Zeichnungen, B-Ort, Lage-Orte + 500 m Rand) so scharf, wie der Speicher erlaubt (≤ 400 MB, Stufe 12–17), und speichert das Wetter (`missionBounds`, `packageZooms` in `web/offline.js`).

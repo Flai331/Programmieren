@@ -46,7 +46,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v87';
+const APP_VERSION = 'v88';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -1103,8 +1103,8 @@ function addMark(kind, quick = false) {
   const n = P.marks.filter((m) => m.kind === 'team').length + 1;
   let label = kind === 'team' ? `Team ${n}` : 'Markierung';
   if (quick) {
-    const t = prompt('Name des Teams:', label);
-    if (t === null) return;
+    const t = prompt(kind === 'team' ? 'Name des Teams:' : 'Bedeutung der Markierung (z. B. „Fundstelle“, „Gefahr“):', label);
+    if (t === null) return null;
     label = t.trim() || label;
   }
   snapshot();
@@ -1116,7 +1116,7 @@ function addMark(kind, quick = false) {
   P.marks.push(m);
   db.activeMark = m.id;
   changed();
-  if (quick) return;
+  if (quick) return m;
   openPanel('panel-teams');
   const inp = $('mark-list').querySelector(`[data-id="${m.id}"] input`);
   if (inp) { inp.focus(); inp.select(); }
@@ -1127,7 +1127,8 @@ function renderMarks() {
   box.innerHTML = '';
   const as = Object.fromEntries(assignments(P).map((a) => [a.mark.id, a]));
   const act = activeMark();
-  for (const m of P.marks) {
+  // nur Teams; Markierungen (abgesucht, Fundstelle …) setzt und ändert man per langem Druck aufs Feld
+  for (const m of P.marks.filter((x) => x.kind === 'team')) {
     const el = document.createElement('div');
     el.className = 'mark' + (act && act.id === m.id ? ' active' : '');
     el.dataset.id = m.id;
@@ -1201,7 +1202,6 @@ $('mark-alpha').addEventListener('input', () => {
   redraw();
   save();
 });
-$('mark-add').addEventListener('click', () => addMark('status'));
 
 // ---------- Raster ----------
 function setArea(area, cellM = P.cellM) {
@@ -1449,7 +1449,140 @@ $('cell-go').addEventListener('click', goToCell);
 $('cell-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') goToCell(); });
 
 // Antippen im Bewegen-Modus zeigt Feld, Zuteilung und ggf. UTMREF
+// ---------- Feld lange drücken: Team zuteilen, Markierung setzen, neu anlegen, ändern ----------
+const LONG_PRESS = 550; // ms
+let pressT = null;
+let pressAt = null;
+let longPressedAt = 0;
+const mapEl = map.getContainer();
+mapEl.addEventListener('pointerdown', (e) => {
+  clearTimeout(pressT);
+  if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0) || tool !== 'pan' || db.mode !== 'el') return;
+  pressAt = { x: e.clientX, y: e.clientY };
+  pressT = setTimeout(() => {
+    pressT = null;
+    const r = mapEl.getBoundingClientRect();
+    const ll = map.containerPointToLatLng([pressAt.x - r.left, pressAt.y - r.top]);
+    const h = allGrids(P).length ? hitGrid(ll.lat, ll.lng) : null;
+    if (!h) return;
+    longPressedAt = Date.now();
+    if (navigator.vibrate) navigator.vibrate(30);
+    if (isLocked()) return lockedToast();
+    useGridAt(ll.lat, ll.lng);
+    fieldDialog(ll);
+  }, LONG_PRESS);
+});
+mapEl.addEventListener('pointermove', (e) => {
+  if (pressT && pressAt && Math.hypot(e.clientX - pressAt.x, e.clientY - pressAt.y) > 10) { clearTimeout(pressT); pressT = null; }
+});
+for (const ev of ['pointerup', 'pointercancel']) mapEl.addEventListener(ev, () => { clearTimeout(pressT); pressT = null; });
+map.on('zoomstart movestart', () => { clearTimeout(pressT); pressT = null; });
+mapEl.addEventListener('contextmenu', (e) => e.preventDefault());
+
+function fieldDialog(ll) {
+  const cell = grid && cellAt(grid, ll.lat, ll.lng);
+  if (!cell) return;
+  const key = `${cell.c},${cell.r}`;
+  const h = hitGrid(ll.lat, ll.lng);
+  const name = `${h ? h.label : ''}${cellLabel(cell.c, cell.r)}`;
+  let edit = null; // Markierung, die gerade geändert wird
+  const set = (kind, id) => {
+    snapshot();
+    const mp = kind === 'team' ? P.fills : P.status;
+    if (id) mp[key] = id; else delete mp[key];
+    changed();
+  };
+  return openDlg((box, close) => {
+    const chip = (parent, m, on, fn) => {
+      const b = document.createElement('button');
+      b.className = 'fchip' + (on ? ' on' : '');
+      b.innerHTML = '<i></i><span></span>';
+      if (m) b.querySelector('i').style.background = m.color; else b.querySelector('i').remove();
+      b.querySelector('span').textContent = `${on ? '✓ ' : ''}${m ? markLabel(m) || '(ohne Namen)' : 'keine'}`;
+      b.addEventListener('click', fn);
+      parent.appendChild(b);
+      return b;
+    };
+    const render = () => {
+      box.innerHTML = '';
+      if (edit) {
+        const m = edit;
+        dlgHead(box, '✏️ Markierung ändern', 'Gilt für alle Felder mit dieser Markierung und für die Legende im PDF.');
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.value = m.label;
+        const sel = document.createElement('select');
+        for (const c of [...new Set([...MARK_COLORS, m.color])]) sel.add(new Option(COLOR_NAMES[c] || 'eigene Farbe', c));
+        sel.value = m.color;
+        box.append(inp, sel);
+        dlgButton(box, 'Speichern', 'primary', () => {
+          snapshot();
+          m.label = inp.value.trim() || m.label;
+          m.color = sel.value;
+          changed();
+          renderPalette();
+          edit = null;
+          render();
+        });
+        dlgButton(box, '🗑️ Markierung löschen', 'danger', () => {
+          const n = Object.values(P.status).filter((v) => v === m.id).length + (P.otherGrids || []).reduce((a, g) => a + Object.values(g.status || {}).filter((v) => v === m.id).length, 0);
+          if (!confirm(`„${markLabel(m)}“ löschen?${n ? ` Sie wird von ${n} Feld${n === 1 ? '' : 'ern'} entfernt.` : ''}`)) return;
+          snapshot();
+          P.marks = P.marks.filter((x) => x.id !== m.id);
+          for (const mp of [P.status, ...(P.otherGrids || []).map((g) => g.status || {})]) for (const k of Object.keys(mp)) if (mp[k] === m.id) delete mp[k];
+          changed();
+          renderPalette();
+          edit = null;
+          render();
+        });
+        dlgButton(box, '‹ Zurück', '', () => { edit = null; render(); });
+        return;
+      }
+      dlgHead(box, `▦ Feld ${name}`, 'Antippen übernimmt sofort. Für viele Felder auf einmal: Werkzeug „Feld“.');
+      const sec = (title) => {
+        const l = document.createElement('label');
+        l.textContent = title;
+        const d = document.createElement('div');
+        d.className = 'fchips';
+        box.append(l, d);
+        return d;
+      };
+      const tb = sec('👥 Team');
+      const teams = P.marks.filter((m) => m.kind === 'team');
+      for (const m of teams) chip(tb, m, P.fills[key] === m.id, () => { set('team', P.fills[key] === m.id ? null : m.id); render(); });
+      chip(tb, null, !P.fills[key], () => { set('team', null); render(); });
+      const nt = document.createElement('button');
+      nt.className = 'fchip add';
+      nt.textContent = '+ Neues Team';
+      nt.addEventListener('click', () => { const m = addMark('team', true); if (m) set('team', m.id); render(); });
+      tb.appendChild(nt);
+      const sb = sec('🏷️ Markierung');
+      for (const m of P.marks.filter((x) => x.kind === 'status')) {
+        const wrap = document.createElement('span');
+        wrap.className = 'fchip-wrap';
+        sb.appendChild(wrap);
+        chip(wrap, m, P.status[key] === m.id, () => { set('status', P.status[key] === m.id ? null : m.id); render(); });
+        const ed = document.createElement('button');
+        ed.className = 'fchip edit';
+        ed.textContent = '✏️';
+        ed.title = 'Markierung ändern';
+        ed.addEventListener('click', () => { edit = m; render(); });
+        wrap.appendChild(ed);
+      }
+      chip(sb, null, !P.status[key], () => { set('status', null); render(); });
+      const nm = document.createElement('button');
+      nm.className = 'fchip add';
+      nm.textContent = '+ Neue Markierung';
+      nm.addEventListener('click', () => { const m = addMark('status', true); if (m) set('status', m.id); render(); });
+      sb.appendChild(nm);
+      dlgButton(box, 'Fertig', 'primary', () => close(true));
+    };
+    render();
+  });
+}
+
 map.on('click', (e) => {
+  if (Date.now() - longPressedAt < 1000) return; // gehört zum langen Druck
   // Linie eines Umrisses angetippt (Einsatzleitung): Name, Zuteilung, Notiz bearbeiten
   if (db.mode === 'el' && tool === 'pan') {
     const pi = poiAt(e.containerPoint.x, e.containerPoint.y);
@@ -4449,8 +4582,8 @@ for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
   }, { capture: true });
 }
 $('btn-projects').addEventListener('click', () => { fillProjectForm(); renderProjects(); openPanel('panel-projects'); });
-$('btn-grid').addEventListener('click', () => { updateGridInfo(); openPanel('panel-grid'); });
-$('btn-teams').addEventListener('click', () => { renderMarks(); renderAlpha(); openPanel('panel-teams'); });
+$('btn-grid').addEventListener('click', () => { updateGridInfo(); renderAlpha(); openPanel('panel-grid'); });
+$('btn-teams').addEventListener('click', () => { renderMarks(); openPanel('panel-teams'); });
 $('btn-layers').addEventListener('click', () => openPanel('panel-layers'));
 $('layers-offline').addEventListener('click', () => { renderOfflineForm(); openPanel('panel-offline'); });
 $('btn-more').addEventListener('click', () => { renderDeviceName(); openPanel('panel-more'); });
