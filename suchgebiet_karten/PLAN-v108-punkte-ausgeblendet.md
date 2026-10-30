@@ -81,3 +81,39 @@ ein Tipp gar nichts tun.
 - Bestehende Tests bleiben grün: `node --test test/*.mjs` und die Scratchpad-e2e-Skripte gridfit, noteam (falls
   vorhanden), text, tapclose, close, accept, progress, labels, orders, status und park.
 - **Nicht** deployen, committen oder die Version erhöhen.
+
+## 3. Langdruck neu verteilt (mit Klaas abgestimmt)
+- **Langdruck auf der Karte** (app.js ~1650, `pressT`, nur im Pan-Modus bei EL): öffnet **nicht mehr** das Feld-Fenster
+  (`fieldDialog`).
+  - Er trifft Umrisse und Linien per `hitItem` (Toleranz ca. 14 px). `kind: 'track'`: Es öffnet `outlineDialog` über
+    `renameItem(i)`.
+  - Das Fenster bekommt zusätzlich **🗑 Löschen** mit Rückfrage „🗑 Umriss löschen?“. Die Sperren `blocked(it, 'delete')`
+    und `guardAssigned` gelten wie beim Radierer, ebenso `snapshot()` und `changed()`.
+  - Dazu kommt der Knopf **„✋ Punkte bearbeiten“** aus Teil 1.
+  - Trifft der Langdruck nichts, passiert nichts. Vibration gibt es nur bei einem Treffer.
+  - `longPressedAt` wird weiter gesetzt, damit der folgende Klick kein Tipp-Fenster öffnet.
+  - Auch für HF prüfen: Ein eigener Bereich öffnet `hfAreaEdit`, wenn die Bedingung `db.mode !== 'el'` das erlaubt.
+    Sonst bleibt der Langdruck nur für die EL.
+  - `fieldDialog` selbst bleibt erhalten, falls es noch woanders aufgerufen wird (`grep`). Sonst wird es entfernt bzw. für
+    Teil 4 wiederverwendet.
+- **Langdruck auf den Knopf „Feld“** (index.html:127, `data-tool="fill"`, Werkzeugleiste unten) öffnet das neue Fenster
+  **„▦ Feld-Markierungen“** mit `openDlg`. Ein normaler Tipp wählt weiterhin das Werkzeug. Nach einem Langdruck darf der
+  folgende Klick das Werkzeug nicht umschalten. Kontextmenü und Textauswahl unterdrücken
+  (`contextmenu` preventDefault, CSS `-webkit-touch-callout:none; user-select:none`).
+  - Der erste Teil ist eine Liste aller `P.marks`: Farbpunkt, Name, Art (Team/Markierung), die aktive Zeile ist
+    hervorgehoben.
+    - Ein Tipp auf den Farbpunkt bzw. die Zeile macht die Markierung aktiv (`db.activeMark`), schließt das Fenster und
+      wählt das Feld-Werkzeug.
+    - Der Knopf ✏️ öffnet ein Unterfenster: Name ändern, Farbe aus `MARK_COLORS` wählen (Grau ist ab v107 ausgeschlossen,
+      `NO_TEAM` ist nicht änderbar), 🗑 Löschen mit Rückfrage (Logik wie im Teams-Fenster, `renderMarks` ~1264ff.
+      wiederverwenden, nicht duplizieren).
+  - Danach folgt der Eintrag „⬜ ohne Team“ (v107) zum Auswählen.
+  - Unten stehen die Knöpfe **„+ Team“** und **„+ Markierung“** (`addMark('team', true)` bzw. `addMark('status', true)`)
+    und **Schließen**.
+  - Nur EL. Für HF gibt es den Knopf „Feld“ nicht bzw. ist er gesperrt; das prüfen.
+- e2e: Langdruck auf einen Umriss (Pointer 700 ms halten) öffnet das Fenster; Löschen entfernt den Umriss. Langdruck
+  auf ein leeres Feld öffnet kein Fenster. Langdruck auf „Feld“ öffnet „▦ Feld-Markierungen“; neue Markierung anlegen,
+  umbenennen, Farbe ändern, auswählen; das Werkzeug ist danach `fill` mit dieser Markierung. Für Tablet (Maus) und
+  Handy (Touch: `touchscreen` hat kein Halten, daher per CDP `Input.dispatchTouchEvent` oder Pointer-Events
+  simulieren). Screenshots machen. Bestehende Tests, die den Feld-Langdruck nutzen, auf den neuen Weg umstellen
+  (`grep -l "LONG\|long" ~scratchpad/*.mjs`).
