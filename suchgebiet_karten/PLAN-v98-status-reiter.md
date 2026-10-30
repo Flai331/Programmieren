@@ -1,39 +1,50 @@
-# Plan v98: 📣 Status-Reiter · Status-Leiste oben (Tablet) · Suchfeld einklappbar
+# Plan v98: 📣 Team-Stati auf der Karte · Status-Verlauf · Suchfeld einklappbar (Tablet)
 
-Wünsche von Klaas (30.10.2026), nur Einsatzleitung (EL):
+Mit Klaas abgestimmt (30.10.2026). Gilt nur im EL-Modus; HF-Modus bleibt unverändert.
+Schon gebaut (Commit d935625): Plakette je Umriss/Raster mit Team, Status und Stand; Sammel-Plakette entfällt.
 
-## 1. Eigener Reiter „📣 Status“
-- Neue Kachel in der rechten Randleiste (EL-Modus) **„📣 Status“** mit eigenem Panel `panel-status`
-  (wie die anderen Panels über `SIDE_PANELS`/`openPanel`, zweiter Tipp schließt).
-- Inhalt: alle Status-Meldungen des Einsatzes (`allMsgs()`, also Status-Server + QR, ohne gelöschte),
-  **neueste oben**, je Zeile: Teamfarbe, Team, Meldung (`msgLabel`), Uhrzeit (hh:mm, „vor x min“), Text,
-  📍 wenn mit Standort. Dringende (Fund/Hilfe) rot hervorgehoben.
-- Zeile antippen: mit Standort → Karte springt hin (`showStatusMark`) und Panel schließt; Löschen über den
-  vorhandenen `msgDialog` (Warnung) per kleinem 🗑-Knopf in der Zeile.
-- Filter oben: „Alle Teams“ / einzelnes Team (Select). Leer: „Noch keine Status-Meldungen“.
-- Aktualisiert sich bei neuen Meldungen (pollLive, QR-Rückmeldung, Löschen), wenn offen.
-- Kachel zeigt ein Zähler-Badge mit ungelesenen Meldungen seit dem letzten Öffnen (`P.live.seen` bzw.
-  `P.msgSeen` = Zeit des letzten Öffnens; normalisieren in store.js).
+## 1. Team-Chips (aktueller Status je Team)
+- Ein Chip **pro Team mit laufendem Auftrag**: Teamfarbe-Punkt · Team (Hund) · Gebietsname(n) des Auftrags ·
+  letzter Status mit Uhrzeit. Beispiel: „● Juh 1 (Kira) · Umriss 2 · ⏸ Pause 14:32“.
+  Ohne Meldung: „📲 wartet“ (nicht übernommen) bzw. „📲 übernommen 13:10“.
+- Fund/Hilfe: Chip rot. Sortierung: neueste Aktivität zuerst.
+- **Verschwindet**, sobald die QR-Rückmeldung dieses Auftrags eingelesen wurde (`x.last`); kommt danach eine neuere
+  Meldung (m.t > x.last), erscheint er wieder. Team mit mehreren Aufträgen: der neueste nicht zurückgemeldete.
+- Reine Logik `teamChips(sent, msgs, marks, items)` in `web/status.js` (oder eigenes Modul) mit Unit-Tests.
 
-## 2. Status-Leiste oben neben dem Suchfeld (Tablet/breite Bildschirme)
-- Oben in der roten Kopfzeile rechts neben dem Suchfeld (`#search-form`) eine Leiste `#status-strip` mit den
-  **letzten 3 Meldungen** als kompakte Chips: „<Teamfarbe-Punkt> Team · Meldung · 14:32“. Antippen wie im Reiter.
-- Nur im EL-Modus und nur, wenn es Meldungen gibt; nur bei Breite ≥ 700 px (Tablet/Querformat).
-  Auf schmalen Handys ausgeblendet (dort gibt es den Reiter).
-- **Suchfeld kleiner und einklappbar**: auf breiten Bildschirmen ist das Suchfeld standardmäßig
-  eingeklappt zu einem 🔍-Knopf; Antippen klappt es auf (Fokus ins Feld), nach dem Suchen bzw. Verlassen
-  (blur ohne Text, Ergebnisliste geschlossen, ✕) klappt es wieder zu. Eingeklappt bekommt die Status-Leiste
-  den Platz und zeigt **so viele Meldungen, wie hineinpassen** (mindestens 3, dynamisch nach Breite, z. B.
-  per Messen der Chips oder feste Chipbreite). Aufgeklappt: Suchfeld schmaler als heute, Leiste zeigt 3.
-- Auf schmalen Handys bleibt das Suchfeld wie bisher (immer sichtbar).
-- Auch im HF-Modus bleibt alles wie bisher.
+### Platz
+- **Tablet (Breite ≥ 700 px)**: Chips in der roten Kopfleiste neben dem Suchfeld. Suchfeld standardmäßig
+  eingeklappt zu 🔍-Knopf; Antippen klappt es auf (Fokus), nach Suche/✕/Verlassen ohne Text klappt es zu.
+  Eingeklappt so viele Chips wie passen, Rest als „+n“-Chip (öffnet den Verlauf). Aufgeklappt Suchfeld schmaler als heute.
+- **Handy (< 700 px)**: kleiner Knopf **„📣 Teams“** oben links unter der Kopfleiste (keine Überlappung mit der
+  linken Werkzeugspalte). Antippen klappt eine kompakte, scrollbare Liste der Chips auf (max. ~40 % Höhe);
+  nochmal tippen oder Tipp auf die Karte klappt zu. Offen/zu wird pro Gerät gemerkt (`db.teamsOpen`).
+
+### Antippen eines Chips
+- Karte springt auf das Gebiet des Auftrags (alle Gebiete umfassend, `fitBounds`) und ein kleines Infofenster zeigt
+  die **letzten 3 Meldungen** dieses Teams + Knopf „Alle Meldungen“ (öffnet den Verlauf gefiltert auf das Team).
+
+### Neue Meldungen (außer Fund/Hilfe, die bleiben beim Dringend-Dialog)
+- Kein Toast mehr für normale Meldungen. Der Chip des Teams **blinkt** einige Sekunden.
+- Meldungen gelten als **ungelesen**, bis man sie gesehen hat (`P.msgSeen` = Set/Objekt gelesener IDs, normalisieren).
+- **Mehrere ungelesene Meldungen**: unter den Chips klappt automatisch eine kurze Liste der ungelesenen auf
+  (Team · Meldung · Uhrzeit, neueste oben). **Ein Tipp irgendwohin** schließt sie und markiert sie als gelesen.
+- Eine einzelne ungelesene Meldung: Chip blinkt und trägt einen Punkt, bis man den Chip antippt oder die Liste
+  schließt (dann gelesen).
+- Auf dem Handy: ist die Team-Liste zu, blinkt der Knopf „📣 Teams“ und zeigt die Zahl ungelesener; mehrere
+  ungelesene klappen die Liste der ungelesenen auf wie oben.
+
+## 2. Verlauf: eigene Kachel „📣 Status“
+- Neue Kachel in der rechten Randleiste (EL), Panel `panel-status` (über `SIDE_PANELS`, zweiter Tipp schließt).
+- Alle Meldungen (`allMsgs()`), neueste oben: Teamfarbe, Team, Meldung, Uhrzeit („vor x min“), Text, 📍 wenn mit
+  Standort; Fund/Hilfe rot. Filter „Alle Teams“ / Team. Zeile mit Standort antippen → Karte springt (`showStatusMark`).
+  🗑 je Zeile → `msgDialog`-Löschen mit Warnung. Öffnen markiert alle als gelesen. Kachel zeigt Zahl ungelesener.
 
 ## Tests
-- Unit (reine Logik in `web/status.js`): `recentMsgs(list, n, teamFilter)` (neueste zuerst, Filter, ohne gelöschte),
-  `unreadCount(list, seen)`.
-- Playwright `statusbar-e2e.mjs` im Scratchpad: Viewport 1280×800 (Tablet): EL mit Meldungen (P.qmsgs/P.live.msgs
-  setzen) → Leiste zeigt ≥ 3 Chips, Suchfeld eingeklappt; 🔍 aufklappen → Suchfeld sichtbar, Leiste 3 Chips;
-  Reiter „📣 Status“ öffnet Liste neueste oben, Filter nach Team, Zeile antippen springt; 🗑 löscht mit Warnung.
-  Viewport 412×860 (Handy): Leiste aus, Suchfeld wie bisher. Screenshots ansehen.
-- Alle bisherigen Tests grün: `node --test test/*.mjs` (187) und im Scratchpad status-e2e, accept-e2e, progress-e2e,
-  badge-e2e, area-badge-e2e, multi-e2e, send-e2e, time-e2e (Versions-Checks auf v98 anpassen).
+- Unit: `teamChips` (Inhalt, Sortierung, Ausblenden nach QR-Rückmeldung, Wiedererscheinen, mehrere Aufträge),
+  ungelesen/gelesen-Logik, Filter für den Verlauf.
+- Playwright `statusbar-e2e.mjs` (Scratchpad), beide Viewports 1280×800 und 412×860, Screenshots ansehen:
+  Chips/Knopf sichtbar, Suchfeld ein-/ausklappen (Tablet), Chip antippen → Karte + Infofenster, neue Meldungen →
+  Blinken / Liste der ungelesenen, Tipp schließt und markiert gelesen, QR-Rückmeldung → Chip weg, neue Meldung → wieder da,
+  Verlauf mit Filter und Löschen. Keine Überlappung mit Randleisten/Suchergebnissen.
+- Alle bisherigen Tests grün (`node --test test/*.mjs`, Scratchpad-E2E; Versions-Checks auf v98).
