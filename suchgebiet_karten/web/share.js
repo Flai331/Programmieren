@@ -115,6 +115,25 @@ function unpackItem(x, extra = {}) {
 }
 
 // ---------- Auftrag (Einsatzleitung) ----------
+// Kurzbeschreibung eines Auftrags für die Übersicht der Einsatzleitung, z. B. „Gebiet 1: 6 Felder · Nordhang · „Bachlauf zuerst““
+export function assignmentSummary(a) {
+  const parts = [];
+  for (const g of a.g || []) {
+    const n = (g.f || []).length;
+    parts.push(n ? `${g.n}: ${n} Feld${n === 1 ? '' : 'er'}` : `${g.n} (ganzes Gebiet)`);
+  }
+  const tracks = (a.i || []).filter((x) => x.k === 't').map((x) => x.n || 'Umriss');
+  if (tracks.length) parts.push(tracks.join(', '));
+  if (a.h) parts.push(`„${a.h.length > 60 ? `${a.h.slice(0, 59)}…` : a.h}“`);
+  return parts.join(' · ');
+}
+
+// Dauer seit t (ms) als „12 min“ bzw. „1 h 05 min“
+export function sinceText(t, now = Date.now()) {
+  const m = Math.max(0, Math.floor((now - t) / 60000));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
+}
+
 // sel: { teamId, gridIds: [], fields: 'team'|'all'|'pick', picked: {gridId: ["c,r"]}, itemIdx: [], meet, poiIds: [], rescue: [pts], hint, person }
 export function buildAssignment(p, sel) {
   const team = p.marks.find((m) => m.id === sel.teamId && m.kind === 'team') || null;

@@ -1,7 +1,7 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v85**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v87**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
@@ -35,6 +35,8 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
     Kürzung, Fingerprint); im CI-Emulator-Test darf kein Bericht ausgelöst werden.
 
 - [x] **v80 – 📤 Weitergeben** statt Export: „Was?“ (ganzer Einsatz, Team, Gebiet, eigene Auswahl) und „Wie?“ (QR an HF oder EL/ELW, Garmin-App, Mail/BaseCamp, Speichern, PDF, Einsatz-Datei) (direkt mit Klaas gebaut).
+- [x] **v87 – 📋 Auftrags-Übersicht für die EL** (Teams-Fenster): je Auftrag Team (Farbe, Hund), was (Gebiete/Felder, Umrisse, Hinweis), seit wann, Zahl und Zeit der Rückmeldungen mit gelaufenen km; > 60 min ohne Rückmeldung orange „nachfragen?“.
+- [x] **v86 – 🗺️ Standard-Kartenart pro Gerät** (⚙️ Mehr → Dieses Gerät): gilt für neue Einsätze, übernommene Aufträge, Übergaben und geladene Dateien (`db.defaultLayer`).
 - [x] **v85 – 📦 Offline-Paket fürs Einsatzgebiet** (Idee 9): ein Tipp unter „Karte“ bzw. im HF-Menü lädt die aktuelle Kartenart fürs ganze Einsatzgebiet (Raster, Zeichnungen, B-Ort, Lage-Orte + 500 m Rand) so scharf, wie der Speicher erlaubt (≤ 400 MB, Stufe 12–17), und speichert das Wetter (`missionBounds`, `packageZooms` in `web/offline.js`).
 - [x] **v84 – Ein „📷 Scannen“-Knopf** für alles (Randleiste) und einheitliche Dateinamen `Einsatz_JJJJ-MM-TT_HHMM_Inhalt.ext` (`web/files.js`).
 - [x] **v79 – GPX-Auswahl für die Garmin-App**: einzelne Umrisse, Striche, Texte, Lage-Orte, Felder antippen; Umriss nimmt alles darin mit, „Ganzes Raster“ alles im Gebiet (direkt mit Klaas gebaut).
@@ -82,6 +84,8 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
 ## Fehlerbehebungen (gehen sofort live)
 
 (Der Autopilot trägt hier behobene Meldungen aus der 🐞 Fehlerzentrale ein: Datum, Version, Kurzbeschreibung.)
+
+- 30.10.2026, v86: Einsatz-/Auftragsliste zeigt Namen vollständig (Knöpfe darunter); doppelter Zoom (+/−) unten rechts entfernt – die rechte Leiste verdeckte ihn, der Zoom-Regler links bleibt.
 
 ## Rückfragen an Klaas
 

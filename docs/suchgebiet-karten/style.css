@@ -108,7 +108,8 @@ button, input, select { font: inherit; }
 }
 .zs-level { font-size: 12px; font-weight: 700; color: #1565c0; line-height: 1; padding: 2px 0; font-variant-numeric: tabular-nums; }
 @media (max-height: 560px) { .zs-track { height: 90px; } }
-@media (max-height: 430px) { .zoomslider { display: none; } }
+.leaflet-control-zoom { display: none; }
+@media (max-height: 430px) { .zoomslider { display: none; } .leaflet-control-zoom { display: block; } }
 
 .bottomstack {
   position: fixed; left: 10px; right: 80px; bottom: 74px; z-index: 1001;
@@ -197,11 +198,11 @@ button, input, select { font: inherit; }
 .panel label > input[type=text] { display: block; width: 100%; margin-top: 4px; }
 
 .plist .proj {
-  display: flex; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; margin: 6px 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; margin: 6px 0;
 }
 .plist .proj.current { border-color: var(--red); background: #fdecea; }
-.plist .proj .meta { flex: 1; min-width: 0; font-size: 13px; }
-.plist .proj .meta b { display: block; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plist .proj .meta { flex: 1 1 100%; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+.plist .proj .meta b { display: block; font-size: 15px; }
 .plist .proj button { padding: 6px 9px; font-size: 13px; }
 
 .mark {
@@ -591,3 +592,12 @@ body.closed :is(#pc-add, #pc-new) { pointer-events: none; opacity: 0.45; }
 .share-grid button b { font-size: 14px; }
 .share-grid button small { font-size: 11px; color: #555; font-weight: 400; }
 .share-grid button.active { outline: 3px solid #c62828; background: #ffebee; }
+
+/* Übersicht der Aufträge (Teams-Fenster) */
+.sent-card { border: 1px solid var(--line); border-left: 5px solid #2e7d32; border-radius: 10px; padding: 8px 10px; margin: 6px 0; font-size: 13px; }
+.sent-card.quiet { border-left-color: #ef6c00; background: #fff3e0; }
+.sent-card b { display: flex; align-items: center; gap: 6px; font-size: 15px; }
+.sent-card b i { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.sent-card .what { margin: 2px 0; overflow-wrap: anywhere; }
+.sent-card .since, .sent-card .back { color: var(--muted, #555); }
+html.night .sent-card.quiet { background: transparent; }

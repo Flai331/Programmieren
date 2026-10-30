@@ -34,7 +34,7 @@ import {
   fetchWeather, fetchStations, dirName, beaufort, approach, circularMean, sunTimes, windChanged, STRENGTHS, ICONS as WX_ICONS, CONDITIONS,
 } from './weather.js';
 import {
-  PUBLIC_URL, pack, unpack, parseShared, shareLink, appIntentUrl, buildAssignment, projectFromAssignment, buildResult, applyResult,
+  PUBLIC_URL, pack, unpack, parseShared, shareLink, appIntentUrl, assignmentSummary, sinceText, buildAssignment, projectFromAssignment, buildResult, applyResult,
 } from './share.js';
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
@@ -46,7 +46,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v85';
+const APP_VERSION = 'v87';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -2847,7 +2847,10 @@ async function prepareSend() {
   P.sent = P.sent || [];
   if (!P.sent.some((x) => x.id === c.a.id)) {
     const team = P.marks.find((m) => m.id === c.sel.teamId);
-    P.sent.push({ id: c.a.id, teamId: c.sel.teamId, team: team ? team.label : 'ohne Team', grids: c.a.g.map((g) => g.i), at: Date.now() });
+    P.sent.push({
+      id: c.a.id, teamId: c.sel.teamId, team: team ? team.label : 'ohne Team', grids: c.a.g.map((g) => g.i), at: Date.now(),
+      what: assignmentSummary(c.a), n: 0,
+    });
     touch();
     renderSentList();
   }
@@ -2867,12 +2870,33 @@ $('send-copy').addEventListener('click', async () => {
   const c = await prepareSend();
   if (c) copyText(c.link);
 });
+// Übersicht der Einsatzleitung: welches Team hat welchen Auftrag, seit wann, kamen Rückmeldungen?
+const SENT_QUIET = 60 * 60e3; // so lange ohne Rückmeldung: orange markieren
 function renderSentList() {
   const box = $('sent-list');
   box.innerHTML = '';
-  for (const x of [...(P.sent || [])].reverse()) {
+  const list = [...(P.sent || [])].reverse();
+  if (!list.length) return;
+  const h = document.createElement('h2');
+  h.className = 'sub';
+  h.textContent = `📋 Aufträge (${list.length})`;
+  box.appendChild(h);
+  const now = Date.now();
+  for (const x of list) {
+    const team = P.marks.find((m) => m.id === x.teamId);
+    const quiet = now - (x.last || x.at) > SENT_QUIET;
     const d = document.createElement('div');
-    d.textContent = `📲 ${hhmm(x.at)} Auftrag an ${x.team}${x.last ? ` · Rückmeldung ${hhmm(x.last)}` : ' · noch keine Rückmeldung'}`;
+    d.className = 'sent-card' + (quiet ? ' quiet' : '');
+    d.innerHTML = '<b><i></i><span></span></b><div class="what"></div><div class="since"></div><div class="back"></div>';
+    d.querySelector('i').style.background = team ? team.color : '#999';
+    d.querySelector('b span').textContent = `${team ? team.label : x.team}${team && team.dog ? ` – ${team.dog}` : ''}`;
+    const what = x.what || allGrids(P).filter((g) => (x.grids || []).includes(g.id)).map((g) => gridLabel(P, g)).join(', ');
+    d.querySelector('.what').textContent = what || 'Auftrag';
+    d.querySelector('.since').textContent = `📲 Auftrag seit ${hhmm(x.at)} (${sinceText(x.at, now)})`;
+    const n = x.n || (x.last ? 1 : 0);
+    d.querySelector('.back').textContent = x.last
+      ? `📥 ${n} Rückmeldung${n === 1 ? '' : 'en'}, zuletzt ${hhmm(x.last)} (vor ${sinceText(x.last, now)})${x.lastSum ? ` – ${x.lastSum}` : ''}`
+      : `⏳ noch keine Rückmeldung${quiet ? ' – nachfragen?' : ''}`;
     box.appendChild(d);
   }
 }
@@ -2908,7 +2932,12 @@ async function handleShared(text) {
   if (isFree()) createProject(wizTitle());
   const res = applyResult(P, data);
   const sent = (P.sent || []).find((x) => x.id === data.a);
-  if (sent) sent.last = Date.now();
+  if (sent) {
+    sent.last = Date.now();
+    sent.n = (sent.n || 0) + 1;
+    const km = (P.items.filter((it) => it.resultKey && it.resultKey.startsWith(`${data.a}|t`)).reduce((a, it) => a + pathLen(it.pts), 0) / 1000);
+    sent.lastSum = [km && `${km.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km gelaufen`, res.fields && `${res.fields} Feld${res.fields === 1 ? '' : 'er'} gemeldet`].filter(Boolean).join(', ');
+  }
   changed();
   renderSentList();
   toast(`📥 Rückmeldung ${res.who}: ${res.ways} Weg${res.ways === 1 ? '' : 'e'}, ${res.marks} Markierung${res.marks === 1 ? '' : 'en'}, ${res.fields} Feld${res.fields === 1 ? '' : 'er'}${res.winds ? `, ${res.winds} Wind-Messung${res.winds === 1 ? '' : 'en'}` : ''}${res.known ? '' : ' (Auftrag hier unbekannt – ins aktuelle Suchgebiet übernommen)'}${res.ways + res.marks + res.fields + res.winds ? '' : ' – nichts Neues'}`, 9000);
@@ -2926,6 +2955,7 @@ async function takeAssignment(a) {
   let p = known;
   if (!p) {
     p = projectFromAssignment(a);
+    if (devLayer()) p.layerId = devLayer();
     db.projects[p.id] = p;
     if (p.hfRescue.length) {
       rescuePts = mergeRescue(rescuePts, p.hfRescue);
@@ -3134,6 +3164,7 @@ async function takeHandover(e) {
   // leeres Start-Suchgebiet eines frischen Geräts nicht stehen lassen
   const empty = P && !P.area && !P.items.length && !(P.otherGrids || []).length && !P.title && P.id !== p.id;
   if (empty) delete db.projects[P.id];
+  if (devLayer()) p.layerId = devLayer();
   p.updated = Date.now();
   db.projects[p.id] = p;
   switchProject(p.id);
@@ -3205,7 +3236,23 @@ async function takeInfos(inf) {
 // Name dieses Geräts (z. B. „ELW 11-1“, „Tablet EL“) – wird beim Übernehmen eines Einsatzes abgefragt
 function renderDeviceName() {
   $('dev-name').textContent = db.deviceName || '–';
+  const sel = $('dev-layer');
+  if (!sel.options.length) {
+    sel.add(new Option('wie zuletzt benutzt', ''));
+    for (const l of LAYERS) sel.add(new Option(l.name, l.id));
+  }
+  sel.value = devLayer() || '';
 }
+// Standard-Kartenart dieses Geräts (oder null): gilt für neue, übernommene und geladene Einsätze
+function devLayer() {
+  return db.defaultLayer && LAYERS.some((l) => l.id === db.defaultLayer) ? db.defaultLayer : null;
+}
+$('dev-layer').addEventListener('change', () => {
+  db.defaultLayer = $('dev-layer').value || null;
+  if (db.defaultLayer) setLayer(db.defaultLayer);
+  saveNow();
+  toast(db.defaultLayer ? `Standard-Kartenart: ${layerById(db.defaultLayer).name.replace(/ \(.*/, '')} – gilt ab jetzt für neue und übernommene Einsätze` : 'Keine Standard-Kartenart – neue Einsätze nehmen die zuletzt benutzte');
+});
 async function askDeviceName(joined) {
   const name = await openDlg((box, close) => {
     dlgHead(box, '📛 Name dieses Geräts', joined
@@ -3795,7 +3842,7 @@ function createProject(title) {
     return P;
   }
   const p = newProject(title);
-  p.layerId = P.layerId;
+  p.layerId = devLayer() || P.layerId;
   p.cellM = P.cellM;
   const c = map.getCenter();
   p.view = { lat: c.lat, lon: c.lng, z: map.getZoom() };
@@ -4298,6 +4345,7 @@ async function importFile(name, buf, shared = false) {
     if (/\.xml$/i.test(name) || /^\s*<\?xml/i.test(head)) throw new Error('XML-Datei ist weder GPX noch KML');
     // JSON-Dateien sind UTF-8, PDFs werden nur nach dem eingebetteten Block durchsucht
     const p = importProject(text.trimStart().startsWith('{') ? new TextDecoder().decode(buf) : text);
+    if (devLayer()) p.layerId = devLayer();
     p.updated = Date.now();
     db.projects[p.id] = p;
     switchProject(p.id);
@@ -5533,7 +5581,7 @@ function freeMap() {
   if (blank) {
     const c = map.getCenter();
     blank.view = { lat: c.lat, lon: c.lng, z: map.getZoom() };
-    blank.layerId = P.layerId;
+    blank.layerId = devLayer() || P.layerId;
     switchProject(blank.id);
     renderProjects();
   } else createProject('');
