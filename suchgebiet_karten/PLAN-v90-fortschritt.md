@@ -30,6 +30,18 @@ Baut auf v89 (Status-Meldungen, `web/status.js`, Apps-Script, `P.live`) auf.
 - Zuordnung über `eid`/`parentEid` (wie `infoTarget`).
 - Übertragung **nur per QR-Code bzw. Link** (mehrteilig `#m` wie Übergabe). **Nicht** über
   Google Sheets: die Tabelle trägt ausschließlich die Status-Meldungen aus v89.
+- **Nur zwischen Geräten der Einsatzleitung** (EL, UA, ELW) in beide Richtungen – nicht an/von
+  Hundeführern (die nutzen Auftrag/Rückmeldung wie bisher).
+- **Nur das Neue senden statt des ganzen Einsatzes** (Klaas, 30.10.2026): jedes Element trägt
+  eine Änderungszeit (`t`, bei Feldern `g.statusT[k]`/`g.fillT[k]`, Protokoll-/Wind-Einträge
+  ihre Zeit). Beim Senden fragt die App „An wen?“ (gemerkte Empfänger je Einsatz,
+  `P.peers = [{ name, lastSent }]`, neuer Empfänger per Name) und packt nur, was seit
+  `lastSent` dieses Empfängers neu/geändert ist; danach `lastSent = jetzt`.
+  Zusätzlich Knopf „Alles seit Beginn erneut senden“ (falls ein QR nicht ankam).
+  Der Empfänger verträgt doppelte Inhalte (feste IDs), daher ist erneutes Senden unschädlich.
+  „Nichts Neues seit HH:MM“ statt eines leeren QR-Codes.
+- Die bisherige Übergabe des ganzen Einsatzes (`#e`) bleibt nur für den ersten Start eines
+  weiteren EL-Geräts bzw. UA; danach läuft alles über „🔄 Fortschritt senden“.
 - Meldung: „🔄 Fortschritt von <Gerät>: 12 Felder, 2 Wege, 3 Protokolleinträge“.
 - Knopf in „📤 Weitergeben“ neben „Infos senden“; Gerätename wie bei Infos.
 
