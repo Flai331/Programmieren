@@ -3354,7 +3354,7 @@ async function sendStatus(o) {
     toast('📍 Standort wird bestimmt … (bis 10 s)', 11000);
     pos = await getFix();
   }
-  const m = buildMsg({ a: h.id, tm: h.team, s: o.s, cat: o.cat, txt: o.txt, pc: o.pc, pos });
+  const m = buildMsg({ a: h.id, tm: h.team, s: o.s, cat: o.cat, txt: o.txt, pc: o.pc, ar: o.ar, pos });
   if (!h.ls) {
     h.log = [...h.log, { ...m }].slice(-100);
     p.updated = Date.now();
@@ -3456,31 +3456,48 @@ async function spotDialog() {
   }
   sendStatus({ s: 'ort', cat: r.cat, txt: r.txt });
 }
-// Stand melden: der Hundeführer schätzt selbst, wie viel vom Gebiet abgesucht ist (100 % = Gebiet fertig)
+// Gebiete des Auftrags (Hundeführer): Rastergebiete und geschlossene Umrisse der Einsatzleitung
+function hfAreas() {
+  const out = allGrids(P).map((g) => gridLabel(P, g));
+  let n = 0;
+  for (const it of P.items) if (it.fromEl && it.kind === 'track' && !it.open && (it.pts || []).length > 2) out.push(it.name || `Umriss ${++n}`);
+  return [...new Set(out)];
+}
+// Stand melden: der Hundeführer schätzt selbst, wie viel abgesucht ist (100 % = fertig) – bei mehreren Gebieten je Gebiet
 async function doneDialog() {
+  const areas = hfAreas();
+  const multi = areas.length > 1;
+  const prev = [...(P.hf.log || [])].reverse().find((m) => m.s === 'fertig');
+  const was = (name) => { const x = prev && (prev.ar || []).find((q) => q[0] === name); return x ? x[1] : prev && !multi && prev.pc != null ? prev.pc : 50; };
   const r = await openDlg((box, close) => {
-    dlgHead(box, '📊 Stand melden', 'Wie viel vom Gebiet hast du abgesucht? Erst 100 % meldet „Gebiet fertig“.');
-    const big = document.createElement('div');
-    big.className = 'st-pct';
-    const rng = document.createElement('input');
-    rng.type = 'range';
-    rng.className = 'st-range';
-    rng.min = 0; rng.max = 100; rng.step = 10;
-    rng.value = 50;
-    const show = () => { big.textContent = Number(rng.value) >= 100 ? '100 % – ✅ Gebiet fertig' : `${rng.value} % abgesucht`; };
-    rng.addEventListener('input', show);
-    box.append(big, rng);
+    dlgHead(box, '📊 Stand melden', multi ? 'Wie viel ist je Gebiet abgesucht? 100 % = Gebiet fertig.' : 'Wie viel vom Gebiet hast du abgesucht? Erst 100 % meldet „Gebiet fertig“.');
+    const rows = (multi ? areas : ['']).map((name) => {
+      const big = document.createElement('div');
+      big.className = 'st-pct';
+      const rng = document.createElement('input');
+      rng.type = 'range';
+      rng.className = 'st-range';
+      rng.min = 0; rng.max = 100; rng.step = 10;
+      rng.value = Math.round(was(name) / 10) * 10;
+      const show = () => { big.textContent = `${name ? `${name}: ` : ''}${Number(rng.value) >= 100 ? '100 % – ✅ fertig' : `${rng.value} % abgesucht`}`; };
+      rng.addEventListener('input', show);
+      show();
+      box.append(big, rng);
+      return { name, rng };
+    });
     const txt = document.createElement('input');
     txt.type = 'text';
     txt.placeholder = 'Grund / Hinweis (optional)';
     txt.style.marginTop = '8px';
     box.appendChild(txt);
-    show();
-    dlgButton(box, '📣 Melden', 'primary', () => close({ pc: Number(rng.value), txt: txt.value.trim() }));
+    dlgButton(box, '📣 Melden', 'primary', () => close({
+      ...(multi ? { ar: rows.map((x) => [x.name, Number(x.rng.value)]) } : {}),
+      pc: Math.min(...rows.map((x) => Number(x.rng.value))), txt: txt.value.trim(),
+    }));
     dlgButton(box, 'Abbrechen', '', () => close(null));
   });
   if (!r) return;
-  sendStatus({ s: 'fertig', pc: r.pc, txt: r.txt });
+  sendStatus({ s: 'fertig', pc: r.pc, ar: r.ar, txt: r.txt });
 }
 $('hf-status').addEventListener('click', openStatusDialog);
 
