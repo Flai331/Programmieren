@@ -45,7 +45,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v81';
+const APP_VERSION = 'v82';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -2154,10 +2154,24 @@ async function openWindMeter() {
 }
 $('wm-take').addEventListener('click', () => { if (wmHeading != null) wmStep2(wmHeading + 180); });
 $('wm-cancel').addEventListener('click', () => { wmStop(); $('windmeter').hidden = true; });
-document.querySelectorAll('.wm-str button').forEach((b) => b.addEventListener('click', () => {
+// Ort der Messung: aktueller Standort; ist keiner da, kurz holen (sonst Kartenmitte)
+function windPos() {
+  if (lastPos) return Promise.resolve({ lat: lastPos[0], lng: lastPos[1] });
+  const center = () => ({ ...map.getCenter(), center: true });
+  if (!navigator.geolocation) return Promise.resolve(center());
+  toast('Standort wird für die Messung geholt …', 15000);
+  return new Promise((res) => navigator.geolocation.getCurrentPosition(
+    (p) => res({ lat: p.coords.latitude, lng: p.coords.longitude }),
+    () => res(center()),
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
+  ));
+}
+document.querySelectorAll('.wm-str button').forEach((b) => b.addEventListener('click', async () => {
   const s = b.dataset.s;
-  const pos = gpsMarker ? gpsMarker.getLatLng() : map.getCenter();
-  (M().wind ||= []).push({ t: Date.now(), from: Math.round(wmFrom), strength: s, src: 'gemessen', lat: pos.lat, lon: pos.lng });
+  $('windmeter').hidden = true;
+  const from = wmFrom;
+  const pos = await windPos();
+  (M().wind ||= []).push({ t: Date.now(), from: Math.round(from), strength: s, src: 'gemessen', lat: pos.lat, lon: pos.lng });
   touch();
   $('windmeter').hidden = true;
   // Wetterspalte bleibt, wie sie ist – die Messung erscheint als grüner Pfeil auf der Karte
@@ -2165,7 +2179,7 @@ document.querySelectorAll('.wm-str button').forEach((b) => b.addEventListener('c
   saveNow();
   renderWx();
   redraw();
-  toast(`Wind gemessen: aus ${dirName(wmFrom)}, ${STRENGTHS[s].label}. ${approach(wmFrom)}.`, 9000);
+  toast(`Wind gemessen: aus ${dirName(from)}, ${STRENGTHS[s].label}. ${approach(from)}.${pos.center ? ' Kein Standort – an der Kartenmitte gespeichert.' : ''}`, 9000);
 }));
 $('wx-measure').addEventListener('click', openWindMeter);
 $('wx-point').addEventListener('click', () => { setTool('windpt'); toast('Auf die Karte tippen: dort wird der Wind angezeigt'); });
@@ -2319,14 +2333,28 @@ let recTimer = null;
 function ensureHf() {
   if (!P.hf) P.hf = { id: uid(), team: 'Ich', hint: '', received: Date.now(), grids: allGrids(P).map((g) => g.id), track: [] };
 }
-async function startRec() {
+// resume: nach dem Schließen der App weiter aufzeichnen – neues Wegstück erst bei genauem Standort
+const REC_ACC = 40; // m, ungenauere Punkte werden verworfen
+const RESUME_ACC = 20; // m, ab dieser Genauigkeit geht es nach dem Wiederöffnen weiter
+async function startRec(resume = false) {
   if (!navigator.geolocation) return toast('Standort wird nicht unterstützt');
   ensureHf();
-  recSeg = { t0: Date.now(), pts: [] };
-  P.hf.track.push(recSeg);
-  if (watchId === null) $('btn-gps').click();
+  recSeg = null;
+  if (!resume) {
+    recSeg = { t0: Date.now(), pts: [] };
+    P.hf.track.push(recSeg);
+  }
+  P.hf.recOn = true;
+  saveNow();
+  startGps(false);
   recWatch = navigator.geolocation.watchPosition((pos) => {
-    if (pos.coords.accuracy > 40) return;
+    if (pos.coords.accuracy > (recSeg ? REC_ACC : RESUME_ACC)) return;
+    if (!recSeg) {
+      recSeg = { t0: Date.now(), pts: [] };
+      P.hf.track.push(recSeg);
+      updateRecBtn();
+      toast('Standort genau – Weg wird weiter aufgezeichnet');
+    }
     const pt = [Math.round(pos.coords.latitude * 1e6) / 1e6, Math.round(pos.coords.longitude * 1e6) / 1e6];
     const last = recSeg.pts[recSeg.pts.length - 1];
     if (last && distance(last[0], last[1], pt[0], pt[1]) < 5) return;
@@ -2337,7 +2365,7 @@ async function startRec() {
   try { recLock = await navigator.wakeLock.request('screen'); } catch { if (bridge && bridge.keepScreenOn) bridge.keepScreenOn(true); }
   recTimer = setInterval(updateRecBtn, 5000);
   updateRecBtn();
-  toast('Weg wird aufgezeichnet – Bildschirm bleibt an. Nicht sperren!', 6000);
+  toast(resume ? 'Aufzeichnung läuft weiter, sobald der Standort genau ist (⏳)' : 'Weg wird aufgezeichnet – Bildschirm bleibt an. Nicht sperren!', 6000);
 }
 function stopRec() {
   if (recWatch !== null) navigator.geolocation.clearWatch(recWatch);
@@ -2348,6 +2376,7 @@ function stopRec() {
   clearInterval(recTimer);
   if (recSeg && recSeg.pts.length < 2) P.hf.track = P.hf.track.filter((sg) => sg !== recSeg);
   recSeg = null;
+  if (P.hf) P.hf.recOn = false;
   saveNow();
   updateRecBtn();
   redraw();
@@ -2355,8 +2384,9 @@ function stopRec() {
 function updateRecBtn() {
   const on = recWatch !== null;
   $('hf-rec').classList.toggle('on', on);
-  $('hf-rec').querySelector('span').textContent = on ? '⏹' : '⏺';
-  $('hf-rec').querySelector('b').textContent = on
+  const wait = on && !recSeg;
+  $('hf-rec').querySelector('span').textContent = wait ? '⏳' : on ? '⏹' : '⏺';
+  $('hf-rec').querySelector('b').textContent = wait ? 'wartet auf GPS …' : on
     ? `${fmtKm(pathLen(recSeg.pts))} · ${Math.round((Date.now() - recSeg.t0) / 60000)} min` : 'Weg';
   renderHfInfo();
 }
@@ -2384,7 +2414,7 @@ $('hf-mark').addEventListener('click', () => {
     });
     const gpsBtn = dlgButton(list, '🛰️ Standort einschalten', 'primary', () => {
       if (!navigator.geolocation) return toast('Standort wird nicht unterstützt');
-      if (watchId === null) $('btn-gps').click();
+      startGps(false);
       gpsBtn.disabled = true;
       gpsBtn.textContent = '🛰️ Standort wird gesucht …';
       const t0 = Date.now();
@@ -3550,18 +3580,34 @@ function updateStatus() {
   $('status').textContent = parts.join(' · ') || '📍';
 }
 
+// Zum Standort springt die Karte nur auf Tipp auf „GPS“; mitgeführt wird sie nur im
+// Hundeführer-Modus, solange ein Weg aufgezeichnet wird.
+let gpsJump = false;
+const gpsFollow = () => db.mode === 'hf' && recWatch !== null;
+function stopGps() {
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+  lastPos = null;
+  if (gpsMarker) { map.removeLayer(gpsMarker); map.removeLayer(gpsCircle); gpsMarker = null; }
+  $('btn-gps').classList.remove('on');
+  updateStatus();
+}
 $('btn-gps').addEventListener('click', () => {
   if (watchId !== null) {
-    navigator.geolocation.clearWatch(watchId);
-    watchId = null;
-    lastPos = null;
-    if (gpsMarker) { map.removeLayer(gpsMarker); map.removeLayer(gpsCircle); gpsMarker = null; }
-    $('btn-gps').classList.remove('on');
-    updateStatus();
-    return;
+    // schon an: Standort außerhalb der Mitte -> hinspringen, sonst ausschalten
+    if (lastPos) {
+      const c = map.latLngToContainerPoint(lastPos);
+      const m = map.getSize();
+      if (Math.hypot(c.x - m.x / 2, c.y - m.y / 2) > 40) { map.setView(lastPos, Math.max(map.getZoom(), 16)); return; }
+    }
+    return stopGps();
   }
+  startGps(true);
+});
+function startGps(jump) {
   if (!navigator.geolocation) return toast('Standort wird nicht unterstützt');
-  let first = true;
+  if (watchId !== null) return;
+  gpsJump = jump;
   $('btn-gps').classList.add('on');
   watchId = navigator.geolocation.watchPosition((pos) => {
     const ll = [pos.coords.latitude, pos.coords.longitude];
@@ -3573,14 +3619,15 @@ $('btn-gps').addEventListener('click', () => {
       gpsMarker.setLatLng(ll);
       gpsCircle.setLatLng(ll).setRadius(pos.coords.accuracy);
     }
-    // Standort immer in der Mitte halten – außer kurz nachdem man die Karte selbst verschoben hat
-    if (first) { map.setView(ll, Math.max(map.getZoom(), 16)); first = false; }
-    else if (Date.now() - userMovedAt > FOLLOW_PAUSE) map.panTo(ll, { animate: true, duration: 0.5 });
+    // nach dem Tipp auf „GPS“ einmal hinspringen; beim Weg-Aufzeichnen (HF) in der Mitte halten –
+    // außer kurz nachdem man die Karte selbst verschoben hat
+    if (gpsJump) { map.setView(ll, Math.max(map.getZoom(), 16)); gpsJump = false; }
+    else if (gpsFollow() && Date.now() - userMovedAt > FOLLOW_PAUSE) map.panTo(ll, { animate: true, duration: 0.5 });
     updateStatus();
   }, (err) => {
     toast('Standort nicht verfügbar: ' + err.message);
   }, { enableHighAccuracy: true, maximumAge: 5000 });
-});
+}
 
 // ---------- Suchgebiete (Projekte) ----------
 function switchProject(id) {
@@ -6067,4 +6114,7 @@ window.__app = {
 
 // Modus anwenden, beim ersten Start fragen, Auftrag/Rückmeldung aus dem Link übernehmen
 applyMode();
-chooseModeIfNeeded().then(handleHash).then(() => window.onSharedFile());
+chooseModeIfNeeded().then(handleHash).then(() => window.onSharedFile()).then(() => {
+  // App wurde während der Weg-Aufzeichnung geschlossen: weiter aufzeichnen
+  if (db.mode === 'hf' && P.hf && P.hf.recOn && recWatch === null) startRec(true);
+});
