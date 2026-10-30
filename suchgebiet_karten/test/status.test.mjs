@@ -223,3 +223,11 @@ test('areaShapes: Felder des Teams, sonst ganzes Raster, sonst Umrisse', () => {
   q.hf = { grids: [], track: [] };
   assert.equal(areaShapes(q).length, 1);
 });
+
+test('Stand-Meldung: unter 100 % nicht „Gebiet fertig“', async () => {
+  const { msgLabel, msgIcon } = await import('../web/status.js');
+  assert.equal(msgLabel({ s: 'fertig', pc: 40 }), '📊 40 % abgesucht');
+  assert.equal(msgIcon({ s: 'fertig', pc: 40 }), '📊');
+  assert.equal(msgLabel({ s: 'fertig', pc: 100 }), '✅ Gebiet fertig');
+  assert.equal(msgLabel({ s: 'fertig' }), '✅ Gebiet fertig');
+});

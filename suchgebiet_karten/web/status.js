@@ -9,7 +9,7 @@ export const STATUS_LIST = [
   { code: 'anfahrt', ico: '🚗', label: 'Anfahrt' },
   { code: 'start', ico: '▶️', label: 'Suche begonnen' },
   { code: 'pause', ico: '⏸', label: 'Pause' },
-  { code: 'fertig', ico: '✅', label: 'Gebiet fertig' },
+  { code: 'fertig', ico: '📊', label: 'Stand / fertig' }, // HF schätzt, wie viel abgesucht ist (100 % = fertig)
   { code: 'zurueck', ico: '🏁', label: 'Zurück am B-Ort' },
   { code: 'anzeige', ico: '🐕', label: 'Hund zeigt an' },
   { code: 'fund', ico: '🟢', label: 'Person gefunden' },
@@ -33,10 +33,14 @@ export function spotLabel(cat) {
   const s = find(SPOT_LIST, cat);
   return s ? `${s.ico} ${s.label}` : '📌 Standort';
 }
+// Stand-Meldung: erst bei 100 % (oder ohne Angabe) „Gebiet fertig“, sonst „40 % abgesucht“
+const done = (m) => m.s === 'fertig' && (m.pc == null || m.pc >= 100);
 // Text einer Meldung: Standort-Meldungen nach ihrer Art
-export const msgLabel = (m) => (m.s === 'ort' ? spotLabel(m.cat) : statusLabel(m.s));
+export const msgLabel = (m) => (m.s === 'ort' ? spotLabel(m.cat)
+  : m.s === 'fertig' ? (done(m) ? '✅ Gebiet fertig' : `📊 ${m.pc} % abgesucht`) : statusLabel(m.s));
 // Nur das Symbol (für die Karte)
 export function msgIcon(m) {
+  if (m.s === 'fertig') return done(m) ? '✅' : '📊';
   const s = m.s === 'ort' ? find(SPOT_LIST, m.cat) : find(STATUS_LIST, m.s);
   return s ? s.ico : '📍';
 }
