@@ -1,4 +1,4 @@
-# Plan v100: ⬇️ App aktualisiert sich selbst (APK) · Tipp ins Leere schließt Offenes
+# Plan v103: ⬇️ App aktualisiert sich selbst (APK) · Tipp ins Leere schließt Offenes
 
 Mit Klaas abgestimmt (30.10.2026).
 

@@ -671,6 +671,8 @@ export function hitItem(items, toPx, x, y, tol) {
     if (it.kind === 'text') {
       const [px, py] = toPx(it.lat, it.lon);
       if (Math.hypot(px - x, py - y) <= tol + 6) return i;
+      // auch die Schrift rechts vom Punkt (ca. 9 px je Zeichen, fett 15 px)
+      if (x >= px && x <= px + 12 + String(it.text || '').length * 9 && Math.abs(y - py) <= 12) return i;
     } else if (it.kind === 'stroke' || it.kind === 'track') {
       const pts = it.pts.map(([lat, lon]) => toPx(lat, lon));
       for (let k = 0; k < pts.length; k++) {

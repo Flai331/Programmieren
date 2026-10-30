@@ -48,6 +48,8 @@ import {
   teamChips, chipText, teamAssignments, teamMsgs, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, unreadAge, bannerText, parseSnooze,
   snoozeUntilFrom, snoozeText, historyFilter, historyTeams, SNOOZE_PICKS,
 } from './statusbar.js';
+import { einsatzOffen, shouldOfferUpdate, updateText, PERMISSION_HINT } from './update.js';
+import { tapVerdict, backdropAction } from './tapclose.js';
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { placeBadges, boxOf } from './badgeplace.js';
@@ -59,7 +61,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v102';
+const APP_VERSION = 'v103';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -881,6 +883,8 @@ function finishPointer(e, cancelled) {
   } else if (cancelled) {
     return;
   } else if (tool === 'text' && !panning && Math.hypot(x - downPt.x, y - downPt.y) < 10) {
+    const ti = hitItem(P.items, toPx, downPt.x, downPt.y, 12);
+    if (ti >= 0 && P.items[ti].kind === 'text') return textDialog(ti); // vorhandenen Text ändern/löschen
     const text = prompt('Text für diesen Punkt (z. B. Fundstelle, Hinweis):');
     if (text && text.trim()) {
       snapshot();
@@ -952,20 +956,50 @@ document.querySelectorAll('.toolbar [data-tool]').forEach((b) => b.addEventListe
 }));
 $('undo').addEventListener('click', undo);
 
+// Textpunkt angetippt: Text ändern oder löschen
+function textDialog(i) {
+  const it = P.items[i];
+  if (!it || it.kind !== 'text') return;
+  if (isLocked()) return lockedToast();
+  if (blocked(it) || guardAssigned(assignedOf(P, it))) return;
+  openDlg((box, close) => {
+    dlgHead(box, '📍 Text', 'Ändern oder löschen.');
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.id = 'txt-edit';
+    inp.value = it.text;
+    inp.defaultValue = it.text;
+    inp.style.width = '100%';
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') close({ text: inp.value }); });
+    box.appendChild(inp);
+    dlgButton(box, '💾 Speichern', 'primary', () => close({ text: inp.value }));
+    dlgButton(box, '🗑 Löschen', 'urgent', () => close({ del: true }));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  }).then((r) => {
+    const k = P.items.indexOf(it);
+    if (!r || k < 0) return;
+    if (r.del) {
+      if (blocked(it, 'delete')) return;
+      snapshot();
+      P.items.splice(k, 1);
+      changed();
+      return toast('Text gelöscht (↶ macht es rückgängig)', 4000);
+    }
+    const t = r.text.trim();
+    if (!t || t === it.text) return;
+    snapshot();
+    it.text = t;
+    changed();
+  });
+}
+
 // Zeichnung, Track oder Textpunkt benennen (Name steht auf der Karte, im PDF und im GPX)
 function renameItem(i) {
   const it = P.items[i];
   if (!it) return;
+  if (it.kind === 'text') return textDialog(i);
   if (isLocked()) return lockedToast();
   if (blocked(it) || guardAssigned(assignedOf(P, it))) return;
-  if (it.kind === 'text') {
-    const t = prompt('Text für diesen Punkt:', it.text);
-    if (t === null || !t.trim() || t.trim() === it.text) return;
-    snapshot();
-    it.text = t.trim();
-    changed();
-    return;
-  }
   if (it.kind === 'track') {
     outlineDialog(it, '📐 Umriss').then((r) => {
       if (!r) return;
@@ -1664,6 +1698,11 @@ map.on('click', (e) => {
   if (sm) return db.mode === 'el' ? msgDialog(sm.m) : toast(statusText(sm), 9000);
   const sb = tool === 'pan' && badgeAt(e.containerPoint.x, e.containerPoint.y);
   if (sb) { renderSentList(); return openPanel('panel-teams'); } // Plakette: Auftrags-Übersicht
+  // Text angetippt: ändern oder löschen
+  if (tool === 'pan') {
+    const ti = hitItem(P.items, toPx, e.containerPoint.x, e.containerPoint.y, 12);
+    if (ti >= 0 && P.items[ti].kind === 'text') return textDialog(ti);
+  }
   // Linie eines Umrisses angetippt (Einsatzleitung): Name, Zuteilung, Notiz bearbeiten
   if (db.mode === 'el' && tool === 'pan') {
     const pi = poiAt(e.containerPoint.x, e.containerPoint.y);
@@ -2454,9 +2493,18 @@ async function pinHash(pin) {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`suchgebiet:${pin}`));
   return [...new Uint8Array(d)].slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
-function openDlg(build) {
+// opts.keep: Tipp auf den dunklen Hintergrund schließt den Dialog nicht (laufender Vorgang)
+// Fenster, die beim Loslassen des Fingers aufgehen: der Klick, den das Handy danach schickt, darf nicht den
+// Knopf treffen, der jetzt unter dem Finger liegt (sonst z. B. sofort „Speichern“)
+let dlgOpenedAt = 0;
+$('dlg-box').addEventListener('click', (e) => {
+  if (e.isTrusted && Date.now() - dlgOpenedAt < 400) { e.stopPropagation(); e.preventDefault(); } // .click() aus dem Code geht durch
+}, true);
+function openDlg(build, opts = {}) {
   const box = $('dlg-box');
+  dlgOpenedAt = Date.now();
   box.innerHTML = '';
+  box.dataset.keep = opts.keep ? '1' : '';
   $('dlg').hidden = false;
   return new Promise((resolve) => {
     build(box, (v) => { $('dlg').hidden = true; resolve(v); });
@@ -4001,7 +4049,7 @@ function renderTeamBar() {
   cnt.hidden = !ur.length;
   cnt.textContent = ur.length;
   if (el && ur.length >= 2 && !unreadOpen && !(P.msgSnooze > now)) openUnread(); // mehrere ungelesene: Liste klappt auf
-  if (!ur.length && unreadOpen) { unreadOpen = false; document.removeEventListener('pointerdown', onAnyTap, true); }
+  if (!ur.length && unreadOpen) unreadOpen = false;
   const tab = isTablet();
   const urKeys = new Set(ur.map((m) => teamKeyOf(m.a)));
   const newKeys = new Set(ur.filter((m) => now - (P.msgRecv[m.id] || 0) < 30e3).map((m) => teamKeyOf(m.a)));
@@ -4036,17 +4084,15 @@ function renderTeamBar() {
   if (popChip) { popChip = chips.find((q) => q.key === popChip.key) || popChip; renderPop(); }
 }
 // Liste der ungelesenen: ein Tipp irgendwohin schließt sie und markiert alles als gelesen
-function onAnyTap() { closeUnread(); }
+// (der zentrale Tipp-Listener „Tipp ins Leere“ weiter unten ruft closeUnread auf)
 function openUnread() {
   if (unreadOpen) return;
   unreadOpen = true;
   tbSig = '';
-  document.addEventListener('pointerdown', onAnyTap, true);
 }
 function closeUnread() {
   if (!unreadOpen) return;
   unreadOpen = false;
-  document.removeEventListener('pointerdown', onAnyTap, true);
   readMsgs();
   $('tm-unread').hidden = true;
   // Neuaufbau der Chips erst nach dem Tipp, sonst geht der Klick auf einen Chip verloren
@@ -4219,7 +4265,7 @@ function openStatusPanel(teamId = stFilter) {
   renderStatusPanel();
   openPanel('panel-status');
   closePop();
-  if (unreadOpen) { unreadOpen = false; document.removeEventListener('pointerdown', onAnyTap, true); }
+  if (unreadOpen) unreadOpen = false;
   readMsgs();
   tbSig = '';
   renderTeamBar();
@@ -6060,6 +6106,66 @@ function closePanels() {
   if ($('notepad').hidden) dropOverlay();
 }
 document.querySelectorAll('.panel .close').forEach((b) => b.addEventListener('click', closePanels));
+
+// ---------- v103: Tipp ins Leere schließt, was offen ist ----------
+// Ein zentraler pointerdown-Listener (Capture-Phase): Ist ein Fenster der Randleiste, das HF-Menü, die Team-Liste bzw.
+// das Infofenster oder die Suchergebnisse offen, schließt ein Tipp auf die Karte/leere Fläche es – und macht sonst nichts.
+// Dialoge: Tipp auf den dunklen Hintergrund = Abbrechen/Schließen (Ausnahmen siehe tapclose.js).
+// Die Ungelesen-Liste (v98) schließt hier ebenfalls („Tipp irgendwohin = gelesen“), der Tipp geht weiter wie bisher.
+let tapSwallow = null; // {id, until}: Rest der verschluckten Tipp-Geste (pointerup, click) ebenfalls verschlucken
+function tapIsEmpty(t) {
+  if (!t || t === document.body || t === document.documentElement || t === canvas) return true;
+  return !!(t.closest && t.closest('#map') && !t.closest('.leaflet-control, .leaflet-popup, button, a'));
+}
+function anyOpenThing() {
+  return [...document.querySelectorAll('.panel')].some((p) => !p.hidden)
+    || !$('searchbar').hidden
+    || !$('tm-pop').hidden
+    || (!isTablet() && !!db.teamsOpen && !$('tm-list').hidden);
+}
+function closeOpenThings() {
+  closePanels();
+  closeSearch();
+  closePop();
+  if (db.teamsOpen && !isTablet()) { db.teamsOpen = false; saveNow(); tbSig = ''; renderTeamBar(); }
+}
+function dlgBackdropTap() {
+  const box = $('dlg-box');
+  const btns = [...box.querySelectorAll('button')];
+  const typed = [...box.querySelectorAll('textarea, input:not([type=checkbox]):not([type=radio]):not([type=button])')].some((i) => (i.value || '').trim() !== '' && i.value !== i.defaultValue); // vorbelegt und unverändert zählt nicht
+  const i = backdropAction({
+    keep: !!box.dataset.keep, typed, head: (box.querySelector('h2') || {}).textContent || '',
+    labels: btns.map((b) => b.textContent),
+  });
+  if (i >= 0) btns[i].click();
+}
+document.addEventListener('pointerdown', (e) => {
+  if (!e.isPrimary) return;
+  tapSwallow = null;
+  if (unreadOpen) closeUnread();
+  const dlgOpen = !$('dlg').hidden;
+  const v = tapVerdict({
+    dlgOpen,
+    target: dlgOpen ? (e.target === $('dlg') ? 'backdrop' : 'ui') : (tapIsEmpty(e.target) ? 'empty' : 'ui'),
+    anyOpen: !dlgOpen && anyOpenThing(),
+  });
+  if (v === 'none') return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  if (v === 'dlg-backdrop') dlgBackdropTap();
+  else closeOpenThings();
+  tapSwallow = { id: e.pointerId, until: Date.now() + 800 }; // erst nach dem Schließen, sonst frisst es dessen Knopf-Klick
+}, true);
+for (const ev of ['pointerup', 'pointercancel', 'click']) {
+  document.addEventListener(ev, (e) => {
+    if (!tapSwallow) return;
+    if (Date.now() > tapSwallow.until) { tapSwallow = null; return; }
+    if (ev === 'pointerup' || ev === 'pointercancel') { if (e.pointerId === tapSwallow.id) e.stopImmediatePropagation(); return; }
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    tapSwallow = null;
+  }, true);
+}
 // Freie Karte: Einsatz-Fenster erst nach „+ Neuer Einsatz“
 for (const btn of ['btn-mission', 'btn-notes', 'btn-grid', 'btn-teams']) {
   $(btn).addEventListener('click', async (e) => {
@@ -7884,6 +7990,116 @@ if ('serviceWorker' in navigator && location.protocol === 'https:' && !bridge) {
     if (hadController) toast('Neue Version da – bitte die Seite einmal neu laden.');
     hadController = true;
   });
+}
+
+// ---------- v103: Selbst-Update der Android-App ----------
+// Die Hülle (Updater.kt) prüft im Release, ob eine neuere APK da ist, lädt sie und startet den Android-Installer.
+// Der Hinweis erscheint nie mitten im Einsatz: erst wenn kein Einsatz offen ist (siehe update.js).
+const updBridge = bridge && bridge.updateCheck && bridge.appVersion ? bridge : null;
+let updInstalled = null; // {code, name, enabled}
+let updAvail = null; // {code, name}: neuere Version, noch nicht installiert
+let updLater = false; // „Später“: bis zum nächsten App-Start nicht wieder fragen
+let updBusy = false; // Hinweis oder Download läuft
+let updManual = false; // Suche per Knopf in „Mehr“
+let updDl = null; // Fortschrittsdialog {close, text}
+let updWaitInstall = false; // wartet auf die Erlaubnis „Unbekannte Apps installieren“
+let updTimer = null;
+const updEinsatzOffen = () => einsatzOffen({ mode: db.mode, free: isFree(), closed: isClosed(), hfAssigned: !!(P && P.hf) });
+function updMsg(text) {
+  const m = $('upd-msg');
+  m.textContent = text || '';
+  m.hidden = !text;
+}
+function updTryOffer() {
+  if (!updAvail || updBusy || !$('dlg').hidden) return;
+  if (!shouldOfferUpdate({ installed: updInstalled.code, latest: updAvail.code, einsatzOffen: updEinsatzOffen(), later: updLater })) return;
+  updOffer(false);
+}
+async function updOffer(manual) {
+  if (updBusy || !updAvail) return;
+  updBusy = true;
+  const warn = manual && updEinsatzOffen();
+  const go = await openDlg((box, close) => {
+    dlgHead(box, warn ? '⚠️ Einsatz läuft – trotzdem aktualisieren?' : '⬇️ Update verfügbar',
+      `${updateText(updInstalled.name, updAvail.name)}${warn ? '\n\nWährend des Updates ist die App kurz nicht benutzbar.' : ''}`);
+    dlgButton(box, 'Jetzt aktualisieren', 'primary', () => close(true));
+    dlgButton(box, 'Später', '', () => close(false));
+  });
+  if (!go) { if (!manual) updLater = true; updBusy = false; return; }
+  updProgress(0);
+  updBridge.updateDownload();
+}
+function updProgress(pct) {
+  if (!updDl) {
+    openDlg((box, close) => {
+      dlgHead(box, '⬇️ Update wird geladen');
+      const p = document.createElement('p');
+      p.className = 'small';
+      box.appendChild(p);
+      updDl = { close, text: p };
+    }, { keep: true });
+  }
+  updDl.text.textContent = `Lädt … ${pct} %`;
+}
+function updCloseProgress() {
+  if (updDl) { const d = updDl; updDl = null; d.close(); }
+}
+async function updInstallNow() {
+  if (!updBridge.updateCanInstall || updBridge.updateCanInstall()) {
+    updWaitInstall = false;
+    updBridge.updateInstall();
+    updBusy = false;
+    updLater = true; // Installer läuft: bricht man ihn ab, nicht gleich wieder fragen (Knopf in „Mehr“ geht weiter)
+    return;
+  }
+  updWaitInstall = true;
+  const ok = await openDlg((box, close) => {
+    dlgHead(box, '⬇️ Update bereit', PERMISSION_HINT);
+    dlgButton(box, 'Weiter', 'primary', () => close(true));
+    dlgButton(box, 'Abbrechen', '', () => close(false));
+  });
+  if (!ok) { updWaitInstall = false; updBusy = false; return; }
+  updBridge.updateInstall(); // öffnet die Einstellung; zurück in der App geht es weiter (visibilitychange)
+}
+window.sgkUpdate = (s) => {
+  if (!s || !updInstalled) return;
+  if (s.state === 'available') {
+    updAvail = { code: s.code, name: s.name || `1.0.${s.code}` };
+    if (updManual) { updManual = false; updMsg(''); updOffer(true); return; }
+    updTryOffer();
+    if (!updTimer) updTimer = setInterval(updTryOffer, 3000); // Einsatz offen: später nochmal versuchen
+  } else if (s.state === 'none') {
+    if (updManual) { updManual = false; updMsg(`✓ Du hast die neueste Version (${updInstalled.name}).`); }
+  } else if (s.state === 'progress') {
+    updProgress(s.pct || 0);
+  } else if (s.state === 'ready') {
+    updCloseProgress();
+    updInstallNow();
+  } else if (s.state === 'error') {
+    updCloseProgress();
+    updBusy = false;
+    toast(`Update fehlgeschlagen: ${s.msg || 'unbekannter Fehler'}. Die APK gibt es auch unter ⚙️ Mehr → „Neueste APK herunterladen“.`, 8000);
+  }
+};
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !updWaitInstall || !updBridge) return;
+  if (!updBridge.updateCanInstall || updBridge.updateCanInstall()) { updWaitInstall = false; updBridge.updateInstall(); updBusy = false; updLater = true; }
+});
+if (updBridge) {
+  try { updInstalled = JSON.parse(updBridge.appVersion()); } catch { updInstalled = null; }
+}
+if (updInstalled) {
+  $('upd-ver').textContent = `Installierte App-Version: ${updInstalled.name}`;
+  $('upd-box').hidden = false;
+  $('upd-check').addEventListener('click', () => {
+    if (!updInstalled.enabled) return updMsg('Diese Testversion der App hat keine Update-Suche.');
+    if (updBusy) return;
+    updManual = true;
+    updMsg('Suche läuft …');
+    updBridge.updateCheck();
+  });
+  // bei jedem App-Start prüfen (kurz nach dem Laden)
+  if (updInstalled.enabled) setTimeout(() => updBridge.updateCheck(), 4000);
 }
 
 // Startmeldung (der Emulator-Test der Android-App wartet darauf)

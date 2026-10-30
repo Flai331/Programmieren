@@ -40,10 +40,26 @@ test('Gebiet am oberen Rand: Plakette bleibt sichtbar und außerhalb', () => {
   assert.equal(ov(r, area), 0);
 });
 
-test('Gebiet größer als der Bildschirm: Plakette bleibt im Bild', () => {
+test('Gebiet größer als der Bildschirm: Plakette bleibt am Gebiet (nicht ins Bild geschoben)', () => {
   const area = { x0: -500, y0: -500, x1: 1500, y1: 1500 };
   const [p] = placeBadges([{ area, w: 120, h: 38 }], [], view);
-  assert.ok(p.x0 >= 0 && p.y0 >= 0 && p.x0 + 120 <= view.w && p.y0 + 38 <= view.h);
+  const r = rect(p, 120, 38);
+  assert.equal(ov(r, area), 0);
+  assert.ok(r.x1 <= 0 || r.y1 <= 0 || r.x0 >= view.w || r.y0 >= view.h, 'außerhalb des Bildes');
+});
+
+test('Gebiet außerhalb des Bildes: Plakette auch', () => {
+  const area = { x0: 2000, y0: 300, x1: 2200, y1: 500 };
+  const [p] = placeBadges([{ area, w: 120, h: 38 }], [], view);
+  assert.ok(p.x0 + 120 > 1500, 'nahe am Gebiet');
+});
+
+test('Gebiet am rechten Rand: Plakette auf der sichtbaren Seite', () => {
+  const area = { x0: view.w - 150, y0: 300, x1: view.w + 300, y1: 500 };
+  const [p] = placeBadges([{ area, w: 120, h: 38 }], [], view);
+  const r = rect(p, 120, 38);
+  assert.ok(r.x0 >= 0 && r.x1 <= view.w && r.y0 >= 0 && r.y1 <= view.h);
+  assert.equal(ov(r, area), 0);
 });
 
 test('nicht unter Knöpfen am Rand', () => {
