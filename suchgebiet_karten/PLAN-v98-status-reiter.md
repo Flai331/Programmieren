@@ -34,6 +34,15 @@ Schon gebaut (Commit d935625): Plakette je Umriss/Raster mit Team, Status und St
 - Auf dem Handy: ist die Team-Liste zu, blinkt der Knopf „📣 Teams“ und zeigt die Zahl ungelesener; mehrere
   ungelesene klappen die Liste der ungelesenen auf wie oben.
 
+### Erinnerung, wenn ungelesen (Klaas)
+- Ist eine Meldung **5 Minuten** ungelesen: Hinweis auf dem Hauptbildschirm (gut sichtbares Banner oben auf der
+  Karte: „📣 3 ungelesene Meldungen seit 5 min – antippen“), bleibt stehen bis gelesen. Antippen öffnet die Liste der
+  ungelesenen; Tipp irgendwohin danach = gelesen.
+- Nach **7 Minuten** ungelesen zusätzlich ein **Piepton** (wie Dringend, aber kürzer), danach alle 2 Minuten erneut,
+  bis gelesen. Zeit zählt ab Eingang der ältesten ungelesenen Meldung auf diesem Gerät (`P.msgRecv[id]`).
+- Prüfung im bestehenden Takt (z. B. alle 15 s zusammen mit dem Abholen bzw. eigenem 15-s-Timer).
+- Logik testbar: `unreadAlert(unread, recvTimes, now)` -> 'none' | 'banner' | 'beep'.
+
 ## 2. Verlauf: eigene Kachel „📣 Status“
 - Neue Kachel in der rechten Randleiste (EL), Panel `panel-status` (über `SIDE_PANELS`, zweiter Tipp schließt).
 - Alle Meldungen (`allMsgs()`), neueste oben: Teamfarbe, Team, Meldung, Uhrzeit („vor x min“), Text, 📍 wenn mit
