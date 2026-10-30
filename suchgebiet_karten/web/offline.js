@@ -235,3 +235,37 @@ export function nativeJob(region, defs, wifiOnly) {
     layers: defs.map(nativeLayer),
   };
 }
+
+// ---------- Offline-Paket für einen Einsatz (ein Tipp) ----------
+// Bereich: alle Rastergebiete, Zeichnungen, B-Ort und Lage-Orte des Einsatzes, mit Rand (m). null, wenn nichts da ist.
+export function missionBounds(p, marginM = 500) {
+  const pts = [];
+  const areas = [p.area, ...(p.otherGrids || []).map((g) => g.area)].filter(Boolean);
+  for (const a of areas) pts.push([a.north, a.west], [a.south, a.east]);
+  for (const it of p.items || []) {
+    if (it.kind === 'text') pts.push([it.lat, it.lon]);
+    else for (const q of it.pts || []) pts.push(q);
+  }
+  if (p.meet) pts.push([p.meet.lat, p.meet.lon]);
+  for (const x of p.pois || []) pts.push([x.lat, x.lon]);
+  const ok = pts.filter(([la, lo]) => Number.isFinite(la) && Number.isFinite(lo));
+  if (!ok.length) return null;
+  const b = {
+    north: Math.max(...ok.map((q) => q[0])), south: Math.min(...ok.map((q) => q[0])),
+    west: Math.min(...ok.map((q) => q[1])), east: Math.max(...ok.map((q) => q[1])),
+  };
+  const dLat = marginM / 111320;
+  const dLon = dLat / Math.cos((((b.north + b.south) / 2) * Math.PI) / 180);
+  const r = (v) => Math.round(v * 1e6) / 1e6;
+  return { north: r(b.north + dLat), south: r(b.south - dLat), west: r(b.west - dLon), east: r(b.east + dLon) };
+}
+
+// Zoomstufen fürs Paket: ab zMin so scharf wie möglich (bis hi), aber höchstens budgetMB
+export function packageZooms(defs, b, { zMin = 12, hi = 17, lo = 14, budgetMB = 400 } = {}) {
+  const top = Math.min(hi, ...defs.map(maxZoom));
+  for (let z = top; z > lo; z--) {
+    const e = estimate(defs, b, zMin, z);
+    if (e.mb <= budgetMB) return { zMin, zMax: z, ...e };
+  }
+  return { zMin, zMax: Math.min(lo, top), ...estimate(defs, b, zMin, Math.min(lo, top)) };
+}
