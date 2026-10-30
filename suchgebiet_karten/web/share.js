@@ -4,7 +4,7 @@
 
 import { newProject, normalizeProject, uid, allGrids, gridLabel } from './store.js';
 import { compactContact, fromCompact } from './contacts.js';
-import { newLiveKey, mergeStatus } from './status.js';
+import { newLiveKey, mergeStatus, qrMsgs } from './status.js';
 import { makeGrid, cellBounds } from './grid.js';
 
 export const PUBLIC_URL = 'https://flai331.github.io/Programmieren/suchgebiet-karten/';
@@ -253,7 +253,7 @@ export function buildResult(p, tol = 5) {
   const w = (p.mission.wind || []).filter((x) => x.src === 'gemessen' && x.t >= (p.hf.received || 0) && !x.by)
     .map((x) => [x.t, Math.round(x.from), x.strength, r6(x.lat ?? 0), r6(x.lon ?? 0)]);
   // Status-Meldungen (Stand, Pause …) gehen auch mit der QR-Rückmeldung mit – die letzten 20
-  const sm = (p.hf.log || []).slice(-20).map(({ ok, ...m }) => m);
+  const sm = qrMsgs(p.hf.log).map(({ ok, ...m }) => m);
   return { v: 1, k: 'r', a: p.hf.id, tm: p.hf.team, at: Date.now(), tr, i: items, d, w, ...(sm.length ? { sm } : {}) };
 }
 

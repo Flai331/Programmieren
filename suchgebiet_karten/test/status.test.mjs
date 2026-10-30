@@ -263,3 +263,58 @@ test('Suchstand ohne Standort, Markierungen mit', async () => {
   assert.deepEqual(SPOT_LIST.slice(0, 3).map((s) => s.code), ['anzeige', 'fund', 'hilfe']);
   assert.ok(isUrgent({ s: 'ort', cat: 'hilfe' }) && isUrgent({ s: 'ort', cat: 'fund' }) && !isUrgent({ s: 'ort', cat: 'anzeige' }));
 });
+
+// ---------- v103: Korrekturen ----------
+import { buildKor, applyKor, qrMsgs } from '../web/status.js';
+const M = (id, t, o = {}) => buildMsg({ a: 'A1', tm: 'Team', s: 'ort', cat: 'anzeige', pos: { lat: 50, lon: 8 }, t, id, ...o });
+
+test('buildKor: eigene ID, Zeit, ref; del/nopos/Ort/Notiz', () => {
+  const k = buildKor({ a: 'A1', tm: 'Team', ref: 'x1', del: true, t: 5 });
+  assert.equal(k.s, 'kor'); assert.equal(k.ref, 'x1'); assert.equal(k.del, 1); assert.equal(k.t, 5); assert.ok(k.id);
+  assert.equal(buildKor({ a: 'A1', ref: 'x', nopos: true }).nopos, 1);
+  const v = buildKor({ a: 'A1', ref: 'x', pos: { lat: 1.1234567, lon: 2 } });
+  assert.equal(v.lat, 1.123457); assert.equal(v.lon, 2);
+  assert.equal(buildKor({ a: 'A1', ref: 'x', txt: '' }).txt, '');
+  assert.ok(!('txt' in buildKor({ a: 'A1', ref: 'x', pos: { lat: 1, lon: 2 } })));
+  assert.ok(!('txt' in buildMsg({ a: 'A1', tm: 'T', s: 'pause', txt: '' })));
+});
+test('applyKor: Notiz, Verlegen, Ort entfernen, Notiz entfernen; kor erscheint nie selbst', () => {
+  const m = M('m1', 10, { txt: 'alt' });
+  const l = applyKor([m, buildKor({ a: 'A1', ref: 'm1', txt: 'neu', t: 20, id: 'k1' }), buildKor({ a: 'A1', ref: 'm1', pos: { lat: 51, lon: 9 }, t: 30, id: 'k2' })]);
+  assert.equal(l.length, 1);
+  assert.equal(l[0].txt, 'neu'); assert.equal(l[0].lat, 51); assert.equal(l[0].lon, 9); assert.equal(l[0].ed, 30);
+  assert.equal(l[0].t, 10);
+  const n = applyKor([m, buildKor({ a: 'A1', ref: 'm1', nopos: true, txt: '', t: 20, id: 'k3' })]);
+  assert.ok(n[0].lat === undefined && n[0].lon === undefined && n[0].txt === undefined);
+  assert.equal(m.lat, 50); // Original unverändert
+});
+test('applyKor: mehrere kor in Zeitfolge (spätere gewinnt, auch bei umgekehrter Listenfolge)', () => {
+  const k1 = buildKor({ a: 'A1', ref: 'm1', txt: 'eins', t: 20, id: 'k1' });
+  const k2 = buildKor({ a: 'A1', ref: 'm1', txt: 'zwei', t: 30, id: 'k2' });
+  assert.equal(applyKor([k2, M('m1', 10), k1])[0].txt, 'zwei');
+});
+test('applyKor: Löschen – normale Meldung fällt weg, Fund/Hilfe bleiben mit gone', () => {
+  const k = (ref) => buildKor({ a: 'A1', ref, del: true, t: 40, id: `k${ref}` });
+  assert.deepEqual(applyKor([M('m1', 10), k('m1')]), []);
+  const f = applyKor([M('m2', 10, { cat: 'fund' }), M('m3', 11, { cat: 'hilfe' }), k('m2')]);
+  assert.equal(f.length, 2);
+  assert.equal(f[0].gone, 40); assert.ok(isUrgent(f[0])); assert.equal(f[1].gone, undefined);
+  assert.equal(applyKor([buildMsg({ a: 'A1', tm: 'T', s: 'fund', id: 'f1', t: 1 }), k('f1')])[0].gone, 40);
+});
+test('applyKor: kor ohne Ziel oder fremdes Team wird ignoriert, ohne kor bleibt die Liste', () => {
+  const m = M('m1', 10);
+  assert.deepEqual(applyKor([m, buildKor({ a: 'A1', ref: 'nix', del: true, t: 5, id: 'k' })]), [m]);
+  assert.deepEqual(applyKor([m, buildKor({ a: 'B2', ref: 'm1', del: true, t: 5, id: 'k' })]), [m]);
+  assert.deepEqual(applyKor([m]), [m]);
+  assert.deepEqual(applyKor(null), []);
+});
+test('QR-Auswahl: letzte n ohne kor samt ihrer Korrekturen', () => {
+  const log = [];
+  for (let i = 0; i < 25; i++) log.push(M(`m${i}`, i + 1));
+  log.push(buildKor({ a: 'A1', ref: 'm24', txt: 'x', t: 100, id: 'k1' }), buildKor({ a: 'A1', ref: 'm0', del: true, t: 101, id: 'k2' }));
+  const q = qrMsgs(log, 20);
+  assert.equal(q.filter((m) => m.s !== 'kor').length, 20);
+  assert.ok(q.some((m) => m.id === 'k1') && !q.some((m) => m.id === 'k2'));
+  assert.ok(!q.some((m) => m.id === 'm0'));
+  assert.equal(applyKor(q).find((m) => m.id === 'm24').txt, 'x');
+});

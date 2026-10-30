@@ -42,7 +42,7 @@ import {
   assignmentCenter,
 } from './share.js';
 import {
-  STATUS_LIST, CLOSE_STATUS, SPOT_LIST, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, mergeStatus, withoutDeleted, latestFor, flushOutbox, pollMessages, coverageGaps, areaShapes,
+  STATUS_LIST, CLOSE_STATUS, SPOT_LIST, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, buildKor, applyKor, mergeStatus, withoutDeleted, latestFor, flushOutbox, pollMessages, coverageGaps, areaShapes,
 } from './status.js';
 import {
   teamChips, chipText, teamAssignments, teamMsgs, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, unreadAge, bannerText, parseSnooze,
@@ -95,6 +95,8 @@ let searchPin = null; // Nadel des letzten Suchergebnisses (gehört zu keinem Ei
 let gpxSel = null; // Auswahl auf der Karte (Werkzeug „gpxsel“), siehe unten
 let selMode = null; // 'export' (GPX direkt), 'share' (für „Weitergeben“), 'area' (Gebiet antippen)
 let gapView = null; // „Lücken zeigen“ (Einsatzleitung): { a, step, pts }
+let moveTapAt = 0; // Zeit des letzten „Verlegen“-Tipps (der Klick danach öffnet nichts)
+let pendingMove = null; // „📍 Verlegen“ mit Tippen auf die Karte: { msg: Meldung } (Hundeführer) bzw. { item: Textpunkt }
 let pendingSpot = null; // „Standort melden“ mit Tippen auf die Karte (Hundeführer): { cat, txt }
 let liveBusy = false; // Abholen der Status-Meldungen läuft
 let urgentOpen = false; // Dringend-Dialog steht
@@ -555,6 +557,8 @@ const HINTS = {
   windpt: 'Tippe auf die Karte, wo der Wind (DWD) angezeigt werden soll.',
   hfmarkpt: 'Tippe auf die Karte, wo der Punkt hin soll.',
   hfspotpt: 'Tippe auf die Karte, wo der Standort gemeldet werden soll.',
+  hfmovept: 'Tippe auf die Karte, wo die Meldung hin soll.',
+  textmove: 'Tippe auf die Karte, wo der Punkt hin soll.',
   hfdraw: 'Mit dem Finger einmal um den Bereich herum malen.',
   hffield: 'Feld antippen: abgesucht → teilweise → nicht begehbar → zurück. „Feld“ nochmal tippen = fertig.',
   sendpick: 'Felder für den Auftrag antippen (blau umrandet). Dann „Weiter“.',
@@ -762,7 +766,7 @@ canvas.addEventListener('pointerdown', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill') {
     fillAt(ll, true);
-  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'hfspotpt', 'gpxsel'].includes(tool)) {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'hfspotpt', 'hfmovept', 'textmove', 'gpxsel'].includes(tool)) {
     panning = false;
   }
 });
@@ -782,7 +786,7 @@ canvas.addEventListener('pointermove', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill' && fillStroke) {
     fillAt(ll, false);
-  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'hfspotpt', 'gpxsel'].includes(tool)) {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'hfspotpt', 'hfmovept', 'textmove', 'gpxsel'].includes(tool)) {
     // Im Track-Modus verschiebt Ziehen die Karte, Tippen setzt Punkte
     if (!panning && Math.hypot(x - lastPt.x, y - lastPt.y) < 8) return;
     panning = true;
@@ -849,6 +853,22 @@ function finishPointer(e, cancelled) {
       pendingSpot = null;
       if (sp) sendStatus({ s: sp.s || 'ort', cat: sp.cat, txt: sp.txt, pos: { lat: ll.lat, lon: ll.lng } });
     }
+  } else if (tool === 'hfmovept' || tool === 'textmove') {
+    if (!cancelled && !panning) {
+      const mv = pendingMove;
+      pendingMove = null;
+      moveTapAt = Date.now();
+      setTool('pan');
+      if (mv && mv.msg) sendKor(mv.msg, { pos: { lat: ll.lat, lon: ll.lng } });
+      else if (mv && mv.item && P.items.includes(mv.item)) {
+        snapshot();
+        mv.item.lat = ll.lat;
+        mv.item.lon = ll.lng;
+        changed();
+        toast('Punkt verlegt (↶ macht es rückgängig)', 4000);
+      }
+    }
+    panning = false;
   } else if (tool === 'windpt') {
     if (!cancelled && !panning) {
       P.windPt = { lat: Math.round(ll.lat * 1e5) / 1e5, lon: Math.round(ll.lng * 1e5) / 1e5 };
@@ -973,11 +993,17 @@ function textDialog(i) {
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') close({ text: inp.value }); });
     box.appendChild(inp);
     dlgButton(box, '💾 Speichern', 'primary', () => close({ text: inp.value }));
+    dlgButton(box, '📍 Verlegen', '', () => close({ move: true }));
     dlgButton(box, '🗑 Löschen', 'urgent', () => close({ del: true }));
     dlgButton(box, 'Abbrechen', '', () => close(null));
   }).then((r) => {
     const k = P.items.indexOf(it);
     if (!r || k < 0) return;
+    if (r.move) {
+      pendingMove = { item: it };
+      setTool('textmove');
+      return toast('Neuen Ort auf der Karte antippen', 6000);
+    }
     if (r.del) {
       if (blocked(it, 'delete')) return;
       snapshot();
@@ -1694,8 +1720,9 @@ function fieldDialog(ll) {
 
 map.on('click', (e) => {
   if (Date.now() - longPressedAt < 1000) return; // gehört zum langen Druck
+  if (Date.now() - moveTapAt < 700) return; // gehört zum Tipp „neuen Ort setzen“
   const sm = statusMarkAt(e.containerPoint.x, e.containerPoint.y);
-  if (sm) return db.mode === 'el' ? msgDialog(sm.m) : toast(statusText(sm), 9000);
+  if (sm) return db.mode === 'el' ? msgDialog(sm.m) : hfMsgDialog(sm.m);
   const sb = tool === 'pan' && badgeAt(e.containerPoint.x, e.containerPoint.y);
   if (sb) { renderSentList(); return openPanel('panel-teams'); } // Plakette: Auftrags-Übersicht
   // Text angetippt: ändern oder löschen
@@ -1715,6 +1742,11 @@ map.on('click', (e) => {
     const i = hitItem(P.items, toPx, e.containerPoint.x, e.containerPoint.y, 12);
     if (i >= 0 && !canEdit(P, P.items[i])) { toast(MSG_VIEW, 4000); return; }
     if (i >= 0 && P.items[i].kind === 'track') { renameItem(i); return; }
+  }
+  // Hundeführer: eigenen Bereich antippen (Name/Notiz ändern, löschen); Zeichnungen/Wege der Einsatzleitung bleiben unberührt
+  if (db.mode === 'hf' && tool === 'pan') {
+    const i = hitItem(P.items, toPx, e.containerPoint.x, e.containerPoint.y, 12);
+    if (i >= 0 && P.items[i].kind === 'track' && !P.items[i].fromEl && !P.items[i].prev) return hfAreaEdit(P.items[i]);
   }
   const parts = [];
   if (allGrids(P).length) {
@@ -2814,6 +2846,43 @@ function hfAreaDone(raw) {
   });
 }
 
+// v103: eigenen Bereich (Umkreisung) ändern oder löschen
+async function hfAreaEdit(it) {
+  const r = await openDlg((box, close) => {
+    dlgHead(box, `✏️ ${it.name || 'Bereich'}`, 'Name und Notiz ändern oder den Bereich löschen.');
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.id = 'area-name';
+    name.value = it.name || '';
+    const note = document.createElement('textarea');
+    note.id = 'area-note';
+    note.rows = 3;
+    note.value = it.note || '';
+    note.placeholder = 'Notiz (optional)';
+    box.append(name, note);
+    dlgButton(box, '💾 Speichern', 'primary', () => close({ name: name.value.trim(), note: note.value.trim() }));
+    dlgButton(box, '🗑 Löschen', 'urgent', () => close({ del: true }));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!r || !P.items.includes(it)) return;
+  if (r.del) {
+    const ok = await openDlg((box, close) => {
+      dlgHead(box, '🗑 Bereich löschen?', `„${it.name || 'Bereich'}“ wird gelöscht und geht nicht mehr an die Einsatzleitung.`);
+      dlgButton(box, 'Löschen', 'urgent', () => close(true));
+      dlgButton(box, 'Abbrechen', 'primary', () => close(false));
+    });
+    if (!ok || !P.items.includes(it)) return;
+    snapshot();
+    P.items.splice(P.items.indexOf(it), 1);
+    changed();
+    return toast('Bereich gelöscht (↶ macht es rückgängig)', 4000);
+  }
+  snapshot();
+  if (r.name) it.name = r.name;
+  if (r.note) it.note = r.note; else delete it.note;
+  changed();
+}
+
 // Feld abgesucht: antippen schaltet durch
 $('hf-field').addEventListener('click', () => {
   if (!allGrids(P).length) return toast('Im Auftrag ist kein Raster');
@@ -3361,7 +3430,9 @@ const teamColorOf = (a) => {
 };
 // Alle Status-Meldungen der Einsatzleitung: über den Status-Server und aus QR-Rückmeldungen
 const allMsgsRaw = () => mergeStatus((P.live && P.live.msgs) || [], P.qmsgs || []);
-const allMsgs = () => withoutDeleted(allMsgsRaw(), P.msgDel); // gelöschte (P.msgDel) bleiben weg
+// v103: Korrekturen (s: 'kor') eingearbeitet; allMsgsK mit zurückgezogenen Fund/Hilfe (gone, nur Verlauf), allMsgs ohne sie
+const allMsgsK = () => withoutDeleted(applyKor(allMsgsRaw()), P.msgDel); // gelöschte (P.msgDel) bleiben weg
+const allMsgs = () => allMsgsK().filter((m) => !m.gone);
 
 // ---- Status-Plakette an jedem Gebiet mit gesendetem Auftrag (Einsatzleitung) ----
 // Mitte: beim Senden gemerkt (ctr), bei älteren Aufträgen aus den Feldern des Teams bzw. dem Raster
@@ -3555,7 +3626,7 @@ function badgeAt(x, y) {
 // Meldungen mit Standort für die Karte: Einsatzleitung alle Teams, Hundeführer nur die eigenen
 function statusMarks() {
   let list;
-  if (db.mode === 'hf') list = ((P.hf && P.hf.log) || []).map((m) => ({ m, color: hfColor() }));
+  if (db.mode === 'hf') list = hfLog().map((m) => ({ m, color: hfColor() }));
   else if (!db.msgOff) list = allMsgs().map((m) => ({ m, color: teamColorOf(m.a) }));
   else return [];
   list = list.filter((x) => x.m.lat != null);
@@ -3593,7 +3664,7 @@ function statusMarkAt(x, y) {
   return hit;
 }
 function statusText({ m }) {
-  return [`${m.tm || 'Team'}: ${msgLabel(m)}`, hhmm(m.t) + (m.acc != null ? ` (± ${m.acc} m)` : ''), m.txt && `„${m.txt}“`,
+  return [`${m.tm || 'Team'}: ${msgLabel(m)}`, hhmm(m.t) + (m.acc != null ? ` (± ${m.acc} m)` : ''), m.txt && `„${m.txt}“`, m.ed && `✏️ geändert ${hhmm(m.ed)}`,
     ].filter(Boolean).join(' · ');
 }
 // EL: Meldung antippen – Text und Löschen (nach Warnung); gelöscht wird nur auf diesem Gerät (und per Fortschritt bei den anderen EL-Geräten)
@@ -3676,6 +3747,75 @@ function renderStatusBtn() {
   const ok = [...(h.log || [])].reverse().find((x) => x.ok);
   b.classList.toggle('pend', n > 0);
   b.querySelector('b').textContent = n ? `⏳ ${n}` : ok ? `✓ ${hhmm(ok.t)}` : 'Status';
+}
+// Eigene Meldungen mit Korrekturen (zurückgezogene fallen weg)
+const hfLog = () => applyKor((P.hf && P.hf.log) || []).filter((m) => !m.gone);
+// Korrektur an eine eigene Meldung: wie jede Meldung ins Log / in die Warteschlange, ohne Standortabfrage
+async function sendKor(m, f) {
+  const p = P;
+  const h = p.hf;
+  if (!h) return;
+  const k = buildKor({ a: h.id, tm: h.team, ref: m.id, ...f });
+  h.log = [...h.log, { ...k }].slice(-100);
+  if (h.ls) h.outbox.push(k);
+  p.updated = Date.now();
+  saveNow();
+  renderStatusBtn();
+  redraw();
+  const what = f.del ? 'Meldung gelöscht' : f.pos ? 'Meldung verlegt' : f.nopos ? 'Standort entfernt' : 'Meldung geändert';
+  if (!h.ls) return toast(`${what} – geht mit der nächsten QR-Rückmeldung an die Einsatzleitung`, 6000);
+  toast(`${what} – wird gesendet …`, 3000);
+  await flushStatus();
+  toast(h.outbox.some((x) => x.id === k.id) ? `⏳ ${what}: wartet auf Netz – wird automatisch nachgesendet` : `✓ ${what} ${hhmm(Date.now())}`, 5000);
+}
+// Eigene Meldung antippen: Notiz ändern, verlegen, Standort entfernen, löschen
+async function hfMsgDialog(m) {
+  if (!hasLive()) return;
+  const r = await openDlg((box, close) => {
+    dlgHead(box, `${msgLabel(m)} ${hhmm(m.t)}`, m.ed ? `✏️ geändert ${hhmm(m.ed)}` : 'Notiz ändern, verlegen oder zurückziehen.');
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.id = 'msg-edit';
+    inp.value = m.txt || '';
+    inp.defaultValue = m.txt || '';
+    inp.placeholder = 'Notiz (optional)';
+    inp.style.width = '100%';
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') close({ txt: inp.value.trim() }); });
+    box.appendChild(inp);
+    dlgButton(box, '💾 Speichern', 'primary', () => close({ txt: inp.value.trim() }));
+    if (!NO_POS.includes(m.s)) dlgButton(box, '📍 Verlegen', '', () => close({ move: true }));
+    if (m.lat != null) dlgButton(box, '📍 Standort entfernen', '', () => close({ nopos: true }));
+    dlgButton(box, '🗑 Löschen', 'urgent', () => close({ del: true }));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!r) return;
+  if (r.move) {
+    pendingMove = { msg: m };
+    setTool('hfmovept');
+    return toast('Neuen Ort auf der Karte antippen', 6000);
+  }
+  if (r.nopos) return sendKor(m, { nopos: true });
+  if (r.del) {
+    const ok = await openDlg((box, close) => {
+      dlgHead(box, '🗑 Meldung löschen?', isUrgent(m) ? 'Die Einsatzleitung sieht, dass die Meldung zurückgezogen wurde.' : `${msgLabel(m)} (${hhmm(m.t)}) wird bei der Einsatzleitung nicht mehr angezeigt.`);
+      dlgButton(box, 'Löschen', 'urgent', () => close(true));
+      dlgButton(box, 'Abbrechen', 'primary', () => close(false));
+    });
+    if (ok) sendKor(m, { del: true });
+    return;
+  }
+  if (r.txt !== (m.txt || '')) sendKor(m, { txt: r.txt });
+}
+// 🗂 Meine Meldungen: alle eigenen, neueste oben
+async function hfMyList() {
+  const list = [...hfLog()].reverse();
+  const m = await openDlg((box, close) => {
+    dlgHead(box, `🗂 Meine Meldungen (${list.length})`, 'Antippen zum Ändern, Verlegen oder Löschen.');
+    if (!list.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = 'Noch nichts gemeldet.'; box.appendChild(p); }
+    for (const x of list) dlgButton(box, `${msgLabel(x)} ${hhmm(x.t)}${x.lat != null ? ' 📍' : ''}${x.txt ? ` – ${x.txt}` : ''}${x.ed ? ' ✏️' : ''}`, 'my-msg', () => close(x));
+    dlgButton(box, 'Schließen', 'primary', () => close(null));
+  });
+  if (m) hfMsgDialog(m);
 }
 // Standort im Moment der Meldung: bis 10 s auf ≤ 30 m warten, sonst der beste Wert; ohne GPS null
 function getFix(maxWait = 10000) {
@@ -3778,9 +3918,11 @@ async function openStatusDialog() {
     for (const s of STATUS_LIST) dlgButton(list, `${s.ico} ${s.label}`, '', () => close(s.code));
     dlgButton(box, `${CLOSE_STATUS.ico} Auftrag abschließen`, '', () => close('zu')); // getrennt vom Stand: auch bei 80 % beenden/abbrechen
     dlgButton(box, '📍 Standort melden', 'primary', () => close('ort'));
+    dlgButton(box, `🗂 Meine Meldungen (${hfLog().length})`, '', () => close('mine'));
     dlgButton(box, 'Abbrechen', '', () => close(null));
   });
   if (!code) return;
+  if (code === 'mine') return hfMyList();
   if (code === 'ort') return spotDialog();
   if (code === 'fertig') return doneDialog();
   if (code === 'zu') return closeDialog();
@@ -3867,7 +4009,7 @@ function hfAreas() {
 }
 // Regler je Gebiet (bzw. ein Regler), vorausgefüllt mit dem letzten Stand (Stand- oder Abschluss-Meldung) -> [{ name, rng }]
 function pctRows(box, areas, multi) {
-  const prev = [...(P.hf.log || [])].reverse().find((m) => m.s === 'fertig' || m.s === 'zu');
+  const prev = [...hfLog()].reverse().find((m) => m.s === 'fertig' || m.s === 'zu');
   const was = (name) => { const x = prev && (prev.ar || []).find((q) => q[0] === name); return x ? x[1] : prev && !multi && prev.pc != null ? prev.pc : 50; };
   return (multi ? areas : ['']).map((name) => {
     const big = document.createElement('div');
@@ -4245,19 +4387,20 @@ function renderStatusPanel() {
   }
   const box = $('st-list');
   box.innerHTML = '';
-  const list = historyFilter(allMsgs(), P.sent, stFilter);
+  const list = historyFilter(allMsgsK(), P.sent, stFilter);
   if (!list.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = 'Noch keine Meldungen.'; box.appendChild(p); }
   for (const m of list.slice(0, 300)) {
     const x = (P.sent || []).find((q) => q.id === m.a);
     const team = x && P.marks.find((q) => q.id === x.teamId);
     const d = document.createElement('div');
-    d.className = `st-row${isUrgent(m) ? ' urgent' : ''}${m.lat != null ? ' loc' : ''}${stFresh.has(m.id) ? ' unread' : ''}`;
+    d.className = `st-row${isUrgent(m) && !m.gone ? ' urgent' : ''}${m.lat != null && !m.gone ? ' loc' : ''}${m.gone ? ' gone' : ''}${stFresh.has(m.id) ? ' unread' : ''}`;
     d.style.setProperty('--tc', team ? team.color : '#455a64');
     d.innerHTML = '<div class="tx"><b></b><span></span><br><small></small></div><button type="button" class="del" aria-label="Meldung löschen">🗑</button>';
     d.querySelector('b').textContent = `${team ? team.label : m.tm || 'Team'}${team && team.dog ? ` (${team.dog})` : ''}`;
     d.querySelector('span').textContent = `${msgLabel(m)}${m.lat != null ? ' 📍' : ''}${m.txt ? ` – ${m.txt}` : ''}`;
-    d.querySelector('small').textContent = `${hhmm(m.t)} (vor ${sinceText(m.t, now)})`;
-    if (m.lat != null) d.addEventListener('click', () => showStatusMark(m));
+    d.querySelector('small').textContent = `${hhmm(m.t)} (vor ${sinceText(m.t, now)})${m.gone ? ` · ↩ vom Team zurückgezogen ${hhmm(m.gone)}` : m.ed ? ` · ✏️ geändert ${hhmm(m.ed)}` : ''}`;
+    if (m.gone) d.querySelector('span').style.textDecoration = 'line-through';
+    if (m.lat != null && !m.gone) d.addEventListener('click', () => showStatusMark(m));
     d.querySelector('.del').addEventListener('click', (e) => { e.stopPropagation(); msgDialog(m, true); });
     box.appendChild(d);
   }
@@ -4311,7 +4454,8 @@ async function pollLive() {
         l.msgs = mergeStatus(l.msgs, fresh).slice(-500);
         markAccepted(proj, fresh); // erste Meldung (z. B. 📲 Quittung) = Auftrag übernommen
         proj.updated = Date.now();
-        prune(noteReceived(proj.msgRecv, fresh)); // v98: Eingang auf diesem Gerät -> ungelesen
+        prune(noteReceived(proj.msgRecv, fresh.filter((m) => m.s !== 'kor'))); // v98: Eingang auf diesem Gerät -> ungelesen (Korrekturen nicht)
+        if (proj === P) korToast(fresh);
         if (proj === P) {
           renderSentList(); // aktualisiert auch die Team-Chips
           redraw();
@@ -4362,18 +4506,33 @@ function beep() {
     setTimeout(() => ac.close().catch(() => {}), 2000);
   } catch { /* Ton nur nach Tipp auf die Seite erlaubt */ }
 }
+// Offene Dringend-Meldungen (zurückgezogene nicht)
+const urgentTodo = (proj) => applyKor(proj.live.msgs).filter((m) => isUrgent(m) && !m.gone && !proj.live.ack.includes(m.id) && !(proj.msgDel && proj.msgDel[m.id]));
+let urgentClose = null;
+// Neue Korrekturen: Hinweis; steht ein Dringend-Fenster, dessen Meldungen alle zurückgezogen sind, schließt es sich
+function korToast(fresh) {
+  const ks = fresh.filter((m) => m.s === 'kor');
+  const k = ks[ks.length - 1];
+  if (k) {
+    const x = (P.sent || []).find((q) => q.id === k.a);
+    const team = x && P.marks.find((q) => q.id === x.teamId);
+    toast(`${team ? team.label : k.tm || 'Team'}: Meldung ${k.del ? 'zurückgezogen' : 'geändert'}`, 5000);
+  }
+  if (urgentClose && urgentOpen && !urgentTodo(P).length) urgentClose(false);
+}
 // Dringende Meldungen (Fund, Hilfe): Ton, Vibration, Dialog bleibt bis „Gesehen“
 async function showUrgent() {
   const proj = P;
   const l = proj && proj.live;
   if (urgentOpen || db.mode !== 'el' || !l) return;
-  const todo = l.msgs.filter((m) => isUrgent(m) && !l.ack.includes(m.id) && !(proj.msgDel && proj.msgDel[m.id]));
+  const todo = urgentTodo(proj);
   if (!todo.length) return;
   if (!$('dlg').hidden) return setTimeout(showUrgent, 4000); // ein anderes Fenster steht – gleich nochmal
   urgentOpen = true;
   beep();
   const beeper = setInterval(beep, 12000);
   const r = await openDlg((box, close) => {
+    urgentClose = close;
     dlgHead(box, `🆘 Dringend (${todo.length})`, 'Diese Meldung bleibt, bis du sie als gesehen bestätigst.');
     for (const m of todo) {
       const d = document.createElement('div');
@@ -4386,6 +4545,7 @@ async function showUrgent() {
   });
   clearInterval(beeper);
   urgentOpen = false;
+  urgentClose = null;
   l.ack.push(...todo.map((m) => m.id));
   saveNow();
   if (r && r.lat != null && proj === P) showStatusMark(r);
