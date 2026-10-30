@@ -1,12 +1,12 @@
 // Service Worker: App offline verfügbar machen und angesehene Kartenkacheln
 // zwischenspeichern (hilft bei schlechtem Empfang im Gelände).
-const VERSION = 'v89';
+const VERSION = 'v90';
 const APP_CACHE = `suchgebiet-app-${VERSION}`;
 const TILE_CACHE = 'suchgebiet-tiles';
 const MAX_TILES = 4000;
 
 const APP_FILES = [
-  './', './index.html', './style.css', './app.js', './grid.js', './render.js', './pdf.js', './layers.js', './utm.js', './store.js', './gpx.js', './font.js', './mission.js', './offline.js', './juh.js', './kmz.js', './zip.js', './search.js', './contacts.js', './rescue.js', './weather.js', './share.js', './handover.js', './report.js', './pois.js', './infos.js', './files.js', './scope.js', './wizard.js', './status.js', './lib/qrcode.js', './lib/jsQR.js',
+  './', './index.html', './style.css', './app.js', './grid.js', './render.js', './pdf.js', './layers.js', './utm.js', './store.js', './gpx.js', './font.js', './mission.js', './offline.js', './juh.js', './kmz.js', './zip.js', './search.js', './contacts.js', './rescue.js', './weather.js', './share.js', './handover.js', './report.js', './pois.js', './infos.js', './files.js', './scope.js', './wizard.js', './status.js', './locks.js', './progress.js', './lib/qrcode.js', './lib/jsQR.js',
   './manifest.json', './icon.svg', './icon-192.png', './icon-512.png',
   './lib/leaflet.js', './lib/pdf-lib.esm.min.js', './vorlagen/juh-einsatzbericht-rhs.pdf', './lib/leaflet.css', './lib/jspdf.umd.min.js',
 ];

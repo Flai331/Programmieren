@@ -99,6 +99,9 @@ export function subsetProject(p, sel, title, { base = false } = {}) {
       mission: clone(p.mission || q.mission), parentEid: p.eid || p.id, parentTitle: p.title || '',
       items: clone(p.items), itemDel: clone(p.itemDel || {}), cellT: clone(p.cellT || {}), gridT: clone(p.gridT || {}),
     });
+    // gleicher Status-Schlüssel und Aufträge wie der Grund-Einsatz: der UA liest alle Meldungen mit
+    if (p.live) q.live = { ...clone(p.live), since: 0 };
+    if ((p.sent || []).length) q.sent = clone(p.sent);
     // Sperren: Ausgewähltes = 'ua' (bearbeitbar, nicht löschbar), alles andere = 'base' (nur ansehen)
     q.items.forEach((it, i) => { it.lock = sel.items.has(p.items[i]) ? 'ua' : 'base'; });
     q.pois.forEach((x, i) => { x.lock = sel.pois.has(p.pois[i]) ? 'ua' : 'base'; });

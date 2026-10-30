@@ -2945,7 +2945,7 @@ function sendSelection() {
     picked: Object.fromEntries(Object.entries(sendPicked).map(([k, v]) => [k, [...v]])),
     itemIdx: idx, meet: $('send-meet').checked && !!P.meet, rescue,
     poiIds: [...$('send-pois').querySelectorAll('input:checked')].map((i) => i.value), hint: $('send-hint').value.trim(), person: $('send-person').checked,
-    liveUrl: db.statusUrl || '',
+    liveUrl: db.statusUrl || (P.live && P.live.url) || '', // UA/ELW ohne eigene Einstellung: Server des Einsatzes
     contacts: $('send-contacts').checked
       ? sendContactsAll().filter((c) => c.id === 'lead' || !$('send-ct-list').querySelector(`input[value="${c.id}"]:not(:checked)`)) : [],
   };

@@ -334,3 +334,27 @@ test('Status-Meldungen, Aufträge, Eckzeiten werden ergänzt (nie überschrieben
   assert.equal(b.mission.forces.length, 1);
   assert.match(progressSummary(r), /Protokolleintr/);
 });
+
+test('Status-Schlüssel: UA bekommt ihn mit, Fortschritt bringt ihn zu einem Gerät ohne', () => {
+  const p = base();
+  p.live = { url: 'https://script.google.com/macros/s/X/exec', key: 'K1', since: 5, ack: [], msgs: [{ id: 'm1', a: 'A1', t: 1, s: 'start' }] };
+  p.sent = [{ id: 'A1', teamId: 'T1', team: 'Team 1', grids: ['G1'], at: 1, live: true }];
+  const sel = emptySel();
+  sel.edges.add('G1');
+  const ua = subsetProject(p, sel, 'UA', { base: true });
+  assert.equal(ua.live.key, 'K1');
+  assert.equal(ua.live.since, 0);
+  assert.equal(ua.sent[0].id, 'A1');
+  const f = buildProgress(p, { from: 'EL' });
+  assert.deepEqual(f.lv, ['https://script.google.com/macros/s/X/exec', 'K1']);
+  const q = normalizeProject(newProject('ELW'));
+  q.eid = 'E1';
+  mergeProgress(q, f);
+  assert.equal(q.live.key, 'K1');
+  assert.equal(q.live.msgs.length, 1);
+  // vorhandener Schlüssel wird nicht überschrieben, fremde Adressen nicht übernommen
+  const r = normalizeProject(newProject('X'));
+  r.eid = 'E1';
+  mergeProgress(r, { ...f, lv: ['https://evil.example/x', 'K9'] });
+  assert.equal(r.live, undefined);
+});

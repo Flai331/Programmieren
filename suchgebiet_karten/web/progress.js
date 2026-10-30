@@ -141,6 +141,8 @@ export function buildProgress(p, { from = '', to = '', since = 0, now = Date.now
   const ms = p.live ? (p.live.msgs || []).filter((x) => nw(x.t)) : [];
   if (ms.length) { out.ms = ms; n += ms.length; }
   if (!n) return null;
+  // Status-Server: ein Schlüssel pro Einsatz – alle Geräte der Einsatzleitung lesen alle Meldungen
+  if (p.live && p.live.url && p.live.key) out.lv = [p.live.url, p.live.key];
   out.mk = (p.marks || []).map(({ hidden, ...r }) => r);
   out.n = n;
   return out;
@@ -312,6 +314,9 @@ export function mergeProgress(p, f) {
     if (!x || !x.id) continue;
     const o = p.sent.find((y) => y.id === x.id);
     if (!o) { p.sent.push(x); res.proto++; } else if ((x.last || 0) > (o.last || 0)) { Object.assign(o, { n: x.n, last: x.last, lastSum: x.lastSum }); res.proto++; }
+  }
+  if (!p.live && Array.isArray(f.lv) && f.lv.length === 2 && /^https:\/\/script\.google\.com\//.test(String(f.lv[0])) && f.lv[1]) {
+    p.live = { url: String(f.lv[0]), key: String(f.lv[1]), since: 0, ack: [], msgs: [] };
   }
   if (p.live && Array.isArray(f.ms)) {
     const before = p.live.msgs.length;

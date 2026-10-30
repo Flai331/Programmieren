@@ -49,6 +49,13 @@ export function newProject(title = '') {
     pois: [], // Lage-Orte (ELW-Infos)
     poiDel: {}, // gelöschte Lage-Orte { id: Zeit } für den Abgleich zwischen Geräten
     eid: '', // Einsatz-ID über Geräte hinweg (Übergabe Handy -> Tablet)
+    // v90: Fortschritt senden (progress.js) und UA-Sperren (locks.js)
+    itemDel: {}, // gelöschte Zeichnungen { id: Zeit } – blockieren Wiederanlegen durch Fortschritt
+    cellBy: {}, // von welchem Gerät das Feld zuletzt ankam { Schlüssel: Name } (geht nicht zurück)
+    cellT: {}, // Änderungszeit je Feld { "Raster|c,r|f" (Team) bzw. "|s" (Status): Zeit }
+    gridT: {}, // Änderungszeit je Rastergebiet { Raster-ID: Zeit }
+    glock: {}, gown: {}, // Sperren je Rastergebiet (nur im Unterabschnitt)
+    peers: [], // Empfänger von „Fortschritt senden“: [{ name, lastSent }]
     showUtm: false,
     view: null,
     mission: newMission(), // Einsatzprotokoll
@@ -78,6 +85,15 @@ export function normalizeProject(p) {
   if (!out.poiDel || typeof out.poiDel !== 'object' || Array.isArray(out.poiDel)) out.poiDel = {};
   out.contacts = out.contacts.map(normalizeContact);
   if (!out.eid) out.eid = out.id;
+  // v90: Zeichnungen bekommen feste ID, Änderungszeit (t) und Gerät (by); Sperren (lock) nur 'base' | 'ua'
+  for (const k of ['itemDel', 'cellT', 'cellBy', 'gridT', 'glock', 'gown']) if (!out[k] || typeof out[k] !== 'object' || Array.isArray(out[k])) out[k] = {};
+  out.peers = (Array.isArray(out.peers) ? out.peers : []).filter((x) => x && typeof x.name === 'string' && x.name).map((x) => ({ name: x.name, lastSent: Number(x.lastSent) || 0 }));
+  out.items = out.items.map((it) => {
+    const x = { ...it, id: it.id || uid(), t: Number(it.t) || out.updated || Date.now(), by: String(it.by || '') };
+    if (x.lock !== 'base' && x.lock !== 'ua') delete x.lock;
+    return x;
+  });
+  if (out.meet && typeof out.meet === 'object' && !out.meet.t) out.meet = { ...out.meet, t: out.updated || Date.now() };
   // v89: Status-Meldungen – EL: live { url, key, since, ack, msgs }, HF: hf.ls = [url, key], Warteschlange hf.outbox, eigene Meldungen hf.log
   if (out.live && typeof out.live === 'object' && out.live.url && out.live.key) {
     const l = out.live;
