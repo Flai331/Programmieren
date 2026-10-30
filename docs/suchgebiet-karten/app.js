@@ -61,7 +61,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v103';
+const APP_VERSION = 'v104';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -3569,6 +3569,7 @@ function badgeUi() {
 function drawSentBadges(c) {
   badgeBoxes = [];
   const list = sentBadges();
+  if (!isTablet()) return renderOrders(list); // Handy: Stand im Reiter „📋 Aufträge“ statt auf der Karte
   if (!list.length) return;
   const sizes = list.map((b) => ({
     w: Math.max(...b.lines.map((l, i) => { c.font = `${i ? '' : 'bold '}12px sans-serif`; return c.measureText(l).width; })) + 16,
@@ -4243,8 +4244,55 @@ function closeUnread() {
   // Neuaufbau der Chips erst nach dem Tipp, sonst geht der Klick auf einen Chip verloren
   setTimeout(() => { tbSig = ''; renderTeamBar(); checkUnread(); }, 350);
 }
+// Handy: Reiter „📋 Aufträge“ neben „📣 Teams“ – Stand je Gebiet als aufklappbare Liste, Antippen zeigt das Gebiet
+let ordOpen = false;
+let ordSig = '';
+function renderOrders(list) {
+  const btn = $('ord-btn');
+  const tb = $('tm-btn');
+  btn.hidden = !list.length || tb.hidden;
+  if (!btn.hidden) { const r = tb.getBoundingClientRect(); btn.style.left = `${r.right + 8}px`; btn.style.top = `${r.top}px`; }
+  if (btn.hidden) ordOpen = false;
+  btn.classList.toggle('open', ordOpen);
+  const box = $('ord-list');
+  const sig = JSON.stringify([ordOpen, list.map((b) => [b.lines, b.color, b.fin, b.done, b.wait])]);
+  if (sig === ordSig) return;
+  ordSig = sig;
+  box.innerHTML = '';
+  box.hidden = !ordOpen;
+  if (!ordOpen) return;
+  const run = list.filter((b) => !b.done);
+  const fin = list.filter((b) => b.done);
+  for (const b of [...run, ...fin]) {
+    const r = document.createElement('button');
+    r.type = 'button';
+    r.className = `ord-row${b.done ? ' done' : ''}${b.wait ? ' wait' : ''}`;
+    r.style.setProperty('--tc', b.done ? '#2e7d32' : b.color);
+    const t = document.createElement('b');
+    t.textContent = b.lines[0];
+    const s = document.createElement('small');
+    s.textContent = b.lines.slice(1).join(' · ');
+    r.append(t, s);
+    r.addEventListener('click', () => {
+      ordOpen = false;
+      ordSig = '';
+      const [[s1, w1], [n1, e1]] = b.bnd;
+      if (n1 === s1 && e1 === w1) map.setView([s1, w1], Math.max(map.getZoom(), 15));
+      else map.fitBounds([[s1, w1], [n1, e1]], { padding: [60, 60], maxZoom: 17 });
+      redraw();
+    });
+    box.appendChild(r);
+  }
+}
+$('ord-btn').addEventListener('click', () => {
+  ordOpen = !ordOpen;
+  if (ordOpen && db.teamsOpen) { db.teamsOpen = false; saveNow(); tbSig = ''; renderTeamBar(); }
+  ordSig = '';
+  redraw();
+});
 $('tm-btn').addEventListener('click', () => {
   db.teamsOpen = !db.teamsOpen;
+  if (db.teamsOpen && ordOpen) { ordOpen = false; ordSig = ''; redraw(); }
   saveNow();
   tbSig = '';
   renderTeamBar();
@@ -6284,13 +6332,15 @@ function anyOpenThing() {
   return [...document.querySelectorAll('.panel')].some((p) => !p.hidden)
     || !$('searchbar').hidden
     || !$('tm-pop').hidden
-    || (!isTablet() && !!db.teamsOpen && !$('tm-list').hidden);
+    || (!isTablet() && !!db.teamsOpen && !$('tm-list').hidden)
+    || (!isTablet() && ordOpen);
 }
 function closeOpenThings() {
   closePanels();
   closeSearch();
   closePop();
   if (db.teamsOpen && !isTablet()) { db.teamsOpen = false; saveNow(); tbSig = ''; renderTeamBar(); }
+  if (ordOpen) { ordOpen = false; ordSig = ''; redraw(); }
 }
 function dlgBackdropTap() {
   const box = $('dlg-box');

@@ -70,3 +70,12 @@ test('nicht unter Knöpfen am Rand', () => {
   assert.equal(ov(r, ui[0]) + ov(r, ui[1]), 0);
   assert.equal(ov(r, area), 0);
 });
+
+test('Gebiet am linken Rand hinter Knöpfen: Plakette weder außerhalb noch unter Knöpfen', () => {
+  const area = { x0: 30, y0: 300, x1: 120, y1: 360 };
+  const ui = [{ x0: 0, y0: 0, x1: 70, y1: 800 }];
+  const [p] = placeBadges([{ area, w: 180, h: 38 }], [], view, ui);
+  const r = rect(p, 180, 38);
+  assert.ok(r.x0 >= 0 && r.x1 <= view.w && r.y0 >= 0 && r.y1 <= view.h);
+  assert.equal(ov(r, ui[0]), 0);
+});
