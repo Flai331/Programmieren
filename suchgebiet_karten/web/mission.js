@@ -11,6 +11,26 @@ export const FORCE_KEYS = [
   ['vehicles', 'Fahrz.'],
 ];
 
+// Uhrzeit von Hand: „930“, „9:30“, „0930“, „14“ -> „09:30“ bzw. „14:00“; leer -> ''; ungültig -> null
+export function normTime(s) {
+  const t = String(s || '').trim();
+  if (!t) return '';
+  let h;
+  let m;
+  const p = t.split(/[^0-9]+/).filter(Boolean);
+  if (p.length >= 2) [h, m] = p;
+  else {
+    const d = p[0] || '';
+    if (d.length <= 2) [h, m] = [d, '0'];
+    else if (d.length <= 4) [h, m] = [d.slice(0, -2), d.slice(-2)];
+    else return null;
+  }
+  h = Number(h);
+  m = Number(m);
+  if (!Number.isInteger(h) || !Number.isInteger(m) || h > 23 || m > 59) return null;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
 export function newMission() {
   return {
     person: '', // vermisste Person
