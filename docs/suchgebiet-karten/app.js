@@ -11,7 +11,7 @@ import { buildGpx, mergeGpx, parseGpx, parseKml, pointInPolygon, selectionGpx, g
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import { buildReport, describeTarget, makeDedup, makeLog } from './report.js';
 import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
-import { buildInfos, deletePoi, infoSummary, mergeInfos } from './infos.js';
+import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './infos.js';
 import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject } from './scope.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -3002,7 +3002,7 @@ $('handed').addEventListener('click', async () => {
   if (ok) { delete P.handedOver; changed(); }
 });
 $('ho-send').addEventListener('click', () => handoverQr(P, true));
-// Einsatz (ganz oder Teil-Einsatz aus „Weitergeben“) per QR-Code an ein Gerät der Einsatzleitung
+// Einsatz (ganz oder Unterabschnitt aus „Weitergeben“) per QR-Code an ein Gerät der Einsatzleitung
 async function handoverQr(proj, whole) {
   saveNow();
   // erst ein QR-Code mit wenig Vereinfachung, sonst mehrere im Wechsel
@@ -3030,7 +3030,7 @@ async function handoverQr(proj, whole) {
   const pc = ' Zum PC: „Teilen“ oder „Link kopieren“ (z. B. WhatsApp Web, Mail).';
   const lost = miss.length ? ` Nicht dabei: ${miss.join(', ')} – dafür „Suchgebiet als Datei senden“.` : '';
   if (whole) qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
-  showQr(link, `📲 ${whole ? 'Einsatz' : 'Teil-Einsatz'} „${proj.title || 'Suchgebiet'}“ übergeben`, how + pc + lost, parts);
+  showQr(link, `📲 ${whole ? 'Einsatz' : 'Unterabschnitt'} „${proj.title || 'Suchgebiet'}“ übergeben`, how + pc + lost, parts);
 }
 $('ho-scan').addEventListener('click', () => { closePanels(); startScan(); });
 
@@ -3063,7 +3063,7 @@ async function takeHandover(e) {
   renderProjects();
   applyMode();
   await askDeviceName(true);
-  toast(`📥 Einsatz „${p.title || 'Suchgebiet'}“ übernommen – Rückmeldungen jetzt hier scannen${e.np ? ` (ohne ${e.np} Foto${e.np === 1 ? '' : 's'})` : ''}`, 8000);
+  toast(`📥 ${p.parentEid ? 'Unterabschnitt' : 'Einsatz'} „${p.title || 'Suchgebiet'}“ übernommen – Rückmeldungen jetzt hier scannen${e.np ? ` (ohne ${e.np} Foto${e.np === 1 ? '' : 's'})` : ''}`, 8000);
 }
 
 // ---- Lage-Infos (Lage-Orte, optional Kontakte) zwischen Geräten der Einsatzleitung abgleichen ----
@@ -3102,7 +3102,7 @@ async function takeInfos(inf) {
   if (db.mode === 'hf' && !(await toElMode())) return;
   if (db.mode !== 'el') { db.mode = 'el'; applyMode(); }
   const from = inf.from || 'Einsatzleitung';
-  let target = Object.values(db.projects).find((p) => p.eid === inf.eid);
+  let target = infoTarget(db.projects, inf);
   if (!target) {
     if (isFree()) return toast(`Der Einsatz „${inf.ti || '?'}“ ist auf diesem Gerät nicht vorhanden – erst den Einsatz übernehmen oder anlegen`, 8000);
     const ok = await openDlg((box, close) => {
@@ -4398,10 +4398,12 @@ $('share-qr').addEventListener('click', () => shareRun(async () => {
   const to = await openDlg((box, close) => {
     dlgHead(box, '📲 QR-Code für …', `„${shareLabel()}“: ${selSummary(P, shareSel)}`);
     dlgButton(box, '🐕 Hundeführer<small>öffnet als Auftrag, Rückmeldung kommt zurück</small>', 'primary', () => close('hf'));
-    dlgButton(box, '🚐 Einsatzleitung / ELW<small>wird dort ein eigener Einsatz mit nur diesem Teil</small>', '', () => close('el'));
+    dlgButton(box, '🚐 EL / ELW: ganzer Einsatz<small>alles, Rückmeldungen laufen dann dort ein</small>', '', () => close('all'));
+    dlgButton(box, '🚐 EL / ELW: Unterabschnitt<small>nur dieses Gebiet, dazu B-Ort, Lage-Orte, Stammdaten und Protokoll des Einsatzes</small>', '', () => close('el'));
     dlgButton(box, 'Abbrechen', '', () => close(null));
   });
-  if (to === 'el') return handoverQr(subsetProject(P, shareSel, `${P.title || 'Einsatz'} – ${shareLabel()}`), false);
+  if (to === 'all') return handoverQr(P, true);
+  if (to === 'el') return handoverQr(subsetProject(P, shareSel, `${P.title || 'Einsatz'} – UA ${shareLabel()}`, { base: true }), false);
   if (to === 'hf') prefillSend(shareSel, shareScope === 'team' ? $('share-team').value : '');
 }));
 $('share-pdf').addEventListener('click', () => shareRun(async () => {

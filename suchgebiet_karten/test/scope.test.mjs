@@ -72,3 +72,29 @@ test('Auftrag: Lage-Orte gehen mit und kommen beim Hundeführer an', async () =>
   assert.equal(h.pois.length, 1);
   assert.equal(h.pois[0].cat, 'food');
 });
+
+test('Unterabschnitt: nur das Gebiet, aber alle übrigen Daten des Grund-Einsatzes', async () => {
+  const { buildInfos, infoTarget } = await import('../web/infos.js');
+  const p = demo();
+  p.eid = 'E1';
+  const s = emptySel();
+  s.items.add(p.items[0]);
+  const q = subsetProject(p, s, 'Übung – UA U1', { base: true });
+  assert.notEqual(q.eid, 'E1');
+  assert.equal(q.parentEid, 'E1');
+  assert.equal(q.parentTitle, 'Übung');
+  assert.deepEqual(q.items.map((i) => i.name), ['U1']);
+  assert.equal(q.otherGrids.length, 0);
+  assert.equal(q.area, null);
+  assert.equal(q.pois.length, 1);
+  assert.equal(q.meet.text, 'B-Ort');
+  assert.equal(q.notes, 'geheim');
+  assert.equal(q.mission.person, 'Max');
+  q.mission.person = 'x';
+  assert.equal(p.mission.person, 'Max'); // Kopie
+  // Infos aus dem Unterabschnitt finden den Grund-Einsatz und umgekehrt
+  const projects = { a: p, b: { ...q, eid: 'other-device' } };
+  assert.equal(infoTarget({ a: p }, buildInfos(q)), p);
+  assert.equal(infoTarget({ b: q }, buildInfos(p)), q);
+  assert.equal(infoTarget(projects, { eid: 'nix' }), null);
+});

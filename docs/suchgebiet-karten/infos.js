@@ -19,10 +19,20 @@ export function deletePoi(p, poi, now = Date.now()) {
 export function buildInfos(p, { from = '', contacts = false } = {}, now = Date.now()) {
   const out = {
     k: 'i', v: 1, eid: p.eid || p.id, ti: p.title || '', from, at: now,
+    ...(p.parentEid ? { pe: p.parentEid } : {}), // Unterabschnitt: gehört zu diesem Grund-Einsatz
     po: (p.pois || []).map((x) => [x.id, x.cat, r6(x.lat), r6(x.lon), x.name || '', x.desc || '', x.t || 0, x.by || '']),
   };
   if (contacts && (p.contacts || []).length) out.ct = p.contacts.map(compactContact);
   return out;
+}
+
+// Passender Einsatz für Infos: derselbe, sein Grund-Einsatz oder einer seiner Unterabschnitte
+export function infoTarget(projects, inf) {
+  const list = Object.values(projects);
+  return list.find((p) => p.eid === inf.eid)
+    || (inf.pe && list.find((p) => p.eid === inf.pe))
+    || list.find((p) => p.parentEid && p.parentEid === inf.eid)
+    || null;
 }
 
 // Ergänzt p um die Infos (ändert p) -> { added, changed, contacts }
