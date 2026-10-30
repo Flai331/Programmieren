@@ -49,6 +49,7 @@ import {
 } from './statusbar.js';
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
+import { placeBadges, boxOf } from './badgeplace.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
   newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor, cellsText,
@@ -57,7 +58,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v99';
+const APP_VERSION = 'v100';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -841,7 +842,7 @@ function finishPointer(e, cancelled) {
       setTool('pan');
       const sp = pendingSpot;
       pendingSpot = null;
-      if (sp) sendStatus({ s: 'ort', cat: sp.cat, txt: sp.txt, pos: { lat: ll.lat, lon: ll.lng } });
+      if (sp) sendStatus({ s: sp.s || 'ort', cat: sp.cat, txt: sp.txt, pos: { lat: ll.lat, lon: ll.lng } });
     }
   } else if (tool === 'windpt') {
     if (!cancelled && !panning) {
@@ -3195,6 +3196,11 @@ const allMsgs = () => withoutDeleted(allMsgsRaw(), P.msgDel); // gelöschte (P.m
 // Mitte: beim Senden gemerkt (ctr), bei älteren Aufträgen aus den Feldern des Teams bzw. dem Raster
 function sentCenter(x) {
   if (x.ctr) return x.ctr;
+  const b = sentBounds(x);
+  return b && [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2];
+}
+// Ausdehnung (Team-Felder bzw. Raster) als [[Süd, West], [Nord, Ost]]
+function sentBounds(x) {
   const pts = [];
   for (const g of allGrids(P).filter((q) => (x.grids || []).includes(q.id))) {
     const gr = makeGrid(g.area, g.cellM);
@@ -3202,10 +3208,13 @@ function sentCenter(x) {
     if (!keys.length) { pts.push([g.area.north, g.area.west], [g.area.south, g.area.east]); continue; }
     for (const k of keys) { const [c, r] = k.split(',').map(Number); const b = cellBounds(gr, c, r); pts.push([b.north, b.west], [b.south, b.east]); }
   }
+  return ptsBounds(pts);
+}
+function ptsBounds(pts) {
   if (!pts.length) return null;
   const la = pts.map((q) => q[0]);
   const lo = pts.map((q) => q[1]);
-  return [(Math.min(...la) + Math.max(...la)) / 2, (Math.min(...lo) + Math.max(...lo)) / 2];
+  return [[Math.min(...la), Math.min(...lo)], [Math.max(...la), Math.max(...lo)]];
 }
 // Felder des Auftrags (Team-Felder in seinen Rastern) und wie viele davon als „abgesucht“ zurückgemeldet sind
 function sentFields(x) {
@@ -3217,18 +3226,18 @@ function sentFields(x) {
   }
   return { n, a };
 }
-// Gebiete eines Auftrags mit Namen wie beim Hundeführer (Rastername bzw. Umrissname/„Umriss n“) -> Map Name -> Mitte
+// Gebiete eines Auftrags mit Namen wie beim Hundeführer (Rastername bzw. Umrissname/„Umriss n“) -> Map Name -> Ausdehnung
 function sentAreas(x) {
   const out = new Map();
   for (const g of allGrids(P).filter((q) => (x.grids || []).includes(q.id))) {
-    out.set(gridLabel(P, g), sentCenter({ grids: [g.id], teamId: x.teamId }));
+    out.set(gridLabel(P, g), sentBounds({ grids: [g.id], teamId: x.teamId }));
   }
   let n = 0;
   for (const id of x.items || []) {
     const it = P.items.find((q) => q.id === id);
     if (!it || it.kind !== 'track' || it.open || (it.pts || []).length < 3) continue;
     const name = it.name || `Umriss ${++n}`;
-    out.set(name, [it.pts.reduce((a, q) => a + q[0], 0) / it.pts.length, it.pts.reduce((a, q) => a + q[1], 0) / it.pts.length]);
+    out.set(name, ptsBounds(it.pts));
   }
   return out;
 }
@@ -3245,8 +3254,8 @@ function sentBadges() {
     const own = msgs.filter((m) => m.a === x.id);
     const f = sentFields(x);
     let areas = sentAreas(x);
-    if (!areas.size) { const c = sentCenter(x); if (!c) continue; areas = new Map([['', c]]); }
-    for (const [area, ctr] of areas) {
+    if (!areas.size) { const c = sentCenter(x); if (!c) continue; areas = new Map([['', [c, c]]]); }
+    for (const [area, bnd] of areas) {
       // Stand in diesem Gebiet: letzte Stand-Meldung mit Wert für das Gebiet (bzw. ohne Gebiete)
       let pc = null;
       for (const m of [...own].reverse()) {
@@ -3265,23 +3274,83 @@ function sentBadges() {
       if (f.a && (!area || allGrids(P).some((g) => gridLabel(P, g) === area))) info.push(`▦ ${f.a}/${f.n} Felder`);
       if (!info.length) info.push(`📲 seit ${hhmm(x.acc || x.at)}`);
       lines.push(info.join(' · '));
-      out.push({ x, ctr, color, lines, fin: pc != null && pc >= 100, wait: !acc });
+      out.push({ x, bnd, color, lines, fin: pc != null && pc >= 100, wait: !acc });
     }
   }
   return out;
 }
 let badgeBoxes = []; // zuletzt gezeichnete Plaketten (zum Antippen)
+// Was eine Plakette nicht überdecken soll: Texte/Markierungen, Lage-Orte, B-Ort, Meldungen auf der Karte (Pixel-Kästen)
+function badgeObstacles(c) {
+  const out = [];
+  const label = (x, y, r, text, px) => {
+    c.font = `bold ${px}px sans-serif`;
+    out.push(boxOf(x - r, y - Math.max(r, px / 2 + 3), 2 * r + 5 + (text ? c.measureText(text).width + 6 : 0), 2 * Math.max(r, px / 2 + 3)));
+  };
+  for (const it of P.items) {
+    if (it.hidden || it.kind !== 'text') continue;
+    const [x, y] = toPx(it.lat, it.lon);
+    label(x, y, 7, it.text, 15);
+  }
+  const hide = P.hide || {};
+  if (!hide.pois) for (const p of P.pois || []) { const [x, y] = toPx(p.lat, p.lon); label(x, y, 14, poiName(p), 13); }
+  if (P.meet && !hide.meet) { const [x, y] = toPx(P.meet.lat, P.meet.lon); label(x, y, 13, P.meet.text, 14); }
+  for (const s of statusMarks()) { const [x, y] = toPx(s.m.lat, s.m.lon); out.push(boxOf(x - 20, y - 20, 40, 40)); }
+  // Name und Fläche der Umrisse/Wege (stehen über dem Startpunkt)
+  c.font = 'bold 13px sans-serif';
+  for (const it of P.items) {
+    if (it.hidden || it.kind !== 'track' || !(it.pts || []).length) continue;
+    const [x, y] = toPx(it.pts[0][0], it.pts[0][1]);
+    const who = it.to ? assigneeName(P, it.to) || '' : '';
+    const w = c.measureText(`${it.name || ''}${who ? ` → ${who}` : ''} · 000,0 ha`).width;
+    out.push(boxOf(x + 4, y - 24, w + 8, 22));
+    if (it.note) out.push(boxOf(x + 4, y - 4, Math.min(it.note.length, 60) * 6.5 + 8, 18));
+  }
+  return out;
+}
+// Knöpfe und Leisten, die über der Karte liegen (Pixel relativ zur Karte)
+const BADGE_UI = '.topbar, #tm-btn, .leftbar > *, .sidebuttons > *, .toolbar, #hfbar, #hfinfo, #wx, #hint, #tm-banner, .leaflet-control-attribution';
+function badgeUi() {
+  const m = canvas.getBoundingClientRect();
+  return [...document.querySelectorAll(BADGE_UI)].filter((e) => e.offsetParent || e.getClientRects().length)
+    .map((e) => e.getBoundingClientRect()).filter((r) => r.width && r.height)
+    .map((r) => ({ x0: r.left - m.left - 4, y0: r.top - m.top - 4, x1: r.right - m.left + 4, y1: r.bottom - m.top + 4 }));
+}
 function drawSentBadges(c) {
   badgeBoxes = [];
+  const list = sentBadges();
+  if (!list.length) return;
+  const sizes = list.map((b) => ({
+    w: Math.max(...b.lines.map((l, i) => { c.font = `${i ? '' : 'bold '}12px sans-serif`; return c.measureText(l).width; })) + 16,
+    h: b.lines.length * 15 + 8,
+  }));
+  const areas = list.map((b) => {
+    const [ax, ay] = toPx(b.bnd[1][0], b.bnd[0][1]); // Nord-West
+    const [bx, by] = toPx(b.bnd[0][0], b.bnd[1][1]); // Süd-Ost
+    return { x0: Math.min(ax, bx), y0: Math.min(ay, by), x1: Math.max(ax, bx), y1: Math.max(ay, by) };
+  });
+  const dpr = window.devicePixelRatio || 1;
+  const pos = placeBadges(list.map((b, i) => ({ area: areas[i], ...sizes[i] })), badgeObstacles(c), { w: canvas.width / dpr, h: canvas.height / dpr }, badgeUi());
   c.textAlign = 'left';
   c.textBaseline = 'middle';
-  for (const b of sentBadges()) {
-    const [px, py] = toPx(b.ctr[0], b.ctr[1]);
-    c.font = 'bold 12px sans-serif';
-    const w = Math.max(...b.lines.map((l, i) => { c.font = `${i ? '' : 'bold '}12px sans-serif`; return c.measureText(l).width; })) + 16;
-    const h = b.lines.length * 15 + 8;
-    const x0 = px - w / 2;
-    const y0 = py - h / 2;
+  list.forEach((b, i) => {
+    const { w, h } = sizes[i];
+    const { x0, y0, ax, ay } = pos[i];
+    // Verbindungslinie zum Gebiet
+    const mx = Math.min(Math.max(ax, x0), x0 + w);
+    const my = Math.min(Math.max(ay, y0), y0 + h);
+    if (Math.hypot(mx - ax, my - ay) > 3) {
+      c.strokeStyle = b.color;
+      c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(mx, my);
+      c.lineTo(ax, ay);
+      c.stroke();
+      c.fillStyle = b.color;
+      c.beginPath();
+      c.arc(ax, ay, 3.5, 0, Math.PI * 2);
+      c.fill();
+    }
     c.fillStyle = b.fin ? '#e8f5e9' : 'rgba(255,255,255,0.93)';
     c.strokeStyle = b.color;
     c.lineWidth = 3;
@@ -3294,7 +3363,7 @@ function drawSentBadges(c) {
     c.fillStyle = '#111';
     b.lines.forEach((l, i) => { c.font = `${i ? '' : 'bold '}12px sans-serif`; c.fillText(l, x0 + 8, y0 + 11 + i * 15); });
     badgeBoxes.push({ b, x0, y0, w, h });
-  }
+  });
 }
 function badgeAt(x, y) {
   for (let i = badgeBoxes.length - 1; i >= 0; i--) {
@@ -3533,6 +3602,7 @@ async function openStatusDialog() {
   if (!code) return;
   if (code === 'ort') return spotDialog();
   if (code === 'fertig') return doneDialog();
+  if (code === 'da') return parkDialog();
   if (isUrgent({ s: code }) && !(await confirmSend(statusLabel(code)))) return;
   // Suche begonnen/beendet: bei mehreren Gebieten wählen, für welche (eins, mehrere oder alle)
   let gb;
@@ -3589,6 +3659,22 @@ async function spotDialog() {
     return toast('Auf die Karte tippen: dort wird der Standort gemeldet', 6000);
   }
   sendStatus({ s: 'ort', cat: r.cat, txt: r.txt });
+}
+// 🅿️ Parkplatz Auto: geht mit Ort – eigener Standort oder auf der Karte angetippt
+async function parkDialog() {
+  const here = await openDlg((box, close) => {
+    dlgHead(box, '🅿️ Parkplatz Auto', 'Wo steht das Auto? Der Ort geht mit der Meldung an die Einsatzleitung.');
+    dlgButton(box, '📍 Mein Standort (hier)', 'primary', () => close(true));
+    dlgButton(box, '👆 Auf der Karte setzen', '', () => close(false));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (here == null) return;
+  if (!here) {
+    pendingSpot = { s: 'da' };
+    setTool('hfspotpt');
+    return toast('Auf die Karte tippen: dort steht das Auto', 6000);
+  }
+  sendStatus({ s: 'da' });
 }
 // Gebiete des Auftrags (Hundeführer): Rastergebiete und geschlossene Umrisse der Einsatzleitung
 function hfAreas() {
