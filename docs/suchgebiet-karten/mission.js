@@ -3,6 +3,7 @@
 // Kartenlegende, Verfasser und Mail-Empfänger. Gehört zum jeweiligen Suchgebiet.
 
 import { windLines } from './weather.js';
+import { outlineColor } from './store.js';
 
 export const FORCE_KEYS = [
   ['lead', 'Führung'],
@@ -159,7 +160,8 @@ export function missionHours(m) {
 export function usedColors(project) {
   const seen = [];
   for (const it of project.items) {
-    if ((it.kind === 'stroke' || it.kind === 'track') && it.color && !seen.includes(it.color)) seen.push(it.color);
+    const col = outlineColor(it); // Umriss ohne Team: Grau
+    if ((it.kind === 'stroke' || it.kind === 'track') && col && !seen.includes(col)) seen.push(col);
   }
   return seen;
 }
@@ -195,7 +197,7 @@ export function missionText(project, grid, attach = 'Abschlussbericht im Anhang 
 
 const NAMES = {
   '#d50000': 'rot', '#1565c0': 'blau', '#2e7d32': 'grün', '#ef6c00': 'orange', '#6a1b9a': 'lila', '#000000': 'schwarz', '#fdd835': 'gelb',
-  '#f06292': 'rosa',
+  '#f06292': 'rosa', '#616161': 'grau (ohne Team)',
 };
 export const colorName = (c) => NAMES[String(c).toLowerCase()] || c;
 

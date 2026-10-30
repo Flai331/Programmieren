@@ -1,7 +1,7 @@
 import {
   makeGrid, cellCount, cellAt, cellBounds, cellLabel, parseCell, formatMeters, MAX_CELLS, remapCells, gridBounds, fitGridArea,
 } from './grid.js';
-import { drawOverlay, hitItem as hitItemAll, labelDetail, trackLabel, markHidden } from './render.js';
+import { drawOverlay, hitItem as hitItemAll, labelDetail, trackLabel, markHidden, outlineColor } from './render.js';
 import {
   LAYERS, OVERLAYS, DEFAULT_OVERLAYS, layerById, layerStack, tileUrl,
 } from './layers.js';
@@ -56,12 +56,12 @@ import { placeBadges, boxOf } from './badgeplace.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
   newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor, cellsText,
-  exportProject, importProject, uid, TEAM_COLORS, assignTargets, assigneeName,
+  exportProject, importProject, uid, MARK_COLORS, NO_TEAM, NO_TEAM_COLOR, assignTargets, assigneeName,
   allGrids, activateGrid, startNewGrid, removeActiveGrid, gridView, gridLabel,
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v106';
+const APP_VERSION = 'v107';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -69,7 +69,6 @@ let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kur
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
-const MARK_COLORS = [...new Set([...TEAM_COLORS, '#f06292', '#00c853', '#2e7d32', '#fdd835', '#616161', '#000000'])];
 const COLOR_NAMES = {
   '#d50000': 'Rot', '#1565c0': 'Blau', '#ef6c00': 'Orange', '#6a1b9a': 'Lila', '#00838f': 'Türkis', '#ad1457': 'Pink', '#f06292': 'Rosa',
   '#4e342e': 'Braun', '#558b2f': 'Olivgrün', '#2e7d32': 'Dunkelgrün', '#00c853': 'Hellgrün', '#fdd835': 'Gelb', '#616161': 'Grau', '#000000': 'Schwarz',
@@ -385,6 +384,7 @@ function redraw() {
     if (gridLock(P, P.gridId) === 'base') { st.fills = grey(st.fills); st.status = grey(st.status); }
     st.others = (st.others || []).map((o, i) => (gridLock(P, P.otherGrids[i].id) === 'base' ? { ...o, fills: grey(o.fills), status: grey(o.status) } : o));
   }
+  st.noTeamGrey = db.mode !== 'hf'; // Umrisse ohne Team grau (Hundeführer-Gerät: wie bisher)
   if (hide.meet) st.meet = null;
   if (hide.pois) st.pois = [];
   st.rescue = rescueInView();
@@ -634,7 +634,10 @@ let erased = false;
 let fillStroke = null; // beim Wischen über Felder: {mode: 'set'|'clear', seen}
 let panning = false;
 
+// „ohne Team“ ist keine echte Markierung (steht nicht in P.marks), malt aber in fills
+const NO_TEAM_MARK = { id: NO_TEAM, kind: 'team', label: 'ohne Team', color: NO_TEAM_COLOR };
 function activeMark() {
+  if (db.activeMark === NO_TEAM) return NO_TEAM_MARK;
   return P.marks.find((m) => m.id === db.activeMark) || P.marks[0] || null;
 }
 
@@ -1085,7 +1088,7 @@ function outlineDialog(it, title) {
 function applyOutline(it, r) {
   if (r.name) it.name = r.name;
   if (r.to) {
-    // einem Team zugeteilt: Umriss in der Teamfarbe
+    // einem Team zugeteilt: Umriss in der Teamfarbe (ohne Team zeichnet render.js automatisch grau)
     if (r.to !== it.to) { const m = P.marks.find((x) => x.id === r.to); if (m) it.color = m.color; }
     it.to = r.to;
   } else delete it.to;
@@ -1217,11 +1220,11 @@ function renderPalette() {
   const box = $('palette').querySelector('.marks');
   box.innerHTML = '';
   const act = activeMark();
-  for (const m of P.marks) {
+  for (const m of [NO_TEAM_MARK, ...P.marks]) {
     const b = document.createElement('button');
     b.innerHTML = '<i></i><span></span>';
     b.querySelector('i').style.background = m.color;
-    b.querySelector('span').textContent = m.label || '(ohne Namen)';
+    b.querySelector('span').textContent = m === NO_TEAM_MARK ? 'ohne Team' : m.label || '(ohne Namen)';
     b.classList.toggle('active', act && act.id === m.id);
     b.addEventListener('click', () => { db.activeMark = m.id; renderPalette(); save(); });
     box.appendChild(b);
@@ -1525,7 +1528,7 @@ function renderViewToggles() {
     if (it.group) seen.add(it.group);
     if (it.kind === 'stroke') n++;
     const members = it.group ? P.items.filter((x) => x.group === it.group) : [it];
-    row(itemName(it, n), !it.hidden, (on) => { for (const x of members) x.hidden = !on; }, it.color);
+    row(itemName(it, n), !it.hidden, (on) => { for (const x of members) x.hidden = !on; }, outlineColor(it, db.mode !== 'hf'));
   }
 }
 // Schnellschalter links (gleiche Einstellungen wie in „Auf der Karte zeigen“)
@@ -1743,7 +1746,8 @@ function fieldDialog(ll) {
       const tb = sec('👥 Team');
       const teams = P.marks.filter((m) => m.kind === 'team');
       for (const m of teams) chip(tb, m, P.fills[key] === m.id, () => { set('team', P.fills[key] === m.id ? null : m.id); render(); });
-      chip(tb, null, !P.fills[key], () => { set('team', null); render(); });
+      // „ohne Team“: Feld gehört zum Suchgebiet, hat aber noch kein Team (grau); zweiter Tipp löscht das Feld
+      chip(tb, NO_TEAM_MARK, !P.fills[key] || P.fills[key] === NO_TEAM, () => { set('team', P.fills[key] === NO_TEAM ? null : NO_TEAM); render(); });
       const nt = document.createElement('button');
       nt.className = 'fchip add';
       nt.textContent = '+ Neues Team';
@@ -7122,7 +7126,7 @@ function gpxSelFile(src = gpxSel, withLines = false, label = 'Auswahl') {
     const groups = new Map();
     for (const k of src.cells.get(g.id) || []) {
       const [c, r] = k.split(',').map(Number);
-      const m = cellOwner(v, c, r) || cellStatus(v, c, r);
+      const m = cellOwner(v, c, r) || cellStatus(v, c, r) || (v.fills[k] === NO_TEAM ? NO_TEAM_MARK : null);
       const id = m ? m.id : '';
       if (!groups.has(id)) groups.set(id, { m, keys: [] });
       groups.get(id).keys.push(k);

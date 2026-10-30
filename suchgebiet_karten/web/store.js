@@ -7,6 +7,11 @@ import { rangeLabel } from './grid.js';
 import { normalizePois } from './pois.js';
 
 export const TEAM_COLORS = ['#d50000', '#1565c0', '#ef6c00', '#6a1b9a', '#00838f', '#ad1457', '#4e342e', '#558b2f'];
+// v107: „ohne Team“ ist fest Dunkelgrau (Umrisse und Felder); Grau gibt es nicht mehr als Team-/Markierungsfarbe
+export const NO_TEAM_COLOR = '#616161';
+// reservierte Team-ID in fills: Feld gehört zum Suchgebiet, ist aber noch keinem Team zugeteilt
+export const NO_TEAM = '-';
+export const MARK_COLORS = [...new Set([...TEAM_COLORS, '#f06292', '#00c853', '#2e7d32', '#fdd835', '#000000'])];
 
 export function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -136,7 +141,16 @@ export function normalizeProject(p) {
   if (!out.status || typeof out.status !== 'object') out.status = {};
   out.fills = { ...out.fills };
   out.status = { ...out.status };
+  // v107: ein Team mit der Farbe „ohne Team“ (Grau) bekommt die erste freie Teamfarbe; seine Umrisse ziehen mit
+  const greyTeams = out.marks.filter((m) => m.kind === 'team' && String(m.color).toLowerCase() === NO_TEAM_COLOR);
+  if (greyTeams.length) {
+    const used = new Set(out.marks.map((m) => String(m.color).toLowerCase()));
+    out.marks = out.marks.map((m) => (greyTeams.includes(m) ? { ...m, color: MARK_COLORS.find((c) => !used.has(c)) || MARK_COLORS[0] } : m));
+    const newColor = Object.fromEntries(greyTeams.map((m) => [m.id, out.marks.find((x) => x.id === m.id).color]));
+    out.items = out.items.map((it) => (it.to && newColor[it.to] ? { ...it, color: newColor[it.to] } : it));
+  }
   const kind = Object.fromEntries(out.marks.map((m) => [m.id, m.kind]));
+  kind[NO_TEAM] = 'team';
   // Ältere Stände hatten Team und Status in einem Feld: Status-Einträge umziehen
   for (const k of Object.keys(out.fills)) {
     if (kind[out.fills[k]] === 'status' && !out.status[k]) out.status[k] = out.fills[k];
@@ -235,6 +249,15 @@ export function migrateV1(old) {
   return p;
 }
 
+// v107: geschlossener Umriss ohne Team ist immer Dunkelgrau (+ gestrichelt); mit Team, offene Linien,
+// Stände vom Grund-Einsatz (gedämpft) und Items vom EL/Vorgänger bleiben in ihrer Farbe.
+// grey = false: Hundeführer-Gerät, dort bleibt alles wie bisher
+export function isNoTeamOutline(it, grey = true) {
+  return grey && it.kind === 'track' && !it.open && !it.to && !it.fromEl && !it.prev && it.color !== '#9e9e9e';
+}
+export function outlineColor(it, grey = true) {
+  return isNoTeamOutline(it, grey) ? NO_TEAM_COLOR : it.color;
+}
 // Umriss zugeteilt an ein Team (it.to = Team-ID) oder eine Einheit aus den Kräften (it.to = 'u:Name')
 export function assignTargets(p) {
   const teams = p.marks.filter((m) => m.kind === 'team').map((m) => ({ to: m.id, label: markLabel(m) || 'Team', color: m.color }));
@@ -242,7 +265,7 @@ export function assignTargets(p) {
   return [...teams, ...orgs.map((o) => ({ to: `u:${o}`, label: o, color: null }))];
 }
 export function assigneeName(p, to) {
-  if (!to) return '';
+  if (!to || to === NO_TEAM) return '';
   if (to.startsWith('u:')) return to.slice(2);
   const m = p.marks.find((x) => x.id === to && x.kind === 'team');
   return m ? m.label : '';
@@ -262,6 +285,7 @@ export function mapFor(p, m) {
 // "c,r" -> Farbe (für die Darstellung); which = 'fills' (Teams) oder 'status'
 export function resolveFills(p, which = 'fills') {
   const color = Object.fromEntries(p.marks.map((m) => [m.id, m.color]));
+  color[NO_TEAM] = NO_TEAM_COLOR;
   const out = {};
   for (const [k, id] of Object.entries(p[which] || {})) if (color[id]) out[k] = color[id];
   return out;

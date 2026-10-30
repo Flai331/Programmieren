@@ -8,14 +8,22 @@ import {
   blocks, cellBounds, gridBounds, makeGrid, rangeBounds, rangeLabel, fitBox,
   mercLat, mercLon, mercX, mercY, metersPerUnit, niceScale, niceLength, formatMeters,
 } from './grid.js';
-import { drawOverlay, hatchRect } from './render.js';
+import { drawOverlay, hatchRect, isNoTeamOutline } from './render.js';
 import { formatArea, hasArea, polygonArea } from './gpx.js';
 import { tileUrl } from './layers.js';
 import { cachedTileUrl } from './offline.js';
 import { formatMgrs, formatUtm, utmZone } from './utm.js';
 import {
-  allGrids, assignments, embedMarker, gridLabel, markLabel, resolveFills, teamStatus, assigneeName,
+  allGrids, assignments, embedMarker, NO_TEAM, NO_TEAM_COLOR, gridLabel, markLabel, resolveFills, teamStatus, assigneeName,
 } from './store.js';
+
+// v107: „ohne Team“ (Grau) in der Legende, wenn ein Feld oder ein geschlossener Umriss ohne Team vorkommt
+function noTeamLegend(project, opts) {
+  const field = opts.mapTeams !== false && allGrids(project).some((g) => Object.values(g.fills || {}).includes(NO_TEAM));
+  const outline = (project.items || []).some((it) => isNoTeamOutline(it));
+  if (field) return [{ color: NO_TEAM_COLOR, label: 'ohne Team', hatch: false }];
+  return outline ? [{ color: NO_TEAM_COLOR, label: 'ohne Team (Umriss)', line: true }] : [];
+}
 
 export const PAGES = { A4: [297, 210], A3: [420, 297] };
 const MARGIN = 8;
@@ -557,7 +565,7 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
   if (fit) sheets[0].bounds = contentBounds(rstate, area.w / area.h, area.w);
   const legend = [...assignments(project).filter((a) => a.count)
     .filter((a) => (a.mark.kind === 'team' ? opts.mapTeams !== false : opts.mapStatus !== false))
-    .map((a) => ({ color: a.mark.color, label: markLabel(a.mark), hatch: a.mark.kind !== 'team' })), ...lineLegend(project)];
+    .map((a) => ({ color: a.mark.color, label: markLabel(a.mark), hatch: a.mark.kind !== 'team' })), ...noTeamLegend(project, opts), ...lineLegend(project)];
 
   // Abschlussbericht: Berichtsseiten vor der Karte
   const reportPages = opts.report ? await addReportPages(doc, project, grid, W, H, MARGIN, opts.report === true ? {} : opts.report) : 0;

@@ -4,7 +4,7 @@
 // es zuletzt bearbeitet hat (by === from) und neuer, nichts wird gelöscht, Löschvermerke des Empfängers
 // blockieren Wiederanlegen. Feldkonflikt: neuere Änderung gewinnt, im UA-Gebiet entscheidet der UA.
 // Richtung: UA -> EL nur UA-Gebiet + Neues des UA; EL -> UA alles, beim UA als lock 'base' (außer UA-eigenes).
-import { allGrids, uid } from './store.js';
+import { allGrids, uid, NO_TEAM } from './store.js';
 import { encodePts, decodePts, simplify } from './share.js';
 import { mergeStatus, withoutDeleted } from './status.js';
 import { normalizePois } from './pois.js';
@@ -239,7 +239,7 @@ export function mergeProgress(p, f) {
     for (const [tag, src, dst] of [['f', g.f, loc.fills], ['s', g.s, loc.status]]) {
       for (const [k, v] of Object.entries(src || {})) {
         const [id, t] = Array.isArray(v) ? v : [v, 0];
-        if (!p.marks.some((m) => m.id === id) || !/^\d+,\d+$/.test(k)) continue;
+        if (!(tag === 'f' && id === NO_TEAM) && !p.marks.some((m) => m.id === id) || !/^\d+,\d+$/.test(k)) continue;
         const ck = `${g.i}|${k}|${tag}`;
         const lt = p.cellT[ck] || 0;
         const cur = dst[k];
