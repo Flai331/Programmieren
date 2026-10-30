@@ -1,7 +1,7 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v78**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v79**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
@@ -34,6 +34,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
   - Tests: Unit-Test für das Zusammenstellen des Berichts (keine Einsatzdaten enthalten,
     Kürzung, Fingerprint); im CI-Emulator-Test darf kein Bericht ausgelöst werden.
 
+- [x] **v79 – GPX-Auswahl für die Garmin-App**: einzelne Umrisse, Striche, Texte, Lage-Orte, Felder antippen; Umriss nimmt alles darin mit, „Ganzes Raster“ alles im Gebiet (direkt mit Klaas gebaut).
 - [x] **v78 – Freie Karte ohne Einsatz nur ansehen** (Einzeichnen erst nach „+ Neuer Einsatz“; Suchnadel verschwindet beim Wechsel).
 - [x] **v78 – 📍 Lage-Orte** (direkt mit Klaas gebaut; Details: `PLAN-einsatz-assistent.md`, Abschnitt D)
   - Werkzeug „📍 Lage-Ort“ für EL-Geräte; Kategorien 🚐 ELW, 🅱️ Bereitstellungsraum,
@@ -44,7 +45,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
   - Gehen bei der Übergabe an ein weiteres EL-Gerät (`#e=`) mit.
   - Neue Logik in `web/pois.js` mit Unit-Tests.
 
-- [ ] **v79 – 📤 Infos an EL senden** (`#i=`, Abschnitt D)
+- [ ] **v80 – 📤 Infos an EL senden** (`#i=`, Abschnitt D)
   - „📤 Infos senden“: neue/geänderte/gelöschte Lage-Orte (optional Kontakte) per QR-Code
     oder Link, mit Gerätename (`db.deviceName`) als Absender; beide Richtungen.
   - Zusammenführen ohne Duplikate (feste IDs + Änderungszeit), gelöschte verschwinden auch
@@ -53,7 +54,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
   - `#i=` in `parseShared`, Android-`sharedHash` und Tab-Übergabe (`handOff`) ist schon vorbereitet.
   - Ohne Gerätename vor dem ersten Senden danach fragen.
 
-- [ ] **v80 – Lage-Orte an Hundeführer**
+- [ ] **v81 – Lage-Orte an Hundeführer**
   - Im Auftrag (Senden-Fenster) Lage-Orte einzeln anhakbar (B-Ort-nahe wie ELW/Sanität
     standardmäßig an); HF sieht sie auf der Karte und unter „☰ Mein Auftrag“.
 

@@ -42,3 +42,21 @@ test('GPX: Lage-Orte als Wegpunkte mit Symbol', () => {
   assert.match(gpx, /<desc>Sanität – am Waldparkplatz<\/desc>/);
   assert.match(gpx, /<sym>Medical Facility<\/sym>/);
 });
+
+test('pointInPolygon und selectionGpx', async () => {
+  const { pointInPolygon, selectionGpx } = await import('../web/gpx.js');
+  const sq = [[52.61, 10.06], [52.61, 10.09], [52.63, 10.09], [52.63, 10.06]];
+  assert.equal(pointInPolygon([52.62, 10.07], sq), true);
+  assert.equal(pointInPolygon([52.64, 10.07], sq), false);
+  assert.equal(pointInPolygon([52.62, 10.1], sq), false);
+  const gpx = selectionGpx({
+    items: [{ kind: 'track', name: 'Nordhang', color: '#d50000', pts: sq }, { kind: 'text', lat: 52.62, lon: 10.07, text: 'Fund' }, { kind: 'stroke', color: '#1565c0', pts: [[52.62, 10.07], [52.621, 10.071]] }],
+    pois: [newPoi({ cat: 'elw', lat: 52.62, lon: 10.08 })],
+    meet: { lat: 52.6, lon: 10.05, text: 'B-Ort' },
+    areas: [{ name: 'Team 1: C4', color: '#1565c0', loops: [sq] }],
+    lines: [{ name: 'Rand', color: '#d50000', pts: sq }],
+  }, 'Übung – Auswahl');
+  for (const n of ['Nordhang', 'Fund', 'ELW', 'B-Ort', 'Team 1: C4', 'Rand', 'Stift 1 (blau)', 'Übung – Auswahl']) assert.ok(gpx.includes(`<name>${n}</name>`), n);
+  assert.equal((gpx.match(/<trk>/g) || []).length, 4);
+  assert.equal((gpx.match(/<wpt /g) || []).length, 3);
+});

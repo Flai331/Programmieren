@@ -7,7 +7,7 @@ import {
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { buildGpx, mergeGpx, parseGpx, parseKml, trackDesc, trackLength, outlineName } from './gpx.js';
+import { buildGpx, mergeGpx, parseGpx, parseKml, pointInPolygon, selectionGpx, cellComponents, cellOutlines, hasArea, trackDesc, trackLength, outlineName } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import { buildReport, describeTarget, makeDedup, makeLog } from './report.js';
 import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
@@ -37,13 +37,13 @@ import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
 import {
-  newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor,
+  newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor, cellsText,
   exportProject, importProject, uid, TEAM_COLORS, assignTargets, assigneeName,
   allGrids, activateGrid, startNewGrid, removeActiveGrid, gridView, gridLabel,
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v78';
+const APP_VERSION = 'v79';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -72,6 +72,8 @@ let draftTrack = null; // Umriss, der gerade Punkt für Punkt gesetzt wird
 let draftPen = null; // Stift-Zeichnung in Arbeit: { strokes: [...] } – bis „Fertig“ oder „Abbrechen“
 let undoStack = [];
 let searchPin = null; // Nadel des letzten Suchergebnisses (gehört zu keinem Einsatz)
+let gpxSel = null; // GPX-Auswahl (Werkzeug „gpxsel“), siehe unten
+let gpxSelGrid = null; // zuletzt angetipptes Rastergebiet (für „Ganzes Raster“)
 
 function load() {
   try {
@@ -338,6 +340,7 @@ function redraw() {
   drawOverlay(ctx, toPx, st, {
     s: 1, width: W, height: H, view, utm: P.showUtm, noGrid: !!hide.grid, noEdge: !!hide.edge, areaLabels: 'on',
   });
+  drawGpxSel();
   if (dragRect) {
     const [x0, y0] = toPx(dragRect.a.lat, dragRect.a.lng);
     const [x1, y1] = toPx(dragRect.b.lat, dragRect.b.lng);
@@ -504,6 +507,7 @@ const HINTS = {
   hfdraw: 'Mit dem Finger einmal um den Bereich herum malen.',
   hffield: 'Feld antippen: abgesucht → teilweise → nicht begehbar → zurück. „Feld“ nochmal tippen = fertig.',
   sendpick: 'Felder für den Auftrag antippen (blau umrandet). Dann „Weiter“.',
+  gpxsel: 'Antippen, was als GPX mit soll. Ein Umriss nimmt alles mit, was darin liegt.',
   offsquares: 'Quadrate antippen (blau = gewählt, grün = schon gespeichert). Ziehen verschiebt die Karte.',
   meet: 'Auf die Karte tippen, um den B-Ort zu setzen.',
   poi: 'Auf die Karte tippen, um den Lage-Ort zu setzen.',
@@ -533,6 +537,10 @@ function setTool(t) {
   $('penbar').hidden = t !== 'pen';
   $('offsqbar').hidden = t !== 'offsquares';
   $('pickbar').hidden = t !== 'sendpick';
+  if (t === 'gpxsel' && !gpxSel) gpxSel = newGpxSel();
+  if (t !== 'gpxsel') gpxSel = null;
+  $('gpxselbar').hidden = t !== 'gpxsel';
+  if (t === 'gpxsel') updateGpxSelBar();
   $('hf-field').classList.toggle('on', t === 'hffield');
   $('hf-draw').classList.toggle('on', t === 'hfdraw');
   if (t === 'offsquares') updateOffSqBar();
@@ -697,7 +705,7 @@ canvas.addEventListener('pointerdown', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill') {
     fillAt(ll, true);
-  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt'].includes(tool)) {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'gpxsel'].includes(tool)) {
     panning = false;
   }
 });
@@ -717,7 +725,7 @@ canvas.addEventListener('pointermove', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill' && fillStroke) {
     fillAt(ll, false);
-  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt'].includes(tool)) {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'gpxsel'].includes(tool)) {
     // Im Track-Modus verschiebt Ziehen die Karte, Tippen setzt Punkte
     if (!panning && Math.hypot(x - lastPt.x, y - lastPt.y) < 8) return;
     panning = true;
@@ -817,6 +825,8 @@ function finishPointer(e, cancelled) {
       P.items.push({ kind: 'text', color: db.color, lat: ll.lat, lon: ll.lng, text: text.trim() });
       changed();
     }
+  } else if (tool === 'gpxsel' && !panning && Math.hypot(x - downPt.x, y - downPt.y) < 10) {
+    gpxTap(x, y, ll);
   } else if (tool === 'poi' && !panning && Math.hypot(x - downPt.x, y - downPt.y) < 10) {
     setTool('pan');
     placePoi(ll.lat, ll.lng);
@@ -4545,6 +4555,187 @@ $('gpx-grid-share').addEventListener('click', () => runExport('gpx-grid', $('gpx
 $('gpx-grid-save').addEventListener('click', () => runExport('gpx-grid', $('gpx-grid-save'), exportKey(gpxGridOpts()), gridGpx(), 'save'));
 $('gpx-share').addEventListener('click', () => runExport('gpx', $('gpx-share'), exportKey(gpxMarkOpts()), markGpx(), 'share'));
 $('gpx-save').addEventListener('click', () => runExport('gpx', $('gpx-save'), exportKey(gpxMarkOpts()), markGpx(), 'save'));
+
+// ---------- GPX-Auswahl: einzelne Dinge an die Garmin-App ----------
+// Felder je Rastergebiet ("c,r"), dazu Umrisse/Striche/Texte, Lage-Orte, B-Ort und Rasterränder
+function newGpxSel() { return { items: new Set(), pois: new Set(), meet: false, cells: new Map(), edges: new Set() }; }
+function gridGeoms() { return allGrids(P).map((g) => ({ g, gr: g.active ? grid : makeGrid(g.area, g.cellM) })).filter((x) => x.gr); }
+const cellCenter = (gr, c, r) => [gr.originLat - (r + 0.5) * gr.dLat, gr.originLon + (c + 0.5) * gr.dLon];
+const gridCorner = (gr) => ([c, r]) => [gr.originLat - r * gr.dLat, gr.originLon + c * gr.dLon];
+function itemPoints(it) { return it.kind === 'text' ? [[it.lat, it.lon]] : (it.pts || []); }
+function cellSet(id) {
+  if (!gpxSel.cells.has(id)) gpxSel.cells.set(id, new Set());
+  return gpxSel.cells.get(id);
+}
+function gpxSelCount() {
+  let n = gpxSel.items.size + gpxSel.pois.size + (gpxSel.meet ? 1 : 0) + gpxSel.edges.size;
+  for (const s of gpxSel.cells.values()) n += s.size;
+  return n;
+}
+function updateGpxSelBar() {
+  if (!gpxSel) return;
+  const n = gpxSelCount();
+  $('gpxsel-info').textContent = n ? `${n} ausgewählt` : 'Antippen zum Auswählen';
+  $('gpxsel-share').disabled = !n;
+  $('gpxsel-save').disabled = !n;
+  $('gpxsel-grid').disabled = !allGrids(P).length;
+}
+// Alles innerhalb einer Fläche (Umriss oder Rasterrand) dazunehmen; Rückgabe: Anzahl neu
+function selectInside(inside, except = null) {
+  let n = 0;
+  for (const it of P.items) {
+    if (it === except || it.hidden || gpxSel.items.has(it)) continue;
+    if (itemPoints(it).some(inside)) { gpxSel.items.add(it); n++; }
+  }
+  for (const p of P.pois) if (!gpxSel.pois.has(p) && inside([p.lat, p.lon])) { gpxSel.pois.add(p); n++; }
+  if (P.meet && !gpxSel.meet && inside([P.meet.lat, P.meet.lon])) { gpxSel.meet = true; n++; }
+  // eingefärbte Felder (Teams, Status), deren Mitte in der Fläche liegt
+  for (const { g, gr } of gridGeoms()) {
+    const set = cellSet(g.id);
+    for (const k of new Set([...Object.keys(g.fills || {}), ...Object.keys(g.status || {})])) {
+      const [c, r] = k.split(',').map(Number);
+      if (!set.has(k) && inside(cellCenter(gr, c, r))) { set.add(k); n++; }
+    }
+  }
+  return n;
+}
+function gpxTap(x, y, ll) {
+  const pi = poiAt(x, y);
+  if (pi >= 0) {
+    const p = P.pois[pi];
+    if (gpxSel.pois.has(p)) gpxSel.pois.delete(p); else gpxSel.pois.add(p);
+  } else if (P.meet && Math.hypot(toPx(P.meet.lat, P.meet.lon)[0] - x, toPx(P.meet.lat, P.meet.lon)[1] - y) <= 16) {
+    gpxSel.meet = !gpxSel.meet;
+  } else {
+    const i = hitItem(P.items, toPx, x, y, 12);
+    const h = i < 0 && hitGrid(ll.lat, ll.lng);
+    if (i >= 0) {
+      const it = P.items[i];
+      if (gpxSel.items.has(it)) gpxSel.items.delete(it);
+      else {
+        gpxSel.items.add(it);
+        // Umriss: alles darin gleich mit
+        if (it.kind === 'track' && hasArea(it)) {
+          const n = selectInside((pt) => pointInPolygon(pt, it.pts), it);
+          if (n) toast(`Umriss und ${n} Ding${n === 1 ? '' : 'e'} darin ausgewählt`);
+        }
+      }
+    } else if (h) {
+      gpxSelGrid = h.g.id;
+      const set = cellSet(h.g.id);
+      const k = `${h.c},${h.r}`;
+      if (set.has(k)) set.delete(k); else set.add(k);
+    }
+  }
+  updateGpxSelBar();
+  redraw();
+}
+$('gpxsel-grid').addEventListener('click', () => {
+  const list = gridGeoms();
+  const c = map.getCenter();
+  const at = hitGrid(c.lat, c.lng);
+  const hit = list.find((x) => x.g.id === gpxSelGrid) || (at && list.find((x) => x.g.id === at.g.id)) || list[0];
+  if (!hit) return;
+  const { g, gr } = hit;
+  const north = gr.originLat;
+  const west = gr.originLon;
+  const south = north - gr.rows * gr.dLat;
+  const east = west + gr.cols * gr.dLon;
+  const n = selectInside(([la, lo]) => la <= north && la >= south && lo >= west && lo <= east);
+  gpxSel.edges.add(g.id);
+  updateGpxSelBar();
+  redraw();
+  toast(`${gridLabel(P, g)}: Rand${n ? ` und ${n} Ding${n === 1 ? '' : 'e'}` : ''} ausgewählt`);
+});
+function gpxSelFile() {
+  const title = P.title || 'Suchgebiet';
+  const multi = allGrids(P).length > 1;
+  const sel = { items: P.items.filter((it) => gpxSel.items.has(it)), pois: P.pois.filter((p) => gpxSel.pois.has(p)), meet: gpxSel.meet ? P.meet : null, areas: [], lines: [] };
+  for (const { g, gr } of gridGeoms()) {
+    const prefix = multi ? `${gridLabel(P, g)} ` : '';
+    const corner = gridCorner(gr);
+    if (gpxSel.edges.has(g.id)) {
+      sel.lines.push({ name: `Rand ${prefix}${title}`.trim(), color: '#d50000', pts: [[0, 0], [gr.cols, 0], [gr.cols, gr.rows], [0, gr.rows], [0, 0]].map(corner), desc: `${gr.cols} × ${gr.rows} Felder à ${formatMeters(gr.cellM)}` });
+    }
+    // Felder nach Team/Status zusammenfassen, sonst „Felder“
+    const v = gridView(P, g);
+    const groups = new Map();
+    for (const k of gpxSel.cells.get(g.id) || []) {
+      const [c, r] = k.split(',').map(Number);
+      const m = cellOwner(v, c, r) || cellStatus(v, c, r);
+      const id = m ? m.id : '';
+      if (!groups.has(id)) groups.set(id, { m, keys: [] });
+      groups.get(id).keys.push(k);
+    }
+    for (const { m, keys } of groups.values()) {
+      for (const part of cellComponents(keys)) {
+        sel.areas.push({ name: `${m ? markLabel(m) : 'Felder'}: ${prefix}${cellsText(part)}`, color: m ? m.color : '#ff6f00', loops: cellOutlines(part).map((loop) => loop.map(corner)) });
+      }
+    }
+  }
+  const gpx = selectionGpx(sel, `${title} – Auswahl`);
+  return {
+    blob: new Blob([gpx], { type: 'application/gpx+xml' }),
+    name: safeName('_Auswahl.gpx', false),
+    title: `${title} – Auswahl`,
+    text: 'GPX für Garmin: in der Garmin-App (z. B. Garmin Explore) öffnen und an das Gerät senden – oder in BaseCamp importieren.',
+  };
+}
+async function gpxSelExport(action) {
+  if (!gpxSel || !gpxSelCount()) return toast('Erst etwas auf der Karte antippen');
+  try {
+    const f = gpxSelFile();
+    if (action === 'save') await saveFile(f.blob, f.name);
+    else await shareFile(f.blob, f.name, f.title, f.text, f);
+  } catch (err) {
+    console.error(err);
+    toast('Fehler: ' + err.message);
+  }
+}
+$('gpxsel-share').addEventListener('click', () => gpxSelExport('share'));
+$('gpxsel-save').addEventListener('click', () => gpxSelExport('save'));
+$('gpxsel-done').addEventListener('click', () => { setTool('pan'); redraw(); });
+$('gpxsel-open').addEventListener('click', () => { closePanels(); gpxSelGrid = null; setTool('gpxsel'); redraw(); });
+// Hervorhebung der Auswahl (gelb)
+function drawGpxSel() {
+  if (!gpxSel) return;
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  for (const { g, gr } of gridGeoms()) {
+    ctx.fillStyle = 'rgba(255, 214, 0, 0.45)';
+    for (const k of gpxSel.cells.get(g.id) || []) {
+      const [c, r] = k.split(',').map(Number);
+      const [x0, y0] = toPx(gr.originLat - r * gr.dLat, gr.originLon + c * gr.dLon);
+      const [x1, y1] = toPx(gr.originLat - (r + 1) * gr.dLat, gr.originLon + (c + 1) * gr.dLon);
+      ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    }
+    if (gpxSel.edges.has(g.id)) {
+      const [x0, y0] = toPx(gr.originLat, gr.originLon);
+      const [x1, y1] = toPx(gr.originLat - gr.rows * gr.dLat, gr.originLon + gr.cols * gr.dLon);
+      ctx.strokeStyle = 'rgba(255, 214, 0, 0.9)';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    }
+  }
+  ctx.strokeStyle = 'rgba(255, 214, 0, 0.75)';
+  for (const it of gpxSel.items) {
+    const pts = itemPoints(it).map(([la, lo]) => toPx(la, lo));
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    if (pts.length === 1) ctx.arc(pts[0][0], pts[0][1], 14, 0, 2 * Math.PI);
+    else {
+      pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+      if (it.kind === 'track' && hasArea(it)) ctx.closePath();
+    }
+    ctx.stroke();
+  }
+  ctx.lineWidth = 5;
+  const ring = (la, lo) => { const [px, py] = toPx(la, lo); ctx.beginPath(); ctx.arc(px, py, 19, 0, 2 * Math.PI); ctx.stroke(); };
+  for (const p of gpxSel.pois) ring(p.lat, p.lon);
+  if (gpxSel.meet && P.meet) ring(P.meet.lat, P.meet.lon);
+  ctx.restore();
+}
 
 // ---------- Garmin: Custom Map (KMZ) ----------
 function kmzBounds() {
