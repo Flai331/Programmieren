@@ -8,25 +8,30 @@ import { makeGrid, cellBounds } from './grid.js';
 export const STATUS_LIST = [
   { code: 'da', ico: '🅿️', label: 'Parkplatz Auto' }, // am Suchgebiet angekommen, Auto abgestellt
   { code: 'start', ico: '▶️', label: 'Suche begonnen' },
+  { code: 'ende', ico: '⏹', label: 'Suche beendet' },
   { code: 'pause', ico: '⏸', label: 'Pause' },
   { code: 'fertig', ico: '📊', label: 'Stand / fertig' }, // HF schätzt, wie viel abgesucht ist (100 % = fertig)
   { code: 'zurueck', ico: '🏁', label: 'Zurück am B-Ort' },
+];
+// „📍 Standort melden“: Markierungen mit Standort
+export const SPOT_LIST = [
   { code: 'anzeige', ico: '🐕', label: 'Hund zeigt an' },
   { code: 'fund', ico: '🟢', label: 'Person gefunden' },
   { code: 'hilfe', ico: '🆘', label: 'Brauche Hilfe' },
-];
-export const SPOT_LIST = [
-  { code: 'anzeige', ico: '🐕', label: 'Anzeige' },
-  { code: 'fund', ico: '🟢', label: 'Fund' },
   { code: 'hinweis', ico: '👕', label: 'Hinweis' },
   { code: 'gefahr', ico: '⚠️', label: 'Gefahr' },
   { code: 'sonst', ico: '📌', label: 'Sonstiges' },
 ];
 export const URGENT = ['fund', 'hilfe'];
+// Suchstand-Meldungen gehen ohne Standort; nur Markierungen („📍 Standort melden“) mit
+export const NO_POS = ['da', 'start', 'ende', 'pause', 'fertig', 'zurueck', 'ok'];
 
 const find = (list, code) => list.find((x) => x.code === code);
 // ältere Meldungen, die es als Taste nicht mehr gibt
-const OLD_LIST = [{ code: 'anfahrt', ico: '🚗', label: 'Anfahrt' }];
+const OLD_LIST = [
+  { code: 'anfahrt', ico: '🚗', label: 'Anfahrt' }, { code: 'anzeige', ico: '🐕', label: 'Hund zeigt an' },
+  { code: 'fund', ico: '🟢', label: 'Person gefunden' }, { code: 'hilfe', ico: '🆘', label: 'Brauche Hilfe' },
+];
 export function statusLabel(code) {
   const s = find(STATUS_LIST, code) || find(OLD_LIST, code);
   return s ? `${s.ico} ${s.label}` : code === 'ort' ? '📍 Standort' : code === 'ok' ? '📲 Auftrag übernommen' : String(code || '');
@@ -41,6 +46,7 @@ const done = (m) => m.s === 'fertig' && (Array.isArray(m.ar) && m.ar.length ? m.
 const areaText = (m) => m.ar.map(([n, p]) => `${n} ${p >= 100 ? '✅' : `${p} %`}`).join(' · ');
 // Text einer Meldung: Standort-Meldungen nach ihrer Art
 export const msgLabel = (m) => (m.s === 'ort' ? spotLabel(m.cat)
+  : Array.isArray(m.gb) && m.gb.length ? `${statusLabel(m.s)}: ${m.gb.join(', ')}` // Suche begonnen/beendet für bestimmte Gebiete
   : m.s === 'fertig' ? (Array.isArray(m.ar) && m.ar.length
     ? (done(m) ? '✅ Alle Gebiete fertig' : `📊 ${areaText(m)}`)
     : (done(m) ? '✅ Gebiet fertig' : `📊 ${m.pc} % abgesucht`)) : statusLabel(m.s));
@@ -50,7 +56,7 @@ export function msgIcon(m) {
   const s = m.s === 'ort' ? find(SPOT_LIST, m.cat) : find(STATUS_LIST, m.s) || find(OLD_LIST, m.s);
   return s ? s.ico : m.s === 'ok' ? '📲' : '📍';
 }
-export const isUrgent = (m) => URGENT.includes(m.s) || (m.s === 'ort' && m.cat === 'fund');
+export const isUrgent = (m) => URGENT.includes(m.s) || (m.s === 'ort' && URGENT.includes(m.cat));
 
 // ---------- Base64url ----------
 const b64url = (bytes) => {
@@ -86,7 +92,7 @@ export async function decryptMsg(key, d) {
 // ---------- Meldungen ----------
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
 // Neue Meldung (Klartext). pos: { lat, lon, acc? } oder null
-export function buildMsg({ a, tm, s, cat, txt, pos, pc, pa, ar, t = Date.now(), id }) {
+export function buildMsg({ a, tm, s, cat, txt, pos, pc, pa, ar, gb, t = Date.now(), id }) {
   const m = { v: 1, id: id || b64url(cr().getRandomValues(new Uint8Array(9))), a, tm, t, s };
   if (pos && Number.isFinite(pos.lat) && Number.isFinite(pos.lon)) {
     m.lat = r6(pos.lat);
@@ -96,6 +102,7 @@ export function buildMsg({ a, tm, s, cat, txt, pos, pc, pa, ar, t = Date.now(), 
   if (txt) m.txt = String(txt).slice(0, 300);
   if (pc != null) m.pc = pc;
   if (pa != null) m.pa = pa;
+  if (Array.isArray(gb) && gb.length) m.gb = gb.map((n) => String(n).slice(0, 40));
   if (Array.isArray(ar) && ar.length) m.ar = ar.map(([n, p]) => [String(n).slice(0, 40), Number(p)]);
   if (cat) m.cat = cat;
   return m;

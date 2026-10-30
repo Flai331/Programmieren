@@ -1,13 +1,14 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v96**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v97**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [x] **v97 – 📣 Status-Fenster neu sortiert**: erstes Fenster nur Suchstand ohne Standort (🅿️ Parkplatz Auto, ▶️ Suche begonnen, ⏹ Suche beendet, ⏸ Pause, 📊 Stand / fertig, 🏁 Zurück am B-Ort); „Suche begonnen/beendet“ bei mehreren Gebieten mit Auswahl (eins, mehrere, alle); Hund zeigt an, Person gefunden, Brauche Hilfe unter „📍 Standort melden“ (mit Standort). EL-Karte: Prozent des Stands direkt am jeweiligen Umriss/Raster.
 - [x] **v95 – 📲 Auftrag erst bei Übernahme · 🔒 Schutz übernommener Aufträge · 🗑 Meldungen löschen**: Ein Auftrag gilt erst als vergeben, wenn das Team ihn übernommen hat (automatische Quittung „📲 Auftrag übernommen“ vom Hundeführer-Handy, oder erste Meldung/QR-Rückmeldung, oder manuell „✓ Team hat übernommen“; nicht übernommene Aufträge stehen grau „wartet auf Übernahme“ und lassen sich verwerfen). Felder und Zeichnungen übernommener Aufträge ändern/löschen in der EL nur nach Warnung mit „Ändern freigeben“ (5 Minuten). Status-/Standort-Meldungen auf der EL-Karte antippen → löschen nach Warnung (Löschvermerke gehen mit dem Fortschritt an andere EL-Geräte). Fehler behoben: „☰ Menü“ im Hundeführer-Modus schließt beim zweiten Tipp (Plan: `PLAN-v95-auftrag-uebernommen.md`).
 - [x] **v93 – 📊 Stand statt Berechnung, Status-Plaketten**: HF schätzt selbst, wie viel abgesucht ist (erst 100 % = „Gebiet fertig“, sonst „40 % abgesucht“), keine App-Berechnung mehr. EL-Karte zeigt an jedem Gebiet mit Auftrag eine Plakette (Team, letzter Status, abgesuchte Felder; grün wenn fertig, antippen = Auftrags-Übersicht). Status-Meldungen gehen auch mit der QR-Rückmeldung mit (ohne Status-Server).
 - [x] **v90 – 🔒 UA-Sperren · 🔄 Fortschritt senden** Im Unterabschnitt sind Elemente des Grund-Einsatzes ausgegraut und nur ansehbar („🔒 Gehört zum Grund-Einsatz – nur ansehen“), dem UA übergebene sind bearbeitbar, aber nicht löschbar, neu angelegte frei. „🔄 Fortschritt senden“ (Weitergeben) schickt nur zwischen Geräten der Einsatzleitung (EL, UA, ELW) per QR-Code/Link (mehrteilig möglich, nie über die Google-Tabelle) das Neue seit dem letzten Senden an das gewählte Gerät (Felder, Zeichnungen, Wege, Lage-Orte, Protokoll), mit „Alles seit Beginn erneut senden“. Zusammenführen nur ergänzend (nichts wird gelöscht, Löschvermerke blocken, neuere Änderung gewinnt, im UA-Gebiet der UA); die Übergabe des ganzen Einsatzes bleibt jederzeit möglich und führt bei schon vorhandenem Einsatz zusammen (Plan: `PLAN-v90-fortschritt.md`).

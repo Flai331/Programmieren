@@ -35,8 +35,8 @@ test('Ver- und Entschlüsseln rund; falscher Schlüssel scheitert', async () => 
 });
 
 test('Status-Tabellen und Beschriftungen', () => {
-  assert.equal(STATUS_LIST.length, 8);
-  assert.equal(SPOT_LIST.length, 5);
+  assert.equal(STATUS_LIST.length, 6);
+  assert.equal(SPOT_LIST.length, 6);
   assert.equal(statusLabel('pause'), '⏸ Pause');
   assert.equal(msgLabel({ s: 'ort', cat: 'gefahr' }), '⚠️ Gefahr');
   assert.ok(isUrgent({ s: 'hilfe' }) && isUrgent({ s: 'fund' }) && isUrgent({ s: 'ort', cat: 'fund' }));
@@ -244,4 +244,21 @@ test('Status-Tasten: „Parkplatz Auto“ statt „Anfahrt“, alte Meldungen le
   assert.ok(!STATUS_LIST.some((s) => s.code === 'anfahrt'));
   assert.equal(statusLabel('da'), '🅿️ Parkplatz Auto');
   assert.equal(statusLabel('anfahrt'), '🚗 Anfahrt');
+});
+
+test('Suche begonnen/beendet für ausgewählte Gebiete', async () => {
+  const { msgLabel, buildMsg } = await import('../web/status.js');
+  assert.equal(msgLabel(buildMsg({ a: 'A', tm: 'T', s: 'start', gb: ['Umriss 1', 'Umriss 2'], t: 1 })), '▶️ Suche begonnen: Umriss 1, Umriss 2');
+  assert.equal(msgLabel(buildMsg({ a: 'A', tm: 'T', s: 'ende', gb: ['Umriss 2'], t: 1 })), '⏹ Suche beendet: Umriss 2');
+  assert.equal(msgLabel({ s: 'start' }), '▶️ Suche begonnen');
+});
+
+test('Suchstand ohne Standort, Markierungen mit', async () => {
+  const { NO_POS } = await import('../web/status.js');
+  for (const c of ['da', 'start', 'ende', 'pause', 'fertig', 'zurueck']) assert.ok(NO_POS.includes(c), c);
+  assert.ok(!NO_POS.includes('ort'));
+  const { STATUS_LIST, SPOT_LIST, isUrgent } = await import('../web/status.js');
+  assert.deepEqual(STATUS_LIST.map((s) => s.code), ['da', 'start', 'ende', 'pause', 'fertig', 'zurueck']);
+  assert.deepEqual(SPOT_LIST.slice(0, 3).map((s) => s.code), ['anzeige', 'fund', 'hilfe']);
+  assert.ok(isUrgent({ s: 'ort', cat: 'hilfe' }) && isUrgent({ s: 'ort', cat: 'fund' }) && !isUrgent({ s: 'ort', cat: 'anzeige' }));
 });

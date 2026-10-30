@@ -41,7 +41,7 @@ import {
   assignmentCenter,
 } from './share.js';
 import {
-  STATUS_LIST, SPOT_LIST, msgLabel, msgIcon, isUrgent, buildMsg, mergeStatus, withoutDeleted, latestFor, flushOutbox, pollMessages, coverageGaps, areaShapes,
+  STATUS_LIST, SPOT_LIST, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, mergeStatus, withoutDeleted, latestFor, flushOutbox, pollMessages, coverageGaps, areaShapes,
 } from './status.js';
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
@@ -53,7 +53,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v96';
+const APP_VERSION = 'v97';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -3208,6 +3208,21 @@ function sentFields(x) {
   }
   return { n, a };
 }
+// Gebiete eines Auftrags mit Namen wie beim Hundeführer (Rastername bzw. Umrissname/„Umriss n“) -> Map Name -> Mitte
+function sentAreas(x) {
+  const out = new Map();
+  for (const g of allGrids(P).filter((q) => (x.grids || []).includes(q.id))) {
+    out.set(gridLabel(P, g), sentCenter({ grids: [g.id], teamId: x.teamId }));
+  }
+  let n = 0;
+  for (const id of x.items || []) {
+    const it = P.items.find((q) => q.id === id);
+    if (!it || it.kind !== 'track' || it.open || (it.pts || []).length < 3) continue;
+    const name = it.name || `Umriss ${++n}`;
+    out.set(name, [it.pts.reduce((a, q) => a + q[0], 0) / it.pts.length, it.pts.reduce((a, q) => a + q[1], 0) / it.pts.length]);
+  }
+  return out;
+}
 function sentBadges() {
   if (db.mode !== 'el' || db.msgOff || isFree()) return [];
   const msgs = allMsgs();
@@ -3220,9 +3235,22 @@ function sentBadges() {
     const f = sentFields(x);
     const fin = (done && (done.pc == null || done.pc >= 100)) || (f.n > 0 && f.a === f.n);
     const acc = isAccepted(x);
-    const line1 = `${team ? team.label : x.team}: ${!acc && !last ? '📲 wartet auf Übernahme' : last ? msgLabel(last) : `📲 Auftrag ${hhmm(x.acc)}`}`;
+    const color = team ? team.color : '#455a64';
+    // Stand je Gebiet: Prozent direkt am jeweiligen Umriss/Raster; was sich nicht zuordnen lässt, bleibt in der Plakette
+    let label = last ? msgLabel(last) : '';
+    if (last && last.s === 'fertig' && Array.isArray(last.ar) && last.ar.length) {
+      const areas = sentAreas(x);
+      const rest = [];
+      for (const [name, pc] of last.ar) {
+        const at = areas.get(name);
+        if (at) out.push({ x, ctr: at, color, lines: [`${name}: ${pc >= 100 ? '✅ fertig' : `${pc} %`}`], fin: pc >= 100, small: true });
+        else rest.push(`${name} ${pc >= 100 ? '✅' : `${pc} %`}`);
+      }
+      label = rest.length ? `📊 ${rest.join(' · ')}` : '📊 Stand je Gebiet';
+    }
+    const line1 = `${team ? team.label : x.team}: ${!acc && !last ? '📲 wartet auf Übernahme' : last ? label : `📲 Auftrag ${hhmm(x.acc)}`}`;
     const line2 = [f.a ? `▦ ${f.a}/${f.n} Felder abgesucht` : '', last ? hhmm(last.t) : ''].filter(Boolean).join(' · ');
-    out.push({ x, ctr, color: team ? team.color : '#455a64', lines: [line1, line2].filter(Boolean), fin, wait: !acc });
+    out.push({ x, ctr, color, lines: [line1, line2].filter(Boolean), fin, wait: !acc });
   }
   return out;
 }
@@ -3411,12 +3439,12 @@ async function sendStatus(o) {
   const p = P;
   const h = p.hf;
   if (!h) return;
-  let pos = o.pos;
+  let pos = NO_POS.includes(o.s) ? null : o.pos;
   if (pos === undefined) {
     toast('📍 Standort wird bestimmt … (bis 10 s)', 11000);
     pos = await getFix();
   }
-  const m = buildMsg({ a: h.id, tm: h.team, s: o.s, cat: o.cat, txt: o.txt, pc: o.pc, ar: o.ar, pos });
+  const m = buildMsg({ a: h.id, tm: h.team, s: o.s, cat: o.cat, txt: o.txt, pc: o.pc, ar: o.ar, gb: o.gb, pos });
   if (!h.ls) {
     h.log = [...h.log, { ...m }].slice(-100);
     p.updated = Date.now();
@@ -3431,7 +3459,7 @@ async function sendStatus(o) {
   saveNow();
   renderStatusBtn();
   redraw();
-  toast(`${msgLabel(m)} – wird gesendet${pos ? '' : ' (ohne Standort)'} …`, 4000);
+  toast(`${msgLabel(m)} – wird gesendet${pos || NO_POS.includes(m.s) ? '' : ' (ohne Standort)'} …`, 4000);
   await flushStatus();
   toast(h.outbox.some((x) => x.id === m.id) ? `⏳ ${msgLabel(m)}: wartet auf Netz – wird automatisch nachgesendet` : `✓ ${msgLabel(m)} gesendet ${hhmm(Date.now())}`, 5000);
 }
@@ -3473,7 +3501,7 @@ const confirmSend = (label) => openDlg((box, close) => {
 async function openStatusDialog() {
   if (!hasLive()) return;
   const code = await openDlg((box, close) => {
-    dlgHead(box, '📣 Status melden', `${P.hf.team} – geht mit Standort an die Einsatzleitung`);
+    dlgHead(box, '📣 Status melden', `${P.hf.team} – Suchstand ohne Standort; Anzeige, Fund, Hilfe unter „📍 Standort melden“`);
     const line = document.createElement('p');
     line.className = 'st-line';
     line.textContent = statusLine();
@@ -3481,7 +3509,7 @@ async function openStatusDialog() {
     const list = document.createElement('div');
     list.className = 'dlg-btns two';
     box.appendChild(list);
-    for (const s of STATUS_LIST) dlgButton(list, `${s.ico} ${s.label}`, ['fund', 'hilfe'].includes(s.code) ? 'urgent' : '', () => close(s.code));
+    for (const s of STATUS_LIST) dlgButton(list, `${s.ico} ${s.label}`, '', () => close(s.code));
     dlgButton(box, '📍 Standort melden', 'primary', () => close('ort'));
     dlgButton(box, 'Abbrechen', '', () => close(null));
   });
@@ -3489,9 +3517,36 @@ async function openStatusDialog() {
   if (code === 'ort') return spotDialog();
   if (code === 'fertig') return doneDialog();
   if (isUrgent({ s: code }) && !(await confirmSend(statusLabel(code)))) return;
-  sendStatus({ s: code });
+  // Suche begonnen/beendet: bei mehreren Gebieten wählen, für welche (eins, mehrere oder alle)
+  let gb;
+  if (['start', 'ende'].includes(code) && hfAreas().length > 1) {
+    gb = await areaPick(statusLabel(code));
+    if (!gb) return;
+  }
+  sendStatus({ s: code, gb });
 }
 const statusLabel = (code) => msgLabel({ s: code });
+// Gebiete auswählen (Häkchen, alle vorausgewählt) -> Namen oder null
+function areaPick(title) {
+  const areas = hfAreas();
+  return openDlg((box, close) => {
+    dlgHead(box, title, 'Für welche Gebiete?');
+    const checks = areas.map((name) => {
+      const l = document.createElement('label');
+      l.className = 'check';
+      l.innerHTML = '<input type="checkbox" checked><span></span>';
+      l.lastChild.textContent = name;
+      box.appendChild(l);
+      return l.firstChild;
+    });
+    dlgButton(box, '📣 Melden', 'primary', () => {
+      const sel = areas.filter((_, i) => checks[i].checked);
+      if (!sel.length) return toast('Bitte mindestens ein Gebiet ankreuzen');
+      close(sel);
+    });
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+}
 async function spotDialog() {
   const r = await openDlg((box, close) => {
     dlgHead(box, '📍 Standort melden', 'Art wählen, dann Ort: hier oder auf der Karte.');
@@ -3510,7 +3565,7 @@ async function spotDialog() {
     dlgButton(box, 'Abbrechen', '', () => close(null));
   });
   if (!r) return;
-  if (r.cat === 'fund' && !(await confirmSend('🟢 Fund'))) return;
+  if (URGENT.includes(r.cat) && !(await confirmSend(spotLabel(r.cat)))) return;
   if (!r.here) {
     pendingSpot = { cat: r.cat, txt: r.txt };
     setTool('hfspotpt');
