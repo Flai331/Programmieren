@@ -54,20 +54,16 @@ Ohne Internet geht es weiter wie bisher: Hundeführer geben ihre Rückmeldung pe
 *Tipp zum Prüfen:* Die kopierte URL in einem neuen Browser-Tab öffnen. Es muss
 `{"ok":true,"info":"Suchgebiet-Karten Status-Server läuft."}` erscheinen.
 
-## 5. Adresse in der App eintragen
+## 5. Adresse in der App
 
-1. In der Suchgebiet-App (Einsatzleitung): **⚙️ Mehr** → Abschnitt **„Dieses Gerät“** →
-   Feld **„📣 Status-Server (Web-App-Adresse)“**.
-2. Die kopierte URL dort einfügen. Das Feld speichert von selbst.
-3. Ab jetzt tragen **neue Aufträge** die Verbindung mit. Aufträge, die Sie *vorher* verschickt
-   haben, melden nichts – bitte neu verschicken.
-4. Der Hundeführer sieht dann in seiner Ansicht den Knopf **„📣 Status“**. Seine Meldungen
-   erscheinen bei Ihnen auf der Karte und in der Auftrags-Übersicht („Hunde“ → Aufträge).
-   Eine zweite Einsatzleitungs-Stelle (Tablet/PC) bekommt die Verbindung mit der
-   Einsatz-Übergabe automatisch.
+Die Adresse von Klaas' Tabelle ist seit v90 **fest in die App eingebaut** – auf den Geräten muss
+nichts eingetragen werden. Nur wer eine **eigene** Tabelle benutzen will: in der App
+**⚙️ Mehr** → **„Dieses Gerät“** → **„📣 Status-Server“** die eigene URL einfügen (leer = Standard).
 
-Das Eintragen der Adresse ist nur auf den Geräten der **Einsatzleitung** nötig. Hundeführer
-müssen nichts einstellen.
+- Neue Aufträge tragen die Verbindung mit; der Hundeführer sieht den Knopf **„📣 Status“**.
+- Seine Meldungen erscheinen bei der Einsatzleitung auf der Karte und in der Auftrags-Übersicht.
+- ELW und Unterabschnitte bekommen die Verbindung (und den Schlüssel) mit der Übergabe bzw.
+  „🔄 Fortschritt senden“ automatisch.
 
 ## Wenn etwas geändert werden soll
 

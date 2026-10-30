@@ -74,8 +74,10 @@ export function subsetProject(p, sel, title, { base = false } = {}) {
     const set = sel.cells.get(id) || new Set();
     return Object.fromEntries(Object.entries(map || {}).filter(([k]) => set.has(k)));
   };
-  const grids = allGrids(p).filter(keep).map((g) => ({
-    id: g.id, name: g.name || '', area: { ...g.area }, cellM: g.cellM, fills: pick(g.fills, g.id), status: pick(g.status, g.id),
+  // UA (base): alle Rastergebiete mit allen Feldern – das Ausgewählte gehört dem UA, der Rest bleibt gesperrt
+  const grids = allGrids(p).filter((g) => base || keep(g)).map((g) => ({
+    id: g.id, name: g.name || '', area: { ...g.area }, cellM: g.cellM,
+    fills: base ? { ...g.fills } : pick(g.fills, g.id), status: base ? { ...g.status } : pick(g.status, g.id),
   }));
   const clone = (x) => JSON.parse(JSON.stringify(x));
   const q = newProject(title);
@@ -95,7 +97,21 @@ export function subsetProject(p, sel, title, { base = false } = {}) {
     Object.assign(q, {
       pois: clone(p.pois || []), meet: p.meet ? { ...p.meet } : null, notes: p.notes || '',
       mission: clone(p.mission || q.mission), parentEid: p.eid || p.id, parentTitle: p.title || '',
+      items: clone(p.items), itemDel: clone(p.itemDel || {}), cellT: clone(p.cellT || {}), gridT: clone(p.gridT || {}),
     });
+    // gleicher Status-Schlüssel und Aufträge wie der Grund-Einsatz: der UA liest alle Meldungen mit
+    if (p.live) q.live = { ...clone(p.live), since: 0 };
+    if ((p.sent || []).length) q.sent = clone(p.sent);
+    // Sperren: Ausgewähltes = 'ua' (bearbeitbar, nicht löschbar), alles andere = 'base' (nur ansehen)
+    q.items.forEach((it, i) => { it.lock = sel.items.has(p.items[i]) ? 'ua' : 'base'; });
+    q.pois.forEach((x, i) => { x.lock = sel.pois.has(p.pois[i]) ? 'ua' : 'base'; });
+    if (q.meet) q.meet.lock = sel.meet ? 'ua' : 'base';
+    q.glock = {};
+    q.gown = {};
+    for (const g of allGrids(p)) {
+      q.glock[g.id] = keep(g) ? 'ua' : 'base';
+      if (!sel.edges.has(g.id) && keep(g)) q.gown[g.id] = [...(sel.cells.get(g.id) || [])]; // nur einzelne Felder
+    }
   }
   if (grids.length) {
     const [first, ...rest] = grids;

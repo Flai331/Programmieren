@@ -83,9 +83,10 @@ test('Unterabschnitt: nur das Gebiet, aber alle übrigen Daten des Grund-Einsatz
   assert.notEqual(q.eid, 'E1');
   assert.equal(q.parentEid, 'E1');
   assert.equal(q.parentTitle, 'Übung');
-  assert.deepEqual(q.items.map((i) => i.name), ['U1']);
-  assert.equal(q.otherGrids.length, 0);
-  assert.equal(q.area, null);
+  // ganzer Grund-Einsatz geht mit (v90), das Ausgewählte als 'ua', der Rest als 'base' gesperrt
+  assert.deepEqual(q.items.map((i) => [i.name || i.text, i.lock]), [['U1', 'ua'], ['U2', 'base'], ['Fund', 'base']]);
+  assert.equal(q.otherGrids.length + (q.area ? 1 : 0), 2);
+  assert.deepEqual(Object.values(q.glock), ['base', 'base']);
   assert.equal(q.pois.length, 1);
   assert.equal(q.meet.text, 'B-Ort');
   assert.equal(q.notes, 'geheim');

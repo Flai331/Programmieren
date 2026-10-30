@@ -58,3 +58,11 @@ Einsatzdaten – Laufwege, markierte Punkte, Zeichnungen, Feld-Status, HF-Rückm
 
 Unit: locks, progress-merge (Richtungen, keine Löschung, Konflikte, Idempotenz).
 Playwright: UA mit gesperrten Elementen; Fortschritt UA → EL per Link (auch mehrteilig).
+
+## D. Status-Schlüssel (Klaas, 30.10.2026) – baue ich selbst nach dem Agenten
+
+- **Ein Schlüssel pro Einsatz** für alle HF (wie v89, `P.live.key`); jeder neue Einsatz bekommt
+  automatisch einen neuen. Kein Schlüssel über mehrere Einsätze.
+- **EL, ELW und UA können alle Meldungen lesen**: `P.live` (Adresse, Schlüssel) geht bei Übergabe
+  (`#e`), beim Erstellen eines Unterabschnitts (gleicher Schlüssel wie der Grund-Einsatz) und bei
+  „🔄 Fortschritt senden“ (`#f`) mit.
