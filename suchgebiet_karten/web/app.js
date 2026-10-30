@@ -52,6 +52,9 @@ import {
 } from './statusbar.js';
 import { einsatzOffen, shouldOfferUpdate, updateText, PERMISSION_HINT } from './update.js';
 import { tapVerdict, backdropAction } from './tapclose.js';
+import {
+  LIC_KEY, LIC_CHECK_MS, LIC_TIMEOUT, LIC_CONTACT, licenceState, applyLicenceReply, newLicence, normalizeLicence, checkUrl, lockTitle, lockText, mailtoHref,
+} from './licence.js';
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { placeBadges, boxOf } from './badgeplace.js';
@@ -63,7 +66,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v112';
+const APP_VERSION = 'v113';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -8600,6 +8603,69 @@ console.info(`Suchgebiet-Karten bereit (${bridge ? 'Android-App' : 'Browser'})`)
 window.__app = {
   get P() { return P; }, get grid() { return grid; }, get db() { return db; }, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread, sentBadges,
 };
+
+// ---------- Freigabe (v113): Sperrbildschirm, Prüfung beim Status-Server ----------
+// Eine neue Sperre wirkt erst beim nächsten Start; die Prüfung blockiert den Start nie.
+let lic = null;
+function licSave() { try { localStorage.setItem(LIC_KEY, JSON.stringify(lic)); } catch { /* Speicher gesperrt: läuft im Speicher weiter */ } }
+function licLoad() {
+  const now = Date.now();
+  let s = null;
+  try { s = normalizeLicence(JSON.parse(localStorage.getItem(LIC_KEY)), now); } catch { s = null; }
+  lic = s || newLicence(uid() + uid(), now);
+  if (!s) licSave();
+}
+const licNow = () => licenceState({ now: Date.now(), lastOk: lic.lastOk, firstStart: lic.firstStart, blocked: lic.blocked, inactive: lic.inactive });
+function licShow() {
+  const st = licNow();
+  const box = $('lic-lock');
+  if (st === 'ok') { box.hidden = true; return false; }
+  const kontakt = lic.kontakt || LIC_CONTACT;
+  $('lic-title').textContent = lockTitle(st);
+  $('lic-text').textContent = lockText(st);
+  $('lic-mail').textContent = kontakt;
+  $('lic-mail').href = mailtoHref(kontakt, lic.id);
+  $('lic-id').textContent = lic.id;
+  box.hidden = false;
+  return true;
+}
+async function licCheck() {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), LIC_TIMEOUT);
+  try {
+    const url = checkUrl(STATUS_URL, { id: lic.id, mode: db.mode, version: APP_VERSION, platform: window.AndroidBridge ? 'apk' : 'web', name: db.deviceName, ua: navigator.userAgent });
+    const res = await fetch(url, { signal: ctl.signal, cache: 'no-store' });
+    lic = applyLicenceReply(lic, await res.json(), Date.now());
+    licSave();
+    return true;
+  } catch { return false; } finally { clearTimeout(timer); }
+}
+// Hintergrundprüfung: nur speichern; ein offener Sperrbildschirm schließt, wenn die Prüfung wieder „ok“ ergibt
+async function licBackground() {
+  if (!navigator.onLine) return;
+  await licCheck();
+  if (!$('lic-lock').hidden) licShow();
+}
+licLoad();
+licShow();
+$('lic-id-more').textContent = lic.id;
+$('lic-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(lic.id); $('lic-msg').textContent = 'ID kopiert.'; } catch { $('lic-msg').textContent = 'Kopieren nicht möglich – ID bitte markieren und von Hand kopieren.'; }
+  $('lic-msg').hidden = false;
+});
+$('lic-retry').addEventListener('click', async () => {
+  const b = $('lic-retry');
+  b.disabled = true;
+  const got = await licCheck();
+  b.disabled = false;
+  if (licShow()) {
+    $('lic-msg').textContent = got ? 'Die Freigabe ist weiterhin nicht erteilt.' : 'Keine Verbindung zum Server – bitte Internet prüfen.';
+    $('lic-msg').hidden = false;
+  }
+});
+setTimeout(licBackground, 500);
+setInterval(licBackground, LIC_CHECK_MS);
+window.addEventListener('online', () => { if (!$('lic-lock').hidden) licBackground(); });
 
 // Modus anwenden, beim ersten Start fragen, Auftrag/Rückmeldung aus dem Link übernehmen
 applyMode();

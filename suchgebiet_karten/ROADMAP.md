@@ -1,13 +1,14 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v112**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v113**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v113 – 🔒 Freigabe: Installationen abschalten**: jede Installation (APK und Web) meldet sich mit Geräte-ID beim Status-Server (Blatt „Geräte“); ein Eintrag in „Gesperrt“ sperrt ein Gerät, „App aktiv“ = NEIN im Blatt „Einstellungen“ sperrt alle. Wirkt beim nächsten Start; ohne Internet 14 Tage Frist. Sperrbildschirm mit Kontakt error.404.found@outlook.de, Geräte-ID und „Erneut prüfen“.
 - [~] **v112 – 📍 Gebiete-Knopf neben der Suche**: eigenes Piktogramm (gestrichelte Fläche mit Fadenkreuz) neben dem eingeklappten Suchfeld; öffnet die Liste aller Umrisse (Name, Team, Fläche) und Raster (Felder). Antippen zentriert und zoomt die Karte auf das Gebiet, zweiter Tipp auf den Knopf schließt die Liste.
 - [~] **v111 – ≡ Teams und Markierungen sortieren**: Griff ≡ an jeder Zeile (Teams-Fenster, „▦ Feld-Markierungen“) – gedrückt halten und ziehen; Teams bleiben unter Teams, Markierungen unter Markierungen. Reihenfolge gilt überall (Feld-Leiste, Listen, Legende), Zurück macht es rückgängig.
 - [~] **v110 – Ausgeblendetes Team beim Malen wieder einblenden**: Wer „Feld“ wählt oder ein Team/eine Markierung zum Malen auswählt, bekommt das Raster und diese Markierung automatisch wieder eingeblendet (Hinweis „… wieder eingeblendet“) – vorher malte ein über „Felder“ ausgeblendetes Team still gar nicht.

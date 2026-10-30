@@ -75,6 +75,31 @@ nichts eingetragen werden. Nur wer eine **eigene** Tabelle benutzen will: in der
 - Mehrere Einsätze gleichzeitig? Kein Problem: Jeder Einsatz hat seinen eigenen Schlüssel
   und damit seinen eigenen „Raum“. Eine Tabelle genügt für alle.
 
+## Geräte freigeben und sperren (seit v113)
+
+Jede Installation meldet sich beim Start mit einer Geräte-ID beim Server. Sperren und
+Hauptschalter pflegst du direkt in der Tabelle.
+
+1. Neuen `Code.gs` im Apps-Script-Editor einfügen, speichern, dann **„Bereitstellen“ →
+   „Bereitstellungen verwalten“ → Stift → Version: „Neue Version“ → Bereitstellen**. Die URL
+   bleibt gleich. Danach einmal `setup` ausführen (legt die neuen Blätter an; sie entstehen
+   sonst beim ersten Aufruf von selbst).
+2. **Blatt „Geräte“:** Jedes Gerät steht hier mit ID, Name (den das Gerät unter „⚙️ Mehr →
+   Dieses Gerät“ trägt), Modus, Plattform (`apk` oder `web`), Version, Modell sowie „zuerst“
+   und „zuletzt gesehen“. **Gerät sperren:** ein `x` (oder `ja`, `1` …) in die Spalte
+   „Gesperrt“. Leer, `nein` oder `0` = frei.
+3. **Blatt „Einstellungen“:** `B1` = `JA` oder `NEIN`. **`NEIN` schaltet alle Geräte ab.**
+   `B2` ist die Kontaktadresse, die auf dem Sperrbildschirm steht.
+4. **Wirkung:** erst beim **nächsten Start** der App. Eine laufende Sitzung läuft zu Ende.
+   Gesperrte Geräte zeigen „Bitte beim Administrator melden“ mit der Geräte-ID. Wird die
+   Sperre entfernt, genügt auf dem Sperrbildschirm der Knopf „Erneut prüfen“.
+5. **Ohne Internet** läuft die App 14 Tage ab der letzten erfolgreichen Prüfung (beim ersten
+   Start ab dem Start) weiter. Danach erscheint „Freigabe abgelaufen“, bis wieder eine
+   Prüfung gelingt.
+
+**Grenzen:** Wer den Code kopiert oder eine eigene Tabelle benutzt, ist nicht betroffen. Die
+Daten bleiben auf dem Gerät; die Sperre verhindert nur das Bedienen der App, sie löscht nichts.
+
 ## Häufige Fragen
 
 - **„Es kommt nichts an.“** Hat das Hundeführer-Handy Internet? Ohne Netz wartet die Meldung
