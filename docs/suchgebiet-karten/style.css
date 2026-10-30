@@ -108,7 +108,8 @@ button, input, select { font: inherit; }
 }
 .zs-level { font-size: 12px; font-weight: 700; color: #1565c0; line-height: 1; padding: 2px 0; font-variant-numeric: tabular-nums; }
 @media (max-height: 560px) { .zs-track { height: 90px; } }
-@media (max-height: 430px) { .zoomslider { display: none; } }
+.leaflet-control-zoom { display: none; }
+@media (max-height: 430px) { .zoomslider { display: none; } .leaflet-control-zoom { display: block; } }
 
 .bottomstack {
   position: fixed; left: 10px; right: 80px; bottom: 74px; z-index: 1001;
@@ -197,11 +198,11 @@ button, input, select { font: inherit; }
 .panel label > input[type=text] { display: block; width: 100%; margin-top: 4px; }
 
 .plist .proj {
-  display: flex; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; margin: 6px 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; margin: 6px 0;
 }
 .plist .proj.current { border-color: var(--red); background: #fdecea; }
-.plist .proj .meta { flex: 1; min-width: 0; font-size: 13px; }
-.plist .proj .meta b { display: block; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plist .proj .meta { flex: 1 1 100%; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+.plist .proj .meta b { display: block; font-size: 15px; }
 .plist .proj button { padding: 6px 9px; font-size: 13px; }
 
 .mark {
