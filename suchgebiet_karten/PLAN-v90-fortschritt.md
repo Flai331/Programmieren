@@ -1,4 +1,4 @@
-# Plan v90: 🔒 Unterabschnitt-Sperren · 🔄 Fortschritt senden · 📤 Rückmeldung über Google Sheets
+# Plan v90: 🔒 Unterabschnitt-Sperren · 🔄 Fortschritt senden (nur QR)
 
 Baut auf v89 (Status-Meldungen, `web/status.js`, Apps-Script, `P.live`) auf.
 
@@ -19,7 +19,7 @@ Baut auf v89 (Status-Meldungen, `web/status.js`, Apps-Script, `P.live`) auf.
 
 - Inhalt: Feld-Status und Team-Zuteilungen, neue/geänderte Items (mit `id`, `t`, `by`),
   Lage-Orte (wie `infos.js`), Wind-Messungen, Protokolleinträge, `P.sent`-Übersicht,
-  importierte HF-Rückmeldungen (Wege/Markierungen mit `resultKey`, Team, Zeit), Status-Meldungen.
+  importierte HF-Rückmeldungen (Wege/Markierungen mit `resultKey`, Team, Zeit), empfangene Status-Meldungen.
 - Zusammenführen nur ergänzend (gleiche Regeln wie `mergeInfos`): Neues kommt dazu; Geändertes nur,
   wenn Absender es zuletzt bearbeitet hat (`by === from`) und neuer; nichts wird gelöscht;
   Löschvermerke des Empfängers blockieren Wiederanlegen. Feldkonflikt: neuere Änderung gewinnt,
@@ -28,22 +28,18 @@ Baut auf v89 (Status-Meldungen, `web/status.js`, Apps-Script, `P.live`) auf.
   EL → UA alles, beim UA mit `lock: 'base'` (außer UA-eigene Elemente).
   EL ↔ EL/ELW alles, beidseitig ergänzend.
 - Zuordnung über `eid`/`parentEid` (wie `infoTarget`).
-- Wege: per QR (mehrteilig `#m` wie Übergabe) und per Google Sheets (automatisch alle 2 min,
-  wenn `P.live` und online; nur Änderungen seit letztem Senden, `P.live.progSent`).
+- Übertragung **nur per QR-Code bzw. Link** (mehrteilig `#m` wie Übergabe). **Nicht** über
+  Google Sheets: die Tabelle trägt ausschließlich die Status-Meldungen aus v89.
 - Meldung: „🔄 Fortschritt von <Gerät>: 12 Felder, 2 Wege, 3 Protokolleinträge“.
 - Knopf in „📤 Weitergeben“ neben „Infos senden“; Gerätename wie bei Infos.
 
-## C. 📤 HF-Rückmeldung über Google Sheets
+## C. Abgrenzung (Klaas, 30.10.2026)
 
-- Mit `P.hf.ls`: „📤 Rückmeldung senden“ schickt `buildResult` verschlüsselt über die Tabelle
-  (Outbox wie v89, ohne Netz später). QR bleibt als Option im selben Dialog.
-- Große Inhalte in Teile ≤ 15 000 Zeichen zerlegen (`part`, `of`, gemeinsame `gid`);
-  EL setzt zusammen und wendet `applyResult` an. Doppelte (QR + Sheets) werden über
-  `p.imported`/Meldungs-ID erkannt.
-- Apps-Script unverändert nutzbar (gleiches Format `{ r, id, d }`).
+Über die Google-Tabelle laufen **nur Rückmeldungen im Sinne von Status-Meldungen** (v89).
+Einsatzdaten – Laufwege, markierte Punkte, Zeichnungen, Feld-Status, HF-Rückmeldung (`#r`),
+Übergabe, Fortschritt – gehen weiterhin **nur per QR-Code/Link**.
 
 ## Tests
 
-Unit: locks, progress-merge (Richtungen, keine Löschung, Konflikte, Idempotenz), Teilung/Zusammensetzen.
-Playwright: UA mit gesperrten Elementen; Fortschritt UA → EL per Link; HF-Rückmeldung über
-gemockte Tabelle inkl. großem Weg (mehrteilig).
+Unit: locks, progress-merge (Richtungen, keine Löschung, Konflikte, Idempotenz).
+Playwright: UA mit gesperrten Elementen; Fortschritt UA → EL per Link (auch mehrteilig).
