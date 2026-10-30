@@ -7,10 +7,11 @@ import {
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { buildGpx, mergeGpx, parseGpx, parseKml, pointInPolygon, selectionGpx, cellComponents, cellOutlines, hasArea, trackDesc, trackLength, outlineName } from './gpx.js';
+import { buildGpx, mergeGpx, parseGpx, parseKml, pointInPolygon, selectionGpx, gridWithLabels, gridPath, labelTracks, cellComponents, cellOutlines, hasArea, trackDesc, trackLength, outlineName } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import { buildReport, describeTarget, makeDedup, makeLog } from './report.js';
 import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
+import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject } from './scope.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
   MAIL_PARTS, REPORT_SECTIONS, MAP_PARTS, EXTRA_PARTS, hasReportText, newMailTo, mailAddresses,
@@ -43,7 +44,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v79';
+const APP_VERSION = 'v80';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -72,7 +73,8 @@ let draftTrack = null; // Umriss, der gerade Punkt für Punkt gesetzt wird
 let draftPen = null; // Stift-Zeichnung in Arbeit: { strokes: [...] } – bis „Fertig“ oder „Abbrechen“
 let undoStack = [];
 let searchPin = null; // Nadel des letzten Suchergebnisses (gehört zu keinem Einsatz)
-let gpxSel = null; // GPX-Auswahl (Werkzeug „gpxsel“), siehe unten
+let gpxSel = null; // Auswahl auf der Karte (Werkzeug „gpxsel“), siehe unten
+let selMode = null; // 'export' (GPX direkt), 'share' (für „Weitergeben“), 'area' (Gebiet antippen)
 let gpxSelGrid = null; // zuletzt angetipptes Rastergebiet (für „Ganzes Raster“)
 
 function load() {
@@ -537,8 +539,8 @@ function setTool(t) {
   $('penbar').hidden = t !== 'pen';
   $('offsqbar').hidden = t !== 'offsquares';
   $('pickbar').hidden = t !== 'sendpick';
-  if (t === 'gpxsel' && !gpxSel) gpxSel = newGpxSel();
-  if (t !== 'gpxsel') gpxSel = null;
+  if (t === 'gpxsel' && !gpxSel) gpxSel = emptySel();
+  if (t !== 'gpxsel') { gpxSel = null; selMode = null; }
   $('gpxselbar').hidden = t !== 'gpxsel';
   if (t === 'gpxsel') updateGpxSelBar();
   $('hf-field').classList.toggle('on', t === 'hffield');
@@ -2612,6 +2614,21 @@ function renderSend() {
   });
   if (!ib.children.length) ib.textContent = 'Keine.';
   $('send-meet').parentElement.hidden = !P.meet;
+  // Lage-Orte: alle vorausgewählt (Verpflegung, ELW … helfen dem Hundeführer), einzeln abwählbar
+  const pb = $('send-pois');
+  const poff = new Set([...pb.querySelectorAll('input:not(:checked)')].map((i) => i.value));
+  pb.innerHTML = '';
+  for (const x of sortPois(P.pois)) {
+    const l = document.createElement('label');
+    l.className = 'check';
+    l.innerHTML = '<input type="checkbox"><span></span>';
+    l.firstChild.value = x.id;
+    l.firstChild.checked = !poff.has(x.id);
+    l.lastChild.textContent = poiLabel(x);
+    pb.appendChild(l);
+  }
+  pb.hidden = !P.pois.length;
+  $('send-pois-label').hidden = !P.pois.length;
   $('send-person').parentElement.hidden = !P.mission.person.trim();
   // Kontakte: alle vorausgewählt, einzeln abwählbar; Einsatzleitung immer dabei
   const cts = sendContactsAll();
@@ -2660,7 +2677,8 @@ function sendSelection() {
   return {
     teamId: $('send-team').value, gridIds, fields: sendFields(),
     picked: Object.fromEntries(Object.entries(sendPicked).map(([k, v]) => [k, [...v]])),
-    itemIdx: idx, meet: $('send-meet').checked && !!P.meet, rescue, hint: $('send-hint').value.trim(), person: $('send-person').checked,
+    itemIdx: idx, meet: $('send-meet').checked && !!P.meet, rescue,
+    poiIds: [...$('send-pois').querySelectorAll('input:checked')].map((i) => i.value), hint: $('send-hint').value.trim(), person: $('send-person').checked,
     contacts: $('send-contacts').checked
       ? sendContactsAll().filter((c) => c.id === 'lead' || !$('send-ct-list').querySelector(`input[value="${c.id}"]:not(:checked)`)) : [],
   };
@@ -2676,7 +2694,7 @@ async function currentAssignment() {
 async function updateSendSize() {
   const { a, link } = await currentAssignment();
   const nf = a.g.reduce((x, g) => x + g.f.length, 0);
-  $('send-size').textContent = `${a.g.length ? `${a.g.length} Rastergebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ` : ''}Umrisse/Zeichnungen: ${a.i.length} · ${a.rp ? `Rettungspunkte: ${a.rp.length} · ` : ''}${a.ct ? `Kontakte: ${a.ct.length} · ` : ''}`
+  $('send-size').textContent = `${a.g.length ? `${a.g.length} Rastergebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ` : ''}Umrisse/Zeichnungen: ${a.i.length} · ${a.po ? `Lage-Orte: ${a.po.length} · ` : ''}${a.rp ? `Rettungspunkte: ${a.rp.length} · ` : ''}${a.ct ? `Kontakte: ${a.ct.length} · ` : ''}`
     + (link.length <= QR_MAX ? `passt in einen QR-Code (${link.length} Zeichen)` : `zu groß für einen QR-Code (${link.length} Zeichen) – per WhatsApp senden oder weniger auswählen`);
 }
 ['send-team', 'send-meet', 'send-rescue', 'send-person', 'send-hint'].forEach((id) => $(id).addEventListener(id === 'send-hint' ? 'input' : 'change', () => {
@@ -2689,6 +2707,7 @@ function syncSendFields() {
 }
 $('send-grids').addEventListener('change', () => { syncSendFields(); sendCache = null; updateSendSize(); });
 $('send-items').addEventListener('change', () => { sendCache = null; updateSendSize(); });
+$('send-pois').addEventListener('change', () => { sendCache = null; updateSendSize(); });
 $('send-ct-list').addEventListener('change', () => { sendCache = null; updateSendSize(); });
 $('send-contacts').addEventListener('change', () => { $('send-ct-list').hidden = !$('send-contacts').checked; sendCache = null; updateSendSize(); });
 document.querySelectorAll('input[name=send-fields]').forEach((r) => r.addEventListener('change', () => {
@@ -2981,20 +3000,22 @@ $('handed').addEventListener('click', async () => {
   });
   if (ok) { delete P.handedOver; changed(); }
 });
-$('ho-send').addEventListener('click', async () => {
+$('ho-send').addEventListener('click', () => handoverQr(P, true));
+// Einsatz (ganz oder Teil-Einsatz aus „Weitergeben“) per QR-Code an ein Gerät der Einsatzleitung
+async function handoverQr(proj, whole) {
   saveNow();
   // erst ein QR-Code mit wenig Vereinfachung, sonst mehrere im Wechsel
   let link = '';
   let parts = null;
   let e = null;
   for (const opt of [{ tol: 1 }, { tol: 3 }, { tol: 6 }]) {
-    e = buildHandover(P, opt);
+    e = buildHandover(proj, opt);
     link = shareLink('e', await pack(e), PUBLIC_URL);
     if (link.length <= QR_MAX) break;
   }
   if (link.length > QR_MAX) {
     for (const opt of [{ tol: 1 }, { tol: 3 }, { tol: 6 }, { tol: 6, pages: false }, { tol: 15, pages: false }]) {
-      e = buildHandover(P, opt);
+      e = buildHandover(proj, opt);
       const data = await pack(e);
       link = shareLink('e', data, PUBLIC_URL);
       parts = splitParts(data, 800).map((x) => shareLink('m', x, PUBLIC_URL));
@@ -3007,9 +3028,9 @@ $('ho-send').addEventListener('click', async () => {
     : 'Auf dem anderen Gerät „Einsätze → 📷 Einsatz übernehmen“ antippen oder den Code mit der Kamera scannen.';
   const pc = ' Zum PC: „Teilen“ oder „Link kopieren“ (z. B. WhatsApp Web, Mail).';
   const lost = miss.length ? ` Nicht dabei: ${miss.join(', ')} – dafür „Suchgebiet als Datei senden“.` : '';
-  qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
-  showQr(link, `📲 Einsatz „${P.title || 'Suchgebiet'}“ übergeben`, how + pc + lost, parts);
-});
+  if (whole) qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
+  showQr(link, `📲 ${whole ? 'Einsatz' : 'Teil-Einsatz'} „${proj.title || 'Suchgebiet'}“ übergeben`, how + pc + lost, parts);
+}
 $('ho-scan').addEventListener('click', () => { closePanels(); startScan(); });
 
 async function takeHandover(e) {
@@ -4201,7 +4222,7 @@ for (const btn of ['btn-mission', 'btn-notes', 'btn-grid', 'btn-teams']) {
 // Seitenknopf nochmal antippen, während sein Fenster offen ist: Fenster schließen
 const SIDE_PANELS = {
   'btn-projects': 'panel-projects', 'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',
-  'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-more': 'panel-more', 'btn-pdf': 'panel-pdf', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
+  'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-more': 'panel-more', 'btn-pdf': 'panel-share', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
 };
 for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
   $(btn).addEventListener('click', (e) => {
@@ -4217,7 +4238,9 @@ $('btn-layers').addEventListener('click', () => openPanel('panel-layers'));
 $('layers-offline').addEventListener('click', () => { renderOfflineForm(); openPanel('panel-offline'); });
 $('btn-more').addEventListener('click', () => { renderDeviceName(); openPanel('panel-more'); });
 $('app-version').textContent = `Version ${APP_VERSION}`;
-$('btn-pdf').addEventListener('click', () => {
+$('btn-pdf').addEventListener('click', () => openShare());
+$('share-more').addEventListener('click', () => openExport());
+function openExport() {
   $('pdf-caption').value = P.caption || '';
   renderExportGrids();
   updatePdfPlan();
@@ -4225,7 +4248,135 @@ $('btn-pdf').addEventListener('click', () => {
   $('pdf-msg').textContent = '';
   $('kmz-msg').textContent = '';
   openPanel('panel-pdf');
+}
+
+// ---------- Weitergeben: „Was?“ (Umfang) und „Wie?“ (Weg) ----------
+let shareScope = 'all';
+let shareSel = null;
+let shareName = '';
+function shareLabel() {
+  if (shareScope === 'all') return 'Einsatz';
+  if (shareScope === 'team') { const t = P.marks.find((m) => m.id === $('share-team').value); return t ? t.label : 'Team'; }
+  return shareName || 'Auswahl';
+}
+function openShare() {
+  const teams = P.marks.filter((m) => m.kind === 'team');
+  const ts = $('share-team');
+  const prev = ts.value;
+  ts.innerHTML = '';
+  for (const t of teams) ts.add(new Option(`${t.label}${t.dog ? ` – ${t.dog}` : ''}`, t.id));
+  if (teams.some((t) => t.id === prev)) ts.value = prev;
+  if (shareScope === 'all' || !shareSel) { shareScope = shareSel ? shareScope : 'all'; if (shareScope === 'all') shareSel = selectAll(P); }
+  if (shareScope === 'team') shareSel = selectTeam(P, ts.value);
+  renderShare();
+  openPanel('panel-share');
+}
+function renderShare() {
+  document.querySelectorAll('#share-scopes button').forEach((b) => b.classList.toggle('active', b.dataset.scope === shareScope));
+  $('share-team').hidden = shareScope !== 'team';
+  const sum = shareSel ? selSummary(P, shareSel) : '';
+  $('share-summary').textContent = `${shareScope === 'all' ? 'Ganzer Einsatz' : shareLabel()}: ${sum || 'nichts ausgewählt'}`;
+  $('share-edit').hidden = shareScope === 'all';
+  $('share-gridlines').parentElement.hidden = !allGrids(P).length;
+  $('share-file').hidden = shareScope !== 'all';
+  $('share-msg').textContent = '';
+}
+document.querySelectorAll('#share-scopes button').forEach((b) => b.addEventListener('click', () => {
+  const s = b.dataset.scope;
+  if (s === 'all') { shareScope = 'all'; shareSel = selectAll(P); return renderShare(); }
+  if (s === 'team') {
+    if (!P.marks.some((m) => m.kind === 'team')) return toast('Noch keine Teams angelegt (Teams → „+ Team“)');
+    shareScope = 'team';
+    shareSel = selectTeam(P, $('share-team').value || P.marks.find((m) => m.kind === 'team').id);
+    return renderShare();
+  }
+  if (s === 'area') {
+    if (!allGrids(P).length && !P.items.some((it) => it.kind === 'track' && hasArea(it))) return toast('Kein Raster und kein Umriss vorhanden');
+    shareScope = 'area';
+    closePanels();
+    gpxSel = emptySel();
+    selMode = 'area';
+    setTool('gpxsel');
+    updateGpxSelBar();
+    return redraw();
+  }
+  // eigene Auswahl: auf der Karte antippen
+  shareScope = 'pick';
+  shareName = 'Auswahl';
+  editShareSel(emptySel());
+}));
+function editShareSel(start) {
+  closePanels();
+  gpxSel = start;
+  selMode = 'share';
+  setTool('gpxsel');
+  updateGpxSelBar();
+  redraw();
+}
+$('share-team').addEventListener('change', () => { shareSel = selectTeam(P, $('share-team').value); renderShare(); });
+$('share-edit').addEventListener('click', () => {
+  // ändern: die bisherige Auswahl auf der Karte weiter bearbeiten (wird zur eigenen Auswahl)
+  if (shareScope !== 'pick') shareName = shareLabel();
+  shareScope = 'pick';
+  editShareSel(shareSel || emptySel());
 });
+function shareReady() {
+  if (shareSel && selCount(shareSel)) return true;
+  toast('Nichts ausgewählt – oben unter „Was?“ wählen');
+  return false;
+}
+const shareGpx = () => gpxSelFile(shareSel, $('share-gridlines').checked, shareScope === 'all' ? 'Einsatz' : shareLabel());
+async function shareRun(fn) {
+  if (!shareReady()) return;
+  try { await fn(); } catch (err) { console.error(err); toast('Fehler: ' + err.message); }
+}
+$('share-garmin').addEventListener('click', () => shareRun(async () => { const f = shareGpx(); await shareFile(f.blob, f.name, f.title, f.text, f); }));
+$('share-mail').addEventListener('click', () => shareRun(async () => { const f = shareGpx(); await mailFile(f); }));
+$('share-save').addEventListener('click', () => shareRun(async () => { const f = shareGpx(); await saveFile(f.blob, f.name); }));
+$('share-file').addEventListener('click', () => $('proj-share').click());
+$('share-qr').addEventListener('click', () => shareRun(async () => {
+  if (shareScope === 'all') return handoverQr(P, true);
+  const to = await openDlg((box, close) => {
+    dlgHead(box, '📲 QR-Code für …', `„${shareLabel()}“: ${selSummary(P, shareSel)}`);
+    dlgButton(box, '🐕 Hundeführer<small>öffnet als Auftrag, Rückmeldung kommt zurück</small>', 'primary', () => close('hf'));
+    dlgButton(box, '🚐 Einsatzleitung / ELW<small>wird dort ein eigener Einsatz mit nur diesem Teil</small>', '', () => close('el'));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (to === 'el') return handoverQr(subsetProject(P, shareSel, `${P.title || 'Einsatz'} – ${shareLabel()}`), false);
+  if (to === 'hf') prefillSend(shareSel, shareScope === 'team' ? $('share-team').value : '');
+}));
+$('share-pdf').addEventListener('click', () => shareRun(async () => {
+  if (shareScope === 'all') return openExport();
+  // Teil: eine Karte genau um das Ausgewählte
+  const q = subsetProject(P, shareSel, `${P.title || 'Einsatz'} – ${shareLabel()}`);
+  const qg = q.area ? makeGrid(q.area, q.cellM) : null;
+  $('share-msg').textContent = 'PDF wird erstellt …';
+  const res = await buildPdf(q, qg, { ...pdfOpts(), views: null, fitContent: true, info: false, title: q.title, rescue: rescueForExport() },
+    layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => { $('share-msg').textContent = `Karte ${i} von ${n} …`; });
+  $('share-msg').textContent = '';
+  await shareFile(res.blob, safeName(`_${shareLabel().replace(/[^\wäöüÄÖÜß-]+/g, '_')}.pdf`), q.title, mailText(q.title));
+}));
+// Auftrags-Fenster für Hundeführer mit der Auswahl vorbelegen
+function prefillSend(sel, teamId) {
+  for (const id of ['send-grids', 'send-items', 'send-pois']) $(id).innerHTML = '';
+  renderSend();
+  $('send-team').value = teamId || '';
+  for (const id of ['send-grids', 'send-items', 'send-pois']) $(id).innerHTML = '';
+  renderSend();
+  for (const inp of $('send-items').querySelectorAll('input')) inp.checked = sel.items.has(P.items[Number(inp.value)]);
+  for (const inp of $('send-grids').querySelectorAll('input')) inp.checked = sel.edges.has(inp.value) || ((sel.cells.get(inp.value) || new Set()).size > 0);
+  for (const inp of $('send-pois').querySelectorAll('input')) inp.checked = [...sel.pois].some((x) => x.id === inp.value);
+  $('send-meet').checked = !!sel.meet;
+  const mode = teamId ? 'team' : 'pick';
+  if (mode === 'pick') sendPicked = Object.fromEntries([...sel.cells].map(([id, s]) => [id, new Set(s)]));
+  document.querySelector(`input[name=send-fields][value=${mode}]`).checked = true;
+  syncSendFields();
+  const picked = Object.values(sendPicked).reduce((a, x) => a + x.size, 0);
+  $('send-pickinfo').textContent = mode === 'pick' ? `${picked} Felder angetippt.` : '';
+  sendCache = null;
+  updateSendSize();
+  openPanel('panel-send');
+}
 
 // ---------- Export (PDF, GPX, Garmin-Karte): Teilen oder Speichern ----------
 // Fertige Dateien werden kurz zwischengespeichert: Der Browser erlaubt das Teilen nur
@@ -4558,7 +4709,6 @@ $('gpx-save').addEventListener('click', () => runExport('gpx', $('gpx-save'), ex
 
 // ---------- GPX-Auswahl: einzelne Dinge an die Garmin-App ----------
 // Felder je Rastergebiet ("c,r"), dazu Umrisse/Striche/Texte, Lage-Orte, B-Ort und Rasterränder
-function newGpxSel() { return { items: new Set(), pois: new Set(), meet: false, cells: new Map(), edges: new Set() }; }
 function gridGeoms() { return allGrids(P).map((g) => ({ g, gr: g.active ? grid : makeGrid(g.area, g.cellM) })).filter((x) => x.gr); }
 const cellCenter = (gr, c, r) => [gr.originLat - (r + 0.5) * gr.dLat, gr.originLon + (c + 0.5) * gr.dLon];
 const gridCorner = (gr) => ([c, r]) => [gr.originLat - r * gr.dLat, gr.originLon + c * gr.dLon];
@@ -4567,18 +4717,19 @@ function cellSet(id) {
   if (!gpxSel.cells.has(id)) gpxSel.cells.set(id, new Set());
   return gpxSel.cells.get(id);
 }
-function gpxSelCount() {
-  let n = gpxSel.items.size + gpxSel.pois.size + (gpxSel.meet ? 1 : 0) + gpxSel.edges.size;
-  for (const s of gpxSel.cells.values()) n += s.size;
-  return n;
-}
+const gpxSelCount = () => selCount(gpxSel);
 function updateGpxSelBar() {
   if (!gpxSel) return;
   const n = gpxSelCount();
-  $('gpxsel-info').textContent = n ? `${n} ausgewählt` : 'Antippen zum Auswählen';
+  const area = selMode === 'area';
+  $('gpxsel-info').textContent = area ? 'Raster oder Umriss antippen' : n ? `${n} ausgewählt` : 'Antippen zum Auswählen';
+  $('gpxsel-share').hidden = selMode !== 'export';
+  $('gpxsel-save').hidden = selMode !== 'export';
   $('gpxsel-share').disabled = !n;
   $('gpxsel-save').disabled = !n;
+  $('gpxsel-grid').hidden = area;
   $('gpxsel-grid').disabled = !allGrids(P).length;
+  $('gpxsel-done').textContent = selMode === 'share' ? '✓ Übernehmen' : area ? 'Abbrechen' : 'Fertig';
 }
 // Alles innerhalb einer Fläche (Umriss oder Rasterrand) dazunehmen; Rückgabe: Anzahl neu
 function selectInside(inside, except = null) {
@@ -4600,6 +4751,7 @@ function selectInside(inside, except = null) {
   return n;
 }
 function gpxTap(x, y, ll) {
+  if (selMode === 'area') return areaTap(x, y, ll);
   const pi = poiAt(x, y);
   if (pi >= 0) {
     const p = P.pois[pi];
@@ -4630,37 +4782,77 @@ function gpxTap(x, y, ll) {
   updateGpxSelBar();
   redraw();
 }
-$('gpxsel-grid').addEventListener('click', () => {
-  const list = gridGeoms();
-  const c = map.getCenter();
-  const at = hitGrid(c.lat, c.lng);
-  const hit = list.find((x) => x.g.id === gpxSelGrid) || (at && list.find((x) => x.g.id === at.g.id)) || list[0];
-  if (!hit) return;
-  const { g, gr } = hit;
+// Ganzes Rastergebiet: Rand und alles darin; Rückgabe: Anzahl neu
+function selectGrid({ g, gr }) {
   const north = gr.originLat;
   const west = gr.originLon;
   const south = north - gr.rows * gr.dLat;
   const east = west + gr.cols * gr.dLon;
   const n = selectInside(([la, lo]) => la <= north && la >= south && lo >= west && lo <= east);
   gpxSel.edges.add(g.id);
+  return n;
+}
+$('gpxsel-grid').addEventListener('click', () => {
+  const list = gridGeoms();
+  const c = map.getCenter();
+  const at = hitGrid(c.lat, c.lng);
+  const hit = list.find((x) => x.g.id === gpxSelGrid) || (at && list.find((x) => x.g.id === at.g.id)) || list[0];
+  if (!hit) return;
+  const n = selectGrid(hit);
   updateGpxSelBar();
   redraw();
-  toast(`${gridLabel(P, g)}: Rand${n ? ` und ${n} Ding${n === 1 ? '' : 'e'}` : ''} ausgewählt`);
+  toast(`${gridLabel(P, hit.g)}: Rand${n ? ` und ${n} Ding${n === 1 ? '' : 'e'}` : ''} ausgewählt`);
 });
-function gpxSelFile() {
+// „Ein Gebiet“: Umriss oder Raster antippen -> alles darin, dazu B-Ort und Lage-Orte
+function areaTap(x, y, ll) {
+  const i = hitItem(P.items, toPx, x, y, 12);
+  const it = i >= 0 ? P.items[i] : null;
+  let name = '';
+  if (it && it.kind === 'track' && hasArea(it)) {
+    gpxSel.items.add(it);
+    selectInside((pt) => pointInPolygon(pt, it.pts), it);
+    name = it.name || 'Umriss';
+  } else {
+    const h = hitGrid(ll.lat, ll.lng);
+    const hit = h && gridGeoms().find((x) => x.g.id === h.g.id);
+    if (!hit) return toast('Bitte einen geschlossenen Umriss oder ein Raster antippen');
+    selectGrid(hit);
+    name = gridLabel(P, hit.g);
+  }
+  for (const p of P.pois) gpxSel.pois.add(p);
+  gpxSel.meet = !!P.meet;
+  shareSel = gpxSel;
+  shareName = name;
+  setTool('pan');
+  redraw();
+  openShare();
+}
+// GPX aus einer Auswahl; withLines: Rasterlinien und Feldnamen der ausgewählten Gebiete mit
+function gpxSelFile(src = gpxSel, withLines = false, label = 'Auswahl') {
   const title = P.title || 'Suchgebiet';
   const multi = allGrids(P).length > 1;
-  const sel = { items: P.items.filter((it) => gpxSel.items.has(it)), pois: P.pois.filter((p) => gpxSel.pois.has(p)), meet: gpxSel.meet ? P.meet : null, areas: [], lines: [] };
+  const sel = { items: P.items.filter((it) => src.items.has(it)), pois: P.pois.filter((p) => src.pois.has(p)), meet: src.meet ? P.meet : null, areas: [], lines: [] };
   for (const { g, gr } of gridGeoms()) {
     const prefix = multi ? `${gridLabel(P, g)} ` : '';
     const corner = gridCorner(gr);
-    if (gpxSel.edges.has(g.id)) {
+    const inScope = src.edges.has(g.id) || (src.cells.get(g.id) || new Set()).size > 0;
+    if (withLines && inScope) {
+      const both = gridWithLabels(gr);
+      const desc = `${formatMeters(gr.cellM)} Felder mit Feldnamen, A1 = Nordwest-Ecke`;
+      if (both) sel.lines.push({ name: `Raster ${prefix}${title}`.trim(), color: '#d50000', pts: both, desc });
+      else {
+        // großes Raster: Linien und Feldnamen getrennt (Garmin: höchstens ca. 10 000 Punkte je Track)
+        sel.lines.push({ name: `Rasterlinien ${prefix}${title}`.trim(), color: '#d50000', pts: gridPath(gr), desc });
+        const parts = labelTracks(gr);
+        parts.forEach((t, i) => sel.lines.push({ name: `Feldnamen ${prefix}${title}${parts.length > 1 ? ` (${i + 1})` : ''}`.trim(), color: '#d50000', pts: t.pts }));
+      }
+    } else if (src.edges.has(g.id)) {
       sel.lines.push({ name: `Rand ${prefix}${title}`.trim(), color: '#d50000', pts: [[0, 0], [gr.cols, 0], [gr.cols, gr.rows], [0, gr.rows], [0, 0]].map(corner), desc: `${gr.cols} × ${gr.rows} Felder à ${formatMeters(gr.cellM)}` });
     }
     // Felder nach Team/Status zusammenfassen, sonst „Felder“
     const v = gridView(P, g);
     const groups = new Map();
-    for (const k of gpxSel.cells.get(g.id) || []) {
+    for (const k of src.cells.get(g.id) || []) {
       const [c, r] = k.split(',').map(Number);
       const m = cellOwner(v, c, r) || cellStatus(v, c, r);
       const id = m ? m.id : '';
@@ -4673,11 +4865,11 @@ function gpxSelFile() {
       }
     }
   }
-  const gpx = selectionGpx(sel, `${title} – Auswahl`);
+  const gpx = selectionGpx(sel, `${title} – ${label}`);
   return {
     blob: new Blob([gpx], { type: 'application/gpx+xml' }),
-    name: safeName('_Auswahl.gpx', false),
-    title: `${title} – Auswahl`,
+    name: safeName(`_${label.replace(/[^\wäöüÄÖÜß-]+/g, '_')}.gpx`, false),
+    title: `${title} – ${label}`,
     text: 'GPX für Garmin: in der Garmin-App (z. B. Garmin Explore) öffnen und an das Gerät senden – oder in BaseCamp importieren.',
   };
 }
@@ -4694,8 +4886,14 @@ async function gpxSelExport(action) {
 }
 $('gpxsel-share').addEventListener('click', () => gpxSelExport('share'));
 $('gpxsel-save').addEventListener('click', () => gpxSelExport('save'));
-$('gpxsel-done').addEventListener('click', () => { setTool('pan'); redraw(); });
-$('gpxsel-open').addEventListener('click', () => { closePanels(); gpxSelGrid = null; setTool('gpxsel'); redraw(); });
+$('gpxsel-done').addEventListener('click', () => {
+  const mode = selMode;
+  if (mode === 'share') { shareSel = gpxSel; shareScope = 'pick'; }
+  setTool('pan');
+  redraw();
+  if (mode === 'share' || mode === 'area') openShare();
+});
+$('gpxsel-open').addEventListener('click', () => { closePanels(); gpxSelGrid = null; gpxSel = emptySel(); selMode = 'export'; setTool('gpxsel'); updateGpxSelBar(); redraw(); });
 // Hervorhebung der Auswahl (gelb)
 function drawGpxSel() {
   if (!gpxSel) return;

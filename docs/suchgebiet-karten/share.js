@@ -106,7 +106,7 @@ function unpackItem(x, extra = {}) {
 }
 
 // ---------- Auftrag (Einsatzleitung) ----------
-// sel: { teamId, gridIds: [], fields: 'team'|'all'|'pick', picked: {gridId: ["c,r"]}, itemIdx: [], meet, rescue: [pts], hint, person }
+// sel: { teamId, gridIds: [], fields: 'team'|'all'|'pick', picked: {gridId: ["c,r"]}, itemIdx: [], meet, poiIds: [], rescue: [pts], hint, person }
 export function buildAssignment(p, sel) {
   const team = p.marks.find((m) => m.id === sel.teamId && m.kind === 'team') || null;
   const statusById = Object.fromEntries(p.marks.filter((m) => m.kind === 'status').map((m) => [m.id, STATUS_CODES[m.label] || '']));
@@ -129,6 +129,9 @@ export function buildAssignment(p, sel) {
   if (team) out.tm = { l: team.label, c: team.color, d: team.dog || '' };
   if (sel.hint) out.h = sel.hint;
   if (sel.meet && p.meet) out.mp = [r6(p.meet.lat), r6(p.meet.lon), p.meet.text || ''];
+  // Lage-Orte (ELW, Verpflegung …): [id, Art, lat, lon, Name, Hinweis]
+  const pois = (p.pois || []).filter((x) => (sel.poiIds || []).includes(x.id));
+  if (pois.length) out.po = pois.map((x) => [x.id, x.cat, r6(x.lat), r6(x.lon), x.name || '', (x.desc || '').slice(0, 200)]);
   if (sel.rescue && sel.rescue.length) out.rp = sel.rescue.map((r) => [r.n, r6(r.lat), r6(r.lon)]);
   if (sel.person && p.mission && p.mission.person) out.vp = p.mission.person.trim().slice(0, 400);
   if (sel.contacts && sel.contacts.length) out.ct = sel.contacts.map(compactContact);
@@ -155,6 +158,7 @@ export function projectFromAssignment(a) {
   p.items = (a.i || []).map((x) => unpackItem(x, { fromEl: true }));
   p.contacts = (a.ct || []).map(fromCompact).filter((c) => c.name || c.phone);
   if (a.mp) p.meet = { lat: a.mp[0], lon: a.mp[1], text: a.mp[2] };
+  p.pois = (a.po || []).map(([id, cat, lat, lon, name, desc]) => ({ id, cat, lat, lon, name, desc, t: a.at, by: 'Einsatzleitung' }));
   if (a.vp) p.mission.person = a.vp;
   p.hf = {
     id: a.id, at: a.at, received: Date.now(), team: team.label, hint: a.h || '', grids: a.g.map((g) => g.i),
