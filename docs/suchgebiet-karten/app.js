@@ -57,7 +57,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v98';
+const APP_VERSION = 'v99';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -102,6 +102,7 @@ function load() {
   try {
     const s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
     if (s && s.projects) db = { ...db, ...s };
+    if (!['team', 'ua', 'el', 'other'].includes(db.shareTo)) db.shareTo = null; // v99: zuletzt gewählter Empfänger beim Teilen (pro Gerät)
     db.teamsOpen = !!db.teamsOpen; // v98: Team-Liste auf dem Handy offen (pro Gerät)
   } catch { /* defekter Speicher -> Neustart */ }
   if (!Object.keys(db.projects).length) {
@@ -5860,10 +5861,19 @@ function openExport() {
   openPanel('panel-pdf');
 }
 
-// ---------- Weitergeben: „Was?“ (Umfang) und „Wie?“ (Weg) ----------
+// ---------- Teilen: „An wen?“ (Empfänger), „Was?“ (Umfang) und „Wie?“ (Weg) ----------
+const SHARE_TO = ['team', 'ua', 'el', 'other'];
+const SHARE_HINT = {
+  team: 'Hundeführer-Handy: bekommt einen Auftrag (QR-Code), die Rückmeldung kommt zurück. Vorausgewählt sind die Felder und Umrisse des Teams.',
+  ua: 'Unterabschnitt: bearbeitbar ist nur das ausgewählte Gebiet, der Rest ist nur zum Ansehen (QR-Code an ein Gerät mit dieser App).',
+  el: 'Weiteres EL-Tablet / Einsatzleitwagen: bekommt den ganzen Einsatz, Rückmeldungen laufen dann dort ein (QR-Code).',
+  other: 'Stellen ohne die App (Polizei, Feuerwehr, Druck, Garmin, Mail …): Datei oder PDF, kein QR-Code.',
+};
 let shareScope = 'all';
 let shareSel = null;
 let shareName = '';
+let shareTo = null; // 'team' | 'ua' | 'el' | 'other' – zuletzt gewählter Empfänger (pro Gerät in db.shareTo)
+let shareInit = false;
 function shareLabel() {
   if (shareScope === 'all') return 'Einsatz';
   if (shareScope === 'team') { const t = P.marks.find((m) => m.id === $('share-team').value); return t ? t.label : 'Team'; }
@@ -5876,30 +5886,55 @@ function openShare() {
   ts.innerHTML = '';
   for (const t of teams) ts.add(new Option(`${t.label}${t.dog ? ` – ${t.dog}` : ''}`, t.id));
   if (teams.some((t) => t.id === prev)) ts.value = prev;
-  if (shareScope === 'all' || !shareSel) { shareScope = shareSel ? shareScope : 'all'; if (shareScope === 'all') shareSel = selectAll(P); }
+  if (!shareInit) { // erstes Öffnen: zuletzt gewählter Empfänger dieses Geräts (Team wird nicht gemerkt)
+    shareInit = true;
+    if (SHARE_TO.includes(db.shareTo)) applyShareTo(db.shareTo);
+  }
+  // Rückkehr von der Kartenauswahl ohne passenden Empfänger -> „Sonstige“ (alle Wege außer QR)
+  if (!shareTo && (shareScope === 'pick' || shareScope === 'area') && shareSel) shareTo = 'other';
+  if (shareTo === 'el' || shareScope === 'all') { if (shareTo) shareSel = selectAll(P); }
   if (shareScope === 'team') shareSel = selectTeam(P, ts.value);
   renderShare();
   openPanel('panel-share');
 }
+// Empfänger setzen und den Umfang dazu sinnvoll vorbelegen
+function applyShareTo(to) {
+  shareTo = to;
+  if (to === 'team') { shareScope = 'team'; shareSel = $('share-team').value ? selectTeam(P, $('share-team').value) : emptySel(); }
+  else if (to === 'el') { shareScope = 'all'; shareSel = selectAll(P); }
+  else if (to === 'ua') {
+    if (shareScope === 'all' || shareScope === 'team' || !shareSel) { shareScope = 'pick'; shareName = 'Auswahl'; shareSel = emptySel(); }
+  } else if (shareScope === 'team' || !shareSel) { shareScope = 'all'; shareSel = selectAll(P); }
+}
 function renderShare() {
+  const to = shareTo;
+  const app = to === 'ua' || to === 'el'; // nur QR-Übergabe
+  document.querySelectorAll('#share-to button').forEach((b) => b.classList.toggle('active', b.dataset.to === to));
   document.querySelectorAll('#share-scopes button').forEach((b) => b.classList.toggle('active', b.dataset.scope === shareScope));
-  $('share-team').hidden = shareScope !== 'team';
+  document.querySelector('#share-scopes [data-scope=all]').hidden = to === 'ua';
+  const hasTeams = P.marks.some((m) => m.kind === 'team');
+  $('share-team').hidden = to !== 'team' || !hasTeams;
+  $('share-tohint').textContent = to ? (to === 'team' && !hasTeams ? 'Noch keine Teams angelegt (Teams → „+ Team“).' : SHARE_HINT[to]) : 'Zuerst wählen, an wen es geht – dann kommen die passenden Wege.';
+  $('share-what').hidden = !to || to === 'el';
+  $('share-how').hidden = !to;
   const sum = shareSel ? selSummary(P, shareSel) : '';
   $('share-summary').textContent = `${shareScope === 'all' ? 'Ganzer Einsatz' : shareLabel()}: ${sum || 'nichts ausgewählt'}`;
   $('share-edit').hidden = shareScope === 'all';
-  $('share-gridlines').parentElement.hidden = !allGrids(P).length;
-  $('share-file').hidden = shareScope !== 'all';
+  $('share-gridlines').parentElement.hidden = app || !allGrids(P).length;
+  $('share-qr').hidden = to === 'other';
+  for (const id of ['share-garmin', 'share-mail', 'share-save', 'share-pdf']) $(id).hidden = app;
+  $('share-file').hidden = app || shareScope !== 'all';
   $('share-msg').textContent = '';
 }
+document.querySelectorAll('#share-to button').forEach((b) => b.addEventListener('click', () => {
+  applyShareTo(b.dataset.to);
+  db.shareTo = shareTo;
+  saveNow();
+  renderShare();
+}));
 document.querySelectorAll('#share-scopes button').forEach((b) => b.addEventListener('click', () => {
   const s = b.dataset.scope;
   if (s === 'all') { shareScope = 'all'; shareSel = selectAll(P); return renderShare(); }
-  if (s === 'team') {
-    if (!P.marks.some((m) => m.kind === 'team')) return toast('Noch keine Teams angelegt (Teams → „+ Team“)');
-    shareScope = 'team';
-    shareSel = selectTeam(P, $('share-team').value || P.marks.find((m) => m.kind === 'team').id);
-    return renderShare();
-  }
   if (s === 'area') {
     if (!allGrids(P).length && !P.items.some((it) => it.kind === 'track' && hasArea(it))) return toast('Kein Raster und kein Umriss vorhanden');
     shareScope = 'area';
@@ -5923,7 +5958,7 @@ function editShareSel(start) {
   updateGpxSelBar();
   redraw();
 }
-$('share-team').addEventListener('change', () => { shareSel = selectTeam(P, $('share-team').value); renderShare(); });
+$('share-team').addEventListener('change', () => { shareScope = 'team'; shareSel = selectTeam(P, $('share-team').value); renderShare(); });
 $('share-edit').addEventListener('click', () => {
   // ändern: die bisherige Auswahl auf der Karte weiter bearbeiten (wird zur eigenen Auswahl)
   if (shareScope !== 'pick') shareName = shareLabel();
@@ -5932,7 +5967,7 @@ $('share-edit').addEventListener('click', () => {
 });
 function shareReady() {
   if (shareSel && selCount(shareSel)) return true;
-  toast('Nichts ausgewählt – oben unter „Was?“ wählen');
+  toast('Nichts ausgewählt – oben unter „2. Was?“ wählen');
   return false;
 }
 const shareGpx = () => gpxSelFile(shareSel, $('share-gridlines').checked, shareScope === 'all' ? 'Einsatz' : shareLabel());
@@ -5946,17 +5981,9 @@ $('share-save').addEventListener('click', () => shareRun(async () => { const f =
 $('share-file').addEventListener('click', () => $('proj-share').click());
 $('share-qr').addEventListener('click', () => shareRun(async () => {
   stamp(); // feste IDs vor dem Ausschneiden eines Unterabschnitts
-  if (shareScope === 'all') return handoverQr(P, true);
-  const to = await openDlg((box, close) => {
-    dlgHead(box, '📲 QR-Code für …', `„${shareLabel()}“: ${selSummary(P, shareSel)}`);
-    dlgButton(box, '🐕 Hundeführer<small>öffnet als Auftrag, Rückmeldung kommt zurück</small>', 'primary', () => close('hf'));
-    dlgButton(box, '🚐 EL / ELW: ganzer Einsatz<small>alles, Rückmeldungen laufen dann dort ein</small>', '', () => close('all'));
-    dlgButton(box, '🚐 EL / ELW: Unterabschnitt<small>nur dieses Gebiet, dazu B-Ort, Lage-Orte, Stammdaten und Protokoll des Einsatzes</small>', '', () => close('el'));
-    dlgButton(box, 'Abbrechen', '', () => close(null));
-  });
-  if (to === 'all') return handoverQr(P, true);
-  if (to === 'el') return handoverQr(subsetProject(P, shareSel, `${P.title || 'Einsatz'} – UA ${shareLabel()}`, { base: true }), false);
-  if (to === 'hf') prefillSend(shareSel, shareScope === 'team' ? $('share-team').value : '');
+  if (shareTo === 'el') return handoverQr(P, true);
+  if (shareTo === 'ua') return handoverQr(subsetProject(P, shareSel, `${P.title || 'Einsatz'} – UA ${shareLabel()}`, { base: true }), false);
+  if (shareTo === 'team') prefillSend(shareSel, $('share-team').value, shareScope === 'team' ? 'team' : 'pick');
 }));
 $('share-pdf').addEventListener('click', () => shareRun(async () => {
   if (shareScope === 'all') return openExport();
@@ -5970,7 +5997,7 @@ $('share-pdf').addEventListener('click', () => shareRun(async () => {
   await shareFile(res.blob, safeName(shareLabel(), '.pdf'), q.title, mailText(q.title));
 }));
 // Auftrags-Fenster für Hundeführer mit der Auswahl vorbelegen
-function prefillSend(sel, teamId) {
+function prefillSend(sel, teamId, fields) {
   for (const id of ['send-grids', 'send-items', 'send-pois']) $(id).innerHTML = '';
   renderSend();
   $('send-team').value = teamId || '';
@@ -5980,7 +6007,7 @@ function prefillSend(sel, teamId) {
   for (const inp of $('send-grids').querySelectorAll('input')) inp.checked = sel.edges.has(inp.value) || ((sel.cells.get(inp.value) || new Set()).size > 0);
   for (const inp of $('send-pois').querySelectorAll('input')) inp.checked = [...sel.pois].some((x) => x.id === inp.value);
   $('send-meet').checked = !!sel.meet;
-  const mode = teamId ? 'team' : 'pick';
+  const mode = fields || (teamId ? 'team' : 'pick');
   if (mode === 'pick') sendPicked = Object.fromEntries([...sel.cells].map(([id, s]) => [id, new Set(s)]));
   document.querySelector(`input[name=send-fields][value=${mode}]`).checked = true;
   syncSendFields();
