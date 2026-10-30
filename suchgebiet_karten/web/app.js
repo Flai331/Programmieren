@@ -52,6 +52,8 @@ import {
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
 const APP_VERSION = 'v90';
+// Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
+const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -2945,7 +2947,7 @@ function sendSelection() {
     picked: Object.fromEntries(Object.entries(sendPicked).map(([k, v]) => [k, [...v]])),
     itemIdx: idx, meet: $('send-meet').checked && !!P.meet, rescue,
     poiIds: [...$('send-pois').querySelectorAll('input:checked')].map((i) => i.value), hint: $('send-hint').value.trim(), person: $('send-person').checked,
-    liveUrl: db.statusUrl || (P.live && P.live.url) || '', // UA/ELW ohne eigene Einstellung: Server des Einsatzes
+    liveUrl: db.statusUrl || (P.live && P.live.url) || STATUS_URL, // eigene Einstellung, sonst Server des Einsatzes, sonst Standard
     contacts: $('send-contacts').checked
       ? sendContactsAll().filter((c) => c.id === 'lead' || !$('send-ct-list').querySelector(`input[value="${c.id}"]:not(:checked)`)) : [],
   };
@@ -3954,7 +3956,7 @@ $('dev-status-url').addEventListener('change', () => {
   }
   db.statusUrl = v || null;
   saveNow();
-  toast(v ? '📣 Status-Server gespeichert – gilt für neue Aufträge' : 'Status-Server entfernt – neue Aufträge ohne Status-Meldungen');
+  toast(v ? '📣 Eigener Status-Server gespeichert – gilt für neue Einsätze' : '📣 Standard-Status-Server wird benutzt');
 });
 // Standard-Kartenart dieses Geräts (oder null): gilt für neue, übernommene und geladene Einsätze
 function devLayer() {
