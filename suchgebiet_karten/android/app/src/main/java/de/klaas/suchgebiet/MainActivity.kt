@@ -38,6 +38,8 @@ import java.io.File
 class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
+    // Seite fertig geladen? Vorher würde ein gesetzter Hash verpuffen (neuer Link muss dann neu geladen werden)
+    private var pageReady = false
     private val host = "appassets.androidplatform.net"
     private val startUrl = "https://$host/assets/index.html"
 
@@ -183,6 +185,14 @@ class MainActivity : ComponentActivity() {
                 return assetLoader.shouldInterceptRequest(request.url)
             }
 
+            override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                pageReady = false
+            }
+
+            override fun onPageFinished(view: WebView, url: String?) {
+                pageReady = true
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (request.url.host == host) return false
                 // mailto:, Links zu Lizenzen usw. in anderen Apps öffnen
@@ -272,6 +282,9 @@ class MainActivity : ComponentActivity() {
 
         val link = sharedHash(intent)
         receiveFile(intent)
+        // Link nur einmal verwenden: sonst öffnet ein Neuaufbau der App (Drehen, Android hat sie beendet)
+        // wieder den alten Auftrag statt des zuletzt gescannten
+        if (link != null) intent.data = null
         if (savedInstanceState != null && link == null) webView.restoreState(savedInstanceState)
         else webView.loadUrl(startUrl + (link ?: ""))
     }
@@ -292,8 +305,12 @@ class MainActivity : ComponentActivity() {
             return
         }
         val link = sharedHash(intent) ?: return
-        // App läuft schon: nur den Hash setzen, die Web-App übernimmt die Daten (hashchange)
-        webView.evaluateJavascript("location.hash=" + org.json.JSONObject.quote(link), null)
+        intent.data = null
+        setIntent(intent)
+        // App läuft schon: nur den Hash setzen, die Web-App übernimmt die Daten (hashchange).
+        // Lädt die Seite gerade noch (App wurde eben neu aufgebaut), neu laden – mit dem neuen Link.
+        if (pageReady) webView.evaluateJavascript("location.hash=" + org.json.JSONObject.quote(link), null)
+        else webView.loadUrl(startUrl + link)
     }
 
     // Datei aus ACTION_SEND (Teilen) bzw. ACTION_VIEW mit content:-Adresse (Öffnen mit) lesen

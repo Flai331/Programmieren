@@ -1,13 +1,14 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v100**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v102**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v102 – 🐛 APK: neu gescannter Auftrag öffnet sich (nicht der alte)**: Mit der Handy-Kamera gescannte Auftrags-Links öffneten in der laufenden APK manchmal den alten Auftrag – wenn Android die App im Hintergrund beendet oder neu aufgebaut hatte, wurde der zuerst geöffnete Link erneut geladen und der neue ging verloren. Jetzt wird jeder Link nur einmal verwendet, und ein neuer Link während des Ladens lädt die Seite mit dem neuen Link. Wartet auf Klaas' Test.
 - [~] **v101 – ✅ Auftrag abschließen · Markierungen gehen an das nächste Team mit** (Plan: `PLAN-v101-auftrag-abschliessen.md`): Hundeführer: eigener Knopf „✅ Auftrag abschließen“ im 📣 Status-Fenster (Stand je Gebiet, Grund optional, auch bei unter 100 %), Meldung „Auftrag abgeschlossen“ und danach gleich 📤 Zurückgeben; Kopfzeile „✅ abgeschlossen – bitte zurückgeben“. Einsatzleitung: Karte und Team-Chip zeigen „✅ meldet abgeschlossen hh:mm (80 %)“; Rückfrage „Auftrag {Team} abschließen?“, sobald Meldung und QR-Rückmeldung da sind (egal in welcher Reihenfolge; nach „Noch offen lassen“ nicht doppelt), dazu Knopf „✅ Abschließen“ auf jeder übernommenen Auftragskarte. Abgeschlossen: Karte grau im aufklappbaren Bereich „✅ Abgeschlossen“ mit „↩ Wieder öffnen“, Chip weg (Team frei), grüne Plakette „✅ Team · 80 %“, 🔒-Schutz entfällt. Neue Vergabe eines Gebiets (auch über Teilen → Team) nimmt Wege/Markierungen der Vorgänger-Rückmeldungen als abwählbare Gruppe „Vom vorherigen Team (Team 1, 80 %)“ mit; beim neuen Hundeführer grau, nur zum Ansehen (🔒), mit „Vorher: 80 % von Team 1 abgesucht“ im Auftragstext, gehen nicht mit zurück. Wartet auf Klaas' Test.
 - [~] **v100 – 🅿️ Parkplatz Auto mit Ort · Plaketten außerhalb**: Die Meldung „🅿️ Parkplatz Auto“ fragt „Wo steht das Auto?“ – 📍 Mein Standort (hier) oder 👆 Auf der Karte setzen. Der Ort geht mit an die Einsatzleitung und steht dort als 🅿️ auf der Karte. Status-Plaketten der Gebiete stehen immer außerhalb des Gebiets (mit Verbindungslinie) und weichen Markierungen, Lage-Orten, Gebietsnamen, anderen Plaketten und den Knöpfen am Rand aus. Wartet auf Klaas' Test.
 - [~] **v99 – 📤 Teilen: erst „An wen?“, dann „Was?“, dann „Wie?“** (nur Einsatzleitung, Plan: `PLAN-v99-teilen-an-wen.md`): Empfänger zuerst wählen – Hundeführer/Team (Teamauswahl, Felder und Umrisse des Teams vorausgewählt, QR-Code = Auftrag, alle Wege), Unterabschnitt (Gebiet wählen, nur QR-Code = UA), EL/ELW (ganzer Einsatz, nur QR-Code), Sonstige (alle Wege außer QR). Zwischendialog „QR-Code für …“ entfällt. Zuletzt gewählter Empfänger wird pro Gerät gemerkt. Wartet auf Klaas' Test.
