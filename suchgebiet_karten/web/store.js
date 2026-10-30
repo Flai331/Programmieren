@@ -48,6 +48,7 @@ export function newProject(title = '') {
     contacts: [], // Kontakte dieses Einsatzes (Kopien aus dem Adressbuch), gehen auf Wunsch mit dem Auftrag
     pois: [], // Lage-Orte (ELW-Infos)
     poiDel: {}, // gelöschte Lage-Orte { id: Zeit } für den Abgleich zwischen Geräten
+    msgSeen: {}, msgRecv: {}, msgSnooze: 0, // v98 (nur dieses Gerät)
     msgDel: {}, // v95: gelöschte Status-Meldungen { id: Zeit }
     eid: '', // Einsatz-ID über Geräte hinweg (Übergabe Handy -> Tablet)
     // v90: Fortschritt senden (progress.js) und UA-Sperren (locks.js)
@@ -85,6 +86,12 @@ export function normalizeProject(p) {
   out.pois = normalizePois(out.pois);
   if (!out.poiDel || typeof out.poiDel !== 'object' || Array.isArray(out.poiDel)) out.poiDel = {};
   if (!out.msgDel || typeof out.msgDel !== 'object' || Array.isArray(out.msgDel)) out.msgDel = {};
+  // v98: ungelesene Status-Meldungen – nur dieses Gerät: msgSeen/msgRecv { id: Zeit }, msgSnooze = Erinnerung ruht bis (ms)
+  for (const k of ['msgSeen', 'msgRecv']) {
+    const o = out[k] && typeof out[k] === 'object' && !Array.isArray(out[k]) ? out[k] : {};
+    out[k] = Object.fromEntries(Object.entries(o).filter(([, t]) => Number.isFinite(Number(t))).map(([i, t]) => [i, Number(t)]));
+  }
+  out.msgSnooze = Number(out.msgSnooze) > 0 ? Number(out.msgSnooze) : 0;
   // v95: Aufträge – acc = Zeit der Übernahme (ältere Aufträge gelten als übernommen), items/cells = was zum Auftrag gehört
   if (Array.isArray(out.sent)) {
     out.sent = out.sent.filter((x) => x && x.id).map((x) => {

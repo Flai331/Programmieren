@@ -43,6 +43,10 @@ import {
 import {
   STATUS_LIST, SPOT_LIST, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, mergeStatus, withoutDeleted, latestFor, flushOutbox, pollMessages, coverageGaps, areaShapes,
 } from './status.js';
+import {
+  teamChips, chipText, teamAssignments, teamMsgs, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, unreadAge, bannerText, parseSnooze,
+  snoozeUntilFrom, snoozeText, historyFilter, historyTeams, SNOOZE_PICKS,
+} from './statusbar.js';
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
@@ -53,7 +57,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v97';
+const APP_VERSION = 'v98';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -76,7 +80,7 @@ const repDedup = makeDedup();
 
 // ---------- Zustand ----------
 // db: alle Suchgebiete; P: das aktuelle; grid wird aus P.area + P.cellM berechnet
-let db = { projects: {}, currentId: null, color: COLORS[0], w: 5, activeMark: null };
+let db = { projects: {}, currentId: null, color: COLORS[0], w: 5, activeMark: null, teamsOpen: false };
 let P = null;
 let grid = null;
 let tool = 'pan';
@@ -98,6 +102,7 @@ function load() {
   try {
     const s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
     if (s && s.projects) db = { ...db, ...s };
+    db.teamsOpen = !!db.teamsOpen; // v98: Team-Liste auf dem Handy offen (pro Gerät)
   } catch { /* defekter Speicher -> Neustart */ }
   if (!Object.keys(db.projects).length) {
     let p = null;
@@ -196,6 +201,7 @@ function changed() {
   renderHanded();
   applyClosed();
   renderStatusBtn();
+  renderTeamBar();
   updateGridInfo();
   renderPalette();
   if (!$('panel-teams').hidden) renderMarks();
@@ -2489,6 +2495,7 @@ function applyMode() {
   renderHfInfo();
   renderHanded();
   applyClosed();
+  renderTeamBar();
   renderDeviceName();
   map.invalidateSize();
   resizeCanvas();
@@ -3093,6 +3100,7 @@ $('send-copy').addEventListener('click', async () => {
 // Übersicht der Einsatzleitung: welches Team hat welchen Auftrag, seit wann, kamen Rückmeldungen?
 const SENT_QUIET = 60 * 60e3; // so lange ohne Rückmeldung: orange markieren
 function renderSentList() {
+  renderTeamBar();
   const box = $('sent-list');
   box.innerHTML = '';
   const list = [...(P.sent || [])].reverse();
@@ -3340,8 +3348,8 @@ function statusText({ m }) {
     ].filter(Boolean).join(' · ');
 }
 // EL: Meldung antippen – Text und Löschen (nach Warnung); gelöscht wird nur auf diesem Gerät (und per Fortschritt bei den anderen EL-Geräten)
-async function msgDialog(m) {
-  const del = await openDlg((box, close) => {
+async function msgDialog(m, direct = false) {
+  const del = direct || await openDlg((box, close) => {
     dlgHead(box, 'Meldung', statusText({ m }));
     dlgButton(box, '🗑 Löschen', 'urgent', () => close(true));
     dlgButton(box, 'Schließen', 'primary', () => close(false));
@@ -3358,6 +3366,7 @@ async function msgDialog(m) {
   changed();
   redraw();
   renderSentList();
+  renderStatusPanel();
   saveNow();
   toast('Meldung gelöscht');
 }
@@ -3625,6 +3634,372 @@ async function doneDialog() {
 }
 $('hf-status').addEventListener('click', openStatusDialog);
 
+// ---- v98: Team-Chips, Ungelesen, Erinnerung, Status-Verlauf (Einsatzleitung) ----
+const isTablet = () => window.matchMedia('(min-width: 700px)').matches;
+const teamKeyOf = (a) => { const x = (P.sent || []).find((q) => q.id === a); return x ? x.teamId || `n:${x.team || ''}` : ''; };
+const areasText = (x) => [...sentAreas(x).keys()].join(' + ') || x.what || '';
+const unreadNow = () => (db.mode === 'el' && P ? unreadMsgs(allMsgs(), P.msgSeen, P.msgRecv) : []);
+function readMsgs(list) {
+  const l = list || unreadNow();
+  if (!l.length) return;
+  markSeen(P.msgSeen, l);
+  prune(P.msgSeen);
+  saveNow();
+}
+let tbSig = '';
+let lastChips = [];
+let unreadOpen = false;
+let lastBeepAt = null;
+let popChip = null;
+let stFilter = '';
+let stFresh = new Set();
+
+// Gebiet eines Auftrags als Punkte (Felder des Teams, Raster, Umrisse) – für „Karte springt dorthin“
+function sentPoints(x) {
+  const pts = [];
+  for (const g of allGrids(P).filter((q) => (x.grids || []).includes(q.id))) {
+    const gr = makeGrid(g.area, g.cellM);
+    const keys = Object.keys(g.fills).filter((k) => g.fills[k] === x.teamId);
+    if (!keys.length) { pts.push([g.area.north, g.area.west], [g.area.south, g.area.east]); continue; }
+    for (const k of keys) { const [c, r] = k.split(',').map(Number); const b = cellBounds(gr, c, r); pts.push([b.north, b.west], [b.south, b.east]); }
+  }
+  for (const id of x.items || []) {
+    const it = P.items.find((q) => q.id === id);
+    if (it && it.pts) for (const q of it.pts) pts.push([q[0], q[1]]);
+  }
+  if (!pts.length && x.ctr) pts.push(x.ctr);
+  return pts;
+}
+function jumpToChip(c) {
+  const x = (P.sent || []).find((q) => q.id === c.a);
+  const pts = x ? sentPoints(x) : [];
+  if (!pts.length) return;
+  const b = L.latLngBounds(pts);
+  if (b.getNorth() - b.getSouth() < 1e-5 && b.getEast() - b.getWest() < 1e-5) map.setView(b.getCenter(), 17);
+  else map.fitBounds(b, { maxZoom: 17, paddingTopLeft: [76, 70], paddingBottomRight: [84, 150] });
+}
+
+function chipEl(c, unread, blink) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = `tchip${c.wait ? ' wait' : ''}${c.urgent ? ' urgent' : ''}${unread ? ' unread' : ''}${blink ? ' blink' : ''}`;
+  b.style.setProperty('--tc', c.color);
+  b.dataset.team = c.key;
+  b.innerHTML = '<i></i><span></span>';
+  b.querySelector('span').textContent = chipText(c);
+  b.title = chipText(c);
+  b.addEventListener('click', () => chipTap(c));
+  return b;
+}
+function chipTap(c) {
+  readMsgs(unreadNow().filter((m) => teamKeyOf(m.a) === c.key));
+  jumpToChip(c);
+  popChip = c;
+  tbSig = '';
+  renderTeamBar();
+  renderPop();
+}
+// Tablet: so viele Chips wie passen, Rest als „+n“
+let chipsW = 0;
+function paintChips() {
+  const box = $('teamchips');
+  box.innerHTML = '';
+  if (!isTablet() || db.mode !== 'el' || !lastChips.length) { box.hidden = true; return; }
+  box.hidden = false;
+  const els = lastChips.map((q) => chipEl(q.c, q.unread, q.blink));
+  els.forEach((e) => box.appendChild(e));
+  chipsW = box.clientWidth;
+  const ws = els.map((e) => e.offsetWidth + 6);
+  const MORE = 56;
+  let k = els.length;
+  const sum = (n) => ws.slice(0, n).reduce((a, b) => a + b, 0);
+  while (k > 1 && sum(k) + (k < els.length ? MORE : 0) > chipsW) k--;
+  if (k < els.length) {
+    const hidden = lastChips.slice(k);
+    els.slice(k).forEach((e) => e.remove());
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = `tchip more${hidden.some((q) => q.unread) ? ' unread' : ''}`;
+    more.textContent = `+${hidden.length}`;
+    more.title = hidden.map((q) => chipText(q.c)).join('\n');
+    more.addEventListener('click', () => openStatusPanel(''));
+    box.appendChild(more);
+  }
+}
+new ResizeObserver(() => { if ($('teamchips').clientWidth !== chipsW && lastChips.length) paintChips(); }).observe($('teamchips'));
+
+function unreadRows(box, ur) {
+  const h = document.createElement('h3');
+  h.textContent = `📣 Ungelesene Meldungen (${ur.length})`;
+  box.appendChild(h);
+  for (const m of [...ur].reverse()) {
+    const d = document.createElement('div');
+    d.className = 'tm-ur';
+    d.style.setProperty('--tc', teamColorOf(m.a));
+    d.innerHTML = '<b></b><span></span><time></time>';
+    d.querySelector('b').textContent = m.tm || 'Team';
+    d.querySelector('span').textContent = `${msgLabel(m)}${m.txt ? ` – ${m.txt}` : ''}`;
+    d.querySelector('time').textContent = hhmm(m.t);
+    box.appendChild(d);
+  }
+  const n = document.createElement('p');
+  n.className = 'tm-note';
+  n.textContent = 'Tipp irgendwohin = gelesen';
+  box.appendChild(n);
+}
+function renderTeamBar() {
+  const el = db.mode === 'el' && !!P;
+  const now = Date.now();
+  const chips = el ? teamChips(P.sent, allMsgs(), P.marks, P.items, areasText) : [];
+  const ur = unreadNow();
+  const cnt = $('st-count');
+  cnt.hidden = !ur.length;
+  cnt.textContent = ur.length;
+  if (el && ur.length >= 2 && !unreadOpen && !(P.msgSnooze > now)) openUnread(); // mehrere ungelesene: Liste klappt auf
+  if (!ur.length && unreadOpen) { unreadOpen = false; document.removeEventListener('pointerdown', onAnyTap, true); }
+  const tab = isTablet();
+  const urKeys = new Set(ur.map((m) => teamKeyOf(m.a)));
+  const newKeys = new Set(ur.filter((m) => now - (P.msgRecv[m.id] || 0) < 30e3).map((m) => teamKeyOf(m.a)));
+  const hasSent = el && (P.sent || []).length > 0;
+  const sig = JSON.stringify([el, tab, db.teamsOpen, unreadOpen, hasSent, ur.map((m) => m.id),
+    chips.map((c) => [c.key, c.status, c.areas, c.urgent, c.wait, c.color, c.team, c.dog, urKeys.has(c.key), newKeys.has(c.key)])]);
+  if (sig === tbSig) return;
+  tbSig = sig;
+  lastChips = chips.map((c) => ({ c, unread: urKeys.has(c.key), blink: newKeys.has(c.key) }));
+  paintChips();
+  // Handy: Knopf „📣 Teams“ + aufklappbare Liste
+  const btn = $('tm-btn');
+  btn.hidden = !hasSent;
+  btn.classList.toggle('open', !!db.teamsOpen);
+  const bn = $('tm-btn-n');
+  bn.hidden = !ur.length;
+  bn.textContent = ur.length;
+  btn.classList.remove('blink');
+  if (ur.length && !db.teamsOpen && !unreadOpen) { void btn.offsetWidth; btn.classList.add('blink'); }
+  const list = $('tm-list');
+  list.innerHTML = '';
+  list.hidden = !(el && !tab && db.teamsOpen && !unreadOpen);
+  if (!list.hidden) {
+    if (!chips.length) { const p = document.createElement('p'); p.className = 'tm-note'; p.textContent = 'Keine laufenden Aufträge.'; list.appendChild(p); }
+    for (const q of lastChips) list.appendChild(chipEl(q.c, q.unread, q.blink));
+  }
+  const box = $('tm-unread');
+  box.innerHTML = '';
+  box.hidden = !(el && unreadOpen);
+  if (!box.hidden) unreadRows(box, ur);
+  renderBanner(ur, now);
+  if (popChip) { popChip = chips.find((q) => q.key === popChip.key) || popChip; renderPop(); }
+}
+// Liste der ungelesenen: ein Tipp irgendwohin schließt sie und markiert alles als gelesen
+function onAnyTap() { closeUnread(); }
+function openUnread() {
+  if (unreadOpen) return;
+  unreadOpen = true;
+  tbSig = '';
+  document.addEventListener('pointerdown', onAnyTap, true);
+}
+function closeUnread() {
+  if (!unreadOpen) return;
+  unreadOpen = false;
+  document.removeEventListener('pointerdown', onAnyTap, true);
+  readMsgs();
+  $('tm-unread').hidden = true;
+  // Neuaufbau der Chips erst nach dem Tipp, sonst geht der Klick auf einen Chip verloren
+  setTimeout(() => { tbSig = ''; renderTeamBar(); checkUnread(); }, 350);
+}
+$('tm-btn').addEventListener('click', () => {
+  db.teamsOpen = !db.teamsOpen;
+  saveNow();
+  tbSig = '';
+  renderTeamBar();
+});
+map.on('click', () => {
+  closePop();
+  if (!isTablet() && db.teamsOpen) { db.teamsOpen = false; saveNow(); tbSig = ''; renderTeamBar(); }
+});
+
+// Infofenster eines Chips: letzte 3 Meldungen des Teams
+function closePop() { popChip = null; $('tm-pop').hidden = true; }
+function renderPop() {
+  const box = $('tm-pop');
+  const c = popChip;
+  if (!c || db.mode !== 'el') { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = '';
+  box.style.setProperty('--tc', c.color);
+  const h = document.createElement('h3');
+  const t = document.createElement('span');
+  t.textContent = `${c.team}${c.dog ? ` (${c.dog})` : ''}${c.areas ? ` · ${c.areas}` : ''}`;
+  const x = document.createElement('button');
+  x.type = 'button';
+  x.textContent = '✕';
+  x.setAttribute('aria-label', 'Schließen');
+  x.addEventListener('click', closePop);
+  h.append(t, x);
+  box.appendChild(h);
+  const ids = new Set(c.teamId ? teamAssignments(P.sent, c.teamId) : [c.a]);
+  const ms = allMsgs().filter((m) => ids.has(m.a)).slice(-3).reverse();
+  if (!ms.length) { const p = document.createElement('div'); p.className = 'ln'; p.textContent = c.wait ? '📲 wartet auf Übernahme' : 'Noch keine Meldungen.'; box.appendChild(p); }
+  for (const m of ms) {
+    const d = document.createElement('div');
+    d.className = `ln${isUrgent(m) ? ' urgent' : ''}`;
+    d.textContent = `${hhmm(m.t)} · ${msgLabel(m)}${m.lat != null ? ' · 📍' : ''}${m.txt ? ` – ${m.txt}` : ''}`;
+    box.appendChild(d);
+  }
+  const all = document.createElement('button');
+  all.type = 'button';
+  all.className = 'all';
+  all.textContent = 'Alle Meldungen';
+  all.addEventListener('click', () => { closePop(); openStatusPanel(c.teamId || ''); });
+  box.appendChild(all);
+}
+
+// ---- Erinnerung: Banner, Piepton, Schlummern ----
+async function snoozeDialog() {
+  const min = await openDlg((box, close) => {
+    dlgHead(box, '💤 Erinnerung schlummern', 'Banner und Piepton ruhen. Fund und Hilfe kommen weiter sofort. Neue Meldungen blinken trotzdem am Chip.');
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.inputMode = 'numeric';
+    inp.id = 'snooze-min';
+    inp.className = 'dlg-snz';
+    inp.placeholder = 'Minuten';
+    inp.value = '10';
+    inp.autocomplete = 'off';
+    box.appendChild(inp);
+    const row = document.createElement('div');
+    row.className = 'dlg-btns two';
+    for (const n of SNOOZE_PICKS) {
+      const b = document.createElement('button');
+      b.textContent = `${n} min`;
+      b.addEventListener('click', () => close(n));
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+    dlgButton(box, '💤 Schlummern', 'primary', () => {
+      const n = parseSnooze(inp.value);
+      if (n == null) { inp.style.borderColor = '#d50000'; toast('Bitte Minuten als Zahl eingeben (1 – 720)'); return; }
+      close(n);
+    });
+    dlgButton(box, 'Abbrechen', '', () => close(0));
+  });
+  if (!min) return;
+  P.msgSnooze = snoozeUntilFrom(Date.now(), min);
+  saveNow();
+  toast(`${snoozeText(P.msgSnooze)} – Erinnerung ruht`);
+  checkUnread();
+  renderStatusPanel();
+}
+function unsnooze() {
+  P.msgSnooze = 0;
+  saveNow();
+  checkUnread();
+  renderStatusPanel();
+}
+let bannerSig = '';
+function renderBanner(ur, now) {
+  const b = $('tm-banner');
+  const snoozed = !!P && P.msgSnooze > now;
+  const al = unreadAlert(ur, P ? P.msgRecv : {}, now, P ? P.msgSnooze : 0, lastBeepAt);
+  if (!(db.mode === 'el' && !unreadOpen && ur.length && (snoozed || al !== 'none'))) { b.hidden = true; bannerSig = ''; return al; }
+  const text = snoozed ? `${snoozeText(P.msgSnooze)} · ${ur.length} ungelesen` : bannerText(ur.length, unreadAge(ur, P.msgRecv, now));
+  const sig = `${snoozed}|${text}`;
+  b.hidden = false;
+  if (sig === bannerSig) return al;
+  bannerSig = sig;
+  b.classList.toggle('calm', snoozed);
+  b.innerHTML = '<span></span><button type="button"></button>';
+  b.querySelector('span').textContent = text;
+  const btn = b.querySelector('button');
+  btn.textContent = snoozed ? 'Aufheben' : '💤 Schlummern';
+  btn.addEventListener('click', (e) => { e.stopPropagation(); if (snoozed) unsnooze(); else snoozeDialog(); });
+  return al;
+}
+$('tm-banner').addEventListener('click', () => { openUnread(); renderTeamBar(); });
+// Alle 15 s (und nach jedem Abholen): Banner / Piepton nach Regel
+function checkUnread() {
+  if (db.mode !== 'el' || !P) { $('tm-banner').hidden = true; return; }
+  const now = Date.now();
+  if (P.msgSnooze && P.msgSnooze <= now) P.msgSnooze = 0;
+  const ur = unreadNow();
+  if (!ur.length) lastBeepAt = null;
+  const al = renderBanner(ur, now);
+  if (al === 'beep') { lastBeepAt = now; beepShort(); }
+}
+
+// ---- Verlauf: Kachel „📣 Status“ ----
+function renderStatusPanel() {
+  if (!P) return;
+  const sel = $('st-filter');
+  const teams = historyTeams(P.sent, P.marks);
+  if (stFilter && !teams.some((t) => t.id === stFilter)) stFilter = '';
+  sel.innerHTML = '';
+  for (const [v, l] of [['', 'Alle Teams'], ...teams.map((t) => [t.id, t.label])]) {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = l;
+    sel.appendChild(o);
+  }
+  sel.value = stFilter;
+  const sz = $('st-snz');
+  const now = Date.now();
+  sz.hidden = !(P.msgSnooze > now);
+  if (!sz.hidden) {
+    sz.innerHTML = '<span></span><button type="button">Aufheben</button>';
+    sz.querySelector('span').textContent = `${snoozeText(P.msgSnooze)} – Erinnerung ruht (Fund/Hilfe nicht)`;
+    sz.querySelector('button').addEventListener('click', unsnooze);
+  }
+  const box = $('st-list');
+  box.innerHTML = '';
+  const list = historyFilter(allMsgs(), P.sent, stFilter);
+  if (!list.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = 'Noch keine Meldungen.'; box.appendChild(p); }
+  for (const m of list.slice(0, 300)) {
+    const x = (P.sent || []).find((q) => q.id === m.a);
+    const team = x && P.marks.find((q) => q.id === x.teamId);
+    const d = document.createElement('div');
+    d.className = `st-row${isUrgent(m) ? ' urgent' : ''}${m.lat != null ? ' loc' : ''}${stFresh.has(m.id) ? ' unread' : ''}`;
+    d.style.setProperty('--tc', team ? team.color : '#455a64');
+    d.innerHTML = '<div class="tx"><b></b><span></span><br><small></small></div><button type="button" class="del" aria-label="Meldung löschen">🗑</button>';
+    d.querySelector('b').textContent = `${team ? team.label : m.tm || 'Team'}${team && team.dog ? ` (${team.dog})` : ''}`;
+    d.querySelector('span').textContent = `${msgLabel(m)}${m.lat != null ? ' 📍' : ''}${m.txt ? ` – ${m.txt}` : ''}`;
+    d.querySelector('small').textContent = `${hhmm(m.t)} (vor ${sinceText(m.t, now)})`;
+    if (m.lat != null) d.addEventListener('click', () => showStatusMark(m));
+    d.querySelector('.del').addEventListener('click', (e) => { e.stopPropagation(); msgDialog(m, true); });
+    box.appendChild(d);
+  }
+}
+function openStatusPanel(teamId = stFilter) {
+  stFilter = teamId || '';
+  stFresh = new Set(unreadNow().map((m) => m.id));
+  renderStatusPanel();
+  openPanel('panel-status');
+  closePop();
+  if (unreadOpen) { unreadOpen = false; document.removeEventListener('pointerdown', onAnyTap, true); }
+  readMsgs();
+  tbSig = '';
+  renderTeamBar();
+}
+$('btn-status').addEventListener('click', () => openStatusPanel(''));
+$('st-filter').addEventListener('change', () => { stFilter = $('st-filter').value; renderStatusPanel(); });
+
+// ---- Suchfeld (Tablet): eingeklappt als 🔍, Antippen klappt es auf ----
+const searchForm = $('search-form');
+function collapseSearch() {
+  if (!searchForm.classList.contains('open')) return;
+  searchForm.classList.remove('open');
+  $('search-input').blur();
+}
+$('search-form').querySelector('.searchbtn').addEventListener('click', (e) => {
+  if (!isTablet() || db.mode !== 'el' || searchForm.classList.contains('open')) return;
+  e.preventDefault();
+  searchForm.classList.add('open');
+  $('search-input').focus();
+});
+$('search-input').addEventListener('blur', () => {
+  setTimeout(() => { if (!$('search-input').value.trim() && document.activeElement !== $('search-input')) collapseSearch(); }, 200);
+});
+window.matchMedia('(min-width: 700px)').addEventListener('change', () => { tbSig = ''; renderTeamBar(); });
+
 // ---- Einsatzleitung: Meldungen abholen ----
 async function pollLive() {
   const proj = P;
@@ -3642,11 +4017,12 @@ async function pollLive() {
         l.msgs = mergeStatus(l.msgs, fresh).slice(-500);
         markAccepted(proj, fresh); // erste Meldung (z. B. 📲 Quittung) = Auftrag übernommen
         proj.updated = Date.now();
+        prune(noteReceived(proj.msgRecv, fresh)); // v98: Eingang auf diesem Gerät -> ungelesen
         if (proj === P) {
-          renderSentList();
+          renderSentList(); // aktualisiert auch die Team-Chips
           redraw();
-          const last = fresh[fresh.length - 1];
-          if (!fresh.some(isUrgent)) toast(`📣 ${last.tm || 'Team'}: ${msgLabel(last)}${fresh.length > 1 ? ` (+${fresh.length - 1})` : ''}`, 6000);
+          checkUnread();
+          if ($('panel-status').hidden === false) renderStatusPanel();
         }
       }
       saveNow();
@@ -3654,6 +4030,23 @@ async function pollLive() {
   } catch { /* kein Netz oder Server weg: nächster Versuch */ }
   liveBusy = false;
   showUrgent();
+}
+function beepShort() {
+  try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch { /* egal */ }
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.type = 'square';
+    o.frequency.value = 660;
+    o.connect(g);
+    g.connect(ac.destination);
+    g.gain.setValueAtTime(0.1, ac.currentTime);
+    g.gain.setValueAtTime(0, ac.currentTime + 0.3);
+    o.start();
+    o.stop(ac.currentTime + 0.35);
+    setTimeout(() => ac.close().catch(() => {}), 1200);
+  } catch { /* Ton nur nach Tipp auf die Seite erlaubt */ }
 }
 function beep() {
   try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 600]); } catch { /* egal */ }
@@ -3710,6 +4103,9 @@ function startStatus() {
   showUrgent();
   setInterval(() => { if (navigator.onLine) flushStatus(); }, 60e3);
   setInterval(pollLive, 15e3); // Einsatzleitung: alle 15 s neue Status-Meldungen holen
+  renderTeamBar();
+  checkUnread();
+  setInterval(checkUnread, 15e3); // Erinnerung bei ungelesenen Meldungen
   window.addEventListener('online', () => { flushStatus(); pollLive(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { flushStatus(); pollLive(); } });
 }
@@ -5431,7 +5827,7 @@ for (const btn of ['btn-mission', 'btn-notes', 'btn-grid', 'btn-teams']) {
 // Seitenknopf nochmal antippen, während sein Fenster offen ist: Fenster schließen
 const SIDE_PANELS = {
   'btn-projects': 'panel-projects', 'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',
-  'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-more': 'panel-more', 'btn-hfmenu': 'panel-hfmenu', 'btn-pdf': 'panel-share', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
+  'btn-status': 'panel-status', 'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-more': 'panel-more', 'btn-hfmenu': 'panel-hfmenu', 'btn-pdf': 'panel-share', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
 };
 for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
   $(btn).addEventListener('click', (e) => {
@@ -6966,6 +7362,7 @@ function showSearchPin(lat, lon, label) {
 
 function closeSearch() {
   $('searchbar').hidden = true;
+  collapseSearch();
 }
 
 function goToPlace(r) {
@@ -7125,12 +7522,13 @@ $('search-form').addEventListener('submit', async (e) => {
   const q = parseQuery($('search-input').value);
   if (!q) return;
   const local = localResult(q);
-  if (local) { $('search-input').blur(); local.go(); return; }
+  if (local) { $('search-input').blur(); local.go(); collapseSearch(); return; }
   if (q.type === 'cell' && grid) { toast('Dieses Feld gibt es im Raster nicht.'); return; }
   // Enter: ersten Vorschlag nehmen, sonst sofort suchen
   if (shownResults.length && !$('searchbar').hidden) {
     $('search-input').blur();
     shownResults[0].go();
+    collapseSearch();
     return;
   }
   showResults([], 'Suche läuft …');
@@ -7217,7 +7615,7 @@ console.info(`Suchgebiet-Karten bereit (${bridge ? 'Android-App' : 'Browser'})`)
 
 // Für Tests
 window.__app = {
-  get P() { return P; }, get grid() { return grid; }, get db() { return db; }, map, setArea, setTool, saveNow, changed,
+  get P() { return P; }, get grid() { return grid; }, get db() { return db; }, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread,
 };
 
 // Modus anwenden, beim ersten Start fragen, Auftrag/Rückmeldung aus dem Link übernehmen
