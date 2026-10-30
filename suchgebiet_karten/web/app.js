@@ -2497,8 +2497,11 @@ async function pinHash(pin) {
 // Fenster, die beim Loslassen des Fingers aufgehen: der Klick, den das Handy danach schickt, darf nicht den
 // Knopf treffen, der jetzt unter dem Finger liegt (sonst z. B. sofort „Speichern“)
 let dlgOpenedAt = 0;
+let lastDownAt = 0;
+document.addEventListener('pointerdown', () => { lastDownAt = Date.now(); }, true);
 $('dlg-box').addEventListener('click', (e) => {
-  if (e.isTrusted && Date.now() - dlgOpenedAt < 400) { e.stopPropagation(); e.preventDefault(); } // .click() aus dem Code geht durch
+  // nur Klicks ohne eigenes Antippen nach dem Öffnen; .click() aus dem Code geht durch
+  if (e.isTrusted && lastDownAt < dlgOpenedAt && Date.now() - dlgOpenedAt < 600) { e.stopPropagation(); e.preventDefault(); }
 }, true);
 function openDlg(build, opts = {}) {
   const box = $('dlg-box');
