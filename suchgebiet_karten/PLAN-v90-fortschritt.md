@@ -40,8 +40,11 @@ Baut auf v89 (Status-Meldungen, `web/status.js`, Apps-Script, `P.live`) auf.
   Zusätzlich Knopf „Alles seit Beginn erneut senden“ (falls ein QR nicht ankam).
   Der Empfänger verträgt doppelte Inhalte (feste IDs), daher ist erneutes Senden unschädlich.
   „Nichts Neues seit HH:MM“ statt eines leeren QR-Codes.
-- Die bisherige Übergabe des ganzen Einsatzes (`#e`) bleibt nur für den ersten Start eines
-  weiteren EL-Geräts bzw. UA; danach läuft alles über „🔄 Fortschritt senden“.
+- Die Übergabe des ganzen Einsatzes (`#e`) bleibt **jederzeit im laufenden Einsatz** möglich,
+  z. B. wenn ein weiteres Gerät dazukommt (aktueller Gesamtstand). Das neue Gerät wird dabei
+  gleich als Empfänger in `P.peers` eingetragen (`lastSent = jetzt`), damit danach nur noch das
+  Neue per „🔄 Fortschritt senden“ läuft. Bekommt ein Gerät, das den Einsatz schon hat, erneut
+  den ganzen Einsatz, wird ergänzend zusammengeführt (wie Fortschritt), nichts überschrieben.
 - Meldung: „🔄 Fortschritt von <Gerät>: 12 Felder, 2 Wege, 3 Protokolleinträge“.
 - Knopf in „📤 Weitergeben“ neben „Infos senden“; Gerätename wie bei Infos.
 
