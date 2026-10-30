@@ -11,6 +11,7 @@ import { buildGpx, mergeGpx, parseGpx, parseKml, pointInPolygon, selectionGpx, g
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import { buildReport, describeTarget, makeDedup, makeLog } from './report.js';
 import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
+import { fileName } from './files.js';
 import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './infos.js';
 import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject } from './scope.js';
 import {
@@ -45,7 +46,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v83';
+const APP_VERSION = 'v84';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -2835,7 +2836,7 @@ $('btn-teams').addEventListener('click', renderSentList);
 // ---- Einsatzleitung: Rückmeldung übernehmen (Kamera oder eingefügter Link) ----
 async function handleShared(text) {
   const sh = parseShared(text);
-  if (!sh) return toast('Kein Auftrag und keine Rückmeldung erkannt');
+  if (!sh) return toast('Kein Code dieser App erkannt (Auftrag, Rückmeldung, Übergabe oder Lage-Infos)');
   if (sh.kind === 'm') return toast('Teil eines mehrteiligen QR-Codes – bitte in der App über „Einsätze → 📷 Einsatz übernehmen“ scannen', 8000);
   let data;
   try { data = await unpack(sh.data); } catch { return toast('Code beschädigt oder unvollständig'); }
@@ -2929,7 +2930,7 @@ async function startScan() {
   const v = $('scan-video');
   v.srcObject = scanStream;
   await v.play().catch(() => {});
-  $('scan-text').textContent = 'Kamera auf den QR-Code richten …';
+  $('scan-text').textContent = 'Kamera auf den QR-Code richten – Auftrag, Rückmeldung, Einsatz-Übergabe, Unterabschnitt oder Lage-Infos …';
   let detector = null;
   if ('BarcodeDetector' in window) { try { detector = new BarcodeDetector({ formats: ['qr_code'] }); } catch { detector = null; } }
   if (!detector) await loadScript('lib/jsQR.js');
@@ -2969,6 +2970,8 @@ function stopScan() {
   $('scanbox').hidden = true;
 }
 $('recv-scan').addEventListener('click', startScan);
+// ein Knopf für alles: was gescannt wurde, erkennt handleShared selbst
+$('btn-scan').addEventListener('click', () => { closePanels(); startScan(); });
 $('scan-close').addEventListener('click', stopScan);
 $('hfm-scan').addEventListener('click', () => { closePanels(); startScan(); });
 
@@ -3542,11 +3545,11 @@ $('ct-file').addEventListener('change', async (e) => {
 const contactsFile = () => new Blob([toVcf(sortContacts(db.contacts))], { type: 'text/vcard' });
 $('ct-share').addEventListener('click', () => {
   if (!db.contacts.length) return toast('Noch keine Kontakte');
-  shareFile(contactsFile(), 'Kontakte-Suchgebiet.vcf', 'Kontakte', 'Adressbuch (vCard) – in Suchgebiet-Karten unter Kontakte → Importieren öffnen.');
+  shareFile(contactsFile(), fileName('Kontakte', '', '.vcf'), 'Kontakte', 'Adressbuch (vCard) – in Suchgebiet-Karten unter Kontakte → Importieren öffnen.');
 });
 $('ct-save').addEventListener('click', () => {
   if (!db.contacts.length) return toast('Noch keine Kontakte');
-  saveFile(contactsFile(), 'Kontakte-Suchgebiet.vcf');
+  saveFile(contactsFile(), fileName('Kontakte', '', '.vcf'));
 });
 
 // ---------- Kartenart ----------
@@ -4199,14 +4202,9 @@ $('meet-remove').addEventListener('click', () => {
 });
 
 // withTime=false: nur Datum (kürzer, z. B. als Listenname in BaseCamp)
-function safeName(ext, withTime = true) {
-  const umlaut = { ä: 'ae', ö: 'oe', ü: 'ue', Ä: 'Ae', Ö: 'Oe', Ü: 'Ue', ß: 'ss' };
-  const t = (P.title.trim() || 'Suchgebiet').replace(/[äöüÄÖÜß]/g, (ch) => umlaut[ch])
-    .replace(/[^\w-]+/g, '_').slice(0, 40);
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  return withTime ? `${t}_${date}_${pad(d.getHours())}${pad(d.getMinutes())}${ext}` : `${t}_${date}${ext}`;
+// Dateiname im einheitlichen Schema (files.js): Einsatz_Datum_Uhrzeit_Inhalt.ext
+function safeName(what, ext) {
+  return fileName(P.title, what, ext);
 }
 
 $('proj-share').addEventListener('click', async () => {
@@ -4215,7 +4213,7 @@ $('proj-share').addEventListener('click', async () => {
   const title = P.title || 'Suchgebiet';
   const msg = `Suchgebiet „${title}“ – in der App Suchgebiet-Karten unter „Einsätze → Datei öffnen“ laden.`;
   const json = new Blob([text], { type: 'application/json' });
-  await shareFile(json, safeName('.suchgebiet.json'), title, msg, null, true);
+  await shareFile(json, safeName('Einsatzdatei', '.suchgebiet.json'), title, msg, null, true);
 });
 
 $('proj-import').addEventListener('click', () => $('import-file').click());
@@ -4482,7 +4480,7 @@ $('share-pdf').addEventListener('click', () => shareRun(async () => {
   const res = await buildPdf(q, qg, { ...pdfOpts(), views: null, fitContent: true, info: false, title: q.title, rescue: rescueForExport() },
     layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => { $('share-msg').textContent = `Karte ${i} von ${n} …`; });
   $('share-msg').textContent = '';
-  await shareFile(res.blob, safeName(`_${shareLabel().replace(/[^\wäöüÄÖÜß-]+/g, '_')}.pdf`), q.title, mailText(q.title));
+  await shareFile(res.blob, safeName(shareLabel(), '.pdf'), q.title, mailText(q.title));
 }));
 // Auftrags-Fenster für Hundeführer mit der Auswahl vorbelegen
 function prefillSend(sel, teamId) {
@@ -4637,7 +4635,7 @@ async function buildPdfFile(progress) {
     + (res.missing ? ` – ${res.missing} Kartenkacheln fehlen (keine Verbindung oder Karte nicht exportierbar)` : '');
   return {
     blob: res.blob,
-    name: safeName('.pdf'),
+    name: safeName('Karte', '.pdf'),
     title: opts.title,
     text: mailText(opts.title),
     // Kein Teilen möglich (z. B. PC-Browser): herunterladen und E-Mail-Programm öffnen
@@ -4798,7 +4796,7 @@ function gpxBuilder(opts, part, empty) {
     return {
       blob: new Blob([gpx], { type: 'application/gpx+xml' }),
       // Dateiname = Listenname in BaseCamp
-      name: safeName(`_${part}.gpx`, false),
+      name: safeName(part, '.gpx'),
       title: `${P.title || 'Suchgebiet'} – ${part}`,
       text: 'GPX für Garmin: in BaseCamp öffnen (Datei → In „Meine Sammlung“ importieren) und an das Gerät senden.',
     };
@@ -4996,7 +4994,7 @@ function gpxSelFile(src = gpxSel, withLines = false, label = 'Auswahl') {
   const gpx = selectionGpx(sel, `${title} – ${label}`);
   return {
     blob: new Blob([gpx], { type: 'application/gpx+xml' }),
-    name: safeName(`_${label.replace(/[^\wäöüÄÖÜß-]+/g, '_')}.gpx`, false),
+    name: safeName(label, '.gpx'),
     title: `${title} – ${label}`,
     text: 'GPX für Garmin: in der Garmin-App (z. B. Garmin Explore) öffnen und an das Gerät senden – oder in BaseCamp importieren.',
   };
@@ -5101,7 +5099,7 @@ async function buildKmzFile(progress) {
     + (res.missing ? ` – ${res.missing} Kartenkacheln fehlen (keine Verbindung oder Karte nicht exportierbar)` : '');
   return {
     blob: res.blob,
-    name: safeName('.kmz'),
+    name: safeName('Garmin-Karte', '.kmz'),
     title: P.title || 'Suchgebiet',
     text: 'Garmin-Karte: per USB in den Ordner Garmin/CustomMaps auf dem GPS-Gerät kopieren.',
   };
@@ -5694,7 +5692,7 @@ async function reportPdf(sec, progress) {
     title: `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}`,
   };
   const res = await buildPdf(P, grid, { ...opts, rescue: rescueForExport() }, layerStack(P.layerId, activeOverlays()), viewBounds(), (i, n) => progress(`Karte ${i} von ${n} …`));
-  return { blob: res.blob, name: safeName(hasReportText(parts) ? '_Abschlussbericht.pdf' : hasPad || hasPhotos ? '_Notizen.pdf' : '_Karte.pdf'), title: opts.title, pages: res.pages };
+  return { blob: res.blob, name: safeName(hasReportText(parts) ? 'Abschlussbericht' : hasPad || hasPhotos ? 'Notizen' : 'Karte', '.pdf'), title: opts.title, pages: res.pages };
 }
 
 async function buildReportFile(progress) {
@@ -5714,7 +5712,7 @@ async function juhFile(progress) {
   const bytes = await fillJuh(new Uint8Array(await res.arrayBuffer()), P);
   return {
     blob: new Blob([bytes], { type: 'application/pdf' }),
-    name: safeName('_JUH-Einsatzbericht.pdf'),
+    name: safeName('JUH-Einsatzbericht', '.pdf'),
     title: `JUH-Einsatzbericht ${P.title.trim() || 'Suchgebiet'}`,
     text: 'JUH-Einsatzbericht Rettungshundestaffel – vorausgefüllt, alle Felder sind weiter ausfüllbar.',
   };
