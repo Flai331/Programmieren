@@ -161,3 +161,19 @@ test('assignmentSummary und sinceText für die Auftrags-Übersicht', async () =>
   assert.equal(sinceText(0, 59 * 60e3), '59 min');
   assert.equal(sinceText(0, 65 * 60e3), '1 h 05 min');
 });
+
+test('Status-Plakette: Mitte des Auftrags; Status-Meldungen gehen mit der QR-Rückmeldung mit', async () => {
+  const { assignmentCenter } = await import('../web/share.js');
+  const { buildMsg } = await import('../web/status.js');
+  const el = elProject();
+  const a = buildAssignment(el, { teamId: 'T2', gridIds: [el.gridId], fields: 'team' });
+  const c = assignmentCenter(a);
+  assert.ok(c[0] < 52.30 && c[0] > 52.28 && c[1] > 8.00 && c[1] < 8.04);
+  el.sent = [{ id: a.id, teamId: 'T2', grids: a.g.map((g) => g.i) }];
+  const hf = projectFromAssignment(await unpack(await pack(a)));
+  hf.hf.log.push(buildMsg({ a: a.id, tm: 'Team 2', s: 'fertig', pc: 40, t: 10 }));
+  const r = await unpack(await pack(buildResult(hf)));
+  assert.equal(applyResult(el, r).msgs, 1);
+  assert.equal(el.qmsgs[0].pc, 40);
+  assert.equal(applyResult(el, r).msgs, 0); // doppelt scannen
+});

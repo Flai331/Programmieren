@@ -99,6 +99,7 @@ export function normalizeProject(p) {
     const l = out.live;
     out.live = { url: String(l.url), key: String(l.key), since: Number(l.since) || 0, ack: Array.isArray(l.ack) ? l.ack : [], msgs: Array.isArray(l.msgs) ? l.msgs.slice(-500) : [] };
   } else delete out.live;
+  out.qmsgs = Array.isArray(out.qmsgs) ? out.qmsgs.slice(-500) : []; // Status-Meldungen aus QR-Rückmeldungen
   if (out.hf && typeof out.hf === 'object') {
     out.hf = { ...out.hf };
     if (!(Array.isArray(out.hf.ls) && out.hf.ls.length === 2 && out.hf.ls.every((x) => typeof x === 'string' && x))) delete out.hf.ls;

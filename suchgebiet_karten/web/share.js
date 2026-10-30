@@ -4,7 +4,8 @@
 
 import { newProject, normalizeProject, uid, allGrids, gridLabel } from './store.js';
 import { compactContact, fromCompact } from './contacts.js';
-import { newLiveKey } from './status.js';
+import { newLiveKey, mergeStatus } from './status.js';
+import { makeGrid, cellBounds } from './grid.js';
 
 export const PUBLIC_URL = 'https://flai331.github.io/Programmieren/suchgebiet-karten/';
 
@@ -173,6 +174,26 @@ export function buildAssignment(p, sel) {
   return out;
 }
 
+// Mitte eines Auftrags für die Status-Plakette der Einsatzleitung: Felder des Teams, sonst Raster, sonst Umrisse
+export function assignmentCenter(a) {
+  const pts = [];
+  for (const g of a.g || []) {
+    const area = { north: g.a[0], south: g.a[1], west: g.a[2], east: g.a[3] };
+    if (!(g.f || []).length) { pts.push([area.north, area.west], [area.south, area.east]); continue; }
+    const gr = makeGrid(area, g.m);
+    for (const k of g.f) {
+      const [c, r] = k.split(',').map(Number);
+      const b = cellBounds(gr, c, r);
+      pts.push([b.north, b.west], [b.south, b.east]);
+    }
+  }
+  if (!pts.length) for (const x of a.i || []) pts.push(...decodePts(x.p));
+  if (!pts.length) return null;
+  const la = pts.map((q) => q[0]);
+  const lo = pts.map((q) => q[1]);
+  return [r6((Math.min(...la) + Math.max(...la)) / 2), r6((Math.min(...lo) + Math.max(...lo)) / 2)];
+}
+
 // Auftrag -> neues Suchgebiet auf dem Handy des Hundeführers
 export function projectFromAssignment(a) {
   const p = newProject(`${a.t}${a.tm ? ` – ${a.tm.l}` : ''}`);
@@ -220,7 +241,9 @@ export function buildResult(p, tol = 5) {
   // Wind-Messungen des Hundeführers: [Zeit, aus °, Stärke, Breite, Länge]
   const w = (p.mission.wind || []).filter((x) => x.src === 'gemessen' && x.t >= (p.hf.received || 0) && !x.by)
     .map((x) => [x.t, Math.round(x.from), x.strength, r6(x.lat ?? 0), r6(x.lon ?? 0)]);
-  return { v: 1, k: 'r', a: p.hf.id, tm: p.hf.team, at: Date.now(), tr, i: items, d, w };
+  // Status-Meldungen (Stand, Pause …) gehen auch mit der QR-Rückmeldung mit – die letzten 20
+  const sm = (p.hf.log || []).slice(-20).map(({ ok, ...m }) => m);
+  return { v: 1, k: 'r', a: p.hf.id, tm: p.hf.team, at: Date.now(), tr, i: items, d, w, ...(sm.length ? { sm } : {}) };
 }
 
 // Rückmeldung ins Suchgebiet der Einsatzleitung übernehmen. sent: Liste gesendeter Aufträge
@@ -273,6 +296,10 @@ export function applyResult(p, r) {
     winds++;
   }
   p.mission.wind.sort((a, b) => a.t - b.t);
+  // Status-Meldungen aus der QR-Rückmeldung (ohne Status-Server): p.qmsgs
+  const before = (p.qmsgs || []).length;
+  p.qmsgs = mergeStatus(p.qmsgs || [], (Array.isArray(r.sm) ? r.sm : []).filter((m) => m && m.a === r.a)).slice(-500);
+  const msgs = p.qmsgs.length - before;
   p.updated = Date.now();
-  return { who, ways, marks, fields, winds, known: !!sent };
+  return { who, ways, marks, fields, winds, msgs, known: !!sent };
 }

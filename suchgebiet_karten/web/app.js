@@ -38,9 +38,10 @@ import {
 } from './weather.js';
 import {
   PUBLIC_URL, pack, unpack, parseShared, shareLink, appIntentUrl, assignmentSummary, sinceText, buildAssignment, projectFromAssignment, buildResult, applyResult,
+  assignmentCenter,
 } from './share.js';
 import {
-  STATUS_LIST, SPOT_LIST, msgLabel, msgIcon, isUrgent, buildMsg, mergeStatus, latestFor, flushOutbox, pollMessages, coveragePct, coverageGaps, areaShapes,
+  STATUS_LIST, SPOT_LIST, msgLabel, msgIcon, isUrgent, buildMsg, mergeStatus, latestFor, flushOutbox, pollMessages, coverageGaps, areaShapes,
 } from './status.js';
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
@@ -52,7 +53,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v92';
+const APP_VERSION = 'v93';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -388,6 +389,7 @@ function redraw() {
   drawOffSquares(ctx);
   drawPicked(ctx);
   drawGaps(ctx);
+  drawSentBadges(ctx);
   drawStatusMarks(ctx);
   drawWindArrow(ctx);
 }
@@ -1641,6 +1643,8 @@ map.on('click', (e) => {
   if (Date.now() - longPressedAt < 1000) return; // gehört zum langen Druck
   const sm = statusMarkAt(e.containerPoint.x, e.containerPoint.y);
   if (sm) return toast(statusText(sm), 9000);
+  const sb = tool === 'pan' && badgeAt(e.containerPoint.x, e.containerPoint.y);
+  if (sb) { renderSentList(); return openPanel('panel-teams'); } // Plakette: Auftrags-Übersicht
   // Linie eines Umrisses angetippt (Einsatzleitung): Name, Zuteilung, Notiz bearbeiten
   if (db.mode === 'el' && tool === 'pan') {
     const pi = poiAt(e.containerPoint.x, e.containerPoint.y);
@@ -3055,7 +3059,7 @@ async function prepareSend() {
     const team = P.marks.find((m) => m.id === c.sel.teamId);
     P.sent.push({
       id: c.a.id, teamId: c.sel.teamId, team: team ? team.label : 'ohne Team', grids: c.a.g.map((g) => g.i), at: Date.now(),
-      what: assignmentSummary(c.a), n: 0, ...(c.a.ls ? { live: true } : {}),
+      what: assignmentSummary(c.a), n: 0, ctr: assignmentCenter(c.a), ...(c.a.ls ? { live: true } : {}),
     });
     renderSentList();
   }
@@ -3090,7 +3094,7 @@ function renderSentList() {
   const now = Date.now();
   for (const x of list) {
     const team = P.marks.find((m) => m.id === x.teamId);
-    const { last: lm, done: dm } = latestFor(P.live ? P.live.msgs : [], x.id);
+    const { last: lm, done: dm } = latestFor(allMsgs(), x.id);
     const quiet = now - Math.max(x.last || x.at, lm ? lm.t : 0) > SENT_QUIET;
     const d = document.createElement('div');
     d.className = 'sent-card' + (quiet ? ' quiet' : '');
@@ -3107,17 +3111,16 @@ function renderSentList() {
     if (lm) {
       const lv = document.createElement('div');
       lv.className = 'live';
-      lv.textContent = `📣 ${msgLabel(lm)} · ${hhmm(lm.t)}${lm.lat != null ? ' · 📍' : ''}${lm.pc != null && lm.s === 'fertig' ? ` · HF: ${lm.pc} %` : ''}`;
-      const at = [...P.live.msgs].reverse().find((m) => m.a === x.id && m.lat != null);
+      lv.textContent = `📣 ${msgLabel(lm)} · ${hhmm(lm.t)}${lm.lat != null ? ' · 📍' : ''}${lm.s === 'fertig' && lm.txt ? ` – ${lm.txt}` : ''}`;
+      const at = [...allMsgs()].reverse().find((m) => m.a === x.id && m.lat != null);
       if (at) lv.addEventListener('click', () => showStatusMark(at));
       d.appendChild(lv);
       if (dm && dm !== lm) {
         const dn = document.createElement('div');
         dn.className = 'back';
-        dn.textContent = `✅ Gebiet fertig ${hhmm(dm.t)}: HF: ${dm.pc ?? '–'} %${dm.pa != null ? ` · App: ${dm.pa} %` : ''}${dm.txt ? ` – ${dm.txt}` : ''}`;
+        dn.textContent = `${msgLabel(dm)} · ${hhmm(dm.t)}${dm.txt ? ` – ${dm.txt}` : ''}`;
         d.appendChild(dn);
       }
-      if (lm.s === 'fertig' && lm.pa != null) lv.textContent += ` · App: ${lm.pa} %`;
     }
     if (P.items.some((it) => it.resultKey && it.resultKey.startsWith(`${x.id}|t`))) {
       const gb = document.createElement('button');
@@ -3139,11 +3142,89 @@ const teamColorOf = (a) => {
   const t = s && P.marks.find((m) => m.id === s.teamId);
   return t ? t.color : '#455a64';
 };
+// Alle Status-Meldungen der Einsatzleitung: über den Status-Server und aus QR-Rückmeldungen
+const allMsgs = () => mergeStatus((P.live && P.live.msgs) || [], P.qmsgs || []);
+
+// ---- Status-Plakette an jedem Gebiet mit gesendetem Auftrag (Einsatzleitung) ----
+// Mitte: beim Senden gemerkt (ctr), bei älteren Aufträgen aus den Feldern des Teams bzw. dem Raster
+function sentCenter(x) {
+  if (x.ctr) return x.ctr;
+  const pts = [];
+  for (const g of allGrids(P).filter((q) => (x.grids || []).includes(q.id))) {
+    const gr = makeGrid(g.area, g.cellM);
+    const keys = Object.keys(g.fills).filter((k) => g.fills[k] === x.teamId);
+    if (!keys.length) { pts.push([g.area.north, g.area.west], [g.area.south, g.area.east]); continue; }
+    for (const k of keys) { const [c, r] = k.split(',').map(Number); const b = cellBounds(gr, c, r); pts.push([b.north, b.west], [b.south, b.east]); }
+  }
+  if (!pts.length) return null;
+  const la = pts.map((q) => q[0]);
+  const lo = pts.map((q) => q[1]);
+  return [(Math.min(...la) + Math.max(...la)) / 2, (Math.min(...lo) + Math.max(...lo)) / 2];
+}
+// Felder des Auftrags (Team-Felder in seinen Rastern) und wie viele davon als „abgesucht“ zurückgemeldet sind
+function sentFields(x) {
+  const done = (P.marks.find((m) => m.kind === 'status' && m.label === 'abgesucht') || {}).id;
+  let n = 0;
+  let a = 0;
+  for (const g of allGrids(P).filter((q) => (x.grids || []).includes(q.id))) {
+    for (const k of Object.keys(g.fills)) if (g.fills[k] === x.teamId) { n++; if (done && g.status[k] === done) a++; }
+  }
+  return { n, a };
+}
+function sentBadges() {
+  if (db.mode !== 'el' || db.msgOff || isFree()) return [];
+  const msgs = allMsgs();
+  const out = [];
+  for (const x of P.sent || []) {
+    const ctr = sentCenter(x);
+    if (!ctr) continue;
+    const team = P.marks.find((m) => m.id === x.teamId);
+    const { last, done } = latestFor(msgs, x.id);
+    const f = sentFields(x);
+    const fin = (done && (done.pc == null || done.pc >= 100)) || (f.n > 0 && f.a === f.n);
+    const line1 = `${team ? team.label : x.team}: ${last ? msgLabel(last) : `📲 Auftrag ${hhmm(x.at)}`}`;
+    const line2 = [f.a ? `▦ ${f.a}/${f.n} Felder abgesucht` : '', last ? hhmm(last.t) : ''].filter(Boolean).join(' · ');
+    out.push({ x, ctr, color: team ? team.color : '#455a64', lines: [line1, line2].filter(Boolean), fin });
+  }
+  return out;
+}
+let badgeBoxes = []; // zuletzt gezeichnete Plaketten (zum Antippen)
+function drawSentBadges(c) {
+  badgeBoxes = [];
+  c.textAlign = 'left';
+  c.textBaseline = 'middle';
+  for (const b of sentBadges()) {
+    const [px, py] = toPx(b.ctr[0], b.ctr[1]);
+    c.font = 'bold 12px sans-serif';
+    const w = Math.max(...b.lines.map((l, i) => { c.font = `${i ? '' : 'bold '}12px sans-serif`; return c.measureText(l).width; })) + 16;
+    const h = b.lines.length * 15 + 8;
+    const x0 = px - w / 2;
+    const y0 = py - h / 2;
+    c.fillStyle = b.fin ? '#e8f5e9' : 'rgba(255,255,255,0.93)';
+    c.strokeStyle = b.color;
+    c.lineWidth = 3;
+    c.beginPath();
+    if (c.roundRect) c.roundRect(x0, y0, w, h, 8); else c.rect(x0, y0, w, h);
+    c.fill();
+    c.stroke();
+    c.fillStyle = '#111';
+    b.lines.forEach((l, i) => { c.font = `${i ? '' : 'bold '}12px sans-serif`; c.fillText(l, x0 + 8, y0 + 11 + i * 15); });
+    badgeBoxes.push({ b, x0, y0, w, h });
+  }
+}
+function badgeAt(x, y) {
+  for (let i = badgeBoxes.length - 1; i >= 0; i--) {
+    const q = badgeBoxes[i];
+    if (x >= q.x0 && x <= q.x0 + q.w && y >= q.y0 && y <= q.y0 + q.h) return q.b;
+  }
+  return null;
+}
+
 // Meldungen mit Standort für die Karte: Einsatzleitung alle Teams, Hundeführer nur die eigenen
 function statusMarks() {
   let list;
   if (db.mode === 'hf') list = ((P.hf && P.hf.log) || []).map((m) => ({ m, color: hfColor() }));
-  else if (P.live && !db.msgOff) list = P.live.msgs.map((m) => ({ m, color: teamColorOf(m.a) }));
+  else if (!db.msgOff) list = allMsgs().map((m) => ({ m, color: teamColorOf(m.a) }));
   else return [];
   list = list.filter((x) => x.m.lat != null);
   const newest = new Map();
@@ -3181,7 +3262,7 @@ function statusMarkAt(x, y) {
 }
 function statusText({ m }) {
   return [`${m.tm || 'Team'}: ${msgLabel(m)}`, hhmm(m.t) + (m.acc != null ? ` (± ${m.acc} m)` : ''), m.txt && `„${m.txt}“`,
-    m.pc != null && `HF: ${m.pc} %`, m.pa != null && `App: ${m.pa} %`].filter(Boolean).join(' · ');
+    ].filter(Boolean).join(' · ');
 }
 function showStatusMark(m) {
   closePanels();
@@ -3230,7 +3311,7 @@ function toggleGaps(x) {
 }
 
 // ---- Hundeführer: melden ----
-const hasLive = () => db.mode === 'hf' && !!(P.hf && P.hf.ls);
+const hasLive = () => db.mode === 'hf' && !!P.hf; // ohne Status-Server (P.hf.ls) gehen Meldungen mit der QR-Rückmeldung
 function renderStatusBtn() {
   const b = $('hf-status');
   b.hidden = !hasLive();
@@ -3267,13 +3348,21 @@ function getFix(maxWait = 10000) {
 async function sendStatus(o) {
   const p = P;
   const h = p.hf;
-  if (!h || !h.ls) return;
+  if (!h) return;
   let pos = o.pos;
   if (pos === undefined) {
     toast('📍 Standort wird bestimmt … (bis 10 s)', 11000);
     pos = await getFix();
   }
-  const m = buildMsg({ a: h.id, tm: h.team, s: o.s, cat: o.cat, txt: o.txt, pc: o.pc, pa: o.pa, pos });
+  const m = buildMsg({ a: h.id, tm: h.team, s: o.s, cat: o.cat, txt: o.txt, pc: o.pc, pos });
+  if (!h.ls) {
+    h.log = [...h.log, { ...m }].slice(-100);
+    p.updated = Date.now();
+    saveNow();
+    renderStatusBtn();
+    redraw();
+    return toast(`${msgLabel(m)} gespeichert – geht mit der nächsten QR-Rückmeldung an die Einsatzleitung`, 6000);
+  }
   h.outbox.push(m);
   h.log = [...h.log, { ...m }].slice(-100);
   p.updated = Date.now();
@@ -3308,6 +3397,7 @@ async function flushStatus() {
 }
 function statusLine() {
   const h = P.hf;
+  if (!h.ls) return 'Kein Status-Server in diesem Auftrag: Meldungen gehen mit der nächsten QR-Rückmeldung mit.';
   const n = h.outbox.length;
   const ok = [...h.log].reverse().find((x) => x.ok);
   return n ? `⏳ wartet auf Netz (${n})` : ok ? `✓ gesendet ${hhmm(ok.t)}` : 'Noch nichts gemeldet';
@@ -3366,51 +3456,31 @@ async function spotDialog() {
   }
   sendStatus({ s: 'ort', cat: r.cat, txt: r.txt });
 }
+// Stand melden: der Hundeführer schätzt selbst, wie viel vom Gebiet abgesucht ist (100 % = Gebiet fertig)
 async function doneDialog() {
-  const h = P.hf;
-  const shapes = areaShapes(P);
-  const segs = h.track.map((sg) => sg.pts);
-  const calc = (r) => (shapes.length ? coveragePct(segs, shapes, r) : null);
   const r = await openDlg((box, close) => {
-    dlgHead(box, '✅ Gebiet fertig', 'Wie viel vom Gebiet hast du abgesucht?');
-    let radius = db.coverR || 30;
-    let pa = calc(radius);
+    dlgHead(box, '📊 Stand melden', 'Wie viel vom Gebiet hast du abgesucht? Erst 100 % meldet „Gebiet fertig“.');
     const big = document.createElement('div');
     big.className = 'st-pct';
     const rng = document.createElement('input');
     rng.type = 'range';
     rng.className = 'st-range';
     rng.min = 0; rng.max = 100; rng.step = 10;
-    rng.value = pa != null ? Math.round(pa / 10) * 10 : 100;
-    const info = document.createElement('p');
-    info.className = 'small';
-    const show = () => { big.textContent = `${rng.value} %`; info.textContent = pa != null ? `Aus deinem Weg berechnet: ${pa} % (Reichweite des Hundes ${radius} m).` : 'Kein Weg oder Gebiet zum Berechnen – Wert von Hand einstellen.'; };
+    rng.value = 50;
+    const show = () => { big.textContent = Number(rng.value) >= 100 ? '100 % – ✅ Gebiet fertig' : `${rng.value} % abgesucht`; };
     rng.addEventListener('input', show);
-    box.append(big, rng, info);
-    const rr = document.createElement('div');
-    rr.className = 'dlg-btns two';
-    box.appendChild(rr);
-    const rbtn = [20, 30, 50].map((v) => dlgButton(rr, `${v} m`, v === radius ? 'sel' : '', () => {
-      radius = v;
-      db.coverR = v;
-      pa = calc(v);
-      if (pa != null) rng.value = Math.round(pa / 10) * 10;
-      rbtn.forEach((b, i) => b.classList.toggle('sel', [20, 30, 50][i] === v));
-      show();
-    }));
-    rr.style.gridTemplateColumns = '1fr 1fr 1fr';
+    box.append(big, rng);
     const txt = document.createElement('input');
     txt.type = 'text';
     txt.placeholder = 'Grund / Hinweis (optional)';
     txt.style.marginTop = '8px';
     box.appendChild(txt);
     show();
-    dlgButton(box, '✅ Melden', 'primary', () => close({ pc: Number(rng.value), pa, txt: txt.value.trim() }));
+    dlgButton(box, '📣 Melden', 'primary', () => close({ pc: Number(rng.value), txt: txt.value.trim() }));
     dlgButton(box, 'Abbrechen', '', () => close(null));
   });
   if (!r) return;
-  saveNow();
-  sendStatus({ s: 'fertig', pc: r.pc, pa: r.pa == null ? undefined : r.pa, txt: r.txt });
+  sendStatus({ s: 'fertig', pc: r.pc, txt: r.txt });
 }
 $('hf-status').addEventListener('click', openStatusDialog);
 
@@ -3541,7 +3611,7 @@ async function handleShared(text) {
   }
   changed();
   renderSentList();
-  toast(`📥 Rückmeldung ${res.who}: ${res.ways} Weg${res.ways === 1 ? '' : 'e'}, ${res.marks} Markierung${res.marks === 1 ? '' : 'en'}, ${res.fields} Feld${res.fields === 1 ? '' : 'er'}${res.winds ? `, ${res.winds} Wind-Messung${res.winds === 1 ? '' : 'en'}` : ''}${res.known ? '' : ' (Auftrag hier unbekannt – ins aktuelle Suchgebiet übernommen)'}${res.ways + res.marks + res.fields + res.winds ? '' : ' – nichts Neues'}`, 9000);
+  toast(`📥 Rückmeldung ${res.who}: ${res.ways} Weg${res.ways === 1 ? '' : 'e'}, ${res.marks} Markierung${res.marks === 1 ? '' : 'en'}, ${res.fields} Feld${res.fields === 1 ? '' : 'er'}${res.winds ? `, ${res.winds} Wind-Messung${res.winds === 1 ? '' : 'en'}` : ''}${res.msgs ? `, ${res.msgs} Status-Meldung${res.msgs === 1 ? '' : 'en'}` : ''}${res.known ? '' : ' (Auftrag hier unbekannt – ins aktuelle Suchgebiet übernommen)'}${res.ways + res.marks + res.fields + res.winds + res.msgs ? '' : ' – nichts Neues'}`, 9000);
 }
 async function takeAssignment(a) {
   const known = Object.values(db.projects).find((p) => p.hf && p.hf.id === a.id);
