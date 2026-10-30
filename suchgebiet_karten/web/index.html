@@ -130,7 +130,7 @@
     <button id="btn-layers" title="Kartenart, Rettungspunkte, Offline-Karten"><span>🗺️</span>Karte</button>
     <button id="btn-gps" title="Mein Standort"><span>◎</span>GPS</button>
     <button id="btn-more" title="Gerät, Hundeführer-Modus, App-Download"><span>⚙️</span>Mehr</button>
-    <button id="btn-pdf" class="primary" title="PDF, GPX und Garmin-Karte"><span>📤</span>Export</button>
+    <button id="btn-pdf" class="primary" title="Weitergeben: QR-Code, Garmin, Mail, Speichern, PDF"><span>📤</span>Teilen</button>
   </div>
 
   <!-- links: Raster/Markierungen schnell aus- und einblenden, Zoomleiste -->
@@ -260,6 +260,34 @@
   </section>
 
 
+  <!-- Weitergeben: erst „Was?“, dann „Wie?“ -->
+  <section id="panel-share" class="panel" hidden>
+    <h2>📤 Weitergeben</h2>
+    <h2 class="sub first">1. Was?</h2>
+    <div class="share-grid" id="share-scopes">
+      <button data-scope="all"><span>🗂️</span><b>Ganzer Einsatz</b><small>alle Daten</small></button>
+      <button data-scope="team"><span>👥</span><b>Für ein Team</b><small>seine Felder und Umrisse</small></button>
+      <button data-scope="area"><span>🗺️</span><b>Ein Gebiet</b><small>Raster oder Umriss antippen</small></button>
+      <button data-scope="pick"><span>🎯</span><b>Eigene Auswahl</b><small>einzeln antippen</small></button>
+    </div>
+    <select id="share-team" hidden></select>
+    <p id="share-summary" class="info"></p>
+    <div class="row"><button id="share-edit" class="keep">✏️ Auswahl auf der Karte ändern</button></div>
+    <label class="check"><input type="checkbox" id="share-gridlines" class="keep" checked> Rasterlinien und Feldnamen ins GPX</label>
+    <h2 class="sub">2. Wie?</h2>
+    <div class="share-grid share-ways">
+      <button id="share-qr" class="keep"><span>📲</span><b>QR-Code</b><small>an ein Gerät mit dieser App</small></button>
+      <button id="share-garmin" class="keep"><span>🧭</span><b>Garmin-App</b><small>GPX → Handgerät</small></button>
+      <button id="share-mail" class="keep"><span>📧</span><b>Mail</b><small>GPX für BaseCamp</small></button>
+      <button id="share-save" class="keep"><span>💾</span><b>Speichern</b><small>GPX-Datei</small></button>
+      <button id="share-pdf" class="keep"><span>🖨️</span><b>PDF</b><small>Karte</small></button>
+      <button id="share-file" class="keep"><span>🗂️</span><b>Einsatz-Datei</b><small>alles inkl. Fotos</small></button>
+    </div>
+    <p id="share-msg" class="info"></p>
+    <div class="row"><button id="share-more" class="keep">⚙️ Alle Export-Optionen (PDF-Blätter, BaseCamp, Garmin-Karte)</button></div>
+    <button class="close">Schließen</button>
+  </section>
+
   <!-- Mehr: Gerät, App-Modus, App-Download -->
   <section id="panel-more" class="panel" hidden>
     <h2>⚙️ Mehr <span id="app-version" class="version"></span></h2>
@@ -340,6 +368,10 @@
     </div>
     <div class="checklist">
       <label class="check"><input type="checkbox" id="send-meet" checked> B-Ort</label>
+    </div>
+    <label id="send-pois-label">📍 Lage-Orte</label>
+    <div id="send-pois" class="checklist sub-list"></div>
+    <div class="checklist">
       <label class="check"><input type="checkbox" id="send-rescue" checked> Forst-Rettungspunkte im Raster/Umriss und im Umkreis von 2 km um dessen Mitte</label>
       <label class="check"><input type="checkbox" id="send-person"> Vermisste Person mitsenden (Datenschutz beachten)</label>
       <label class="check"><input type="checkbox" id="send-contacts" checked> <span id="send-contacts-label">Kontakte mitgeben</span></label>

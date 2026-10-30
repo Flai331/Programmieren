@@ -119,6 +119,11 @@ Karteninformationen* ein- und ausschalten. Wer die eigene Wanderkarte sehen will
 - **Jedes PDF aus der App enthält das Suchgebiet ebenfalls.** Wer das PDF
   bekommt, kann es unter „Einsätze → Datei öffnen“ laden und mit Raster,
   Teams und Zeichnungen weiterarbeiten.
+- **📤 Teilen** (rote Kachel): erst „Was?“ – ganzer Einsatz, für ein Team (seine Felder
+  und Umrisse sind schon angehakt), ein Gebiet (Raster oder Umriss antippen: alles darin
+  plus B-Ort und Lage-Orte) oder eigene Auswahl –, dann „Wie?“: QR-Code (für Hundeführer
+  als Auftrag oder für EL/ELW als eigener Teil-Einsatz), Garmin-App, Mail für BaseCamp,
+  Speichern, PDF. Die bisherigen Export-Einstellungen gibt es unter „⚙️ Alle Export-Optionen“.
 - **📍 Lage-Orte** (Einsatz → Stammdaten): ELW, Bereitstellungsraum, Parkplatz,
   Toilette, Verpflegung, Sanität … per GPS oder Kartentipp; auf der Karte
   antippen zum Bearbeiten. Erscheinen im PDF (Karte und Infoseite) und im GPX.
