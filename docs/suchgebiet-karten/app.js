@@ -63,7 +63,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v108';
+const APP_VERSION = 'v109';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1795,11 +1795,8 @@ mapEl.addEventListener('pointerdown', (e) => {
     const it = i >= 0 ? P.items[i] : null;
     if (!it || it.kind !== 'track') return;
     if (navigator.vibrate) navigator.vibrate(30);
-    if (db.mode === 'el') {
-      if (isLocked()) return lockedToast();
-      if (!canEdit(P, it)) return toast(MSG_VIEW, 4000);
-      renameItem(i);
-    } else if (!it.fromEl && !it.prev) hfAreaEdit(it);
+    // v109: Langdruck = Punkte direkt ziehbar (Name/Team/Notiz/Löschen per Antippen)
+    if (db.mode === 'el' || (!it.fromEl && !it.prev)) startVertex(it);
   }, LONG_PRESS);
 });
 mapEl.addEventListener('pointermove', (e) => {
