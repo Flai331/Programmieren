@@ -398,3 +398,14 @@ export function importProject(text) {
   return p;
 }
 
+
+// v111: Reihenfolge der Teams bzw. Markierungen ändern. ids = neue Reihenfolge einer Art (team/status);
+// die Plätze der anderen Art in marks bleiben, wo sie sind. Unbekannte/fehlende ids: Rest in alter Reihenfolge hinten an.
+export function reorderMarks(marks, kind, ids) {
+  const own = marks.filter((m) => m.kind === kind);
+  const byId = new Map(own.map((m) => [m.id, m]));
+  const order = [...new Set(ids)].filter((id) => byId.has(id)).map((id) => byId.get(id));
+  for (const m of own) if (!order.includes(m)) order.push(m);
+  let i = 0;
+  return marks.map((m) => (m.kind === kind ? order[i++] : m));
+}
