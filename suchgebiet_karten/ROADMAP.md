@@ -1,7 +1,7 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v80**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v81**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
@@ -47,7 +47,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
   - Gehen bei der Übergabe an ein weiteres EL-Gerät (`#e=`) mit.
   - Neue Logik in `web/pois.js` mit Unit-Tests.
 
-- [ ] **v81 – 📤 Infos an EL senden** (in „📤 Weitergeben“ einbauen) (`#i=`, Abschnitt D)
+- [x] **v81 – 📍 Infos an EL senden** (in „📤 Weitergeben“, `#i=`, Logik in `web/infos.js`; direkt mit Klaas gebaut)
   - „📤 Infos senden“: neue/geänderte/gelöschte Lage-Orte (optional Kontakte) per QR-Code
     oder Link, mit Gerätename (`db.deviceName`) als Absender; beide Richtungen.
   - Zusammenführen ohne Duplikate (feste IDs + Änderungszeit), gelöschte verschwinden auch
