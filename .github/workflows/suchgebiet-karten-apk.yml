@@ -99,7 +99,7 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
-          disable-animations: true
+          disable-animations: false  # der Schritt brach mit „settings: can't fork“ ab; für den Start-Test unnötig
           script: |
             adb install -r suchgebiet_karten/android/app/build/outputs/apk/release/app-release.apk
             adb logcat -c
