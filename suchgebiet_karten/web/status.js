@@ -27,7 +27,7 @@ export const URGENT = ['fund', 'hilfe'];
 const find = (list, code) => list.find((x) => x.code === code);
 export function statusLabel(code) {
   const s = find(STATUS_LIST, code);
-  return s ? `${s.ico} ${s.label}` : code === 'ort' ? '📍 Standort' : String(code || '');
+  return s ? `${s.ico} ${s.label}` : code === 'ort' ? '📍 Standort' : code === 'ok' ? '📲 Auftrag übernommen' : String(code || '');
 }
 export function spotLabel(cat) {
   const s = find(SPOT_LIST, cat);
@@ -46,7 +46,7 @@ export const msgLabel = (m) => (m.s === 'ort' ? spotLabel(m.cat)
 export function msgIcon(m) {
   if (m.s === 'fertig') return done(m) ? '✅' : '📊';
   const s = m.s === 'ort' ? find(SPOT_LIST, m.cat) : find(STATUS_LIST, m.s);
-  return s ? s.ico : '📍';
+  return s ? s.ico : m.s === 'ok' ? '📲' : '📍';
 }
 export const isUrgent = (m) => URGENT.includes(m.s) || (m.s === 'ort' && m.cat === 'fund');
 
@@ -105,6 +105,8 @@ export function mergeStatus(list, msgs) {
   for (const m of [...(list || []), ...(msgs || [])]) if (okMsg(m) && !byId.has(m.id)) byId.set(m.id, m);
   return [...byId.values()].sort((x, y) => x.t - y.t);
 }
+// Gelöschte Meldungen (del: { id: Zeit }) aus der Liste nehmen
+export const withoutDeleted = (list, del) => (del && Object.keys(del).length ? (list || []).filter((m) => !del[m.id]) : list || []);
 // Letzte Meldung (und letzte „fertig“-Meldung) eines Auftrags
 export function latestFor(list, a) {
   const own = (list || []).filter((m) => m.a === a);

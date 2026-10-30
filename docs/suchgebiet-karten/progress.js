@@ -6,7 +6,7 @@
 // Richtung: UA -> EL nur UA-Gebiet + Neues des UA; EL -> UA alles, beim UA als lock 'base' (außer UA-eigenes).
 import { allGrids, uid } from './store.js';
 import { encodePts, decodePts, simplify } from './share.js';
-import { mergeStatus } from './status.js';
+import { mergeStatus, withoutDeleted } from './status.js';
 import { normalizePois } from './pois.js';
 import { infoTarget } from './infos.js';
 
@@ -136,10 +136,12 @@ export function buildProgress(p, { from = '', to = '', since = 0, now = Date.now
   const imp = {};
   for (const it of items) if (it.resultKey && p.imported && p.imported[it.resultKey] != null) imp[it.resultKey] = p.imported[it.resultKey];
   if (Object.keys(imp).length) out.im = imp;
-  const se = (p.sent || []).filter((x) => nw(x.last || x.at));
-  if (se.length) { out.se = se; n += se.length; }
-  const ms = p.live ? (p.live.msgs || []).filter((x) => nw(x.t)) : [];
+  const se = (p.sent || []).filter((x) => nw(Math.max(x.last || 0, x.acc || 0, x.at || 0)));
+  if (se.length) { out.se = se.map(({ unlock, ...x }) => x); n += se.length; } // Freigabe (unlock) bleibt auf diesem Gerät
+  const md = Object.fromEntries(Object.entries(p.msgDel || {}).filter(([, t]) => nw(t)));
+  const ms = p.live ? withoutDeleted(p.live.msgs || [], p.msgDel).filter((x) => nw(x.t)) : [];
   if (ms.length) { out.ms = ms; n += ms.length; }
+  if (Object.keys(md).length) { out.md = md; n += Object.keys(md).length; }
   if (!n) return null;
   // Status-Server: ein Schlüssel pro Einsatz – alle Geräte der Einsatzleitung lesen alle Meldungen
   if (p.live && p.live.url && p.live.key) out.lv = [p.live.url, p.live.key];
@@ -313,8 +315,17 @@ export function mergeProgress(p, f) {
   for (const x of Array.isArray(f.se) ? f.se : []) {
     if (!x || !x.id) continue;
     const o = p.sent.find((y) => y.id === x.id);
-    if (!o) { p.sent.push(x); res.proto++; } else if ((x.last || 0) > (o.last || 0)) { Object.assign(o, { n: x.n, last: x.last, lastSum: x.lastSum }); res.proto++; }
+    if (!o) { p.sent.push(x); res.proto++; } else {
+      if ((x.last || 0) > (o.last || 0)) { Object.assign(o, { n: x.n, last: x.last, lastSum: x.lastSum }); res.proto++; }
+      // Übernahme: früheste Zeit > 0 gewinnt; Zugehöriges (Items, Felder) ergänzen
+      if (x.acc > 0 && !(o.acc > 0 && o.acc <= x.acc)) { o.acc = x.acc; res.proto++; }
+      if (Array.isArray(x.items) && !o.items) o.items = x.items;
+      if (x.cells && typeof x.cells === 'object' && !o.cells) o.cells = x.cells;
+    }
   }
+  // gelöschte Status-Meldungen ausblenden (Löschvermerke nur ergänzen)
+  p.msgDel = p.msgDel || {};
+  for (const [id, t] of Object.entries(f.md && typeof f.md === 'object' && !Array.isArray(f.md) ? f.md : {})) if (!p.msgDel[id]) p.msgDel[id] = Number(t) || Date.now();
   if (!p.live && Array.isArray(f.lv) && f.lv.length === 2 && /^https:\/\/script\.google\.com\//.test(String(f.lv[0])) && f.lv[1]) {
     p.live = { url: String(f.lv[0]), key: String(f.lv[1]), since: 0, ack: [], msgs: [] };
   }

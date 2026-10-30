@@ -14,7 +14,7 @@ import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js
 import { fileName } from './files.js';
 import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './infos.js';
 import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids } from './scope.js';
-import { MSG_VIEW, MSG_DELETE, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock } from './locks.js';
+import { MSG_VIEW, MSG_DELETE, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock, assignedOf, assignedCell, assignedGrid, markAccepted, isAccepted, unlockUntil } from './locks.js';
 import { buildProgress, mergeProgress, progressSummary, progressPreview, progressTarget, snapshotBase, stampChanges, setPeer, peerOf } from './progress.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -41,7 +41,7 @@ import {
   assignmentCenter,
 } from './share.js';
 import {
-  STATUS_LIST, SPOT_LIST, msgLabel, msgIcon, isUrgent, buildMsg, mergeStatus, latestFor, flushOutbox, pollMessages, coverageGaps, areaShapes,
+  STATUS_LIST, SPOT_LIST, msgLabel, msgIcon, isUrgent, buildMsg, mergeStatus, withoutDeleted, latestFor, flushOutbox, pollMessages, coverageGaps, areaShapes,
 } from './status.js';
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
@@ -53,7 +53,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v94';
+const APP_VERSION = 'v95';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -630,6 +630,8 @@ function fillAt(ll, first) {
     if (first) toast(MSG_VIEW, 4000);
     return;
   }
+  if (!first && !fillStroke) return;
+  if (guardAssigned(assignedCell(P, P.gridId, key))) return;
   if (first) {
     snapshot();
     // Teams und Status liegen getrennt: „abgesucht“ überschreibt nicht das Team
@@ -906,7 +908,7 @@ function eraseAt(x, y) {
   };
   const i = hitItem(P.items, toPx, x, y, 12);
   if (i >= 0) {
-    if (blocked(P.items[i], 'delete')) return;
+    if (blocked(P.items[i], 'delete') || guardAssigned(assignedOf(P, P.items[i]))) return;
     before();
     P.items.splice(i, 1);
   } else if (poiAt(x, y) >= 0) {
@@ -925,6 +927,7 @@ function eraseAt(x, y) {
     const target = h && (h.g.active ? P : P.otherGrids.find((g) => g.id === h.g.id));
     if (!key || (!target.fills[key] && !target.status[key])) return;
     if (!canEditCell(P, h.g.id, key)) return toast(MSG_VIEW, 4000);
+    if (guardAssigned(assignedCell(P, h.g.id, key))) return;
     before();
     delete target.fills[key];
     delete target.status[key];
@@ -943,7 +946,7 @@ function renameItem(i) {
   const it = P.items[i];
   if (!it) return;
   if (isLocked()) return lockedToast();
-  if (blocked(it)) return;
+  if (blocked(it) || guardAssigned(assignedOf(P, it))) return;
   if (it.kind === 'text') {
     const t = prompt('Text für diesen Punkt:', it.text);
     if (t === null || !t.trim() || t.trim() === it.text) return;
@@ -1257,7 +1260,7 @@ $('mark-alpha').addEventListener('input', () => {
 
 // ---------- Raster ----------
 function setArea(area, cellM = P.cellM) {
-  if (P.area && blockedGrid(P.gridId)) return false;
+  if (P.area && (blockedGrid(P.gridId) || guardAssigned(assignedGrid(P, P.gridId)))) return false;
   if (Math.abs(area.north - area.south) < 1e-6 || Math.abs(area.east - area.west) < 1e-6) {
     // nur angetippt: ein Feld an dieser Stelle
     area = { north: area.north, west: area.west, south: area.north - 1e-6, east: area.west + 1e-6 };
@@ -1469,7 +1472,7 @@ $('grid-view').addEventListener('click', () => {
 $('grid-remove').addEventListener('click', () => {
   const multi = allGrids(P).length > 1;
   if (!grid && !multi) return;
-  if (blockedGrid(P.gridId, 'delete')) return;
+  if (blockedGrid(P.gridId, 'delete') || guardAssigned(assignedGrid(P, P.gridId))) return;
   if (!confirm(multi ? `Rastergebiet „${gridLabel(P, { name: P.gridName })}“ mit seinen Feldzuteilungen entfernen?` : 'Raster und Feldzuteilungen entfernen?')) return;
   snapshot();
   removeActiveGrid(P);
@@ -1481,7 +1484,8 @@ $('clear-fills').addEventListener('click', () => {
   if (!any || !confirm('Alle Feldfarben und Zuteilungen löschen (in allen Rastergebieten)?')) return;
   snapshot();
   // im Unterabschnitt bleiben Felder des Grund-Einsatzes stehen
-  const free = (gid) => canEditGrid(P, gid) && !(P.gown && P.gown[gid]);
+  const free = (gid) => canEditGrid(P, gid) && !(P.gown && P.gown[gid]) && !assignedGrid(P, gid); // Raster übernommener Aufträge bleiben stehen
+  if (allGrids(P).some((g) => assignedGrid(P, g.id))) toast('🔒 Felder übernommener Aufträge bleiben stehen – einzeln ändern (mit Freigabe)', 6000);
   if (free(P.gridId)) { P.fills = {}; P.status = {}; }
   P.otherGrids = P.otherGrids.map((g) => (free(g.id) ? { ...g, fills: {}, status: {} } : g));
   changed();
@@ -1489,10 +1493,13 @@ $('clear-fills').addEventListener('click', () => {
 $('clear-drawings').addEventListener('click', () => {
   if (!P.items.length || !confirm('Alle Zeichnungen und Texte löschen?')) return;
   snapshot();
+  const keep = (it) => !canDelete(P, it) || assignedOf(P, it); // übernommene Aufträge: Zeichnungen bleiben stehen
   const keepN = P.items.filter((it) => !canDelete(P, it)).length;
-  P.items = P.items.filter((it) => !canDelete(P, it));
+  const asgN = P.items.filter((it) => canDelete(P, it) && assignedOf(P, it)).length;
+  P.items = P.items.filter(keep);
   changed();
   if (keepN) toast(`${MSG_DELETE} (${keepN} Element${keepN === 1 ? '' : 'e'} bleiben erhalten)`, 5000);
+  else if (asgN) toast(`🔒 ${asgN} Element${asgN === 1 ? '' : 'e'} übernommener Aufträge bleiben stehen – einzeln löschen (mit Freigabe)`, 6000);
 });
 function goToCell() {
   const p = parseCell($('cell-search').value);
@@ -1526,6 +1533,7 @@ mapEl.addEventListener('pointerdown', (e) => {
     if (navigator.vibrate) navigator.vibrate(30);
     if (isLocked()) return lockedToast();
     if (!canEditCell(P, h.g.id, `${h.c},${h.r}`)) return toast(MSG_VIEW, 4000);
+    if (guardAssigned(assignedCell(P, h.g.id, `${h.c},${h.r}`))) return;
     useGridAt(ll.lat, ll.lng);
     fieldDialog(ll);
   }, LONG_PRESS);
@@ -1642,7 +1650,7 @@ function fieldDialog(ll) {
 map.on('click', (e) => {
   if (Date.now() - longPressedAt < 1000) return; // gehört zum langen Druck
   const sm = statusMarkAt(e.containerPoint.x, e.containerPoint.y);
-  if (sm) return toast(statusText(sm), 9000);
+  if (sm) return db.mode === 'el' ? msgDialog(sm.m) : toast(statusText(sm), 9000);
   const sb = tool === 'pan' && badgeAt(e.containerPoint.x, e.containerPoint.y);
   if (sb) { renderSentList(); return openPanel('panel-teams'); } // Plakette: Auftrags-Übersicht
   // Linie eines Umrisses angetippt (Einsatzleitung): Name, Zuteilung, Notiz bearbeiten
@@ -3057,9 +3065,11 @@ async function prepareSend() {
   P.sent = P.sent || [];
   if (!P.sent.some((x) => x.id === c.a.id)) {
     const team = P.marks.find((m) => m.id === c.sel.teamId);
+    // acc 0 = noch nicht übernommen; items/cells merken, was zum Auftrag gehört (Schutz nach der Übernahme)
     P.sent.push({
       id: c.a.id, teamId: c.sel.teamId, team: team ? team.label : 'ohne Team', grids: c.a.g.map((g) => g.i), at: Date.now(),
       what: assignmentSummary(c.a), n: 0, ctr: assignmentCenter(c.a), ...(c.a.ls ? { live: true } : {}),
+      acc: 0, items: (c.sel.itemIdx || []).map((i) => P.items[i] && (P.items[i].id || (P.items[i].id = uid()))).filter(Boolean), cells: Object.fromEntries(c.a.g.map((g) => [g.i, [...g.f]])),
     });
     renderSentList();
   }
@@ -3095,17 +3105,18 @@ function renderSentList() {
   for (const x of list) {
     const team = P.marks.find((m) => m.id === x.teamId);
     const { last: lm, done: dm } = latestFor(allMsgs(), x.id);
-    const quiet = now - Math.max(x.last || x.at, lm ? lm.t : 0) > SENT_QUIET;
+    const quiet = now - Math.max(x.last || 0, x.acc || x.at, lm ? lm.t : 0) > SENT_QUIET;
     const d = document.createElement('div');
-    d.className = 'sent-card' + (quiet ? ' quiet' : '');
+    const acc = isAccepted(x);
+    d.className = 'sent-card' + (acc && quiet ? ' quiet' : '') + (acc ? '' : ' wait');
     d.innerHTML = '<b><i></i><span></span></b><div class="what"></div><div class="since"></div><div class="back"></div>';
     d.querySelector('i').style.background = team ? team.color : '#999';
     d.querySelector('b span').textContent = `${team ? team.label : x.team}${team && team.dog ? ` – ${team.dog}` : ''}`;
     const what = x.what || allGrids(P).filter((g) => (x.grids || []).includes(g.id)).map((g) => gridLabel(P, g)).join(', ');
     d.querySelector('.what').textContent = what || 'Auftrag';
-    d.querySelector('.since').textContent = `📲 Auftrag seit ${hhmm(x.at)} (${sinceText(x.at, now)})`;
+    d.querySelector('.since').textContent = acc ? `📲 Auftrag seit ${hhmm(x.acc)} (${sinceText(x.acc, now)}) – übernommen` : `⏳ QR erstellt ${hhmm(x.at)} – noch nicht übernommen`;
     const n = x.n || (x.last ? 1 : 0);
-    d.querySelector('.back').textContent = x.last
+    d.querySelector('.back').textContent = !acc ? 'Gilt erst als vergeben, wenn das Team ihn übernommen hat.' : x.last
       ? `📥 ${n} Rückmeldung${n === 1 ? '' : 'en'}, zuletzt ${hhmm(x.last)} (vor ${sinceText(x.last, now)})${x.lastSum ? ` – ${x.lastSum}` : ''}`
       : lm ? 'Weg und Markierungen kommen mit der QR-Rückmeldung' : `⏳ noch keine Rückmeldung${quiet ? ' – nachfragen?' : ''}`;
     if (lm) {
@@ -3122,6 +3133,31 @@ function renderSentList() {
         d.appendChild(dn);
       }
     }
+    const bar = document.createElement('div');
+    if (!acc) {
+      const ab = document.createElement('button');
+      ab.className = 'mini';
+      ab.textContent = '✓ Team hat übernommen';
+      ab.addEventListener('click', () => { x.acc = Date.now(); changed(); renderSentList(); toast(`✓ Auftrag ${x.team} gilt als übernommen`); });
+      bar.appendChild(ab);
+    }
+    const rb = document.createElement('button');
+    rb.className = 'mini';
+    rb.textContent = acc ? '🗑 Auftrag entfernen' : '✕ Verwerfen';
+    rb.addEventListener('click', async () => {
+      if (acc && !(await openDlg((box, close) => {
+        dlgHead(box, '🗑 Übernommenen Auftrag entfernen?', `Der Auftrag ${x.team} ist seit ${hhmm(x.acc)} übernommen. Wirklich entfernen? Der Schutz seiner Felder und Zeichnungen entfällt.`);
+        dlgButton(box, 'Entfernen', 'urgent', () => close(true));
+        dlgButton(box, 'Abbrechen', 'primary', () => close(false));
+      }))) return;
+      P.sent = P.sent.filter((y) => y !== x);
+      if (gapView && gapView.a === x.id) gapView = null;
+      changed();
+      redraw();
+      renderSentList();
+    });
+    bar.appendChild(rb);
+    d.appendChild(bar);
     if (P.items.some((it) => it.resultKey && it.resultKey.startsWith(`${x.id}|t`))) {
       const gb = document.createElement('button');
       gb.className = 'mini gaps';
@@ -3143,7 +3179,8 @@ const teamColorOf = (a) => {
   return t ? t.color : '#455a64';
 };
 // Alle Status-Meldungen der Einsatzleitung: über den Status-Server und aus QR-Rückmeldungen
-const allMsgs = () => mergeStatus((P.live && P.live.msgs) || [], P.qmsgs || []);
+const allMsgsRaw = () => mergeStatus((P.live && P.live.msgs) || [], P.qmsgs || []);
+const allMsgs = () => withoutDeleted(allMsgsRaw(), P.msgDel); // gelöschte (P.msgDel) bleiben weg
 
 // ---- Status-Plakette an jedem Gebiet mit gesendetem Auftrag (Einsatzleitung) ----
 // Mitte: beim Senden gemerkt (ctr), bei älteren Aufträgen aus den Feldern des Teams bzw. dem Raster
@@ -3182,9 +3219,10 @@ function sentBadges() {
     const { last, done } = latestFor(msgs, x.id);
     const f = sentFields(x);
     const fin = (done && (done.pc == null || done.pc >= 100)) || (f.n > 0 && f.a === f.n);
-    const line1 = `${team ? team.label : x.team}: ${last ? msgLabel(last) : `📲 Auftrag ${hhmm(x.at)}`}`;
+    const acc = isAccepted(x);
+    const line1 = `${team ? team.label : x.team}: ${!acc && !last ? '📲 wartet auf Übernahme' : last ? msgLabel(last) : `📲 Auftrag ${hhmm(x.acc)}`}`;
     const line2 = [f.a ? `▦ ${f.a}/${f.n} Felder abgesucht` : '', last ? hhmm(last.t) : ''].filter(Boolean).join(' · ');
-    out.push({ x, ctr, color: team ? team.color : '#455a64', lines: [line1, line2].filter(Boolean), fin });
+    out.push({ x, ctr, color: team ? team.color : '#455a64', lines: [line1, line2].filter(Boolean), fin, wait: !acc });
   }
   return out;
 }
@@ -3203,10 +3241,12 @@ function drawSentBadges(c) {
     c.fillStyle = b.fin ? '#e8f5e9' : 'rgba(255,255,255,0.93)';
     c.strokeStyle = b.color;
     c.lineWidth = 3;
+    if (b.wait) c.setLineDash([6, 4]); // noch nicht übernommen: gestrichelt
     c.beginPath();
     if (c.roundRect) c.roundRect(x0, y0, w, h, 8); else c.rect(x0, y0, w, h);
     c.fill();
     c.stroke();
+    c.setLineDash([]);
     c.fillStyle = '#111';
     b.lines.forEach((l, i) => { c.font = `${i ? '' : 'bold '}12px sans-serif`; c.fillText(l, x0 + 8, y0 + 11 + i * 15); });
     badgeBoxes.push({ b, x0, y0, w, h });
@@ -3263,6 +3303,28 @@ function statusMarkAt(x, y) {
 function statusText({ m }) {
   return [`${m.tm || 'Team'}: ${msgLabel(m)}`, hhmm(m.t) + (m.acc != null ? ` (± ${m.acc} m)` : ''), m.txt && `„${m.txt}“`,
     ].filter(Boolean).join(' · ');
+}
+// EL: Meldung antippen – Text und Löschen (nach Warnung); gelöscht wird nur auf diesem Gerät (und per Fortschritt bei den anderen EL-Geräten)
+async function msgDialog(m) {
+  const del = await openDlg((box, close) => {
+    dlgHead(box, 'Meldung', statusText({ m }));
+    dlgButton(box, '🗑 Löschen', 'urgent', () => close(true));
+    dlgButton(box, 'Schließen', 'primary', () => close(false));
+  });
+  if (!del || isLocked()) return;
+  const ok = await openDlg((box, close) => {
+    dlgHead(box, '🗑 Meldung löschen?', `Meldung von ${m.tm || 'Team'} (${hhmm(m.t)}) wirklich löschen? Sie wird auf diesem Gerät nicht mehr angezeigt.`);
+    dlgButton(box, 'Löschen', 'urgent', () => close(true));
+    dlgButton(box, 'Abbrechen', 'primary', () => close(false));
+  });
+  if (!ok) return;
+  P.msgDel = P.msgDel || {};
+  P.msgDel[m.id] = Date.now();
+  changed();
+  redraw();
+  renderSentList();
+  saveNow();
+  toast('Meldung gelöscht');
 }
 function showStatusMark(m) {
   closePanels();
@@ -3511,11 +3573,12 @@ async function pollLive() {
   try {
     const r = await pollMessages(l, (...a) => fetch(...a));
     const known = new Set(l.msgs.map((m) => m.id));
-    const fresh = r.msgs.filter((m) => !known.has(m.id));
+    const fresh = r.msgs.filter((m) => !known.has(m.id) && !(proj.msgDel && proj.msgDel[m.id]));
     if (r.since !== l.since || fresh.length) {
       l.since = r.since;
       if (fresh.length) {
         l.msgs = mergeStatus(l.msgs, fresh).slice(-500);
+        markAccepted(proj, fresh); // erste Meldung (z. B. 📲 Quittung) = Auftrag übernommen
         proj.updated = Date.now();
         if (proj === P) {
           renderSentList();
@@ -3554,7 +3617,7 @@ async function showUrgent() {
   const proj = P;
   const l = proj && proj.live;
   if (urgentOpen || db.mode !== 'el' || !l) return;
-  const todo = l.msgs.filter((m) => isUrgent(m) && !l.ack.includes(m.id));
+  const todo = l.msgs.filter((m) => isUrgent(m) && !l.ack.includes(m.id) && !(proj.msgDel && proj.msgDel[m.id]));
   if (!todo.length) return;
   if (!$('dlg').hidden) return setTimeout(showUrgent, 4000); // ein anderes Fenster steht – gleich nochmal
   urgentOpen = true;
@@ -3622,10 +3685,12 @@ async function handleShared(text) {
   const sent = (P.sent || []).find((x) => x.id === data.a);
   if (sent) {
     sent.last = Date.now();
+    if (!isAccepted(sent)) sent.acc = sent.last; // Rückmeldung = Auftrag übernommen
     sent.n = (sent.n || 0) + 1;
     const km = (P.items.filter((it) => it.resultKey && it.resultKey.startsWith(`${data.a}|t`)).reduce((a, it) => a + pathLen(it.pts), 0) / 1000);
     sent.lastSum = [km && `${km.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km gelaufen`, res.fields && `${res.fields} Feld${res.fields === 1 ? '' : 'er'} gemeldet`].filter(Boolean).join(', ');
   }
+  markAccepted(P, allMsgsRaw());
   changed();
   renderSentList();
   toast(`📥 Rückmeldung ${res.who}: ${res.ways} Weg${res.ways === 1 ? '' : 'e'}, ${res.marks} Markierung${res.marks === 1 ? '' : 'en'}, ${res.fields} Feld${res.fields === 1 ? '' : 'er'}${res.winds ? `, ${res.winds} Wind-Messung${res.winds === 1 ? '' : 'en'}` : ''}${res.msgs ? `, ${res.msgs} Status-Meldung${res.msgs === 1 ? '' : 'en'}` : ''}${res.known ? '' : ' (Auftrag hier unbekannt – ins aktuelle Suchgebiet übernommen)'}${res.ways + res.marks + res.fields + res.winds + res.msgs ? '' : ' – nichts Neues'}`, 9000);
@@ -3666,6 +3731,8 @@ async function takeAssignment(a) {
   saveNow();
   applyMode();
   toast(known ? 'Auftrag ist schon da' : `📲 Auftrag übernommen: ${p.hf.team}`, 5000);
+  // Übernahme-Quittung an die Einsatzleitung (ohne GPS-Warten); ohne Status-Server geht sie mit der QR-Rückmeldung mit
+  if (!known) sendStatus({ s: 'ok', pos: null });
 }
 $('recv-paste').addEventListener('click', () => openDlg((box, close) => {
   dlgHead(box, '📋 Rückmeldung einfügen', 'Den Link aus WhatsApp/SMS hier einfügen.');
@@ -3768,6 +3835,24 @@ function blockedGrid(gid, act = 'edit') {
   const m = deniedGrid(P, gid, act);
   if (m) toast(m, 4000);
   return !!m;
+}
+// Schutz übernommener Aufträge (nur EL): x = schützender Auftrag oder null. true = Aktion abbrechen;
+// der Dialog bietet „Ändern freigeben“ (5 Minuten), danach geht die Aktion beim nächsten Versuch durch.
+function guardAssigned(x) {
+  if (!x || db.mode !== 'el') return false;
+  if (!$('dlg').hidden) return true; // Wisch-Strich: nicht für jedes Feld neu fragen
+  const proj = P;
+  openDlg((box, close) => {
+    dlgHead(box, '🔒 Übernommener Auftrag', `Gehört zum übernommenen Auftrag ${x.team} (seit ${hhmm(x.acc)}). Wirklich ändern?`);
+    dlgButton(box, 'Ändern freigeben', 'urgent', () => close(true));
+    dlgButton(box, 'Abbrechen', 'primary', () => close(false));
+  }).then((ok) => {
+    if (!ok || proj !== P) return;
+    x.unlock = unlockUntil();
+    changed();
+    toast('Freigegeben für 5 Minuten – bitte nochmal ausführen', 5000);
+  });
+  return true;
 }
 async function reopenClosed() {
   const ok = await openDlg((box, close) => {
@@ -4029,8 +4114,10 @@ async function takeProgress(f) {
     if (ph) ph.name = from; else setPeer(P, from, 0);
   }
   progBase.set(P, snapshotBase(P));
+  markAccepted(P, allMsgsRaw());
   syncGrid();
   changed();
+  redraw();
   renderPois();
   if (!$('panel-teams').hidden) renderMarks();
   saveNow();
@@ -5282,7 +5369,7 @@ for (const btn of ['btn-mission', 'btn-notes', 'btn-grid', 'btn-teams']) {
 // Seitenknopf nochmal antippen, während sein Fenster offen ist: Fenster schließen
 const SIDE_PANELS = {
   'btn-projects': 'panel-projects', 'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',
-  'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-more': 'panel-more', 'btn-pdf': 'panel-share', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
+  'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-more': 'panel-more', 'btn-hfmenu': 'panel-hfmenu', 'btn-pdf': 'panel-share', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
 };
 for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
   $(btn).addEventListener('click', (e) => {
