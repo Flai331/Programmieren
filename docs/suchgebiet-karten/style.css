@@ -239,6 +239,22 @@ button, input, select { font: inherit; }
 .gfit-n, .gfit-s { cursor: ns-resize; }
 .gfit-w, .gfit-e { cursor: ew-resize; }
 .gfit-c { cursor: move; border-radius: 6px; }
+/* v108: Punkte eines Umrisses bearbeiten (Eckpunkte, Kantenmitten) */
+.vtx-h { background: #fff; border: 3px solid #1565c0; border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,0.4); cursor: move; }
+.vtx-mid { background: rgba(255,255,255,0.6); border: 2px solid rgba(21,101,192,0.8); border-radius: 50%; cursor: copy; }
+/* Hundeführer: die untere Leiste ist sonst ausgeblendet, die Punkte-Leiste muss aber erscheinen */
+body.hf .bottomstack:has(#vtxbar:not([hidden])) { display: flex !important; bottom: 96px; }
+/* langer Druck auf „Feld“: keine Textauswahl, kein Kontextmenü */
+.toolbar button { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+/* Fenster „Feld-Markierungen“ */
+.mklist { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; }
+.mkrow { display: flex; gap: 6px; }
+.mkrow.on .mkpick { outline: 2px solid var(--red); font-weight: 700; }
+#dlg-box .mkpick { flex: 1; display: flex; align-items: center; gap: 8px; margin: 0; text-align: left; }
+#dlg-box .mkpick i { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+#dlg-box .mkpick span { flex: 1; }
+#dlg-box .mkpick small { opacity: 0.65; }
+#dlg-box .mkedit { width: auto; margin: 0; padding: 8px 12px; }
 .trackbar button { border: 1px solid #ccc; background: var(--btn); border-radius: 10px; padding: 8px 10px; cursor: pointer; }
 .trackbar button.primary { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
 .trackbar button:disabled { opacity: 0.45; cursor: default; }

@@ -124,7 +124,7 @@
     <button data-tool="pan" class="active" title="Karte bewegen"><span>✋</span>Bewegen</button>
     <button data-tool="pen" title="Freihand zeichnen"><span>✏️</span>Stift</button>
     <button data-tool="text" title="Text / Punkt setzen"><span>📍</span>Text</button>
-    <button data-tool="fill" title="Feld einfärben / Team zuteilen"><span>▦</span>Feld</button>
+    <button data-tool="fill" title="Feld einfärben / Team zuteilen (lang drücken: Teams und Markierungen)"><span>▦</span>Feld</button>
     <button data-tool="track" title="Gebiet Punkt für Punkt umranden (auch als Track für Garmin)"><span>📐</span>Umriss</button>
     <button data-tool="erase" title="Zeichnung löschen"><span>🧽</span>Radierer</button>
     <button id="undo" title="Rückgängig"><span>↶</span>Zurück</button>
@@ -173,6 +173,10 @@
     <div id="gridfitbar" class="trackbar" hidden>
       <span id="gridfit-info">↔ Raster anpassen</span>
       <button id="gridfit-done" class="primary">Fertig</button>
+    </div>
+    <div id="vtxbar" class="trackbar" hidden>
+      <span id="vtx-info">✋ Punkte ziehen · Mitte ziehen = neuer Punkt · Punkt antippen = löschen</span>
+      <button id="vtx-done" class="primary">Fertig</button>
     </div>
     <div id="gpxselbar" class="trackbar" hidden>
       <span id="gpxsel-info">Antippen zum Auswählen</span>

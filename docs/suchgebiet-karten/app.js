@@ -1,6 +1,8 @@
 import {
   makeGrid, cellCount, cellAt, cellBounds, cellLabel, parseCell, formatMeters, MAX_CELLS, remapCells, gridBounds, fitGridArea,
 } from './grid.js';
+import { cellEditable, cellLayers, canPaint } from './celledit.js';
+import { removeVertex, insertVertex, moveVertex, edgeMids, vertexCount, minPoints } from './vertex.js';
 import { drawOverlay, hitItem as hitItemAll, labelDetail, trackLabel, markHidden, outlineColor } from './render.js';
 import {
   LAYERS, OVERLAYS, DEFAULT_OVERLAYS, layerById, layerStack, tileUrl,
@@ -61,7 +63,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v107';
+const APP_VERSION = 'v108';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -90,6 +92,7 @@ let tool = 'pan';
 let draftTrack = null; // Umriss, der gerade Punkt für Punkt gesetzt wird
 let draftPen = null; // Stift-Zeichnung in Arbeit: { strokes: [...] } – bis „Fertig“ oder „Abbrechen“
 let undoStack = [];
+let vtx = null; // v108 Punkte-Modus: { it, id, hs: [Marker Eckpunkte], ms: [Marker Kantenmitten] }
 let searchPin = null; // Nadel des letzten Suchergebnisses (gehört zu keinem Einsatz)
 let gpxSel = null; // Auswahl auf der Karte (Werkzeug „gpxsel“), siehe unten
 let selMode = null; // 'export' (GPX direkt), 'share' (für „Weitergeben“), 'area' (Gebiet antippen)
@@ -199,6 +202,7 @@ function undo() {
   Object.assign(P, JSON.parse(s));
   syncGrid();
   changed();
+  syncVertex();
 }
 
 function changed() {
@@ -575,6 +579,7 @@ const HINTS = {
 
 let hintTimer = null;
 function setTool(t) {
+  endVertex();
   // Einzeichnen nur in einem offenen Einsatz (Offline-Bereich wählen u. Ä. geht immer)
   if (['pen', 'text', 'fill', 'track', 'erase', 'meet', 'poi', 'grid'].includes(t) && isLocked()) { lockedToast(); t = 'pan'; }
   if (t !== tool) repLog.add(`Werkzeug ${t}`);
@@ -641,7 +646,17 @@ function activeMark() {
   return P.marks.find((m) => m.id === db.activeMark) || P.marks[0] || null;
 }
 
+// v108: Ausgeblendetes lässt sich nicht verändern (Raster aus, Markierung aus) – ein Tipp tut dann gar nichts
+const hideGrid = () => !!(P.hide && P.hide.grid);
+function cellMarks(src, key) {
+  const of = (id) => (id && id !== NO_TEAM ? P.marks.find((m) => m.id === id) || null : null);
+  return { fillMark: of(src.fills[key]), statusMark: of(src.status[key]) };
+}
+
 function fillAt(ll, first) {
+  if (hideGrid()) return;
+  const am = activeMark();
+  if (am && am.hidden) return;
   // erster Tipp in einem anderen Rastergebiet: dieses bearbeiten
   if (first) useGridAt(ll.lat, ll.lng);
   const cell = grid && cellAt(grid, ll.lat, ll.lng);
@@ -657,6 +672,7 @@ function fillAt(ll, first) {
     return;
   }
   if (!first && !fillStroke) return;
+  if (!canPaint({ hideGrid: false, mark: m, ...cellMarks(P, key) })) return;
   if (guardAssigned(assignedCell(P, P.gridId, key))) return;
   if (first) {
     snapshot();
@@ -955,26 +971,33 @@ function eraseAt(x, y) {
     if (blocked(P.items[i], 'delete') || guardAssigned(assignedOf(P, P.items[i]))) return;
     before();
     P.items.splice(i, 1);
-  } else if (poiAt(x, y) >= 0) {
+  } else if (!(P.hide || {}).pois && poiAt(x, y) >= 0) { // ausgeblendet: nicht radierbar
     if (blocked(P.pois[poiAt(x, y)], 'delete')) return;
     before();
     deletePoi(P, P.pois[poiAt(x, y)]);
     renderPois();
-  } else if (P.meet && Math.hypot(toPx(P.meet.lat, P.meet.lon)[0] - x, toPx(P.meet.lat, P.meet.lon)[1] - y) <= 16) {
+  } else if (P.meet && !(P.hide || {}).meet && Math.hypot(toPx(P.meet.lat, P.meet.lon)[0] - x, toPx(P.meet.lat, P.meet.lon)[1] - y) <= 16) {
     if (blocked(P.meet, 'delete')) return;
     before();
     P.meet = null;
   } else {
     const ll = map.containerPointToLatLng([x, y]);
+    if (hideGrid()) return;
     const h = hitGrid(ll.lat, ll.lng);
     const key = h && `${h.c},${h.r}`;
     const target = h && (h.g.active ? P : P.otherGrids.find((g) => g.id === h.g.id));
-    if (!key || (!target.fills[key] && !target.status[key])) return;
+    if (!key) return;
+    // ausgeblendete Ebenen (Team bzw. Markierung) bleiben stehen
+    const mk = cellMarks(target, key);
+    const lay = cellLayers({ hideGrid: false, ...mk });
+    const delT = cellEditable({ hideGrid: false, ...mk }) && lay.team && target.fills[key];
+    const delS = cellEditable({ hideGrid: false, ...mk }) && lay.status && target.status[key];
+    if (!delT && !delS) return;
     if (!canEditCell(P, h.g.id, key)) return toast(MSG_VIEW, 4000);
     if (guardAssigned(assignedCell(P, h.g.id, key))) return;
     before();
-    delete target.fills[key];
-    delete target.status[key];
+    if (delT) delete target.fills[key];
+    if (delS) delete target.status[key];
   }
   redraw();
 }
@@ -1039,8 +1062,10 @@ function renameItem(i) {
   if (isLocked()) return lockedToast();
   if (blocked(it) || guardAssigned(assignedOf(P, it))) return;
   if (it.kind === 'track') {
-    outlineDialog(it, '📐 Umriss').then((r) => {
-      if (!r) return;
+    outlineDialog(it, '📐 Umriss', { edit: true }).then((r) => {
+      if (!r || !P.items.includes(it)) return;
+      if (r.del) return deleteOutline(it);
+      if (r.vtx) return startVertex(it);
       snapshot();
       applyOutline(it, { ...r, name: r.name || it.name });
       changed();
@@ -1059,7 +1084,7 @@ function renameItem(i) {
 }
 
 // Umriss: Name, Zuteilung (Team oder Einheit aus „Einsatz → Kräfte“) und Notiz
-function outlineDialog(it, title) {
+function outlineDialog(it, title, opts = {}) {
   return openDlg((box, close) => {
     dlgHead(box, title, 'Name und Notiz stehen so auf der Karte, im PDF und auf dem Garmin.');
     const field = (label, el) => {
@@ -1081,6 +1106,10 @@ function outlineDialog(it, title) {
     p.textContent = 'Teams unter „Teams“, weitere Einheiten (Feuerwehr, Polizei …) unter „Einsatz → Kräfte“.';
     box.appendChild(p);
     dlgButton(box, 'Speichern', 'primary', () => close({ name: name.value.trim(), to: sel.value, note: note.value.trim() }));
+    if (opts.edit) {
+      dlgButton(box, '✋ Punkte bearbeiten', '', () => close({ vtx: true }));
+      dlgButton(box, '🗑 Löschen', 'urgent', () => close({ del: true }));
+    }
     dlgButton(box, 'Abbrechen', '', () => close(null));
     setTimeout(() => { name.focus(); name.select(); }, 50);
   });
@@ -1094,6 +1123,105 @@ function applyOutline(it, r) {
   } else delete it.to;
   if (r.note) it.note = r.note; else delete it.note;
 }
+
+// Umriss löschen (Fenster am Umriss, Langdruck): Sperren wie beim Radierer, vorher fragen
+async function deleteOutline(it) {
+  if (blocked(it, 'delete') || guardAssigned(assignedOf(P, it))) return;
+  const ok = await openDlg((box, close) => {
+    dlgHead(box, '🗑 Umriss löschen?', `„${it.name || 'Umriss'}“ wird gelöscht.`);
+    dlgButton(box, '🗑 Löschen', 'urgent', () => close(true));
+    dlgButton(box, 'Abbrechen', 'primary', () => close(false));
+  });
+  const k = P.items.indexOf(it);
+  if (!ok || k < 0) return;
+  snapshot();
+  P.items.splice(k, 1);
+  changed();
+  toast('Umriss gelöscht (↶ macht es rückgängig)', 4000);
+}
+
+// ---------- v108: Punkte eines Umrisses bearbeiten ----------
+// Eckpunkte ziehen, auf der Kantenmitte ziehen = neuer Punkt, Punkt antippen = löschen. Jede Aktion hat ihr eigenes snapshot().
+function startVertex(it) {
+  if (isLocked()) return lockedToast();
+  if (blocked(it) || guardAssigned(assignedOf(P, it))) return;
+  if (db.mode === 'el' ? !canEdit(P, it) : (it.fromEl || it.prev)) return toast(MSG_VIEW, 4000);
+  if (tool !== 'pan') setTool('pan');
+  endVertex();
+  vtx = { it, id: it.id || null, hs: [], ms: [] };
+  buildVertex();
+  $('vtxbar').hidden = false;
+}
+function clearVertex() {
+  if (!vtx) return;
+  for (const m of [...vtx.hs, ...vtx.ms]) m.remove();
+  vtx.hs = [];
+  vtx.ms = [];
+}
+function endVertex() {
+  if (!vtx) return;
+  clearVertex();
+  vtx = null;
+  $('vtxbar').hidden = true;
+  redraw();
+}
+function buildVertex() {
+  clearVertex();
+  const it = vtx.it;
+  const mk = (cls, size, ll) => L.marker(ll, {
+    draggable: true, keyboard: false, zIndexOffset: cls === 'vtx-h' ? 1100 : 1000,
+    icon: L.divIcon({ className: cls, iconSize: [size, size] }),
+  }).addTo(map);
+  for (let i = 0, n = vertexCount(it.pts, it.open); i < n; i++) {
+    const m = mk('vtx-h', 24, it.pts[i]);
+    m.on('dragstart', () => snapshot());
+    m.on('drag', () => { const ll = m.getLatLng(); moveVertex(it.pts, i, ll.lat, ll.lng, it.open); redraw(); });
+    m.on('dragend', () => { changed(); buildMids(); });
+    m.on('click', () => askRemoveVertex(i));
+    vtx.hs.push(m);
+  }
+  buildMids();
+}
+function buildMids() {
+  if (!vtx) return;
+  const it = vtx.it;
+  for (const m of vtx.ms) m.remove();
+  vtx.ms = edgeMids(it.pts, it.open).map((e) => {
+    const m = L.marker([e.lat, e.lon], {
+      draggable: true, keyboard: false, zIndexOffset: 1000,
+      icon: L.divIcon({ className: 'vtx-mid', iconSize: [16, 16] }),
+    }).addTo(map);
+    let j = -1;
+    m.on('dragstart', () => { snapshot(); const ll = m.getLatLng(); j = insertVertex(it.pts, e.i, ll.lat, ll.lng); });
+    m.on('drag', () => { const ll = m.getLatLng(); moveVertex(it.pts, j, ll.lat, ll.lng, it.open); redraw(); });
+    m.on('dragend', () => { changed(); setTimeout(() => vtx && vtx.it === it && buildVertex(), 0); });
+    return m;
+  });
+}
+async function askRemoveVertex(i) {
+  const it = vtx && vtx.it;
+  if (!it) return;
+  if (vertexCount(it.pts, it.open) <= minPoints(it.open)) return toast(`Mindestens ${minPoints(it.open)} Punkte`);
+  const ok = await openDlg((box, close) => {
+    dlgHead(box, '🗑 Punkt löschen?', 'Der Punkt wird aus dem Umriss entfernt.');
+    dlgButton(box, '🗑 Löschen', 'urgent', () => close(true));
+    dlgButton(box, 'Abbrechen', 'primary', () => close(false));
+  });
+  if (!ok || !vtx || vtx.it !== it) return;
+  snapshot();
+  if (!removeVertex(it.pts, i, it.open)) return;
+  changed();
+  buildVertex();
+}
+// nach Rückgängig: Umriss über die ID neu finden (Undo ersetzt die Objekte), sonst Modus beenden
+function syncVertex() {
+  if (!vtx) return;
+  const it = vtx.id ? P.items.find((x) => x.id === vtx.id) : null;
+  if (!it) return endVertex();
+  vtx.it = it;
+  buildVertex();
+}
+$('vtx-done').addEventListener('click', endVertex);
 
 // ---------- Stift-Zeichnung ----------
 function updatePenbar() {
@@ -1260,6 +1388,18 @@ function addMark(kind, quick = false) {
   if (inp) { inp.focus(); inp.select(); }
 }
 
+// Team oder Markierung löschen (Teams-Fenster und Fenster „Feld-Markierungen“): fragt nach, gibt ihre Felder frei
+function deleteMark(m, cnt = null) {
+  const maps = [mapFor(P, m), ...(P.otherGrids || []).map((g) => mapFor(g, m))];
+  const n = cnt ?? maps.reduce((a, mp) => a + Object.values(mp).filter((v) => v === m.id).length, 0);
+  if (!confirm(`„${markLabel(m) || 'Eintrag'}“ löschen?${n ? ` ${n} zugeteilte Felder werden freigegeben.` : ''}`)) return false;
+  snapshot();
+  P.marks = P.marks.filter((x) => x.id !== m.id);
+  for (const mp of maps) for (const k of Object.keys(mp)) if (mp[k] === m.id) delete mp[k];
+  changed();
+  return true;
+}
+
 function renderMarks() {
   const box = $('mark-list');
   box.innerHTML = '';
@@ -1312,16 +1452,7 @@ function renderMarks() {
       el.querySelector('.helpers').addEventListener('input', (e) => { const n = parseInt(e.target.value, 10); if (n > 0) m.helpers = n; else delete m.helpers; save(); });
     }
     sel.addEventListener('change', () => { m.color = sel.value; changed(); renderMarks(); });
-    el.querySelector('.del').addEventListener('click', () => {
-      const cnt = a ? a.count : 0;
-      if (!confirm(`„${markLabel(m) || 'Eintrag'}“ löschen?${cnt ? ` ${cnt} zugeteilte Felder werden freigegeben.` : ''}`)) return;
-      snapshot();
-      P.marks = P.marks.filter((x) => x.id !== m.id);
-      const map = mapFor(P, m);
-      for (const k of Object.keys(map)) if (map[k] === m.id) delete map[k];
-      changed();
-      renderMarks();
-    });
+    el.querySelector('.del').addEventListener('click', () => { if (deleteMark(m, a ? a.count : 0)) renderMarks(); });
     box.appendChild(el);
   }
 }
@@ -1643,7 +1774,9 @@ $('cell-go').addEventListener('click', goToCell);
 $('cell-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') goToCell(); });
 
 // Antippen im Bewegen-Modus zeigt Feld, Zuteilung und ggf. UTMREF
-// ---------- Feld lange drücken: Team zuteilen, Markierung setzen, neu anlegen, ändern ----------
+// ---------- Langer Druck ----------
+// Auf der Karte: Umriss/Linie unter dem Finger → Fenster (Name, Zuteilung, Punkte bearbeiten, Löschen).
+// Auf dem Knopf „Feld“: Fenster „Feld-Markierungen“ (Teams und Markierungen wählen, anlegen, ändern).
 const LONG_PRESS = 550; // ms
 let pressT = null;
 let pressAt = null;
@@ -1651,21 +1784,22 @@ let longPressedAt = 0;
 const mapEl = map.getContainer();
 mapEl.addEventListener('pointerdown', (e) => {
   clearTimeout(pressT);
-  if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0) || tool !== 'pan' || db.mode !== 'el') return;
+  if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0) || tool !== 'pan' || vtx) return;
+  if (e.target.closest && e.target.closest('.leaflet-control, .gfit-h, .vtx-h, .vtx-mid, button, a')) return;
   pressAt = { x: e.clientX, y: e.clientY };
   pressT = setTimeout(() => {
     pressT = null;
+    longPressedAt = Date.now(); // der folgende Klick gehört dazu
     const r = mapEl.getBoundingClientRect();
-    const ll = map.containerPointToLatLng([pressAt.x - r.left, pressAt.y - r.top]);
-    const h = allGrids(P).length ? hitGrid(ll.lat, ll.lng) : null;
-    if (!h) return;
-    longPressedAt = Date.now();
+    const i = hitItem(P.items, toPx, pressAt.x - r.left, pressAt.y - r.top, 14);
+    const it = i >= 0 ? P.items[i] : null;
+    if (!it || it.kind !== 'track') return;
     if (navigator.vibrate) navigator.vibrate(30);
-    if (isLocked()) return lockedToast();
-    if (!canEditCell(P, h.g.id, `${h.c},${h.r}`)) return toast(MSG_VIEW, 4000);
-    if (guardAssigned(assignedCell(P, h.g.id, `${h.c},${h.r}`))) return;
-    useGridAt(ll.lat, ll.lng);
-    fieldDialog(ll);
+    if (db.mode === 'el') {
+      if (isLocked()) return lockedToast();
+      if (!canEdit(P, it)) return toast(MSG_VIEW, 4000);
+      renameItem(i);
+    } else if (!it.fromEl && !it.prev) hfAreaEdit(it);
   }, LONG_PRESS);
 });
 mapEl.addEventListener('pointermove', (e) => {
@@ -1675,30 +1809,34 @@ for (const ev of ['pointerup', 'pointercancel']) mapEl.addEventListener(ev, () =
 map.on('zoomstart movestart', () => { clearTimeout(pressT); pressT = null; });
 mapEl.addEventListener('contextmenu', (e) => e.preventDefault());
 
-function fieldDialog(ll) {
-  const cell = grid && cellAt(grid, ll.lat, ll.lng);
-  if (!cell) return;
-  const key = `${cell.c},${cell.r}`;
-  const h = hitGrid(ll.lat, ll.lng);
-  const name = `${h ? h.label : ''}${cellLabel(cell.c, cell.r)}`;
+// Langer Druck auf „Feld“ (Werkzeugleiste): Teams/Markierungen verwalten. Ein Tipp wählt weiterhin das Werkzeug.
+const fillBtn = document.querySelector('.toolbar [data-tool="fill"]');
+let fillPressT = null;
+let fillLongAt = 0;
+fillBtn.addEventListener('pointerdown', (e) => {
+  clearTimeout(fillPressT);
+  fillLongAt = 0; // neuer Druck: der nächste Klick gehört wieder zum Tipp
+  if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0) || db.mode !== 'el') return;
+  fillPressT = setTimeout(() => {
+    fillPressT = null;
+    fillLongAt = Date.now();
+    if (navigator.vibrate) navigator.vibrate(30);
+    if (isLocked()) return lockedToast();
+    markDialog();
+  }, LONG_PRESS);
+});
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) fillBtn.addEventListener(ev, () => { clearTimeout(fillPressT); fillPressT = null; });
+fillBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+// Klick nach einem langen Druck darf das Werkzeug nicht umschalten (Capture-Phase, vor dem Werkzeug-Handler)
+fillBtn.addEventListener('click', (e) => {
+  if (Date.now() - fillLongAt < 1000) { e.stopImmediatePropagation(); e.preventDefault(); }
+}, true);
+
+// Fenster „Feld-Markierungen“: alle Teams und Markierungen, wählen / ändern / löschen / neu
+function markDialog() {
   let edit = null; // Markierung, die gerade geändert wird
-  const set = (kind, id) => {
-    snapshot();
-    const mp = kind === 'team' ? P.fills : P.status;
-    if (id) mp[key] = id; else delete mp[key];
-    changed();
-  };
   return openDlg((box, close) => {
-    const chip = (parent, m, on, fn) => {
-      const b = document.createElement('button');
-      b.className = 'fchip' + (on ? ' on' : '');
-      b.innerHTML = '<i></i><span></span>';
-      if (m) b.querySelector('i').style.background = m.color; else b.querySelector('i').remove();
-      b.querySelector('span').textContent = `${on ? '✓ ' : ''}${m ? markLabel(m) || '(ohne Namen)' : 'keine'}`;
-      b.addEventListener('click', fn);
-      parent.appendChild(b);
-      return b;
-    };
+    const pick = (m) => { db.activeMark = m.id; renderPalette(); save(); close(true); setTool('fill'); };
     const render = () => {
       box.innerHTML = '';
       if (edit) {
@@ -1706,8 +1844,10 @@ function fieldDialog(ll) {
         dlgHead(box, '✏️ Markierung ändern', 'Gilt für alle Felder mit dieser Markierung und für die Legende im PDF.');
         const inp = document.createElement('input');
         inp.type = 'text';
+        inp.id = 'mk-name';
         inp.value = m.label;
         const sel = document.createElement('select');
+        sel.id = 'mk-color';
         for (const c of [...new Set([...MARK_COLORS, m.color])]) sel.add(new Option(COLOR_NAMES[c] || 'eigene Farbe', c));
         sel.value = m.color;
         box.append(inp, sel);
@@ -1720,65 +1860,47 @@ function fieldDialog(ll) {
           edit = null;
           render();
         });
-        dlgButton(box, '🗑️ Markierung löschen', 'danger', () => {
-          const n = Object.values(P.status).filter((v) => v === m.id).length + (P.otherGrids || []).reduce((a, g) => a + Object.values(g.status || {}).filter((v) => v === m.id).length, 0);
-          if (!confirm(`„${markLabel(m)}“ löschen?${n ? ` Sie wird von ${n} Feld${n === 1 ? '' : 'ern'} entfernt.` : ''}`)) return;
-          snapshot();
-          P.marks = P.marks.filter((x) => x.id !== m.id);
-          for (const mp of [P.status, ...(P.otherGrids || []).map((g) => g.status || {})]) for (const k of Object.keys(mp)) if (mp[k] === m.id) delete mp[k];
-          changed();
-          renderPalette();
-          edit = null;
-          render();
-        });
+        dlgButton(box, '🗑️ Löschen', 'danger', () => { if (deleteMark(m)) { edit = null; render(); } });
         dlgButton(box, '‹ Zurück', '', () => { edit = null; render(); });
         return;
       }
-      dlgHead(box, `▦ Feld ${name}`, 'Antippen übernimmt sofort. Für viele Felder auf einmal: Werkzeug „Feld“.');
-      const sec = (title) => {
-        const l = document.createElement('label');
-        l.textContent = title;
-        const d = document.createElement('div');
-        d.className = 'fchips';
-        box.append(l, d);
-        return d;
+      dlgHead(box, '▦ Feld-Markierungen', 'Antippen wählt die Markierung und das Werkzeug „Feld“.');
+      const act = activeMark();
+      const list = document.createElement('div');
+      list.className = 'mklist';
+      const row = (m, editable) => {
+        const r = document.createElement('div');
+        r.className = 'mkrow' + (act && act.id === m.id ? ' on' : '');
+        r.dataset.id = m.id;
+        r.innerHTML = '<button class="mkpick"><i></i><span></span><small></small></button>';
+        const pk = r.querySelector('.mkpick');
+        pk.querySelector('i').style.background = m.color;
+        pk.querySelector('span').textContent = m === NO_TEAM_MARK ? 'ohne Team' : markLabel(m) || '(ohne Namen)';
+        pk.querySelector('small').textContent = m === NO_TEAM_MARK ? 'Team' : `${m.kind === 'team' ? 'Team' : 'Markierung'}${m.hidden ? ' · ausgeblendet' : ''}`;
+        pk.addEventListener('click', () => pick(m));
+        if (editable) {
+          const ed = document.createElement('button');
+          ed.className = 'mkedit';
+          ed.textContent = '✏️';
+          ed.title = 'Ändern';
+          ed.addEventListener('click', () => { edit = m; render(); });
+          r.appendChild(ed);
+        }
+        list.appendChild(r);
       };
-      const tb = sec('👥 Team');
-      const teams = P.marks.filter((m) => m.kind === 'team');
-      for (const m of teams) chip(tb, m, P.fills[key] === m.id, () => { set('team', P.fills[key] === m.id ? null : m.id); render(); });
-      // „ohne Team“: Feld gehört zum Suchgebiet, hat aber noch kein Team (grau); zweiter Tipp löscht das Feld
-      chip(tb, NO_TEAM_MARK, !P.fills[key] || P.fills[key] === NO_TEAM, () => { set('team', P.fills[key] === NO_TEAM ? null : NO_TEAM); render(); });
-      const nt = document.createElement('button');
-      nt.className = 'fchip add';
-      nt.textContent = '+ Neues Team';
-      nt.addEventListener('click', () => { const m = addMark('team', true); if (m) set('team', m.id); render(); });
-      tb.appendChild(nt);
-      const sb = sec('🏷️ Markierung');
-      for (const m of P.marks.filter((x) => x.kind === 'status')) {
-        const wrap = document.createElement('span');
-        wrap.className = 'fchip-wrap';
-        sb.appendChild(wrap);
-        chip(wrap, m, P.status[key] === m.id, () => { set('status', P.status[key] === m.id ? null : m.id); render(); });
-        const ed = document.createElement('button');
-        ed.className = 'fchip edit';
-        ed.textContent = '✏️';
-        ed.title = 'Markierung ändern';
-        ed.addEventListener('click', () => { edit = m; render(); });
-        wrap.appendChild(ed);
-      }
-      chip(sb, null, !P.status[key], () => { set('status', null); render(); });
-      const nm = document.createElement('button');
-      nm.className = 'fchip add';
-      nm.textContent = '+ Neue Markierung';
-      nm.addEventListener('click', () => { const m = addMark('status', true); if (m) set('status', m.id); render(); });
-      sb.appendChild(nm);
-      dlgButton(box, 'Fertig', 'primary', () => close(true));
+      for (const m of P.marks) row(m, true);
+      row(NO_TEAM_MARK, false);
+      box.appendChild(list);
+      dlgButton(box, '+ Team', '', () => { const m = addMark('team', true); if (m) render(); });
+      dlgButton(box, '+ Markierung', '', () => { const m = addMark('status', true); if (m) render(); });
+      dlgButton(box, 'Schließen', 'primary', () => close(true));
     };
     render();
   });
 }
 
 map.on('click', (e) => {
+  if (vtx) return; // Punkte-Modus: Tipps auf die Karte öffnen nichts
   if (Date.now() - longPressedAt < 1000) return; // gehört zum langen Druck
   if (Date.now() - moveTapAt < 700) return; // gehört zum Tipp „neuen Ort setzen“
   const sm = statusMarkAt(e.containerPoint.x, e.containerPoint.y);
@@ -1809,7 +1931,7 @@ map.on('click', (e) => {
     if (i >= 0 && P.items[i].kind === 'track' && !P.items[i].fromEl && !P.items[i].prev) return hfAreaEdit(P.items[i]);
   }
   const parts = [];
-  if (allGrids(P).length) {
+  if (allGrids(P).length && !hideGrid()) {
     const c = hitGrid(e.latlng.lat, e.latlng.lng);
     if (c) {
       const v = gridView(P, c.g);
@@ -2921,10 +3043,12 @@ async function hfAreaEdit(it) {
     note.placeholder = 'Notiz (optional)';
     box.append(name, note);
     dlgButton(box, '💾 Speichern', 'primary', () => close({ name: name.value.trim(), note: note.value.trim() }));
+    dlgButton(box, '✋ Punkte bearbeiten', '', () => close({ vtx: true }));
     dlgButton(box, '🗑 Löschen', 'urgent', () => close({ del: true }));
     dlgButton(box, 'Abbrechen', '', () => close(null));
   });
   if (!r || !P.items.includes(it)) return;
+  if (r.vtx) return startVertex(it);
   if (r.del) {
     const ok = await openDlg((box, close) => {
       dlgHead(box, '🗑 Bereich löschen?', `„${it.name || 'Bereich'}“ wird gelöscht und geht nicht mehr an die Einsatzleitung.`);
@@ -2949,6 +3073,7 @@ $('hf-field').addEventListener('click', () => {
   setTool(tool === 'hffield' ? 'pan' : 'hffield');
 });
 function hfFieldTap(ll) {
+  if (hideGrid()) return;
   const h = useGridAt(ll.lat, ll.lng);
   if (!h) return toast('Außerhalb des Rasters');
   const key = `${h.c},${h.r}`;
@@ -5677,6 +5802,7 @@ function startGps(jump) {
 // ---------- Suchgebiete (Projekte) ----------
 function switchProject(id) {
   endGridFit();
+  endVertex();
   saveNow();
   db.currentId = id;
   P = db.projects[id];
@@ -6390,7 +6516,7 @@ document.querySelectorAll('.panel .close').forEach((b) => b.addEventListener('cl
 let tapSwallow = null; // {id, until}: Rest der verschluckten Tipp-Geste (pointerup, click) ebenfalls verschlucken
 function tapIsEmpty(t) {
   if (!t || t === document.body || t === document.documentElement || t === canvas) return true;
-  return !!(t.closest && t.closest('#map') && !t.closest('.leaflet-control, .leaflet-popup, .gfit-h, button, a'));
+  return !!(t.closest && t.closest('#map') && !t.closest('.leaflet-control, .leaflet-popup, .gfit-h, .vtx-h, .vtx-mid, button, a'));
 }
 function anyOpenThing() {
   return [...document.querySelectorAll('.panel')].some((p) => !p.hidden)
