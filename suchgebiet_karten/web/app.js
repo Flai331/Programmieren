@@ -3069,7 +3069,7 @@ async function prepareSend() {
     P.sent.push({
       id: c.a.id, teamId: c.sel.teamId, team: team ? team.label : 'ohne Team', grids: c.a.g.map((g) => g.i), at: Date.now(),
       what: assignmentSummary(c.a), n: 0, ctr: assignmentCenter(c.a), ...(c.a.ls ? { live: true } : {}),
-      acc: 0, items: (c.sel.itemIdx || []).map((i) => P.items[i] && P.items[i].id).filter(Boolean), cells: Object.fromEntries(c.a.g.map((g) => [g.i, [...g.f]])),
+      acc: 0, items: (c.sel.itemIdx || []).map((i) => P.items[i] && (P.items[i].id || (P.items[i].id = uid()))).filter(Boolean), cells: Object.fromEntries(c.a.g.map((g) => [g.i, [...g.f]])),
     });
     renderSentList();
   }

@@ -39,3 +39,29 @@ export function deniedGrid(p, gid, act = 'edit') {
   if (l === 'base') return MSG_VIEW;
   return l && act === 'delete' ? MSG_DELETE : '';
 }
+
+// ---------- v95: Schutz übernommener Aufträge (nur Einsatzleitung) ----------
+// P.sent-Eintrag: acc (Zeit der Übernahme, 0 = noch nicht übernommen), items [Item-IDs], cells { Raster-ID: ["c,r" …] },
+// unlock (bis wann der Schutz freigegeben ist). Geschützt = übernommen und nicht freigegeben.
+export const UNLOCK_MS = 5 * 60e3;
+export const isAccepted = (x) => !!x && Number(x.acc) > 0;
+const live = (x, now) => isAccepted(x) && !(Number(x.unlock) > now);
+// Auftrag, der dieses Item schützt (sonst null)
+export const assignedOf = (p, el, now = Date.now()) => (el && el.id ? (p.sent || []).find((x) => live(x, now) && Array.isArray(x.items) && x.items.includes(el.id)) || null : null);
+// Auftrag, der dieses Feld schützt
+export const assignedCell = (p, gid, key, now = Date.now()) => (p.sent || []).find((x) => live(x, now) && x.cells && Array.isArray(x.cells[gid]) && x.cells[gid].includes(key)) || null;
+// Auftrag, der dieses Raster(gebiet) schützt (Felder des Rasters wurden mitgeschickt)
+export const assignedGrid = (p, gid, now = Date.now()) => (p.sent || []).find((x) => live(x, now) && x.cells && Array.isArray(x.cells[gid])) || null;
+export const unlockUntil = (now = Date.now()) => now + UNLOCK_MS;
+// Übernahme erkennen: erste Meldung zu einem Auftrag setzt acc (Zeit der Meldung). Liefert Anzahl neu übernommener.
+export function markAccepted(p, msgs, now = Date.now()) {
+  let n = 0;
+  for (const x of p.sent || []) {
+    if (isAccepted(x)) continue;
+    const mine = (msgs || []).filter((m) => m && m.a === x.id);
+    if (!mine.length) continue;
+    x.acc = Math.min(now, ...mine.map((m) => Number(m.t) || now));
+    n++;
+  }
+  return n;
+}
