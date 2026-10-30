@@ -17,6 +17,9 @@ android {
         // Notion-Token für Fehlerberichte (GitHub-Secret NOTION_TOKEN); leer = Meldung per Mail
         val notionToken = (System.getenv("NOTION_TOKEN") ?: "").replace("\"", "")
         buildConfigField("String", "NOTION_TOKEN", "\"$notionToken\"")
+        // Release-Tag, aus dem sich die App aktualisiert (-PupdateTag=... im CI); leer = kein Update-Check
+        val updateTag = ((project.findProperty("updateTag") as String?) ?: "").replace("\"", "")
+        buildConfigField("String", "UPDATE_TAG", "\"$updateTag\"")
     }
 
     buildFeatures {

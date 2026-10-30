@@ -691,6 +691,7 @@ html.night .st-urgent { background: transparent; color: inherit; }
 .st-row { display: flex; align-items: flex-start; gap: 6px; border-left: 6px solid var(--tc, #455a64); background: #f6f6f6; border-radius: 8px; margin: 5px 0; padding: 6px 4px 6px 8px; font-size: 13px; }
 .st-row.urgent { background: #ffebee; border-left-color: #b71c1c; }
 .st-row.loc { cursor: pointer; }
+.st-row.gone { opacity: .65; }
 .st-row .tx { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .st-row .tx b { display: block; }
 .st-row .tx small { color: #555; }

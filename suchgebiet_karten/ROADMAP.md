@@ -1,13 +1,20 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v102**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v103**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v103 – 🔄 APK-Selbst-Update · 👆 Tippen schließt · 📍 Texte ändern/löschen · Plaketten nur am Gebiet**:
+  - APK prüft beim Start (und unter ☰ Mehr → „Nach Update suchen“) auf eine neue Version, lädt sie und startet die Installation – nie mitten in einem offenen Einsatz ohne Rückfrage. Gilt ab der nächsten APK, v103 einmal von Hand installieren.
+  - Tipp auf leere Karte schließt offene Fenster/Leisten (ohne dabei zu zeichnen); Tipp auf den dunklen Hintergrund schließt Dialoge (nicht bei Eingaben/wichtigen Rückfragen).
+  - Text antippen (Bewegen oder Text-Werkzeug, auch auf die Schrift): Fenster „📍 Text“ mit Speichern / 🗑 Löschen (↶ rückgängig), 🔒-Schutz gilt.
+  - Auftrags-Plaketten bleiben immer direkt am Gebiet/Raster (nicht mehr an den Bildschirmrand geschoben).
+  - ✏️ Hundeführer ändern eigene Meldungen: antippen (Karte oder 📣 → „🗂 Meine Meldungen“) → Notiz ändern, 📍 verlegen, Standort entfernen, 🗑 löschen. Geht als Korrektur an die EL (Status-Server oder QR), dort „✏️ geändert“; zurückgezogene Fund/Hilfe bleiben durchgestrichen im Verlauf, Alarm endet. Eigene Bereiche umbenennen/löschen, Texte 📍 verlegen.
+  - Fix: Handy-„Geisterklick“ traf nach dem Öffnen eines Fensters sofort dessen Knopf.
 - [~] **v102 – 🐛 APK: neu gescannter Auftrag öffnet sich (nicht der alte)**: Mit der Handy-Kamera gescannte Auftrags-Links öffneten in der laufenden APK manchmal den alten Auftrag – wenn Android die App im Hintergrund beendet oder neu aufgebaut hatte, wurde der zuerst geöffnete Link erneut geladen und der neue ging verloren. Jetzt wird jeder Link nur einmal verwendet, und ein neuer Link während des Ladens lädt die Seite mit dem neuen Link. Wartet auf Klaas' Test.
 - [~] **v101 – ✅ Auftrag abschließen · Markierungen gehen an das nächste Team mit** (Plan: `PLAN-v101-auftrag-abschliessen.md`): Hundeführer: eigener Knopf „✅ Auftrag abschließen“ im 📣 Status-Fenster (Stand je Gebiet, Grund optional, auch bei unter 100 %), Meldung „Auftrag abgeschlossen“ und danach gleich 📤 Zurückgeben; Kopfzeile „✅ abgeschlossen – bitte zurückgeben“. Einsatzleitung: Karte und Team-Chip zeigen „✅ meldet abgeschlossen hh:mm (80 %)“; Rückfrage „Auftrag {Team} abschließen?“, sobald Meldung und QR-Rückmeldung da sind (egal in welcher Reihenfolge; nach „Noch offen lassen“ nicht doppelt), dazu Knopf „✅ Abschließen“ auf jeder übernommenen Auftragskarte. Abgeschlossen: Karte grau im aufklappbaren Bereich „✅ Abgeschlossen“ mit „↩ Wieder öffnen“, Chip weg (Team frei), grüne Plakette „✅ Team · 80 %“, 🔒-Schutz entfällt. Neue Vergabe eines Gebiets (auch über Teilen → Team) nimmt Wege/Markierungen der Vorgänger-Rückmeldungen als abwählbare Gruppe „Vom vorherigen Team (Team 1, 80 %)“ mit; beim neuen Hundeführer grau, nur zum Ansehen (🔒), mit „Vorher: 80 % von Team 1 abgesucht“ im Auftragstext, gehen nicht mit zurück. Wartet auf Klaas' Test.
 - [~] **v100 – 🅿️ Parkplatz Auto mit Ort · Plaketten außerhalb**: Die Meldung „🅿️ Parkplatz Auto“ fragt „Wo steht das Auto?“ – 📍 Mein Standort (hier) oder 👆 Auf der Karte setzen. Der Ort geht mit an die Einsatzleitung und steht dort als 🅿️ auf der Karte. Status-Plaketten der Gebiete stehen immer außerhalb des Gebiets (mit Verbindungslinie) und weichen Markierungen, Lage-Orten, Gebietsnamen, anderen Plaketten und den Knöpfen am Rand aus. Wartet auf Klaas' Test.

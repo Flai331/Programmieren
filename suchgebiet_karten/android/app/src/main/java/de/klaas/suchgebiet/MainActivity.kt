@@ -359,6 +359,10 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, text, Toast.LENGTH_LONG).show()
     }
 
+    private fun sendUpdate(state: org.json.JSONObject) = runOnUiThread {
+        webView.evaluateJavascript("window.sgkUpdate&&window.sgkUpdate(" + state.toString() + ")", null)
+    }
+
     inner class Bridge {
         // Fehlerbericht aus der Web-App (JSON, ohne Einsatzdaten) an die Notion-Fehlerzentrale.
         // Rückgabe: "sent" (wird gesendet), "mail" (kein Token: Mail-App geöffnet), "none" (Auto-Fehler ohne Token)
@@ -395,6 +399,34 @@ class MainActivity : ComponentActivity() {
             val f = sharedFile ?: return ""
             sharedFile = null
             return f
+        }
+
+        // ---------- Selbst-Update (siehe Updater); Antworten kommen über window.sgkUpdate({state, …}) ----------
+        // JSON {code, name, tag, enabled} der installierten Version
+        @JavascriptInterface
+        fun appVersion(): String = Updater.versionJson()
+
+        @JavascriptInterface
+        fun updateCheck() = Updater.check { sendUpdate(it) }
+
+        @JavascriptInterface
+        fun updateDownload() = Updater.download(this@MainActivity) { sendUpdate(it) }
+
+        // Darf die App Updates installieren („Unbekannte Apps installieren“ erlaubt)?
+        @JavascriptInterface
+        fun updateCanInstall(): Boolean = Updater.canInstall(this@MainActivity)
+
+        // Rückgabe: "installer" | "settings" | "error"
+        @JavascriptInterface
+        fun updateInstall(): String {
+            var result = "error"
+            val latch = java.util.concurrent.CountDownLatch(1)
+            runOnUiThread {
+                result = Updater.install(this@MainActivity)
+                latch.countDown()
+            }
+            latch.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            return result
         }
 
         // Text (z. B. Auftrags-Link) über den Teilen-Dialog senden – WhatsApp, SMS …

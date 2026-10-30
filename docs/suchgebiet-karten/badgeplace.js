@@ -1,4 +1,4 @@
-// Plaketten der Auftragsgebiete platzieren: immer außerhalb des Gebiets, ohne Markierungen, Lage-Orte oder
+// Plaketten der Auftragsgebiete platzieren: immer außerhalb und direkt am Gebiet, ohne Markierungen, Lage-Orte oder
 // andere Plaketten zu überdecken. Reine Bildschirm-Geometrie (Pixel), damit sie testbar ist.
 
 const GAP = 10; // Abstand zum Gebietsrand
@@ -32,16 +32,16 @@ function candidates(a, w, h) {
 // -> [{ x0, y0, ax, ay }] (Lage der Plakette, Punkt am Gebietsrand für die Verbindungslinie)
 export function placeBadges(list, obstacles, view, ui = []) {
   const placed = [];
+  const screen = boxOf(PAD, PAD, view.w - 2 * PAD, view.h - 2 * PAD);
   const areas = list.map((b) => b.area);
   return list.map((b, i) => {
     const a = b.area;
     let best = null;
     candidates(a, b.w, b.h).forEach(([x, y], k) => {
-      // in den sichtbaren Bereich schieben (großes Gebiet / am Rand)
-      const cx = Math.min(Math.max(x, PAD), Math.max(PAD, view.w - b.w - PAD));
-      const cy = Math.min(Math.max(y, PAD), Math.max(PAD, view.h - b.h - PAD));
-      const r = boxOf(cx, cy, b.w, b.h);
-      let score = k * 0.5 + Math.hypot(cx - x, cy - y) * 0.2;
+      // Nie in den Bildschirm schieben: die Plakette bleibt am Gebiet (liegt das Gebiet außerhalb, dann auch sie).
+      // Ist das Gebiet teils sichtbar, wird eine Seite bevorzugt, auf der die Plakette im Bild liegt.
+      const r = boxOf(x, y, b.w, b.h);
+      let score = k * 0.5 + (b.w * b.h - overlap(r, screen)) * 0.3;
       score += overlap(r, a) * 3; // eigenes Gebiet nur, wenn es nicht anders geht
       for (const p of placed) score += overlap(r, p) * 20;
       for (const o of obstacles) score += overlap(r, o) * 8;

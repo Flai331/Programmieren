@@ -68,7 +68,12 @@ jobs:
           # Notion-Token für die Fehlermeldung in der APK (fehlt er, meldet die App per Mail)
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
         # Fortlaufende Versionsnummer, damit Android jede neue APK als Update sieht.
-        run: gradle assembleRelease -PversionCode=${{ github.run_number }} --no-daemon
+        # updateTag: Release, aus dem sich die App selbst aktualisiert (main = live, Beta = Testversion, sonst leer).
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then UPDATE_TAG=suchgebiet-karten
+          elif [ "${{ github.ref }}" = "refs/heads/claude/suchgebiet-beta" ]; then UPDATE_TAG=suchgebiet-karten-beta
+          else UPDATE_TAG=; fi
+          gradle assembleRelease -PversionCode=${{ github.run_number }} -PupdateTag=$UPDATE_TAG --no-daemon
 
       - name: Signatur der APK prüfen
         run: |
@@ -141,9 +146,11 @@ jobs:
           cp suchgebiet_karten/android/app/build/outputs/apk/release/app-release.apk Suchgebiet-Karten.apk
           # zusätzlich als ZIP (manche Mailprogramme/Messenger blockieren .apk-Anhänge)
           zip -q Suchgebiet-Karten-APK.zip Suchgebiet-Karten.apk
+          # version.json: daran erkennt die App, ob es eine neuere Version gibt (Selbst-Update)
+          printf '{"code": %s, "name": "1.0.%s", "at": "%s"}\n' "${{ github.run_number }}" "${{ github.run_number }}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > version.json
           if gh release view "$TAG" > /dev/null 2>&1; then
-            gh release upload "$TAG" Suchgebiet-Karten.apk Suchgebiet-Karten-APK.zip --clobber
+            gh release upload "$TAG" Suchgebiet-Karten.apk Suchgebiet-Karten-APK.zip version.json --clobber
           else
-            gh release create "$TAG" Suchgebiet-Karten.apk Suchgebiet-Karten-APK.zip --target "${{ github.sha }}" \
+            gh release create "$TAG" Suchgebiet-Karten.apk Suchgebiet-Karten-APK.zip version.json --target "${{ github.sha }}" \
               --title "$TITLE" --notes "$NOTES" $([ "$TAG" = suchgebiet-karten-beta ] && echo --prerelease)
           fi

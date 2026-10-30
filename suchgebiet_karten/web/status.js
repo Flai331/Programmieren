@@ -105,6 +105,7 @@ export function buildMsg({ a, tm, s, cat, txt, pos, pc, pa, ar, gb, t = Date.now
     if (pos.acc != null) m.acc = Math.round(pos.acc);
   }
   if (txt) m.txt = String(txt).slice(0, 300);
+  else if (txt === '' && s === 'kor') m.txt = ''; // Korrektur: leer = Notiz entfernen
   if (pc != null) m.pc = pc;
   if (pa != null) m.pa = pa;
   if (Array.isArray(gb) && gb.length) m.gb = gb.map((n) => String(n).slice(0, 40));
@@ -118,6 +119,44 @@ export function mergeStatus(list, msgs) {
   const byId = new Map();
   for (const m of [...(list || []), ...(msgs || [])]) if (okMsg(m) && !byId.has(m.id)) byId.set(m.id, m);
   return [...byId.values()].sort((x, y) => x.t - y.t);
+}
+// v103: Korrektur-Meldung (s: 'kor', ref = ID der geänderten Meldung): del / neuer Ort (pos) / nopos / txt ('' = Notiz weg)
+export function buildKor({ a, tm, ref, del, pos, nopos, txt, t, id }) {
+  const m = buildMsg({ a, tm, s: 'kor', pos, txt, t, id });
+  m.ref = ref;
+  if (del) m.del = 1;
+  if (nopos) m.nopos = 1;
+  return m;
+}
+// Korrekturen einarbeiten: Liste ohne kor-Meldungen; Ziel bekommt die Änderungen (nach Zeit) und ed = Zeit der letzten.
+// Gelöschte fallen weg – Fund/Hilfe bleiben als { …, gone: Zeit } (Einsatzleitung soll den Rückzug sehen)
+export function applyKor(list) {
+  const all = list || [];
+  const kors = all.filter((m) => m.s === 'kor' && m.ref).sort((x, y) => x.t - y.t);
+  if (!kors.length) return all.filter((m) => m.s !== 'kor');
+  const out = [];
+  for (const m of all) {
+    if (m.s === 'kor') continue;
+    const ks = kors.filter((k) => k.ref === m.id && k.a === m.a);
+    if (!ks.length) { out.push(m); continue; }
+    let r = { ...m };
+    for (const k of ks) {
+      if (k.del) { r.gone = k.t; continue; }
+      if (Number.isFinite(k.lat) && Number.isFinite(k.lon)) { r.lat = k.lat; r.lon = k.lon; delete r.acc; }
+      if (k.nopos) { delete r.lat; delete r.lon; delete r.acc; }
+      if (typeof k.txt === 'string') { if (k.txt) r.txt = k.txt; else delete r.txt; }
+    }
+    r.ed = ks[ks.length - 1].t;
+    if (r.gone && !isUrgent(r)) continue;
+    out.push(r);
+  }
+  return out;
+}
+// QR-Rückmeldung: die letzten n Meldungen ohne kor samt deren Korrekturen
+export function qrMsgs(log, n = 20) {
+  const base = (log || []).filter((m) => m.s !== 'kor').slice(-n);
+  const ids = new Set(base.map((m) => m.id));
+  return (log || []).filter((m) => (m.s === 'kor' ? ids.has(m.ref) : ids.has(m.id)));
 }
 // Gelöschte Meldungen (del: { id: Zeit }) aus der Liste nehmen
 export const withoutDeleted = (list, del) => (del && Object.keys(del).length ? (list || []).filter((m) => !del[m.id]) : list || []);
