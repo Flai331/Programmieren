@@ -497,6 +497,7 @@ body.hf #overlay { height: calc(100% - 136px); }
 .hfinfo b { display: block; font-size: 14px; }
 .hfinfo span { display: block; color: #333; overflow-wrap: anywhere; }
 .hfinfo.min span { display: none; }
+.hfinfo.closed { border-left-color: #2e7d32; background: rgba(232,245,233,0.97); }
 /* Randknöpfe zweispaltig: Auftragsanzeige endet davor */
 @media (max-height: 640px) and (orientation: portrait) { .hfinfo { right: 124px; } }
 @media (max-height: 500px) and (orientation: landscape) { .hfinfo { right: 98px; left: 54px; top: 46px; } }
@@ -719,3 +720,11 @@ html.night .tm-btn, html.night .tm-drop, html.night .tm-pop { filter: invert(1) 
   body:not(.hf) .tm-btn { left: 56px; top: 46px; }
   .tm-drop, .tm-banner { top: 84px; left: 100px; }
 }
+
+/* v101: abgeschlossene Aufträge */
+#sent-list .sent-card.done { background: #f1f1f1; color: #666; }
+#sent-list .sent-card.done b i { opacity: 0.5; }
+#sent-list .closed { color: #2e7d32; font-weight: bold; }
+#sent-list .sent-done { margin-top: 6px; }
+#sent-list .sent-done summary { cursor: pointer; font-weight: bold; padding: 6px 0; }
+html.night .sent-card.done { background: transparent; }

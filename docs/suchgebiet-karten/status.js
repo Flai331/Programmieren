@@ -13,6 +13,8 @@ export const STATUS_LIST = [
   { code: 'fertig', ico: '📊', label: 'Stand / fertig' }, // HF schätzt, wie viel abgesucht ist (100 % = fertig)
   { code: 'zurueck', ico: '🏁', label: 'Zurück am B-Ort' },
 ];
+// v101: „✅ Auftrag abschließen“ – eigener Knopf, nicht in der Liste oben (Auftrag darf auch bei 80 % beendet/abgebrochen werden)
+export const CLOSE_STATUS = { code: 'zu', ico: '✅', label: 'Auftrag abgeschlossen' };
 // „📍 Standort melden“: Markierungen mit Standort
 export const SPOT_LIST = [
   { code: 'anzeige', ico: '🐕', label: 'Hund zeigt an' },
@@ -24,7 +26,7 @@ export const SPOT_LIST = [
 ];
 export const URGENT = ['fund', 'hilfe'];
 // Suchstand-Meldungen gehen ohne Standort; nur Markierungen („📍 Standort melden“) und der Parkplatz mit
-export const NO_POS = ['start', 'ende', 'pause', 'fertig', 'zurueck', 'ok'];
+export const NO_POS = ['start', 'ende', 'pause', 'fertig', 'zu', 'zurueck', 'ok'];
 
 const find = (list, code) => list.find((x) => x.code === code);
 // ältere Meldungen, die es als Taste nicht mehr gibt
@@ -33,7 +35,7 @@ const OLD_LIST = [
   { code: 'fund', ico: '🟢', label: 'Person gefunden' }, { code: 'hilfe', ico: '🆘', label: 'Brauche Hilfe' },
 ];
 export function statusLabel(code) {
-  const s = find(STATUS_LIST, code) || find(OLD_LIST, code);
+  const s = find(STATUS_LIST, code) || find([CLOSE_STATUS], code) || find(OLD_LIST, code);
   return s ? `${s.ico} ${s.label}` : code === 'ort' ? '📍 Standort' : code === 'ok' ? '📲 Auftrag übernommen' : String(code || '');
 }
 export function spotLabel(cat) {
@@ -44,16 +46,19 @@ export function spotLabel(cat) {
 // Mehrere Gebiete: m.ar = [[Name, Prozent], …], fertig erst, wenn alle bei 100 % sind
 const done = (m) => m.s === 'fertig' && (Array.isArray(m.ar) && m.ar.length ? m.ar.every((x) => x[1] >= 100) : (m.pc == null || m.pc >= 100));
 const areaText = (m) => m.ar.map(([n, p]) => `${n} ${p >= 100 ? '✅' : `${p} %`}`).join(' · ');
+// Abschluss-Meldung: Prozent je Gebiet bzw. gesamt, z. B. „80 %“ oder „Nord 80 % · Süd ✅“
+const closeText = (m) => (Array.isArray(m.ar) && m.ar.length ? areaText(m) : m.pc != null ? `${m.pc} %` : '');
 // Text einer Meldung: Standort-Meldungen nach ihrer Art
 export const msgLabel = (m) => (m.s === 'ort' ? spotLabel(m.cat)
   : Array.isArray(m.gb) && m.gb.length ? `${statusLabel(m.s)}: ${m.gb.join(', ')}` // Suche begonnen/beendet für bestimmte Gebiete
+  : m.s === 'zu' ? `${statusLabel('zu')}${closeText(m) ? ` (${closeText(m)})` : ''}`
   : m.s === 'fertig' ? (Array.isArray(m.ar) && m.ar.length
     ? (done(m) ? '✅ Alle Gebiete fertig' : `📊 ${areaText(m)}`)
     : (done(m) ? '✅ Gebiet fertig' : `📊 ${m.pc} % abgesucht`)) : statusLabel(m.s));
 // Nur das Symbol (für die Karte)
 export function msgIcon(m) {
   if (m.s === 'fertig') return done(m) ? '✅' : '📊';
-  const s = m.s === 'ort' ? find(SPOT_LIST, m.cat) : find(STATUS_LIST, m.s) || find(OLD_LIST, m.s);
+  const s = m.s === 'ort' ? find(SPOT_LIST, m.cat) : find(STATUS_LIST, m.s) || find([CLOSE_STATUS], m.s) || find(OLD_LIST, m.s);
   return s ? s.ico : m.s === 'ok' ? '📲' : '📍';
 }
 export const isUrgent = (m) => URGENT.includes(m.s) || (m.s === 'ort' && URGENT.includes(m.cat));
