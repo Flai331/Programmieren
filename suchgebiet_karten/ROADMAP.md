@@ -1,13 +1,15 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v108**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v110**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v110 – Ausgeblendetes Team beim Malen wieder einblenden**: Wer „Feld“ wählt oder ein Team/eine Markierung zum Malen auswählt, bekommt das Raster und diese Markierung automatisch wieder eingeblendet (Hinweis „… wieder eingeblendet“) – vorher malte ein über „Felder“ ausgeblendetes Team still gar nicht.
+- [~] **v109 – ✋ Langdruck auf Umriss = Punkte direkt ziehbar**: Langdruck startet sofort den Punkte-Modus (ohne Fenster). Name/Team/Notiz/Löschen weiter per Antippen.
 - [~] **v108 – ✋ Umriss-Punkte, Langdruck, Ausgeblendetes geschützt**: Umriss-Fenster mit „✋ Punkte bearbeiten“ (Eckpunkte ziehen, Kantenmitte ziehen = neuer Punkt, Punkt antippen = löschen, min. 3 bzw. 2) und „🗑 Löschen“. Langdruck auf Umriss öffnet ihn (HF: eigener Bereich); Langdruck auf Feld im Raster öffnet nichts mehr. Langdruck auf „Feld“: Fenster „▦ Feld-Markierungen“ (wählen, ändern, löschen, + Team/+ Markierung). Ausgeblendetes Raster, ausgeblendete Feldfarben, B-Ort und Lage-Orte lassen sich per Tipp nicht verändern.
 - [~] **v107 – 🩶 Grau für „ohne Team“**: Umrisse ohne Team immer dunkelgrau und gestrichelt (mit Team in Teamfarbe, Team weg → wieder grau). Feld-Leiste: „ohne Team“ malt Felder grau als Suchgebiet ohne Zuteilung (zählt nirgends als zugeteilt). Grau ist als Team-/Markierungsfarbe gesperrt; alte graue Teams bekommen beim Laden eine freie Farbe. PDF-Legende mit „ohne Team“.
 - [~] **v106 – ↔ Raster nach dem Anlegen anpassen**: Nach dem Aufziehen (oder „Ausschnitt nehmen“) 2 Minuten lang Anfasser an Rändern und Ecken; Ziehen ändert Breite/Höhe in ganzen Feldern (mind. 1 Feld), gegenüberliegende Seite bleibt. Leiste unten mit Feldzahl, Countdown und „Fertig“. Rückgängig wie gewohnt.
