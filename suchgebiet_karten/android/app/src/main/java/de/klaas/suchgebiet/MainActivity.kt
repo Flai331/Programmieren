@@ -280,8 +280,8 @@ class MainActivity : ComponentActivity() {
     private fun sharedHash(i: Intent?): String? {
         // #… direkt aus dem Link, oder ?h=… aus dem „In der App öffnen“-Knopf der Webseite (intent:-Link)
         val frag = i?.data?.fragment ?: i?.data?.takeIf { it.isHierarchical }?.getQueryParameter("h") ?: return null
-        // a = Auftrag, r = Rückmeldung, e = Einsatz-Übergabe, i = Lage-Infos
-        return if (Regex("^[areim]=.+").matches(frag)) "#$frag" else null
+        // a = Auftrag, r = Rückmeldung, e = Einsatz-Übergabe, i = Lage-Infos, f = Fortschritt
+        return if (Regex("^[areimf]=.+").matches(frag)) "#$frag" else null
     }
 
     override fun onNewIntent(intent: Intent) {

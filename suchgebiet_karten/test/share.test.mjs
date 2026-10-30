@@ -140,7 +140,7 @@ test('Auftrag mit Kontakten: kommen beim Hundeführer an; neue Link-Arten werden
   const many = Array.from({ length: 8 }, (_, i) => ({ name: `Kontakt Nummer ${i}`, role: 'Hundeführer', call: `RH ${i}`, phone: `0170 55${i}${i}${i}${i}${i}` }));
   const link = shareLink('a', await pack(buildAssignment(el, { teamId: 'T2', gridIds: [el.gridId], fields: 'team', contacts: many })));
   assert.ok(link.length < 1800, String(link.length));
-  for (const k of ['a', 'r', 'e', 'i']) assert.equal(parseShared(`x#${k}=abc`).kind, k);
+  for (const k of ['a', 'r', 'e', 'i', 'f']) assert.equal(parseShared(`x#${k}=abc`).kind, k);
   assert.equal(parseShared('x#x=abc'), null);
 });
 

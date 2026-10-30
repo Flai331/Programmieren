@@ -14,6 +14,8 @@ import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js
 import { fileName } from './files.js';
 import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './infos.js';
 import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject } from './scope.js';
+import { MSG_VIEW, MSG_DELETE, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock } from './locks.js';
+import { buildProgress, mergeProgress, progressSummary, progressPreview, progressTarget, snapshotBase, stampChanges, setPeer, peerOf } from './progress.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
   MAIL_PARTS, REPORT_SECTIONS, MAP_PARTS, EXTRA_PARTS, hasReportText, newMailTo, mailAddresses,
@@ -49,7 +51,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v89';
+const APP_VERSION = 'v90';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
@@ -163,7 +165,12 @@ function saveNow() {
 window.addEventListener('pagehide', saveNow);
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
 
+// v90: Änderungen erkennen (feste IDs, Änderungszeit, Löschvermerke) – Grundlage für „Fortschritt senden“
+const progBase = new WeakMap();
+const devBy = () => db.deviceName || (P.parentEid ? 'UA' : 'EL');
+function stamp() { progBase.set(P, stampChanges(P, progBase.get(P), devBy())); }
 function snapshot() {
+  if (!progBase.has(P)) progBase.set(P, snapshotBase(P));
   undoStack.push(JSON.stringify({
     area: P.area, cellM: P.cellM, fills: P.fills, status: P.status, items: P.items, marks: P.marks, meet: P.meet, pois: P.pois, poiDel: P.poiDel,
     gridId: P.gridId, gridName: P.gridName, otherGrids: P.otherGrids,
@@ -181,6 +188,7 @@ function undo() {
 
 function changed() {
   P.updated = Date.now();
+  stamp();
   renderHanded();
   applyClosed();
   renderStatusBtn();
@@ -347,6 +355,14 @@ function redraw() {
     }, grid),
     items: items.filter((it) => !it.hidden || it === current || it === draftTrack || drafts.includes(it)),
   };
+  if (isUA(P)) {
+    // Unterabschnitt: Elemente des Grund-Einsatzes ausgegraut
+    const GREY = '#9e9e9e';
+    const grey = (o) => Object.fromEntries(Object.keys(o || {}).map((k) => [k, GREY]));
+    st.items = st.items.map((it) => (lockOf(P, it) === 'base' ? { ...it, color: GREY } : it));
+    if (gridLock(P, P.gridId) === 'base') { st.fills = grey(st.fills); st.status = grey(st.status); }
+    st.others = (st.others || []).map((o, i) => (gridLock(P, P.otherGrids[i].id) === 'base' ? { ...o, fills: grey(o.fills), status: grey(o.status) } : o));
+  }
   if (hide.meet) st.meet = null;
   if (hide.pois) st.pois = [];
   st.rescue = rescueInView();
@@ -605,6 +621,10 @@ function fillAt(ll, first) {
   const m = activeMark();
   if (!m) return toast('Bitte zuerst ein Team oder eine Markierung anlegen');
   const key = `${cell.c},${cell.r}`;
+  if (!canEditCell(P, P.gridId, key)) {
+    if (first) toast(MSG_VIEW, 4000);
+    return;
+  }
   if (first) {
     snapshot();
     // Teams und Status liegen getrennt: „abgesucht“ überschreibt nicht das Team
@@ -854,11 +874,13 @@ function finishPointer(e, cancelled) {
   } else if (tool === 'poi' && !panning && Math.hypot(x - downPt.x, y - downPt.y) < 10) {
     setTool('pan');
     placePoi(ll.lat, ll.lng);
+  } else if (tool === 'meet' && P.meet && blocked(P.meet)) {
+    setTool('pan');
   } else if (tool === 'meet') {
     const text = prompt('Bezeichnung des B-Orts:', (P.meet && P.meet.text) || 'B-Ort');
     if (text !== null) {
       snapshot();
-      P.meet = { lat: ll.lat, lon: ll.lng, text: text.trim() };
+      P.meet = { lat: ll.lat, lon: ll.lng, text: text.trim(), ...(P.meet && P.meet.lock ? { lock: P.meet.lock } : {}) };
       changed();
     }
     setTool('pan');
@@ -879,13 +901,16 @@ function eraseAt(x, y) {
   };
   const i = hitItem(P.items, toPx, x, y, 12);
   if (i >= 0) {
+    if (blocked(P.items[i], 'delete')) return;
     before();
     P.items.splice(i, 1);
   } else if (poiAt(x, y) >= 0) {
+    if (blocked(P.pois[poiAt(x, y)], 'delete')) return;
     before();
     deletePoi(P, P.pois[poiAt(x, y)]);
     renderPois();
   } else if (P.meet && Math.hypot(toPx(P.meet.lat, P.meet.lon)[0] - x, toPx(P.meet.lat, P.meet.lon)[1] - y) <= 16) {
+    if (blocked(P.meet, 'delete')) return;
     before();
     P.meet = null;
   } else {
@@ -894,6 +919,7 @@ function eraseAt(x, y) {
     const key = h && `${h.c},${h.r}`;
     const target = h && (h.g.active ? P : P.otherGrids.find((g) => g.id === h.g.id));
     if (!key || (!target.fills[key] && !target.status[key])) return;
+    if (!canEditCell(P, h.g.id, key)) return toast(MSG_VIEW, 4000);
     before();
     delete target.fills[key];
     delete target.status[key];
@@ -912,6 +938,7 @@ function renameItem(i) {
   const it = P.items[i];
   if (!it) return;
   if (isLocked()) return lockedToast();
+  if (blocked(it)) return;
   if (it.kind === 'text') {
     const t = prompt('Text für diesen Punkt:', it.text);
     if (t === null || !t.trim() || t.trim() === it.text) return;
@@ -1225,6 +1252,7 @@ $('mark-alpha').addEventListener('input', () => {
 
 // ---------- Raster ----------
 function setArea(area, cellM = P.cellM) {
+  if (P.area && blockedGrid(P.gridId)) return false;
   if (Math.abs(area.north - area.south) < 1e-6 || Math.abs(area.east - area.west) < 1e-6) {
     // nur angetippt: ein Feld an dieser Stelle
     area = { north: area.north, west: area.west, south: area.north - 1e-6, east: area.west + 1e-6 };
@@ -1436,6 +1464,7 @@ $('grid-view').addEventListener('click', () => {
 $('grid-remove').addEventListener('click', () => {
   const multi = allGrids(P).length > 1;
   if (!grid && !multi) return;
+  if (blockedGrid(P.gridId, 'delete')) return;
   if (!confirm(multi ? `Rastergebiet „${gridLabel(P, { name: P.gridName })}“ mit seinen Feldzuteilungen entfernen?` : 'Raster und Feldzuteilungen entfernen?')) return;
   snapshot();
   removeActiveGrid(P);
@@ -1446,16 +1475,19 @@ $('clear-fills').addEventListener('click', () => {
   const any = allGrids(P).some((g) => Object.keys(g.fills).length || Object.keys(g.status).length);
   if (!any || !confirm('Alle Feldfarben und Zuteilungen löschen (in allen Rastergebieten)?')) return;
   snapshot();
-  P.fills = {};
-  P.status = {};
-  P.otherGrids = P.otherGrids.map((g) => ({ ...g, fills: {}, status: {} }));
+  // im Unterabschnitt bleiben Felder des Grund-Einsatzes stehen
+  const free = (gid) => canEditGrid(P, gid) && !(P.gown && P.gown[gid]);
+  if (free(P.gridId)) { P.fills = {}; P.status = {}; }
+  P.otherGrids = P.otherGrids.map((g) => (free(g.id) ? { ...g, fills: {}, status: {} } : g));
   changed();
 });
 $('clear-drawings').addEventListener('click', () => {
   if (!P.items.length || !confirm('Alle Zeichnungen und Texte löschen?')) return;
   snapshot();
-  P.items = [];
+  const keepN = P.items.filter((it) => !canDelete(P, it)).length;
+  P.items = P.items.filter((it) => !canDelete(P, it));
   changed();
+  if (keepN) toast(`${MSG_DELETE} (${keepN} Element${keepN === 1 ? '' : 'e'} bleiben erhalten)`, 5000);
 });
 function goToCell() {
   const p = parseCell($('cell-search').value);
@@ -1488,6 +1520,7 @@ mapEl.addEventListener('pointerdown', (e) => {
     longPressedAt = Date.now();
     if (navigator.vibrate) navigator.vibrate(30);
     if (isLocked()) return lockedToast();
+    if (!canEditCell(P, h.g.id, `${h.c},${h.r}`)) return toast(MSG_VIEW, 4000);
     useGridAt(ll.lat, ll.lng);
     fieldDialog(ll);
   }, LONG_PRESS);
@@ -1610,11 +1643,12 @@ map.on('click', (e) => {
     const pi = poiAt(e.containerPoint.x, e.containerPoint.y);
     if (pi >= 0) {
       const p = P.pois[pi];
-      if (isLocked()) return toast(`${poiLabel(p)}${p.desc ? ` – ${p.desc}` : ''}`, 6000);
+      if (isLocked() || !canEdit(P, p)) return toast(`${poiLabel(p)}${p.desc ? ` – ${p.desc}` : ''}${canEdit(P, p) ? '' : ` · ${MSG_VIEW}`}`, 6000);
       editPoi(p);
       return;
     }
     const i = hitItem(P.items, toPx, e.containerPoint.x, e.containerPoint.y, 12);
+    if (i >= 0 && !canEdit(P, P.items[i])) { toast(MSG_VIEW, 4000); return; }
     if (i >= 0 && P.items[i].kind === 'track') { renameItem(i); return; }
   }
   const parts = [];
@@ -1624,7 +1658,7 @@ map.on('click', (e) => {
       const v = gridView(P, c.g);
       const m = cellOwner(v, c.c, c.r);
       const st = cellStatus(v, c.c, c.r);
-      parts.push(`Feld ${c.label}${cellLabel(c.c, c.r)}${m ? ` – ${markLabel(m)}` : ''}${st ? ` (${st.label})` : ''}`);
+      parts.push(`Feld ${c.label}${cellLabel(c.c, c.r)}${m ? ` – ${markLabel(m)}` : ''}${st ? ` (${st.label})` : ''}${canEditCell(P, c.g.id, `${c.c},${c.r}`) ? '' : ` · ${MSG_VIEW}`}`);
     } else parts.push('Außerhalb des Rasters');
   }
   const rp = rescueAt(e.containerPoint);
@@ -3455,13 +3489,14 @@ function startStatus() {
 // ---- Einsatzleitung: Rückmeldung übernehmen (Kamera oder eingefügter Link) ----
 async function handleShared(text) {
   const sh = parseShared(text);
-  if (!sh) return toast('Kein Code dieser App erkannt (Auftrag, Rückmeldung, Übergabe oder Lage-Infos)');
+  if (!sh) return toast('Kein Code dieser App erkannt (Auftrag, Rückmeldung, Übergabe, Lage-Infos oder Fortschritt)');
   if (sh.kind === 'm') return toast('Teil eines mehrteiligen QR-Codes – bitte in der App über „Einsätze → 📷 Einsatz übernehmen“ scannen', 8000);
   let data;
   try { data = await unpack(sh.data); } catch { return toast('Code beschädigt oder unvollständig'); }
   if (data.k === 'a') return takeAssignment(data);
   if (data.k === 'e') return takeHandover(data);
   if (data.k === 'i') return takeInfos(data);
+  if (data.k === 'f') return takeProgress(data);
   if (data.k !== 'r') return toast('Unbekannter Inhalt');
   // Rückmeldungen gehören zur Einsatzleitung: Modus umschalten (vom Hundeführer-Modus nur mit PIN)
   if (db.mode === 'hf' && !(await toElMode())) return;
@@ -3555,7 +3590,7 @@ async function startScan() {
   const v = $('scan-video');
   v.srcObject = scanStream;
   await v.play().catch(() => {});
-  $('scan-text').textContent = 'Kamera auf den QR-Code richten – Auftrag, Rückmeldung, Einsatz-Übergabe, Unterabschnitt oder Lage-Infos …';
+  $('scan-text').textContent = 'Kamera auf den QR-Code richten – Auftrag, Rückmeldung, Einsatz-Übergabe, Unterabschnitt, Lage-Infos oder Fortschritt …';
   let detector = null;
   if ('BarcodeDetector' in window) { try { detector = new BarcodeDetector({ formats: ['qr_code'] }); } catch { detector = null; } }
   if (!detector) await loadScript('lib/jsQR.js');
@@ -3620,6 +3655,17 @@ function lockedToast() {
   if (isFree()) toast('Kein Einsatz offen – erst „+ Neuer Einsatz“ anlegen (Leiste oben antippen).', 5000);
   else toast('✅ Einsatz ist abgeschlossen – zum Ändern unter „Einsatz → Einsatzende“ wieder öffnen.', 5000);
 }
+// Sperren im Unterabschnitt: true = gesperrt (mit Hinweis)
+function blocked(el, act = 'edit') {
+  const m = denied(P, el, act);
+  if (m) toast(m, 4000);
+  return !!m;
+}
+function blockedGrid(gid, act = 'edit') {
+  const m = deniedGrid(P, gid, act);
+  if (m) toast(m, 4000);
+  return !!m;
+}
 async function reopenClosed() {
   const ok = await openDlg((box, close) => {
     dlgHead(box, '✅ Abgeschlossener Einsatz', `„${P.title || 'Suchgebiet'}“ ist abgeschlossen und lässt sich nur ansehen und exportieren. Zum Ändern wieder öffnen.`);
@@ -3662,19 +3708,21 @@ $('handed').addEventListener('click', async () => {
 $('ho-send').addEventListener('click', () => handoverQr(P, true));
 // Einsatz (ganz oder Unterabschnitt aus „Weitergeben“) per QR-Code an ein Gerät der Einsatzleitung
 async function handoverQr(proj, whole) {
+  stamp();
   saveNow();
   // erst ein QR-Code mit wenig Vereinfachung, sonst mehrere im Wechsel
   let link = '';
   let parts = null;
   let e = null;
-  for (const opt of [{ tol: 1 }, { tol: 3 }, { tol: 6 }]) {
+  const from = devBy();
+  for (const opt of [{ tol: 1, from }, { tol: 3, from }, { tol: 6, from }]) {
     e = buildHandover(proj, opt);
     link = shareLink('e', await pack(e), PUBLIC_URL);
     if (link.length <= QR_MAX) break;
   }
   if (link.length > QR_MAX) {
     for (const opt of [{ tol: 1 }, { tol: 3 }, { tol: 6 }, { tol: 6, pages: false }, { tol: 15, pages: false }]) {
-      e = buildHandover(proj, opt);
+      e = buildHandover(proj, { ...opt, from });
       const data = await pack(e);
       link = shareLink('e', data, PUBLIC_URL);
       parts = splitParts(data, 800).map((x) => shareLink('m', x, PUBLIC_URL));
@@ -3687,6 +3735,10 @@ async function handoverQr(proj, whole) {
     : 'Auf dem anderen Gerät „Einsätze → 📷 Einsatz übernehmen“ antippen oder den Code mit der Kamera scannen.';
   const pc = ' Zum PC: „Teilen“ oder „Link kopieren“ (z. B. WhatsApp Web, Mail).';
   const lost = miss.length ? ` Nicht dabei: ${miss.join(', ')} – dafür „Suchgebiet als Datei senden“.` : '';
+  // das neue Gerät gleich als Empfänger für „Fortschritt senden“ merken (Name lässt sich dort ändern bzw. neu eintragen)
+  const now = Date.now();
+  setPeer(P, `Gerät ${hhmm(now)}${whole ? '' : ' (UA)'}`, now);
+  touch();
   if (whole) qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
   showQr(link, `📲 ${whole ? 'Einsatz' : 'Unterabschnitt'} „${proj.title || 'Suchgebiet'}“ übergeben`, how + pc + lost, parts);
 }
@@ -3702,11 +3754,27 @@ async function takeHandover(e) {
   if (old) {
     how = await openDlg((box, close) => {
       dlgHead(box, '📥 Einsatz übernehmen', `„${old.title || 'Suchgebiet'}“ ist hier schon vorhanden (zuletzt geändert ${hhmm(old.updated)}, übergeben wurde der Stand von ${hhmm(e.at)}).`);
-      dlgButton(box, 'Ersetzen', 'primary', () => close('replace'));
+      dlgButton(box, 'Zusammenführen<small>ergänzt nur, überschreibt und löscht nichts</small>', 'primary', () => close('merge'));
+      dlgButton(box, 'Ersetzen', '', () => close('replace'));
       dlgButton(box, 'Als Kopie', '', () => close('copy'));
       dlgButton(box, 'Abbrechen', '', () => close(null));
     });
     if (!how) return;
+  }
+  if (how === 'merge') {
+    if (old !== P) switchProject(old.id);
+    if (isClosed() && !(await reopenClosed())) return;
+    snapshot();
+    const r = mergeProgress(P, buildProgress(inc, { from: e.from || '', since: 0, full: true }));
+    if (!r) return toast('Einsatz konnte nicht zusammengeführt werden');
+    if (e.from && !peerOf(P, e.from)) setPeer(P, e.from, Date.now());
+    progBase.set(P, snapshotBase(P));
+    syncGrid();
+    changed();
+    renderPois();
+    saveNow();
+    const sum = progressSummary(r);
+    return toast(`📥 Einsatz zusammengeführt${e.from ? ` (Stand von ${e.from})` : ''}: ${sum || 'nichts Neues'}`, 8000);
   }
   let p = inc;
   if (how === 'replace') p = replaceWithHandover(old, inc, e);
@@ -3722,6 +3790,8 @@ async function takeHandover(e) {
   renderProjects();
   applyMode();
   await askDeviceName(true);
+  setPeer(P, e.from || (P.parentEid ? 'Einsatzleitung' : 'Gerät'), Date.now()); // Absender als Empfänger für „Fortschritt senden“
+  touch();
   toast(`📥 ${p.parentEid ? 'Unterabschnitt' : 'Einsatz'} „${p.title || 'Suchgebiet'}“ übernommen – Rückmeldungen jetzt hier scannen${e.np ? ` (ohne ${e.np} Foto${e.np === 1 ? '' : 's'})` : ''}`, 8000);
 }
 
@@ -3781,6 +3851,88 @@ async function takeInfos(inf) {
   saveNow();
   const sum = infoSummary(r);
   toast(sum ? `📥 Infos von ${from}: ${sum}` : `📥 Infos von ${from}: nichts Neues`, 6000);
+}
+
+// ---- Fortschritt (nur das Neue) zwischen Geräten der Einsatzleitung: nur QR-Code/Link, nie über den Status-Server ----
+async function sendProgress() {
+  if (isFree()) return lockedToast();
+  if (db.mode !== 'el') return toast('Fortschritt senden gibt es nur in der Einsatzleitung');
+  if (!db.deviceName) await askDeviceName(false);
+  stamp();
+  const from = devBy();
+  const proj = P;
+  // 1. An wen?
+  const to = await openDlg((box, close) => {
+    dlgHead(box, '🔄 Fortschritt senden', `Von „${from}“ an ein anderes Gerät der Einsatzleitung (EL, Unterabschnitt, ELW). Es geht nur das Neue seit dem letzten Senden an dieses Gerät. Dort wird nur ergänzt – nichts gelöscht.`);
+    for (const x of proj.peers) dlgButton(box, `${x.name}<small>${x.lastSent ? `zuletzt gesendet ${hhmm(x.lastSent)}` : 'noch nie gesendet'}</small>`, 'primary', () => close(x.name));
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.id = 'prog-new';
+    inp.placeholder = proj.peers.length ? 'oder neues Gerät: Name' : 'Name des Empfänger-Geräts (z. B. Tablet EL, ELW)';
+    box.appendChild(inp);
+    dlgButton(box, 'Weiter', proj.peers.length ? '' : 'primary', () => (inp.value.trim() ? close(inp.value.trim()) : toast('Bitte einen Namen eintragen')));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!to) return;
+  let all = false;
+  for (;;) {
+    // 2. Was ist neu?
+    const peer = peerOf(proj, to);
+    const since = all ? 0 : (peer ? peer.lastSent : 0);
+    const f = buildProgress(proj, { from, to, since });
+    const how = await openDlg((box, close) => {
+      if (!f) {
+        dlgHead(box, `🔄 An ${to}`, `Nichts Neues seit ${since ? hhmm(since) : 'Beginn'}.`);
+        dlgButton(box, 'Alles seit Beginn erneut senden', '', () => close('all'));
+        dlgButton(box, 'OK', 'primary', () => close(null));
+        return;
+      }
+      dlgHead(box, `🔄 An ${to}`, `${since ? `Neu seit ${hhmm(since)}` : 'Alles seit Beginn'}: ${progressPreview(f) || `${f.n} Einträge`}.`);
+      dlgButton(box, '📲 QR-Code', 'primary', () => close('qr'));
+      dlgButton(box, '📤 Link teilen (WhatsApp, Mail …)', '', () => close('share'));
+      dlgButton(box, '📋 Link kopieren', '', () => close('copy'));
+      if (since) dlgButton(box, 'Alles seit Beginn erneut senden', '', () => close('all'));
+      dlgButton(box, 'Abbrechen', '', () => close(null));
+    });
+    if (how === 'all') { all = true; continue; }
+    if (!how || !f) return;
+    const data = await pack(f);
+    const link = shareLink('f', data, PUBLIC_URL);
+    setPeer(proj, to, f.at); // ab jetzt zählt nur noch, was danach neu ist
+    touch();
+    saveNow();
+    if (how === 'copy') return copyText(link);
+    if (how === 'share') return shareLinkText(link, 'Fortschritt', `Fortschritt (${proj.title || 'Einsatz'}) von ${from} – Link in der Suchgebiet-Karten-App öffnen:`);
+    const parts = link.length > QR_MAX ? splitParts(data, 800).map((x) => shareLink('m', x, PUBLIC_URL)) : null;
+    return showQr(link, `🔄 Fortschritt von ${from} an ${to}`, `Auf dem anderen Gerät der Einsatzleitung mit „📷 Einsatz übernehmen“ einlesen${parts ? ` (${parts.length} Codes wechseln sich ab, Kamera ruhig halten)` : ''}. Mehrfach einlesen schadet nicht.`, parts);
+  }
+}
+$('share-progress').addEventListener('click', sendProgress);
+
+async function takeProgress(f) {
+  if (db.mode === 'hf' && !(await toElMode())) return;
+  if (db.mode !== 'el') { db.mode = 'el'; applyMode(); }
+  const from = f.from || 'Einsatzleitung';
+  const target = progressTarget(db.projects, f);
+  if (!target) return toast(`🔄 Fortschritt von ${from} gehört zum Einsatz „${f.ti || '?'}“, der hier nicht vorhanden ist – erst den Einsatz übernehmen (Übergabe per QR-Code)`, 9000);
+  if (target !== P) switchProject(target.id);
+  if (isClosed() && !(await reopenClosed())) return;
+  snapshot();
+  const r = mergeProgress(P, f);
+  if (!r) return toast('🔄 Fortschritt passt nicht zu diesem Einsatz');
+  // Absender als Empfänger merken; ein beim Übergeben angelegter Platzhalter („Gerät 14:03“) bekommt seinen Namen
+  if (!peerOf(P, from)) {
+    const ph = P.peers.find((x) => /^Gerät \d/.test(x.name) && x.name.endsWith('(UA)') === !!f.pe);
+    if (ph) ph.name = from; else setPeer(P, from, 0);
+  }
+  progBase.set(P, snapshotBase(P));
+  syncGrid();
+  changed();
+  renderPois();
+  if (!$('panel-teams').hidden) renderMarks();
+  saveNow();
+  const sum = progressSummary(r);
+  toast(sum ? `🔄 Fortschritt von ${from}: ${sum}` : `🔄 Fortschritt von ${from}: nichts Neues`, 8000);
 }
 
 // Name dieses Geräts (z. B. „ELW 11-1“, „Tablet EL“) – wird beim Übernehmen eines Einsatzes abgefragt
@@ -3848,7 +4000,7 @@ async function handleHash() {
   if (await openInApp(h)) return;
   history.replaceState(null, '', location.pathname + location.search);
   // Rückmeldung: ist die App schon in einem anderen Fenster/Tab offen, dort übernehmen (sonst überschreiben sich die Fenster)
-  if (['r', 'e', 'i'].includes(sh.kind) && await handOff(h)) return;
+  if (['r', 'e', 'i', 'f'].includes(sh.kind) && await handOff(h)) return;
   await handleShared(h);
 }
 
@@ -4670,7 +4822,8 @@ const WIZ = {
 // B-Ort per GPS: frischer Standort der GPS-Anzeige, sonst einmal abfragen
 function wizMeetGps() {
   const setAt = (lat, lon, acc) => {
-    P.meet = { lat, lon, text: (P.meet && P.meet.text) || 'B-Ort' };
+    if (P.meet && blocked(P.meet)) return;
+    P.meet = { lat, lon, text: (P.meet && P.meet.text) || 'B-Ort', ...(P.meet && P.meet.lock ? { lock: P.meet.lock } : {}) };
     map.setView([lat, lon], Math.max(map.getZoom(), 15));
     changed();
     renderMeet();
@@ -4800,12 +4953,12 @@ async function placePoi(lat, lon, acc = null) {
     d.move.lat = Math.round(lat * 1e6) / 1e6;
     d.move.lon = Math.round(lon * 1e6) / 1e6;
     d.move.t = Date.now();
-    d.move.by = db.deviceName || '';
+    d.move.by = devBy();
     changed();
     renderPois();
     return toast(`${poiLabel(d.move)} verschoben`);
   }
-  const p = newPoi({ cat: d.cat, lat, lon, by: db.deviceName || '' });
+  const p = newPoi({ cat: d.cat, lat, lon, by: devBy() });
   const r = await poiTextDlg(p, true);
   if (!r) return;
   p.name = r.name;
@@ -4819,6 +4972,7 @@ async function placePoi(lat, lon, acc = null) {
 }
 async function editPoi(p) {
   if (isLocked()) return lockedToast();
+  if (blocked(p)) return;
   const r = await poiTextDlg(p, false);
   if (!r) return;
   if (r === 'move') {
@@ -4828,6 +4982,7 @@ async function editPoi(p) {
     return;
   }
   if (r === 'delete') {
+    if (blocked(p, 'delete')) return;
     if (!confirm(`„${poiName(p)}“ löschen?`)) return;
     snapshot();
     deletePoi(P, p);
@@ -4842,13 +4997,13 @@ async function editPoi(p) {
     p.desc = r.desc;
   }
   p.t = Date.now();
-  p.by = db.deviceName || '';
+  p.by = devBy();
   changed();
   renderPois();
 }
 $('poi-add').addEventListener('click', addPoi);
 $('meet-remove').addEventListener('click', () => {
-  if (!P.meet) return;
+  if (!P.meet || blocked(P.meet, 'delete')) return;
   snapshot();
   P.meet = null;
   changed();
@@ -5119,6 +5274,7 @@ $('share-mail').addEventListener('click', () => shareRun(async () => { const f =
 $('share-save').addEventListener('click', () => shareRun(async () => { const f = shareGpx(); await saveFile(f.blob, f.name); }));
 $('share-file').addEventListener('click', () => $('proj-share').click());
 $('share-qr').addEventListener('click', () => shareRun(async () => {
+  stamp(); // feste IDs vor dem Ausschneiden eines Unterabschnitts
   if (shareScope === 'all') return handoverQr(P, true);
   const to = await openDlg((box, close) => {
     dlgHead(box, '📲 QR-Code für …', `„${shareLabel()}“: ${selSummary(P, shareSel)}`);
@@ -6787,7 +6943,7 @@ console.info(`Suchgebiet-Karten bereit (${bridge ? 'Android-App' : 'Browser'})`)
 
 // Für Tests
 window.__app = {
-  get P() { return P; }, get grid() { return grid; }, get db() { return db; }, map, setArea, setTool, saveNow,
+  get P() { return P; }, get grid() { return grid; }, get db() { return db; }, map, setArea, setTool, saveNow, changed,
 };
 
 // Modus anwenden, beim ersten Start fragen, Auftrag/Rückmeldung aus dem Link übernehmen
