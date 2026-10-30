@@ -238,3 +238,10 @@ test('Stand je Gebiet: mehrere Gebiete einzeln', async () => {
   assert.equal(msgLabel(m), '📊 Nord 40 % · Süd ✅');
   assert.equal(msgLabel({ ...m, ar: [['Nord', 100], ['Süd', 100]] }), '✅ Alle Gebiete fertig');
 });
+
+test('Status-Tasten: „Parkplatz Auto“ statt „Anfahrt“, alte Meldungen lesbar', async () => {
+  const { STATUS_LIST, statusLabel } = await import('../web/status.js');
+  assert.ok(!STATUS_LIST.some((s) => s.code === 'anfahrt'));
+  assert.equal(statusLabel('da'), '🅿️ Parkplatz Auto');
+  assert.equal(statusLabel('anfahrt'), '🚗 Anfahrt');
+});
