@@ -3223,34 +3223,41 @@ function sentAreas(x) {
   }
   return out;
 }
+// Plakette je Gebiet des Auftrags (Umriss/Raster): welches Team dort ist, sein Status und Stand in diesem Gebiet
 function sentBadges() {
   if (db.mode !== 'el' || db.msgOff || isFree()) return [];
   const msgs = allMsgs();
   const out = [];
   for (const x of P.sent || []) {
-    const ctr = sentCenter(x);
-    if (!ctr) continue;
     const team = P.marks.find((m) => m.id === x.teamId);
-    const { last, done } = latestFor(msgs, x.id);
-    const f = sentFields(x);
-    const fin = (done && (done.pc == null || done.pc >= 100)) || (f.n > 0 && f.a === f.n);
-    const acc = isAccepted(x);
+    const name = team ? team.label : x.team;
     const color = team ? team.color : '#455a64';
-    // Stand je Gebiet: Prozent direkt am jeweiligen Umriss/Raster; was sich nicht zuordnen lässt, bleibt in der Plakette
-    let label = last ? msgLabel(last) : '';
-    if (last && last.s === 'fertig' && Array.isArray(last.ar) && last.ar.length) {
-      const areas = sentAreas(x);
-      const rest = [];
-      for (const [name, pc] of last.ar) {
-        const at = areas.get(name);
-        if (at) out.push({ x, ctr: at, color, lines: [`${name}: ${pc >= 100 ? '✅ fertig' : `${pc} %`}`], fin: pc >= 100, small: true });
-        else rest.push(`${name} ${pc >= 100 ? '✅' : `${pc} %`}`);
+    const acc = isAccepted(x);
+    const own = msgs.filter((m) => m.a === x.id);
+    const f = sentFields(x);
+    let areas = sentAreas(x);
+    if (!areas.size) { const c = sentCenter(x); if (!c) continue; areas = new Map([['', c]]); }
+    for (const [area, ctr] of areas) {
+      // Stand in diesem Gebiet: letzte Stand-Meldung mit Wert für das Gebiet (bzw. ohne Gebiete)
+      let pc = null;
+      for (const m of [...own].reverse()) {
+        if (m.s !== 'fertig') continue;
+        const hit = Array.isArray(m.ar) && m.ar.length ? m.ar.find((q) => q[0] === area) : null;
+        if (hit) { pc = hit[1]; break; }
+        if (!(Array.isArray(m.ar) && m.ar.length)) { pc = m.pc ?? 100; break; }
       }
-      label = rest.length ? `📊 ${rest.join(' · ')}` : '📊 Stand je Gebiet';
+      // letzte sonstige Meldung, die dieses Gebiet betrifft (ohne Gebietsangabe = alle)
+      const st = [...own].reverse().find((m) => m.s !== 'fertig' && !(Array.isArray(m.gb) && m.gb.length && !m.gb.includes(area)));
+      const lines = [area ? `${name} · ${area}` : name];
+      const info = [];
+      if (!acc && !own.length) info.push('📲 wartet auf Übernahme');
+      else if (st) info.push(`${msgLabel({ s: st.s })} ${hhmm(st.t)}`);
+      if (pc != null) info.push(pc >= 100 ? '✅ fertig' : `📊 ${pc} %`);
+      if (f.a && (!area || allGrids(P).some((g) => gridLabel(P, g) === area))) info.push(`▦ ${f.a}/${f.n} Felder`);
+      if (!info.length) info.push(`📲 seit ${hhmm(x.acc || x.at)}`);
+      lines.push(info.join(' · '));
+      out.push({ x, ctr, color, lines, fin: pc != null && pc >= 100, wait: !acc });
     }
-    const line1 = `${team ? team.label : x.team}: ${!acc && !last ? '📲 wartet auf Übernahme' : last ? label : `📲 Auftrag ${hhmm(x.acc)}`}`;
-    const line2 = [f.a ? `▦ ${f.a}/${f.n} Felder abgesucht` : '', last ? hhmm(last.t) : ''].filter(Boolean).join(' · ');
-    out.push({ x, ctr, color, lines: [line1, line2].filter(Boolean), fin, wait: !acc });
   }
   return out;
 }
