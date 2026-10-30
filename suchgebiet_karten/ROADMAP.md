@@ -1,7 +1,7 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v81**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v82**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
@@ -47,7 +47,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
   - Gehen bei der Übergabe an ein weiteres EL-Gerät (`#e=`) mit.
   - Neue Logik in `web/pois.js` mit Unit-Tests.
 
-- [ ] **v82 – 🛰️ Standort: weniger Springen** (Wunsch von Klaas)
+- [x] **v82 – 🛰️ Standort: kein ungefragtes Springen** (direkt mit Klaas gebaut)
   - **Wind messen ohne aktuellen Standort**: vor dem Speichern den Standort neu holen
     (`getCurrentPosition`, kurz warten), statt die Kartenmitte zu nehmen; nur wenn das scheitert, Kartenmitte mit Hinweis.
   - **HF-Modus**: Karte folgt dem Standort nur, solange ein Weg aufgezeichnet wird (⏺ Weg).
