@@ -231,3 +231,10 @@ test('Stand-Meldung: unter 100 % nicht „Gebiet fertig“', async () => {
   assert.equal(msgLabel({ s: 'fertig', pc: 100 }), '✅ Gebiet fertig');
   assert.equal(msgLabel({ s: 'fertig' }), '✅ Gebiet fertig');
 });
+
+test('Stand je Gebiet: mehrere Gebiete einzeln', async () => {
+  const { msgLabel, buildMsg } = await import('../web/status.js');
+  const m = buildMsg({ a: 'A', tm: 'T', s: 'fertig', pc: 40, ar: [['Nord', 40], ['Süd', 100]], t: 1 });
+  assert.equal(msgLabel(m), '📊 Nord 40 % · Süd ✅');
+  assert.equal(msgLabel({ ...m, ar: [['Nord', 100], ['Süd', 100]] }), '✅ Alle Gebiete fertig');
+});

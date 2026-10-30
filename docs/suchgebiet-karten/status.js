@@ -34,10 +34,14 @@ export function spotLabel(cat) {
   return s ? `${s.ico} ${s.label}` : '📌 Standort';
 }
 // Stand-Meldung: erst bei 100 % (oder ohne Angabe) „Gebiet fertig“, sonst „40 % abgesucht“
-const done = (m) => m.s === 'fertig' && (m.pc == null || m.pc >= 100);
+// Mehrere Gebiete: m.ar = [[Name, Prozent], …], fertig erst, wenn alle bei 100 % sind
+const done = (m) => m.s === 'fertig' && (Array.isArray(m.ar) && m.ar.length ? m.ar.every((x) => x[1] >= 100) : (m.pc == null || m.pc >= 100));
+const areaText = (m) => m.ar.map(([n, p]) => `${n} ${p >= 100 ? '✅' : `${p} %`}`).join(' · ');
 // Text einer Meldung: Standort-Meldungen nach ihrer Art
 export const msgLabel = (m) => (m.s === 'ort' ? spotLabel(m.cat)
-  : m.s === 'fertig' ? (done(m) ? '✅ Gebiet fertig' : `📊 ${m.pc} % abgesucht`) : statusLabel(m.s));
+  : m.s === 'fertig' ? (Array.isArray(m.ar) && m.ar.length
+    ? (done(m) ? '✅ Alle Gebiete fertig' : `📊 ${areaText(m)}`)
+    : (done(m) ? '✅ Gebiet fertig' : `📊 ${m.pc} % abgesucht`)) : statusLabel(m.s));
 // Nur das Symbol (für die Karte)
 export function msgIcon(m) {
   if (m.s === 'fertig') return done(m) ? '✅' : '📊';
@@ -80,7 +84,7 @@ export async function decryptMsg(key, d) {
 // ---------- Meldungen ----------
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
 // Neue Meldung (Klartext). pos: { lat, lon, acc? } oder null
-export function buildMsg({ a, tm, s, cat, txt, pos, pc, pa, t = Date.now(), id }) {
+export function buildMsg({ a, tm, s, cat, txt, pos, pc, pa, ar, t = Date.now(), id }) {
   const m = { v: 1, id: id || b64url(cr().getRandomValues(new Uint8Array(9))), a, tm, t, s };
   if (pos && Number.isFinite(pos.lat) && Number.isFinite(pos.lon)) {
     m.lat = r6(pos.lat);
@@ -90,6 +94,7 @@ export function buildMsg({ a, tm, s, cat, txt, pos, pc, pa, t = Date.now(), id }
   if (txt) m.txt = String(txt).slice(0, 300);
   if (pc != null) m.pc = pc;
   if (pa != null) m.pa = pa;
+  if (Array.isArray(ar) && ar.length) m.ar = ar.map(([n, p]) => [String(n).slice(0, 40), Number(p)]);
   if (cat) m.cat = cat;
   return m;
 }
