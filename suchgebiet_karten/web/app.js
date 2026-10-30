@@ -53,7 +53,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v93';
+const APP_VERSION = 'v94';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -3567,7 +3567,7 @@ function startStatus() {
   pollLive();
   showUrgent();
   setInterval(() => { if (navigator.onLine) flushStatus(); }, 60e3);
-  setInterval(pollLive, 30e3);
+  setInterval(pollLive, 15e3); // Einsatzleitung: alle 15 s neue Status-Meldungen holen
   window.addEventListener('online', () => { flushStatus(); pollLive(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { flushStatus(); pollLive(); } });
 }
