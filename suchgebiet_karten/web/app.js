@@ -3069,10 +3069,10 @@ async function takeHandover(e) {
 // ---- Lage-Infos (Lage-Orte, optional Kontakte) zwischen Geräten der Einsatzleitung abgleichen ----
 async function sendInfos() {
   if (isFree()) return lockedToast();
-  if (!P.pois.length && !Object.keys(P.poiDel || {}).length && !P.contacts.length) return toast('Noch keine Lage-Orte – erst unter „Einsatz → Stammdaten“ oder mit 📍 anlegen');
+  if (!P.pois.length && !P.contacts.length) return toast('Noch keine Lage-Orte – erst unter „Einsatz → Stammdaten“ oder mit 📍 anlegen');
   if (!db.deviceName) await askDeviceName(false);
   const how = await openDlg((box, close) => {
-    dlgHead(box, '📍 Lage-Infos an EL senden', `${P.pois.length} Lage-Ort${P.pois.length === 1 ? '' : 'e'} von „${db.deviceName || 'diesem Gerät'}“. Das andere Gerät ergänzt Neues, übernimmt Änderungen und Gelöschtes – nichts wird doppelt, mehrfach scannen schadet nicht.`);
+    dlgHead(box, '📍 Lage-Infos an EL senden', `${P.pois.length} Lage-Ort${P.pois.length === 1 ? '' : 'e'} von „${db.deviceName || 'diesem Gerät'}“. Beim Einsatzleiter wird nur ergänzt: Neues kommt dazu, eigene Änderungen werden übernommen, gelöscht wird dort nichts. Mehrfach scannen schadet nicht.`);
     let ct = null;
     if (P.contacts.length) {
       const l = document.createElement('label');
