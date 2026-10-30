@@ -143,3 +143,12 @@ test('Auftrag mit Kontakten: kommen beim Hundeführer an; neue Link-Arten werden
   for (const k of ['a', 'r', 'e', 'i']) assert.equal(parseShared(`x#${k}=abc`).kind, k);
   assert.equal(parseShared('x#x=abc'), null);
 });
+
+test('appIntentUrl: Link mit #-Teil an die Android-App', async () => {
+  const { appIntentUrl } = await import('../web/share.js');
+  const u = appIntentUrl('https://flai331.github.io/Programmieren/suchgebiet-karten/#a=Ab_c-9', 'de.klaas.suchgebiet');
+  assert.equal(u, 'intent://flai331.github.io/Programmieren/suchgebiet-karten/?h=a%3DAb_c-9#Intent;scheme=https;package=de.klaas.suchgebiet;'
+    + 'S.browser_fallback_url=https%3A%2F%2Fflai331.github.io%2FProgrammieren%2Fsuchgebiet-karten%2F%3Fweb%3D1%23a%3DAb_c-9;end');
+  // index.html fällt weg (Pfad muss zum Intent-Filter der App passen)
+  assert.match(appIntentUrl('https://flai331.github.io/Programmieren/suchgebiet-karten/index.html#e=x', 'p'), /^intent:\/\/flai331\.github\.io\/Programmieren\/suchgebiet-karten\/\?h=e%3Dx#/);
+});

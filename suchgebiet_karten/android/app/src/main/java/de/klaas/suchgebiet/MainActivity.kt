@@ -278,7 +278,8 @@ class MainActivity : ComponentActivity() {
 
     // Auftrags-/Rückmelde-Link (https://flai331.github.io/…#a=… bzw. #r=…) in der App öffnen
     private fun sharedHash(i: Intent?): String? {
-        val frag = i?.data?.fragment ?: return null
+        // #… direkt aus dem Link, oder ?h=… aus dem „In der App öffnen“-Knopf der Webseite (intent:-Link)
+        val frag = i?.data?.fragment ?: i?.data?.takeIf { it.isHierarchical }?.getQueryParameter("h") ?: return null
         // a = Auftrag, r = Rückmeldung, e = Einsatz-Übergabe, i = Lage-Infos
         return if (Regex("^[areim]=.+").matches(frag)) "#$frag" else null
     }

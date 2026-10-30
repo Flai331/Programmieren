@@ -35,6 +35,15 @@ export function parseShared(text) {
 }
 export const shareLink = (kind, data, base = PUBLIC_URL) => `${base}#${kind}=${data}`;
 
+// intent:-Link, der einen Link (mit #a=… usw.) an die Android-App gibt. Der #-Teil geht als ?h=… mit,
+// weil ein intent:-Link selbst keinen tragen kann; ohne App zurück auf die Seite (?web=1: nicht nochmal fragen).
+export function appIntentUrl(href, pkg) {
+  const u = new URL(href);
+  const path = u.pathname.replace(/index\.html$/, '');
+  const back = `${u.origin}${path}?web=1${u.hash}`;
+  return `intent://${u.host}${path}?h=${encodeURIComponent(u.hash.slice(1))}#Intent;scheme=https;package=${pkg};S.browser_fallback_url=${encodeURIComponent(back)};end`;
+}
+
 // ---------- Koordinaten kompakt: ganze Zahlen (1e-5° ≈ 1 m), ab dem 2. Punkt als Differenz ----------
 const E5 = 1e5;
 export function encodePts(pts) {
