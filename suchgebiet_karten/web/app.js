@@ -9,7 +9,7 @@ import {
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { buildGpx, mergeGpx, parseGpx, parseKml, pointInPolygon, selectionGpx, gridWithLabels, gridPath, labelTracks, cellComponents, cellOutlines, hasArea, trackDesc, trackLength, outlineName } from './gpx.js';
+import { buildGpx, mergeGpx, parseGpx, parseKml, pointInPolygon, selectionGpx, gridWithLabels, gridPath, labelTracks, cellComponents, cellOutlines, hasArea, polygonArea, formatArea, trackDesc, trackLength, outlineName } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import { buildReport, describeTarget, makeDedup, makeLog } from './report.js';
 import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
@@ -63,7 +63,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v111';
+const APP_VERSION = 'v112';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -8211,8 +8211,10 @@ function goToPlace(r) {
 
 // Trefferliste: [{name, sub, go()}]
 let shownResults = [];
-function showResults(list, credit) {
-  shownResults = list;
+function showResults(list, credit, title = 'Suchergebnisse') {
+  shownResults = title === 'Suchergebnisse' ? list : []; // Gebietsliste nicht beim Fokus ins Suchfeld wieder öffnen
+  $('search-title').textContent = title;
+  $('searchbar').dataset.kind = title === 'Suchergebnisse' ? 'search' : 'areas';
   const box = $('search-results');
   box.innerHTML = '';
   for (const r of list) {
@@ -8259,6 +8261,33 @@ function localResult(q) {
     };
   }
   return null;
+}
+
+// v112: Gebiete (Umrisse und Raster) für die Liste am Knopf „Gebiete“; Antippen zentriert die Karte darauf
+function areaResults(text = '') {
+  const t = text.trim().toLowerCase();
+  const fit = (s, n, w, e) => { map.fitBounds([[s, w], [n, e]], { padding: [50, 50], maxZoom: 18 }); closeSearch(); };
+  const out = [];
+  for (const it of P.items) {
+    if (it.kind !== 'track' || it.open || !it.pts || it.pts.length < 3) continue;
+    const name = it.name || 'Umriss';
+    const who = it.to ? assigneeName(P, it.to) || '' : 'ohne Team';
+    if (t && !`${name} ${who}`.toLowerCase().includes(t)) continue;
+    const la = it.pts.map((p) => p[0]), lo = it.pts.map((p) => p[1]);
+    out.push({
+      name: `📐 ${name}`,
+      sub: [who, hasArea(it) ? formatArea(polygonArea(it.pts)) : ''].filter(Boolean).join(' · '),
+      go: () => fit(Math.min(...la), Math.max(...la), Math.min(...lo), Math.max(...lo)),
+    });
+  }
+  for (const g of allGrids(P)) {
+    const name = gridLabel(P, g);
+    if (t && !name.toLowerCase().includes(t)) continue;
+    const gg = makeGrid(g.area, g.cellM);
+    const b = gridBounds(gg);
+    out.push({ name: `# ${name}`, sub: `Raster · ${gg.cols} × ${gg.rows} Felder`, go: () => fit(b.south, b.north, b.west, b.east) });
+  }
+  return out;
 }
 
 const asResult = (r) => ({ ...r, go: () => goToPlace(r) });
@@ -8348,6 +8377,14 @@ async function updateSuggestions(immediate = false) {
 
 $('search-input').addEventListener('input', () => updateSuggestions(false));
 $('search-input').addEventListener('focus', () => { if (shownResults.length) $('searchbar').hidden = false; });
+// v112: Knopf „Gebiete“ neben dem Suchfeld – Liste aller Umrisse und Raster, Antippen zentriert die Karte darauf
+$('area-btn').addEventListener('click', () => {
+  if (!$('searchbar').hidden && $('searchbar').dataset.kind === 'areas') return closeSearch();
+  const list = areaResults();
+  if (!list.length) return toast('Noch keine Gebiete – erst einen Umriss oder ein Raster anlegen');
+  collapseSearch();
+  showResults(list, '', '📍 Gebiete');
+});
 $('search-close').addEventListener('click', closeSearch);
 // Vorschläge schließen, sobald man mit der Karte arbeitet
 map.on('movestart click', closeSearch);
