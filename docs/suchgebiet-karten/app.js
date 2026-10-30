@@ -15,6 +15,7 @@ import { fileName } from './files.js';
 import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './infos.js';
 import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids } from './scope.js';
 import { MSG_VIEW, MSG_DELETE, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock, assignedOf, assignedCell, assignedGrid, markAccepted, isAccepted, unlockUntil } from './locks.js';
+import { isDone, msgPct, closeMsg, sentPct, closeAsk, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
 import { buildProgress, mergeProgress, progressSummary, progressPreview, progressTarget, snapshotBase, stampChanges, setPeer, peerOf } from './progress.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -41,7 +42,7 @@ import {
   assignmentCenter,
 } from './share.js';
 import {
-  STATUS_LIST, SPOT_LIST, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, mergeStatus, withoutDeleted, latestFor, flushOutbox, pollMessages, coverageGaps, areaShapes,
+  STATUS_LIST, CLOSE_STATUS, SPOT_LIST, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, mergeStatus, withoutDeleted, latestFor, flushOutbox, pollMessages, coverageGaps, areaShapes,
 } from './status.js';
 import {
   teamChips, chipText, teamAssignments, teamMsgs, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, unreadAge, bannerText, parseSnooze,
@@ -58,7 +59,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v100';
+const APP_VERSION = 'v101';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -367,6 +368,8 @@ function redraw() {
     }, grid),
     items: items.filter((it) => !it.hidden || it === current || it === draftTrack || drafts.includes(it)),
   };
+  // v101: Spuren des vorherigen Teams (beim neuen Hundeführer): gedämpft, nur zum Ansehen
+  if (st.items.some((it) => it.prev)) st.items = st.items.map((it) => (it.prev ? { ...it, color: '#9e9e9e', name: it.name ? `${it.name} 🔒` : '🔒' } : it));
   if (isUA(P)) {
     // Unterabschnitt: Elemente des Grund-Einsatzes ausgegraut
     const GREY = '#9e9e9e';
@@ -2536,13 +2539,16 @@ function renderHfInfo() {
   $('hfi-title').textContent = h ? `${h.team} · ${P.title.replace(/ – [^–]*$/, '')}` : 'Kein Auftrag';
   const rec = h ? h.track.reduce((a, sg) => a + pathLen(sg.pts), 0) : 0;
   $('hfi-text').textContent = h
-    ? [h.hint && `⚠️ ${h.hint}`, `Auftrag ${hhmm(h.received)}`, rec ? `gelaufen ${fmtKm(rec)}` : ''].filter(Boolean).join(' · ')
+    ? [h.closed && `✅ abgeschlossen ${hhmm(h.closed)} – bitte zurückgeben`, h.prev && `🐕 Vorher: ${h.prev}`, h.hint && `⚠️ ${h.hint}`, `Auftrag ${hhmm(h.received)}`, rec ? `gelaufen ${fmtKm(rec)}` : ''].filter(Boolean).join(' · ')
     : 'QR-Code der Einsatzleitung scannen: Menü → „📷 Auftrag scannen“.';
   $('hfinfo').classList.toggle('min', !!db.hfInfoMin);
+  $('hfinfo').classList.toggle('closed', !!(h && h.closed));
   const m = $('hfm-info');
   m.textContent = '';
   if (h) {
     const lines = [`${h.team} – ${P.title}`, `Auftrag erhalten ${hhmm(h.received)}`];
+    if (h.closed) lines.push(`✅ Auftrag abgeschlossen ${hhmm(h.closed)} – bitte zurückgeben`);
+    if (h.prev) lines.push(`Vorher abgesucht: ${h.prev} (graue Wege und Markierungen)`);
     if (h.hint) lines.push(`Hinweis: ${h.hint}`);
     if (P.mission.person) lines.push(`Vermisste Person: ${P.mission.person}`);
     if (P.meet) lines.push(`B-Ort: ${P.meet.text || 'gesetzt'}`);
@@ -2849,11 +2855,12 @@ async function resultLink() {
   }
   return link;
 }
-$('hf-back').addEventListener('click', async () => {
+async function showBack() {
   const link = await resultLink();
   const n = P.hf.track.reduce((a, sg) => a + pathLen(sg.pts), 0);
   showQr(link, `📤 Rückmeldung ${P.hf.team}`, `Die Einsatzleitung scannt diesen Code (Teams → „Rückmeldung scannen“). Gelaufen: ${fmtKm(n)}. Mehrfach zurückgeben schadet nicht – es kommt nichts doppelt an.`);
-});
+}
+$('hf-back').addEventListener('click', showBack);
 
 // ---- Einsatzleitung: Auftrag zusammenstellen ----
 let sendPicked = {}; // gridId -> Set("c,r")
@@ -2909,6 +2916,7 @@ function renderSend() {
     ib.appendChild(l);
   });
   if (!ib.children.length) ib.textContent = 'Keine.';
+  renderPrev();
   $('send-meet').parentElement.hidden = !P.meet;
   // Lage-Orte: alle vorausgewählt (Verpflegung, ELW … helfen dem Hundeführer), einzeln abwählbar
   const pb = $('send-pois');
@@ -2949,6 +2957,32 @@ function renderSend() {
   sendCache = null;
   updateSendSize();
 }
+// v101: Wege/Markierungen früherer Teams im gewählten Gebiet (Rückmeldungen): eigene Gruppe, vorausgewählt, abwählbar
+let sendPrev = []; // zuletzt gezeigte Gruppen (predecessorGroups)
+function prevSel() {
+  const items = [...$('send-items').querySelectorAll('input:checked')].map((i) => P.items[Number(i.value)]).filter(Boolean);
+  return {
+    teamId: $('send-team').value, gridIds: [...$('send-grids').querySelectorAll('input:checked')].map((i) => i.value), fields: sendFields(),
+    picked: Object.fromEntries(Object.entries(sendPicked).map(([k, v]) => [k, [...v]])), areaItems: items,
+  };
+}
+function renderPrev() {
+  const box = $('send-prev');
+  const off = new Set([...box.querySelectorAll('input:not(:checked)')].map((i) => i.value)); // abgewählt bleibt abgewählt
+  box.innerHTML = '';
+  sendPrev = predecessorGroups(P, prevSel(), allMsgs());
+  for (const g of sendPrev) {
+    const l = document.createElement('label');
+    l.className = 'check';
+    l.innerHTML = '<input type="checkbox"><span></span>';
+    l.firstChild.value = g.a;
+    l.firstChild.checked = !off.has(g.a);
+    l.lastChild.textContent = predecessorText(g);
+    box.appendChild(l);
+  }
+  box.hidden = !sendPrev.length;
+  $('send-prev-label').hidden = !sendPrev.length;
+}
 const sendContactsAll = () => [leadContact(), ...P.contacts].filter(Boolean);
 const sendFields = () => (document.querySelector('input[name=send-fields]:checked') || {}).value || 'team';
 function sendSelection() {
@@ -2974,6 +3008,8 @@ function sendSelection() {
     teamId: $('send-team').value, gridIds, fields: sendFields(),
     picked: Object.fromEntries(Object.entries(sendPicked).map(([k, v]) => [k, [...v]])),
     itemIdx: idx, meet: $('send-meet').checked && !!P.meet, rescue,
+    prev: sendPrev.filter((g) => $('send-prev').querySelector(`input[value="${g.a}"]:checked`))
+      .map((g) => ({ team: g.team, pct: g.pct, itemIdx: g.items.map((it) => P.items.indexOf(it)).filter((i) => i >= 0) })),
     poiIds: [...$('send-pois').querySelectorAll('input:checked')].map((i) => i.value), hint: $('send-hint').value.trim(), person: $('send-person').checked,
     liveUrl: db.statusUrl || (P.live && P.live.url) || STATUS_URL, // eigene Einstellung, sonst Server des Einsatzes, sonst Standard
     contacts: $('send-contacts').checked
@@ -2991,11 +3027,12 @@ async function currentAssignment() {
 async function updateSendSize() {
   const { a, link } = await currentAssignment();
   const nf = a.g.reduce((x, g) => x + g.f.length, 0);
-  $('send-size').textContent = `${a.g.length ? `${a.g.length} Rastergebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ` : ''}Umrisse/Zeichnungen: ${a.i.length} · ${a.po ? `Lage-Orte: ${a.po.length} · ` : ''}${a.rp ? `Rettungspunkte: ${a.rp.length} · ` : ''}${a.ct ? `Kontakte: ${a.ct.length} · ` : ''}`
+  const np = a.i.filter((x) => x.pv).length;
+  $('send-size').textContent = `${a.g.length ? `${a.g.length} Rastergebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ` : ''}Umrisse/Zeichnungen: ${a.i.length - np} · ${np ? `Spuren des vorherigen Teams: ${np} · ` : ''}${a.po ? `Lage-Orte: ${a.po.length} · ` : ''}${a.rp ? `Rettungspunkte: ${a.rp.length} · ` : ''}${a.ct ? `Kontakte: ${a.ct.length} · ` : ''}`
     + (link.length <= QR_MAX ? `passt in einen QR-Code (${link.length} Zeichen)` : `zu groß für einen QR-Code (${link.length} Zeichen) – per WhatsApp senden oder weniger auswählen`);
 }
 ['send-team', 'send-meet', 'send-rescue', 'send-person', 'send-hint'].forEach((id) => $(id).addEventListener(id === 'send-hint' ? 'input' : 'change', () => {
-  if (id === 'send-team') { $('send-grids').innerHTML = ''; $('send-items').innerHTML = ''; return renderSend(); }
+  if (id === 'send-team') { $('send-grids').innerHTML = ''; $('send-items').innerHTML = ''; $('send-prev').innerHTML = ''; return renderSend(); }
   sendCache = null; updateSendSize();
 }));
 // ohne Raster gibt es keine Felder auszuwählen
@@ -3008,20 +3045,22 @@ $('send-grids').addEventListener('change', (e) => {
     const inside = itemsInGrids(P, [e.target.value], $('send-team').value);
     for (const inp of $('send-items').querySelectorAll('input')) if (inside.has(P.items[Number(inp.value)])) inp.checked = true;
   }
-  syncSendFields(); sendCache = null; updateSendSize();
+  syncSendFields(); renderPrev(); sendCache = null; updateSendSize();
 });
-$('send-items').addEventListener('change', () => { sendCache = null; updateSendSize(); });
+$('send-items').addEventListener('change', () => { renderPrev(); sendCache = null; updateSendSize(); });
+$('send-prev').addEventListener('change', () => { sendCache = null; updateSendSize(); });
 $('send-pois').addEventListener('change', () => { sendCache = null; updateSendSize(); });
 $('send-ct-list').addEventListener('change', () => { sendCache = null; updateSendSize(); });
 $('send-contacts').addEventListener('change', () => { $('send-ct-list').hidden = !$('send-contacts').checked; sendCache = null; updateSendSize(); });
 document.querySelectorAll('input[name=send-fields]').forEach((r) => r.addEventListener('change', () => {
   sendCache = null;
-  if (sendFields() === 'pick') { closePanels(); setTool('sendpick'); updatePickBar(); redraw(); } else renderSend();
+  if (sendFields() === 'pick') { closePanels(); setTool('sendpick'); updatePickBar(); redraw(); } else { renderSend(); renderPrev(); }
 }));
 $('send-open').addEventListener('click', () => {
   if (!allGrids(P).length && !P.items.some((it) => !it.resultKey)) return toast('Nichts zu verschicken – zuerst ein Raster oder einen Umriss anlegen');
   $('send-grids').innerHTML = '';
   $('send-items').innerHTML = '';
+  $('send-prev').innerHTML = '';
   renderSend();
   openPanel('panel-send');
 });
@@ -3044,6 +3083,7 @@ $('pick-done').addEventListener('click', () => {
   redraw();
   renderSend();
   for (const inp of $('send-grids').querySelectorAll('input')) if (sendPicked[inp.value] && sendPicked[inp.value].size) inp.checked = true;
+  renderPrev();
   sendCache = null;
   updateSendSize();
   openPanel('panel-send');
@@ -3107,10 +3147,22 @@ function renderSentList() {
   box.innerHTML = '';
   const list = [...(P.sent || [])].reverse();
   if (!list.length) return;
+  const open = list.filter((x) => !isDone(x));
+  const fin = list.filter(isDone);
   const h = document.createElement('h2');
   h.className = 'sub';
-  h.textContent = `📋 Aufträge (${list.length})`;
+  h.textContent = `📋 Aufträge (${open.length})`;
   box.appendChild(h);
+  // abgeschlossene Aufträge: eigener, aufklappbarer Bereich unter den offenen
+  let finBox = null;
+  if (fin.length) {
+    finBox = document.createElement('details');
+    finBox.className = 'sent-done';
+    finBox.open = !!db.finOpen;
+    finBox.innerHTML = '<summary></summary>';
+    finBox.firstChild.textContent = `✅ Abgeschlossen (${fin.length})`;
+    finBox.addEventListener('toggle', () => { db.finOpen = finBox.open; });
+  }
   const now = Date.now();
   for (const x of list) {
     const team = P.marks.find((m) => m.id === x.teamId);
@@ -3118,7 +3170,9 @@ function renderSentList() {
     const quiet = now - Math.max(x.last || 0, x.acc || x.at, lm ? lm.t : 0) > SENT_QUIET;
     const d = document.createElement('div');
     const acc = isAccepted(x);
-    d.className = 'sent-card' + (acc && quiet ? ' quiet' : '') + (acc ? '' : ' wait');
+    const fini = isDone(x);
+    const zu = closeMsg(allMsgs(), x.id);
+    d.className = 'sent-card' + (acc && quiet && !fini ? ' quiet' : '') + (acc ? '' : ' wait') + (fini ? ' done' : '');
     d.innerHTML = '<b><i></i><span></span></b><div class="what"></div><div class="since"></div><div class="back"></div>';
     d.querySelector('i').style.background = team ? team.color : '#999';
     d.querySelector('b span').textContent = `${team ? team.label : x.team}${team && team.dog ? ` – ${team.dog}` : ''}`;
@@ -3129,7 +3183,18 @@ function renderSentList() {
     d.querySelector('.back').textContent = !acc ? 'Gilt erst als vergeben, wenn das Team ihn übernommen hat.' : x.last
       ? `📥 ${n} Rückmeldung${n === 1 ? '' : 'en'}, zuletzt ${hhmm(x.last)} (vor ${sinceText(x.last, now)})${x.lastSum ? ` – ${x.lastSum}` : ''}`
       : lm ? 'Weg und Markierungen kommen mit der QR-Rückmeldung' : `⏳ noch keine Rückmeldung${quiet ? ' – nachfragen?' : ''}`;
-    if (lm) {
+    if (fini) {
+      const dn = document.createElement('div');
+      dn.className = 'closed';
+      dn.textContent = `✅ abgeschlossen ${hhmm(x.done)}${x.pct != null ? ` (${x.pct} % abgesucht)` : ''}`;
+      d.appendChild(dn);
+    } else if (zu) {
+      const dn = document.createElement('div');
+      dn.className = 'closed';
+      dn.textContent = `✅ meldet abgeschlossen ${hhmm(zu.t)}${msgPct(zu) != null ? ` (${msgPct(zu)} %)` : ''}${zu.txt ? ` – ${zu.txt}` : ''}`;
+      d.appendChild(dn);
+    }
+    if (lm && !fini) {
       const lv = document.createElement('div');
       lv.className = 'live';
       lv.textContent = `📣 ${msgLabel(lm)} · ${hhmm(lm.t)}${lm.lat != null ? ' · 📍' : ''}${lm.s === 'fertig' && lm.txt ? ` – ${lm.txt}` : ''}`;
@@ -3144,6 +3209,26 @@ function renderSentList() {
       }
     }
     const bar = document.createElement('div');
+    if (acc && !fini) {
+      const cb = document.createElement('button');
+      cb.className = 'mini';
+      cb.textContent = '✅ Abschließen';
+      cb.addEventListener('click', () => askClose(x, false));
+      bar.appendChild(cb);
+    }
+    if (fini) {
+      const ob = document.createElement('button');
+      ob.className = 'mini';
+      ob.textContent = '↩ Wieder öffnen';
+      ob.addEventListener('click', () => {
+        reopenSent(x, allMsgs());
+        changed();
+        redraw();
+        renderSentList();
+        toast(`↩ Auftrag ${x.team} ist wieder offen`);
+      });
+      bar.appendChild(ob);
+    }
     if (!acc) {
       const ab = document.createElement('button');
       ab.className = 'mini';
@@ -3168,15 +3253,50 @@ function renderSentList() {
     });
     bar.appendChild(rb);
     d.appendChild(bar);
-    if (P.items.some((it) => it.resultKey && it.resultKey.startsWith(`${x.id}|t`))) {
+    if (!fini && P.items.some((it) => it.resultKey && it.resultKey.startsWith(`${x.id}|t`))) {
       const gb = document.createElement('button');
       gb.className = 'mini gaps';
       gb.textContent = gapView && gapView.a === x.id ? '🕳 Lücken ausblenden' : '🕳 Lücken zeigen';
       gb.addEventListener('click', () => toggleGaps(x));
       d.appendChild(gb);
     }
-    box.appendChild(d);
+    (fini ? finBox : box).appendChild(d);
   }
+  if (finBox) box.appendChild(finBox);
+}
+// v101: Auftrag abschließen – Rückfrage. reported: das Team hat „✅ Auftrag abgeschlossen“ gemeldet und die Rückmeldung ist da
+async function askClose(x, reported) {
+  const proj = P;
+  const pc = sentPct(x, allMsgs());
+  const ok = await openDlg((box, close) => {
+    dlgHead(box, `✅ Auftrag ${x.team} abschließen?`, reported
+      ? `Das Team meldet ihn als erledigt${pc != null ? ` (${pc} % abgesucht)` : ''}, die Rückmeldung ist da.`
+      : `Der Auftrag gilt danach als abgeschlossen${pc != null ? ` (${pc} % abgesucht)` : ''}, das Team als frei. Der Schutz seiner Felder und Zeichnungen entfällt.`);
+    dlgButton(box, '✅ Abschließen', 'primary', () => close(true));
+    dlgButton(box, reported ? 'Noch offen lassen' : 'Abbrechen', '', () => close(false));
+  });
+  if (proj !== P || !P.sent.includes(x)) return;
+  if (!ok) {
+    if (reported) { declineClose(x, allMsgs()); changed(); }
+    return;
+  }
+  closeSent(x, allMsgs());
+  if (gapView && gapView.a === x.id) gapView = null;
+  changed();
+  redraw();
+  renderSentList();
+  toast(`✅ Auftrag ${x.team} abgeschlossen${x.pct != null ? ` (${x.pct} %)` : ''}`, 5000);
+}
+// Rückfrage, sobald Meldung „abgeschlossen“ und QR-Rückmeldung eines Auftrags da sind (egal in welcher Reihenfolge)
+let closeBusy = false;
+async function checkCloseAsk() {
+  if (closeBusy || db.mode !== 'el' || !P || P.closed) return;
+  const x = (P.sent || []).find((q) => closeAsk(q, allMsgs()));
+  if (!x) return;
+  if (!$('dlg').hidden) return setTimeout(checkCloseAsk, 4000); // ein anderes Fenster steht – gleich nochmal
+  closeBusy = true;
+  try { await askClose(x, true); } finally { closeBusy = false; }
+  checkCloseAsk();
 }
 $('btn-teams').addEventListener('click', renderSentList);
 
@@ -3251,6 +3371,7 @@ function sentBadges() {
     const name = team ? team.label : x.team;
     const color = team ? team.color : '#455a64';
     const acc = isAccepted(x);
+    const fini = isDone(x);
     const own = msgs.filter((m) => m.a === x.id);
     const f = sentFields(x);
     let areas = sentAreas(x);
@@ -3259,10 +3380,17 @@ function sentBadges() {
       // Stand in diesem Gebiet: letzte Stand-Meldung mit Wert für das Gebiet (bzw. ohne Gebiete)
       let pc = null;
       for (const m of [...own].reverse()) {
-        if (m.s !== 'fertig') continue;
+        if (m.s !== 'fertig' && m.s !== 'zu') continue;
         const hit = Array.isArray(m.ar) && m.ar.length ? m.ar.find((q) => q[0] === area) : null;
         if (hit) { pc = hit[1]; break; }
-        if (!(Array.isArray(m.ar) && m.ar.length)) { pc = m.pc ?? 100; break; }
+        if (!(Array.isArray(m.ar) && m.ar.length)) { if (m.s === 'zu' && m.pc == null) continue; pc = m.pc ?? 100; break; }
+      }
+      // abgeschlossener Auftrag: grüne Plakette „✅ Team · 80 %“ (Stand beim Abschließen)
+      if (fini) {
+        if (pc == null) pc = x.pct ?? null;
+        const l = `✅ ${area ? `${name} · ${area}` : name}${pc != null ? ` · ${pc} %` : ''}`;
+        out.push({ x, bnd, color, lines: [l, `abgeschlossen ${hhmm(x.done)}`], fin: true, done: true, wait: false });
+        continue;
       }
       // letzte sonstige Meldung, die dieses Gebiet betrifft (ohne Gebietsangabe = alle)
       const st = [...own].reverse().find((m) => m.s !== 'fertig' && !(Array.isArray(m.gb) && m.gb.length && !m.gb.includes(area)));
@@ -3352,7 +3480,7 @@ function drawSentBadges(c) {
       c.fill();
     }
     c.fillStyle = b.fin ? '#e8f5e9' : 'rgba(255,255,255,0.93)';
-    c.strokeStyle = b.color;
+    c.strokeStyle = b.done ? '#2e7d32' : b.color;
     c.lineWidth = 3;
     if (b.wait) c.setLineDash([6, 4]); // noch nicht übernommen: gestrichelt
     c.beginPath();
@@ -3530,6 +3658,7 @@ async function sendStatus(o) {
     toast('📍 Standort wird bestimmt … (bis 10 s)', 11000);
     pos = await getFix();
   }
+  if (o.s === 'start') delete h.closed; // wieder losgegangen: nicht mehr „abgeschlossen“
   const m = buildMsg({ a: h.id, tm: h.team, s: o.s, cat: o.cat, txt: o.txt, pc: o.pc, ar: o.ar, gb: o.gb, pos });
   if (!h.ls) {
     h.log = [...h.log, { ...m }].slice(-100);
@@ -3596,12 +3725,14 @@ async function openStatusDialog() {
     list.className = 'dlg-btns two';
     box.appendChild(list);
     for (const s of STATUS_LIST) dlgButton(list, `${s.ico} ${s.label}`, '', () => close(s.code));
+    dlgButton(box, `${CLOSE_STATUS.ico} Auftrag abschließen`, '', () => close('zu')); // getrennt vom Stand: auch bei 80 % beenden/abbrechen
     dlgButton(box, '📍 Standort melden', 'primary', () => close('ort'));
     dlgButton(box, 'Abbrechen', '', () => close(null));
   });
   if (!code) return;
   if (code === 'ort') return spotDialog();
   if (code === 'fertig') return doneDialog();
+  if (code === 'zu') return closeDialog();
   if (code === 'da') return parkDialog();
   if (isUrgent({ s: code }) && !(await confirmSend(statusLabel(code)))) return;
   // Suche begonnen/beendet: bei mehreren Gebieten wählen, für welche (eins, mehrere oder alle)
@@ -3680,44 +3811,71 @@ async function parkDialog() {
 function hfAreas() {
   const out = allGrids(P).map((g) => gridLabel(P, g));
   let n = 0;
-  for (const it of P.items) if (it.fromEl && it.kind === 'track' && !it.open && (it.pts || []).length > 2) out.push(it.name || `Umriss ${++n}`);
+  for (const it of P.items) if (it.fromEl && !it.prev && it.kind === 'track' && !it.open && (it.pts || []).length > 2) out.push(it.name || `Umriss ${++n}`);
   return [...new Set(out)];
 }
+// Regler je Gebiet (bzw. ein Regler), vorausgefüllt mit dem letzten Stand (Stand- oder Abschluss-Meldung) -> [{ name, rng }]
+function pctRows(box, areas, multi) {
+  const prev = [...(P.hf.log || [])].reverse().find((m) => m.s === 'fertig' || m.s === 'zu');
+  const was = (name) => { const x = prev && (prev.ar || []).find((q) => q[0] === name); return x ? x[1] : prev && !multi && prev.pc != null ? prev.pc : 50; };
+  return (multi ? areas : ['']).map((name) => {
+    const big = document.createElement('div');
+    big.className = 'st-pct';
+    const rng = document.createElement('input');
+    rng.type = 'range';
+    rng.className = 'st-range';
+    rng.min = 0; rng.max = 100; rng.step = 10;
+    rng.value = Math.round(was(name) / 10) * 10;
+    const show = () => { big.textContent = `${name ? `${name}: ` : ''}${Number(rng.value) >= 100 ? '100 % – ✅ fertig' : `${rng.value} % abgesucht`}`; };
+    rng.addEventListener('input', show);
+    show();
+    box.append(big, rng);
+    return { name, rng };
+  });
+}
+// Reglerwerte als Meldungsfelder: { ar (nur bei mehreren Gebieten), pc (kleinster Wert) }
+const pctResult = (rows, multi, txt) => ({
+  ...(multi ? { ar: rows.map((x) => [x.name, Number(x.rng.value)]) } : {}),
+  pc: Math.min(...rows.map((x) => Number(x.rng.value))), txt: txt.value.trim(),
+});
 // Stand melden: der Hundeführer schätzt selbst, wie viel abgesucht ist (100 % = fertig) – bei mehreren Gebieten je Gebiet
 async function doneDialog() {
   const areas = hfAreas();
   const multi = areas.length > 1;
-  const prev = [...(P.hf.log || [])].reverse().find((m) => m.s === 'fertig');
-  const was = (name) => { const x = prev && (prev.ar || []).find((q) => q[0] === name); return x ? x[1] : prev && !multi && prev.pc != null ? prev.pc : 50; };
   const r = await openDlg((box, close) => {
     dlgHead(box, '📊 Stand melden', multi ? 'Wie viel ist je Gebiet abgesucht? 100 % = Gebiet fertig.' : 'Wie viel vom Gebiet hast du abgesucht? Erst 100 % meldet „Gebiet fertig“.');
-    const rows = (multi ? areas : ['']).map((name) => {
-      const big = document.createElement('div');
-      big.className = 'st-pct';
-      const rng = document.createElement('input');
-      rng.type = 'range';
-      rng.className = 'st-range';
-      rng.min = 0; rng.max = 100; rng.step = 10;
-      rng.value = Math.round(was(name) / 10) * 10;
-      const show = () => { big.textContent = `${name ? `${name}: ` : ''}${Number(rng.value) >= 100 ? '100 % – ✅ fertig' : `${rng.value} % abgesucht`}`; };
-      rng.addEventListener('input', show);
-      show();
-      box.append(big, rng);
-      return { name, rng };
-    });
+    const rows = pctRows(box, areas, multi);
     const txt = document.createElement('input');
     txt.type = 'text';
     txt.placeholder = 'Grund / Hinweis (optional)';
     txt.style.marginTop = '8px';
     box.appendChild(txt);
-    dlgButton(box, '📣 Melden', 'primary', () => close({
-      ...(multi ? { ar: rows.map((x) => [x.name, Number(x.rng.value)]) } : {}),
-      pc: Math.min(...rows.map((x) => Number(x.rng.value))), txt: txt.value.trim(),
-    }));
+    dlgButton(box, '📣 Melden', 'primary', () => close(pctResult(rows, multi, txt)));
     dlgButton(box, 'Abbrechen', '', () => close(null));
   });
   if (!r) return;
   sendStatus({ s: 'fertig', pc: r.pc, ar: r.ar, txt: r.txt });
+}
+// ✅ Auftrag abschließen: Rückfrage mit Stand je Gebiet (auch unter 100 %) und optionalem Grund; danach gleich 📤 Zurückgeben
+async function closeDialog() {
+  const areas = hfAreas();
+  const multi = areas.length > 1;
+  const r = await openDlg((box, close) => {
+    dlgHead(box, '✅ Auftrag abschließen?', `${multi ? 'Wie viel ist je Gebiet abgesucht?' : 'Wie viel vom Gebiet ist abgesucht?'} Der Auftrag darf auch bei weniger als 100 % beendet oder abgebrochen werden.`);
+    const rows = pctRows(box, areas, multi);
+    const txt = document.createElement('input');
+    txt.type = 'text';
+    txt.placeholder = 'Grund, z. B. Hund müde, Dunkelheit (optional)';
+    txt.style.marginTop = '8px';
+    box.appendChild(txt);
+    dlgButton(box, '✅ Abschließen', 'primary', () => close(pctResult(rows, multi, txt)));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!r) return;
+  P.hf.closed = Date.now();
+  sendStatus({ s: 'zu', pc: r.pc, ar: r.ar, txt: r.txt }); // Meldung wandert sofort in Log/Warteschlange, geht auch mit der QR-Rückmeldung mit
+  renderHfInfo();
+  await showBack();
 }
 $('hf-status').addEventListener('click', openStatusDialog);
 
@@ -4109,6 +4267,7 @@ async function pollLive() {
           renderSentList(); // aktualisiert auch die Team-Chips
           redraw();
           checkUnread();
+          checkCloseAsk();
           if ($('panel-status').hidden === false) renderStatusPanel();
         }
       }
@@ -4193,6 +4352,8 @@ function startStatus() {
   renderTeamBar();
   checkUnread();
   setInterval(checkUnread, 15e3); // Erinnerung bei ungelesenen Meldungen
+  checkCloseAsk();
+  setInterval(checkCloseAsk, 15e3);
   window.addEventListener('online', () => { flushStatus(); pollLive(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { flushStatus(); pollLive(); } });
 }
@@ -4238,6 +4399,7 @@ async function handleShared(text) {
   markAccepted(P, allMsgsRaw());
   changed();
   renderSentList();
+  checkCloseAsk(); // Team meldet „abgeschlossen“ und die Rückmeldung ist da: Rückfrage
   toast(`📥 Rückmeldung ${res.who}: ${res.ways} Weg${res.ways === 1 ? '' : 'e'}, ${res.marks} Markierung${res.marks === 1 ? '' : 'en'}, ${res.fields} Feld${res.fields === 1 ? '' : 'er'}${res.winds ? `, ${res.winds} Wind-Messung${res.winds === 1 ? '' : 'en'}` : ''}${res.msgs ? `, ${res.msgs} Status-Meldung${res.msgs === 1 ? '' : 'en'}` : ''}${res.known ? '' : ' (Auftrag hier unbekannt – ins aktuelle Suchgebiet übernommen)'}${res.ways + res.marks + res.fields + res.winds + res.msgs ? '' : ' – nichts Neues'}`, 9000);
 }
 async function takeAssignment(a) {
@@ -6084,10 +6246,10 @@ $('share-pdf').addEventListener('click', () => shareRun(async () => {
 }));
 // Auftrags-Fenster für Hundeführer mit der Auswahl vorbelegen
 function prefillSend(sel, teamId, fields) {
-  for (const id of ['send-grids', 'send-items', 'send-pois']) $(id).innerHTML = '';
+  for (const id of ['send-grids', 'send-items', 'send-pois', 'send-prev']) $(id).innerHTML = '';
   renderSend();
   $('send-team').value = teamId || '';
-  for (const id of ['send-grids', 'send-items', 'send-pois']) $(id).innerHTML = '';
+  for (const id of ['send-grids', 'send-items', 'send-pois', 'send-prev']) $(id).innerHTML = '';
   renderSend();
   for (const inp of $('send-items').querySelectorAll('input')) inp.checked = sel.items.has(P.items[Number(inp.value)]);
   for (const inp of $('send-grids').querySelectorAll('input')) inp.checked = sel.edges.has(inp.value) || ((sel.cells.get(inp.value) || new Set()).size > 0);
@@ -6097,6 +6259,7 @@ function prefillSend(sel, teamId, fields) {
   if (mode === 'pick') sendPicked = Object.fromEntries([...sel.cells].map(([id, s]) => [id, new Set(s)]));
   document.querySelector(`input[name=send-fields][value=${mode}]`).checked = true;
   syncSendFields();
+  renderPrev(); // Spuren des vorherigen Teams im gewählten Gebiet: Team-Auftrag über Teilen nimmt sie mit
   const picked = Object.values(sendPicked).reduce((a, x) => a + x.size, 0);
   $('send-pickinfo').textContent = mode === 'pick' ? `${picked} Felder angetippt.` : '';
   sendCache = null;
@@ -7728,7 +7891,7 @@ console.info(`Suchgebiet-Karten bereit (${bridge ? 'Android-App' : 'Browser'})`)
 
 // Für Tests
 window.__app = {
-  get P() { return P; }, get grid() { return grid; }, get db() { return db; }, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread,
+  get P() { return P; }, get grid() { return grid; }, get db() { return db; }, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread, sentBadges,
 };
 
 // Modus anwenden, beim ersten Start fragen, Auftrag/Rückmeldung aus dem Link übernehmen

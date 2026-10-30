@@ -124,8 +124,9 @@ export function assignmentSummary(a) {
     const n = (g.f || []).length;
     parts.push(n ? `${g.n}: ${n} Feld${n === 1 ? '' : 'er'}` : `${g.n} (ganzes Gebiet)`);
   }
-  const tracks = (a.i || []).filter((x) => x.k === 't').map((x) => x.n || 'Umriss');
+  const tracks = (a.i || []).filter((x) => x.k === 't' && !x.pv).map((x) => x.n || 'Umriss');
   if (tracks.length) parts.push(tracks.join(', '));
+  if (a.pr) parts.push(`Vorher: ${a.pr}`);
   if (a.h) parts.push(`„${a.h.length > 60 ? `${a.h.slice(0, 59)}…` : a.h}“`);
   return parts.join(' · ');
 }
@@ -156,9 +157,19 @@ export function buildAssignment(p, sel) {
     return out;
   });
   const items = (sel.itemIdx || []).map((i) => p.items[i]).filter(Boolean).map((it) => packItem(it, 3)).filter(Boolean);
+  // v101: Wege/Markierungen des vorherigen Teams (sel.prev = [{ team, pct, itemIdx }]) – beim neuen Team grau, nur zum Ansehen
+  const prev = sel.prev || [];
+  for (const g of prev) {
+    for (const i of g.itemIdx || []) {
+      const x = p.items[i] && packItem(p.items[i], 6);
+      if (x) items.push({ ...x, pv: g.team });
+    }
+  }
   const out = { v: 1, k: 'a', id: uid(), t: p.title || 'Suchgebiet', at: Date.now(), g: grids, i: items };
   if (team) out.tm = { l: team.label, c: team.color, d: team.dog || '' };
   if (sel.hint) out.h = sel.hint;
+  const pvText = prev.filter((g) => (g.itemIdx || []).length).map((g) => (g.pct != null ? `${g.pct} % von ${g.team} abgesucht` : `${g.team} war schon hier`)).join(' · ');
+  if (pvText) out.pr = pvText;
   if (sel.meet && p.meet) out.mp = [r6(p.meet.lat), r6(p.meet.lon), p.meet.text || ''];
   // Lage-Orte (ELW, Verpflegung …): [id, Art, lat, lon, Name, Hinweis]
   const pois = (p.pois || []).filter((x) => (sel.poiIds || []).includes(x.id));
@@ -211,13 +222,13 @@ export function projectFromAssignment(a) {
     const [first, ...rest] = grids;
     Object.assign(p, { gridId: first.id, gridName: first.name, area: first.area, cellM: first.cellM, fills: first.fills, status: first.status, otherGrids: rest });
   }
-  p.items = (a.i || []).map((x) => unpackItem(x, { fromEl: true }));
+  p.items = (a.i || []).map((x) => unpackItem(x, { fromEl: true, ...(x.pv ? { prev: String(x.pv) } : {}) }));
   p.contacts = (a.ct || []).map(fromCompact).filter((c) => c.name || c.phone);
   if (a.mp) p.meet = { lat: a.mp[0], lon: a.mp[1], text: a.mp[2] };
   p.pois = (a.po || []).map(([id, cat, lat, lon, name, desc]) => ({ id, cat, lat, lon, name, desc, t: a.at, by: 'Einsatzleitung' }));
   if (a.vp) p.mission.person = a.vp;
   p.hf = {
-    id: a.id, at: a.at, received: Date.now(), team: team.label, hint: a.h || '', grids: a.g.map((g) => g.i),
+    id: a.id, at: a.at, received: Date.now(), team: team.label, hint: a.h || '', ...(a.pr ? { prev: String(a.pr) } : {}), grids: a.g.map((g) => g.i),
     track: [], // aufgezeichnete Wege: [{ t0, pts: [[lat, lon]] }]
     outbox: [], log: [], // Status-Meldungen: noch nicht gesendet / alle eigenen
     ...(Array.isArray(a.ls) && a.ls.length === 2 && /^https:\/\/script\.google\.com\//.test(String(a.ls[0])) ? { ls: [String(a.ls[0]), String(a.ls[1])] } : {}), // Status-Server: [Adresse, Schlüssel]

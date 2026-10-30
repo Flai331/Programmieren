@@ -20,15 +20,20 @@ export function cellLock(p, gid, key) {
   return l;
 }
 
+// v101: Spuren des vorherigen Teams (el.prev = Teamname) beim neuen Hundeführer: nur ansehen
+export const isPrev = (el) => !!(el && el.prev);
+export const msgPrev = (el) => `🔒 Vom vorherigen Team (${el.prev}) – nur ansehen`;
+
 // Bearbeiten (Form, Name, Farbe …) und Löschen für Zeichnung/Lage-Ort/B-Ort
-export const canEdit = (p, el) => lockOf(p, el) !== 'base';
-export const canDelete = (p, el) => !lockOf(p, el);
+export const canEdit = (p, el) => !isPrev(el) && lockOf(p, el) !== 'base';
+export const canDelete = (p, el) => !isPrev(el) && !lockOf(p, el);
 export const canEditCell = (p, gid, key) => cellLock(p, gid, key) !== 'base';
 export const canEditGrid = (p, gid) => gridLock(p, gid) !== 'base';
 export const canDeleteGrid = (p, gid) => !gridLock(p, gid);
 
 // Meldetext, wenn die Aktion nicht erlaubt ist (sonst ''): act = 'edit' | 'delete'
 export function denied(p, el, act = 'edit') {
+  if (isPrev(el)) return msgPrev(el);
   const l = lockOf(p, el);
   if (l === 'base') return MSG_VIEW;
   return l && act === 'delete' ? MSG_DELETE : '';
@@ -45,7 +50,8 @@ export function deniedGrid(p, gid, act = 'edit') {
 // unlock (bis wann der Schutz freigegeben ist). Geschützt = übernommen und nicht freigegeben.
 export const UNLOCK_MS = 5 * 60e3;
 export const isAccepted = (x) => !!x && Number(x.acc) > 0;
-const live = (x, now) => isAccepted(x) && !(Number(x.unlock) > now);
+// abgeschlossener Auftrag (x.done, v101): kein Schutz mehr, das Gebiet lässt sich neu vergeben
+const live = (x, now) => isAccepted(x) && !(Number(x.done) > 0) && !(Number(x.unlock) > now);
 // Auftrag, der dieses Item schützt (sonst null)
 export const assignedOf = (p, el, now = Date.now()) => (el && el.id ? (p.sent || []).find((x) => live(x, now) && Array.isArray(x.items) && x.items.includes(el.id)) || null : null);
 // Auftrag, der dieses Feld schützt

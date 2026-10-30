@@ -2,6 +2,7 @@
 // Reine Logik ohne DOM, damit sie testbar ist.
 import { msgLabel, isUrgent } from './status.js';
 import { isAccepted } from './locks.js';
+import { isDone, closeMsg, msgPct } from './closeout.js';
 
 export const BANNER_MS = 5 * 60e3; // so lange ungelesen: Banner
 export const BEEP_MS = 7 * 60e3; // so lange ungelesen: Piepton
@@ -33,7 +34,9 @@ export function isReturned(x, msgs) {
 export function teamChips(sent, msgs, marks, items, areasOf) {
   const byTeam = new Map();
   for (const x of sent || []) {
-    if (isReturned(x, msgs)) continue;
+    if (isDone(x)) continue; // abgeschlossen: Team gilt als frei
+    // Rückmeldung da, aber das Team meldet „abgeschlossen“: Chip bleibt, bis die Einsatzleitung abschließt
+    if (isReturned(x, msgs) && !closeMsg(msgs, x.id)) continue;
     const key = x.teamId || `n:${x.team || ''}`;
     const prev = byTeam.get(key);
     // mehrere Aufträge: der neueste (nicht zurückgemeldete)
@@ -47,7 +50,8 @@ export function teamChips(sent, msgs, marks, items, areasOf) {
     const acc = isAccepted(x);
     let status;
     let t;
-    if (last && last.s !== 'ok') { status = `${msgLabel(last)} ${hm(last.t)}`; t = last.t; }
+    if (last && last.s === 'zu') { const pc = msgPct(last); status = `✅ meldet abgeschlossen ${hm(last.t)}${pc != null ? ` (${pc} %)` : ''}`; t = last.t; }
+    else if (last && last.s !== 'ok') { status = `${msgLabel(last)} ${hm(last.t)}`; t = last.t; }
     else if (last || acc) { const at = last ? last.t : x.acc; status = `📲 übernommen ${hm(at)}`; t = at; }
     else { status = '📲 wartet'; t = x.at || 0; }
     out.push({
