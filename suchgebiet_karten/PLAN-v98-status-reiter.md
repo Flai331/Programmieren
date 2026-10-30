@@ -41,7 +41,14 @@ Schon gebaut (Commit d935625): Plakette je Umriss/Raster mit Team, Status und St
 - Nach **7 Minuten** ungelesen zusätzlich ein **Piepton** (wie Dringend, aber kürzer), danach alle 2 Minuten erneut,
   bis gelesen. Zeit zählt ab Eingang der ältesten ungelesenen Meldung auf diesem Gerät (`P.msgRecv[id]`).
 - Prüfung im bestehenden Takt (z. B. alle 15 s zusammen mit dem Abholen bzw. eigenem 15-s-Timer).
-- Logik testbar: `unreadAlert(unread, recvTimes, now)` -> 'none' | 'banner' | 'beep'.
+- **Schlummern (Klaas)**: Im Banner ein Knopf „💤 Schlummern“ → kleiner Dialog mit Freitext-Feld
+  „Minuten“ (Zahl, z. B. 10; Schnellwahl 5 / 10 / 15 / 30) → Banner und Piepton ruhen bis `P.msgSnooze`
+  (Zeitpunkt, pro Gerät/Einsatz gespeichert). Neue Meldungen während des Schlummerns blinken trotzdem am Chip,
+  lösen aber kein Banner/Piepen aus. Danach geht die Erinnerung normal weiter (Banner sofort, Piepen nach Regel).
+  Im Banner/Verlauf sichtbar: „💤 bis 14:45“ mit „Aufheben“. **Fund/Hilfe sind nie betroffen** – Dringend-Dialog
+  und Alarmton kommen immer sofort.
+- Logik testbar: `unreadAlert(unread, recvTimes, now, snoozeUntil)` -> 'none' | 'banner' | 'beep'
+  (`snoozeUntil > now` -> 'none').
 
 ## 2. Verlauf: eigene Kachel „📣 Status“
 - Neue Kachel in der rechten Randleiste (EL), Panel `panel-status` (über `SIDE_PANELS`, zweiter Tipp schließt).
@@ -51,7 +58,7 @@ Schon gebaut (Commit d935625): Plakette je Umriss/Raster mit Team, Status und St
 
 ## Tests
 - Unit: `teamChips` (Inhalt, Sortierung, Ausblenden nach QR-Rückmeldung, Wiedererscheinen, mehrere Aufträge),
-  ungelesen/gelesen-Logik, Filter für den Verlauf.
+  ungelesen/gelesen-Logik, `unreadAlert` inkl. Schlummern (läuft ab, Fund/Hilfe unberührt), Filter für den Verlauf.
 - Playwright `statusbar-e2e.mjs` (Scratchpad), beide Viewports 1280×800 und 412×860, Screenshots ansehen:
   Chips/Knopf sichtbar, Suchfeld ein-/ausklappen (Tablet), Chip antippen → Karte + Infofenster, neue Meldungen →
   Blinken / Liste der ungelesenen, Tipp schließt und markiert gelesen, QR-Rückmeldung → Chip weg, neue Meldung → wieder da,
