@@ -2,6 +2,8 @@
 // Auswahl sel = { items: Set(Element aus p.items), pois: Set(Lage-Ort), meet: bool,
 //                 cells: Map(Raster-ID -> Set("c,r")), edges: Set(Raster-ID) }
 import { allGrids, newProject, normalizeProject, uid } from './store.js';
+import { makeGrid, cellAt } from './grid.js';
+import { hasArea, pointInPolygon } from './gpx.js';
 
 export function emptySel() {
   return { items: new Set(), pois: new Set(), meet: false, cells: new Map(), edges: new Set() };
@@ -26,10 +28,44 @@ export function selectAll(p) {
   return sel;
 }
 
+// Texte und Zeichnungen (ohne eigenes Team), die in einem der Umrisse areas liegen oder in einem Feld,
+// für das cellOk(Raster, "c,r") gilt -> Set. So gehen Texte im Gebiet mit dem Gebiet mit.
+export function itemsWithin(p, areas, cellOk = null) {
+  const polys = [...areas].filter(hasArea).map((it) => it.pts);
+  const grids = cellOk ? allGrids(p).map((g) => ({ g, gr: makeGrid(g.area, g.cellM) })) : [];
+  const inCell = ([la, lo]) => grids.some(({ g, gr }) => {
+    const c = cellAt(gr, la, lo);
+    return !!c && cellOk(g, `${c.c},${c.r}`);
+  });
+  const inside = (pt) => polys.some((poly) => pointInPolygon(pt, poly)) || inCell(pt);
+  const out = new Set();
+  for (const it of p.items) {
+    if (it.hidden || it.resultKey || it.to || areas.has(it) || hasArea(it)) continue;
+    const pts = it.kind === 'text' ? [[it.lat, it.lon]] : it.pts || [];
+    if (pts.some(inside)) out.add(it);
+  }
+  return out;
+}
+
+// Alles, was in den Rastergebieten gridIds liegt (Umrisse, Striche, Texte), außer Rückmeldungen und
+// Umrissen, die einem anderen Team zugeteilt sind -> Set
+export function itemsInGrids(p, gridIds, teamId = '') {
+  const areas = allGrids(p).filter((g) => gridIds.includes(g.id)).map((g) => g.area);
+  const inside = ([la, lo]) => areas.some((a) => la <= a.north && la >= a.south && lo >= a.west && lo <= a.east);
+  const out = new Set();
+  for (const it of p.items) {
+    if (it.hidden || it.resultKey || (it.to && it.to !== teamId)) continue;
+    const pts = it.kind === 'text' ? [[it.lat, it.lon]] : it.pts || [];
+    if (pts.some(inside)) out.add(it);
+  }
+  return out;
+}
+
 // Ein Team: seine Felder (mit Rasterrand), die ihm zugeteilten Umrisse, B-Ort und alle Lage-Orte
 export function selectTeam(p, teamId) {
   const sel = emptySel();
   for (const it of p.items) if (it.to === teamId) sel.items.add(it);
+  for (const it of itemsWithin(p, sel.items, (g, k) => (g.fills || {})[k] === teamId)) sel.items.add(it);
   for (const g of allGrids(p)) {
     const keys = Object.keys(g.fills || {}).filter((k) => g.fills[k] === teamId);
     if (!keys.length) continue;
