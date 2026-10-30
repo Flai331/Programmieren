@@ -8,7 +8,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
-- [~] **v105 – 🔍 Beschriftung je Zoomstufe**: Je weiter herausgezoomt, desto weniger Text an Umrissen, Zeichnungen und Texten: bis Stufe 12 keine Beschriftung, 13–15 nur Gebietsname (lange Texte gekürzt), 16 Gebietsname und Team untereinander, ab 17 dazu Fläche und Notiz. PDF unverändert vollständig.
+- [~] **v105 – 🔍 Beschriftung und Markierungen je Zoomstufe**: Bis Stufe 14 nur Umrandungen – kein Text, keine Texte/Zeichnungen, keine Meldungs-Symbole (Fund/Hilfe, B-Ort und Lage-Orte bleiben). Stufe 15: Markierungen und Gebietsname (lange Texte gekürzt), 16: Gebietsname und Team untereinander, ab 17 dazu Fläche und Notiz. Stift/Text/Radierer zoomen bei Bedarf auf Stufe 15. PDF unverändert vollständig.
 - [~] **v104 – 📋 Handy: Auftrags-Stand als eigener Reiter**: Auf dem Handy stehen keine Plaketten mehr an den Gebieten. Neben „📣 Teams“ klappt „📋 Aufträge“ eine Liste auf (Team · Gebiet, letzter Status, Stand %); Antippen zeigt das Gebiet. Teams- und Aufträge-Liste schließen sich gegenseitig, Tipp auf die Karte schließt. Tablet: Plaketten bleiben am Gebiet und jetzt sicher im Bild (nicht mehr hinter Knöpfen/außerhalb).
 - [~] **v103 – 🔄 APK-Selbst-Update · 👆 Tippen schließt · 📍 Texte ändern/löschen · Plaketten nur am Gebiet**:
   - APK prüft beim Start (und unter ☰ Mehr → „Nach Update suchen“) auf eine neue Version, lädt sie und startet die Installation – nie mitten in einem offenen Einsatz ohne Rückfrage. Gilt ab der nächsten APK, v103 einmal von Hand installieren.

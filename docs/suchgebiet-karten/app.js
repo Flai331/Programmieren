@@ -1,7 +1,7 @@
 import {
   makeGrid, cellCount, cellAt, cellBounds, cellLabel, parseCell, formatMeters, MAX_CELLS, remapCells,
 } from './grid.js';
-import { drawOverlay, hitItem, labelDetail, trackLabel } from './render.js';
+import { drawOverlay, hitItem as hitItemAll, labelDetail, trackLabel, markHidden } from './render.js';
 import {
   LAYERS, OVERLAYS, DEFAULT_OVERLAYS, layerById, layerStack, tileUrl,
 } from './layers.js';
@@ -372,6 +372,9 @@ function redraw() {
     }, grid),
     items: items.filter((it) => !it.hidden || it === current || it === draftTrack || drafts.includes(it)),
   };
+  // weit herausgezoomt: nur Umrandungen – Texte und Zeichnungen weg (außer dem, was gerade gezeichnet wird)
+  const dz = labelDetail(map.getZoom());
+  if (dz === 0) st.items = st.items.filter((it) => !markHidden(it, 0) || it === current || drafts.includes(it));
   // v101: Spuren des vorherigen Teams (beim neuen Hundeführer): gedämpft, nur zum Ansehen
   if (st.items.some((it) => it.prev)) st.items = st.items.map((it) => (it.prev ? { ...it, color: '#9e9e9e', name: it.name ? `${it.name} 🔒` : '🔒' } : it));
   if (isUA(P)) {
@@ -575,6 +578,8 @@ function setTool(t) {
   // Einzeichnen nur in einem offenen Einsatz (Offline-Bereich wählen u. Ä. geht immer)
   if (['pen', 'text', 'fill', 'track', 'erase', 'meet', 'poi', 'grid'].includes(t) && isLocked()) { lockedToast(); t = 'pan'; }
   if (t !== tool) repLog.add(`Werkzeug ${t}`);
+  // Texte/Zeichnungen sind erst ab Stufe 15 zu sehen: zum Einzeichnen dorthin zoomen
+  if (['pen', 'text', 'erase', 'hfmarkpt', 'textmove'].includes(t) && labelDetail(map.getZoom()) === 0) map.setZoom(15);
   // Offene Zeichnung/Umriss bleibt beim Werkzeugwechsel erhalten (bis „Fertig“ oder „Abbrechen“)
   if (tool === 'track' && t !== 'track') {
     if (draftTrack && !draftTrack.pts.length) draftTrack = null;
@@ -976,6 +981,9 @@ document.querySelectorAll('.toolbar [data-tool]').forEach((b) => b.addEventListe
   setTool(b.dataset.tool === tool ? 'pan' : b.dataset.tool);
 }));
 $('undo').addEventListener('click', undo);
+
+// Treffer nur auf sichtbare Dinge (weit herausgezoomt keine Texte/Zeichnungen)
+const hitItem = (items, toPx, x, y, tol) => hitItemAll(items, toPx, x, y, tol, labelDetail(map.getZoom()));
 
 // Textpunkt angetippt: Text ändern oder löschen
 function textDialog(i) {
@@ -3634,6 +3642,7 @@ function statusMarks() {
   else if (!db.msgOff) list = allMsgs().map((m) => ({ m, color: teamColorOf(m.a) }));
   else return [];
   list = list.filter((x) => x.m.lat != null);
+  if (labelDetail(map.getZoom()) === 0) list = list.filter((x) => isUrgent(x.m)); // weit weg: nur Fund/Hilfe
   const newest = new Map();
   for (const x of list) newest.set(x.m.a, x.m.id); // Liste ist nach Zeit sortiert
   for (const x of list) x.big = newest.get(x.m.a) === x.m.id;

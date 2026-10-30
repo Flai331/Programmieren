@@ -20,7 +20,8 @@ import { labelDetail, trackLabel } from '../web/render.js';
 
 test('Beschriftung je Zoomstufe: weit weg nichts, nah alles', () => {
   assert.equal(labelDetail(12), 0);
-  assert.equal(labelDetail(13), 1);
+  assert.equal(labelDetail(14), 0);
+  assert.equal(labelDetail(14.4), 0);
   assert.equal(labelDetail(15), 1);
   assert.equal(labelDetail(16), 2);
   assert.equal(labelDetail(16.4), 2);
@@ -32,4 +33,10 @@ test('Beschriftung je Zoomstufe: weit weg nichts, nah alles', () => {
   assert.equal(trackLabel(it, 'Team 1', 2), 'Ost 1\n→ Team 1');
   assert.match(trackLabel(it, 'Team 1', 3), /^Ost 1\n→ Team 1 · .+ha$/);
   assert.equal(trackLabel({ ...it, name: '' }, 'Team 1', 2), '→ Team 1');
+});
+
+test('weit herausgezoomt: Texte nicht antippbar, Umrisse schon', () => {
+  const tr = { kind: 'track', w: 4, pts: [[200, 100], [200, 300]] };
+  assert.equal(hitItem(items, toPx, 102, 101, 12, 0), -1);
+  assert.equal(hitItem([...items, tr], toPx, 200, 202, 12, 0), 1);
 });

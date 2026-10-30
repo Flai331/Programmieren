@@ -40,12 +40,12 @@ function pill(ctx, text, cx, cy, s) {
 //          fillLabels: "c,r" -> Text, items, meet }
 // state.others: weitere Rastergebiete [{ grid, name, fills, status, fillLabels, statusLabels }],
 // state.gridName: Name des Hauptrasters (steht nur da, wenn es mehrere Gebiete gibt)
-// Beschriftungen je nach Zoomstufe: 0 = keine (bis 12), 1 = nur Namen (13–15, Texte gekürzt),
+// Beschriftungen je nach Zoomstufe: 0 = keine (bis 14, dann auch keine Markierungen – nur Umrandungen), 1 = nur Namen (15, Texte gekürzt),
 // 2 = Gebietsname und Team untereinander (16), 3 = dazu Fläche und Notiz (ab 17)
 export function labelDetail(zoom) {
   if (zoom == null) return 3;
   zoom = Math.round(zoom);
-  return zoom <= 12 ? 0 : zoom <= 15 ? 1 : zoom === 16 ? 2 : 3;
+  return zoom <= 14 ? 0 : zoom === 15 ? 1 : zoom === 16 ? 2 : 3;
 }
 // Text am Umriss je nach Stufe (Zeilen mit \n getrennt)
 export function trackLabel(it, who, d = 3) {
@@ -682,10 +682,12 @@ export function distToSegment(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-export function hitItem(items, toPx, x, y, tol) {
+// Weit herausgezoomt (bis Stufe 14) sind Texte und Zeichnungen nicht zu sehen
+export const markHidden = (it, d) => d === 0 && (it.kind === 'text' || it.kind === 'stroke');
+export function hitItem(items, toPx, x, y, tol, d = 3) {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
-    if (it.hidden) continue; // ausgeblendet: nicht radieren/benennen
+    if (it.hidden || markHidden(it, d)) continue; // ausgeblendet: nicht radieren/benennen
     if (it.kind === 'text') {
       const [px, py] = toPx(it.lat, it.lon);
       if (Math.hypot(px - x, py - y) <= tol + 6) return i;
