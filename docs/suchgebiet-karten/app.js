@@ -1,5 +1,5 @@
 import {
-  makeGrid, cellCount, cellAt, cellBounds, cellLabel, parseCell, formatMeters, MAX_CELLS, remapCells,
+  makeGrid, cellCount, cellAt, cellBounds, cellLabel, parseCell, formatMeters, MAX_CELLS, remapCells, gridBounds, fitGridArea,
 } from './grid.js';
 import { drawOverlay, hitItem as hitItemAll, labelDetail, trackLabel, markHidden } from './render.js';
 import {
@@ -61,7 +61,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v105';
+const APP_VERSION = 'v106';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -829,7 +829,7 @@ function finishPointer(e, cancelled) {
   } else if (tool === 'grid' && dragRect) {
     const a = dragRect.a;
     dragRect = null;
-    if (!cancelled) setArea({ north: a.lat, south: ll.lat, west: a.lng, east: ll.lng });
+    if (!cancelled && setArea({ north: a.lat, south: ll.lat, west: a.lng, east: ll.lng })) startGridFit();
     setTool('pan');
     redraw();
   } else if (tool === 'offrect' && dragRect) {
@@ -1363,6 +1363,53 @@ function setArea(area, cellM = P.cellM) {
   return true;
 }
 
+// Neues Raster: 2 Minuten lang Breite und Höhe an Anfassern (Ränder, Ecken) ändern – immer in ganzen Feldern
+const GRID_FIT_MS = 120e3;
+let gridFit = null; // { gid, until, marks: [L.marker], timer }
+function startGridFit() {
+  endGridFit();
+  if (!grid) return;
+  gridFit = { gid: P.gridId, until: Date.now() + GRID_FIT_MS, marks: [] };
+  for (const k of ['n', 's', 'w', 'e', 'nw', 'ne', 'sw', 'se']) {
+    const m = L.marker([0, 0], {
+      draggable: true, zIndexOffset: 1000, keyboard: false,
+      icon: L.divIcon({ className: `gfit-h gfit-${k.length > 1 ? 'c' : k}`, iconSize: [28, 28] }),
+    }).addTo(map);
+    m.on('drag', () => { gridFit.until = Math.max(gridFit.until, Date.now() + 15e3); const r = fitGridArea(grid, k, m.getLatLng()); dragRect = { a: { lat: r.north, lng: r.west }, b: { lat: r.south, lng: r.east } }; redraw(); });
+    m.on('dragend', () => { const r = fitGridArea(grid, k, m.getLatLng()); dragRect = null; setArea(r); placeGridFit(); });
+    m.k = k;
+    gridFit.marks.push(m);
+  }
+  placeGridFit();
+  $('gridfitbar').hidden = false;
+  gridFit.timer = setInterval(tickGridFit, 1000);
+  tickGridFit();
+}
+function placeGridFit() {
+  if (!gridFit || !grid) return;
+  const b = gridBounds(grid);
+  const mid = { lat: (b.north + b.south) / 2, lng: (b.west + b.east) / 2 };
+  const at = { n: [b.north, mid.lng], s: [b.south, mid.lng], w: [mid.lat, b.west], e: [mid.lat, b.east], nw: [b.north, b.west], ne: [b.north, b.east], sw: [b.south, b.west], se: [b.south, b.east] };
+  for (const m of gridFit.marks) m.setLatLng(at[m.k]);
+}
+function tickGridFit() {
+  if (!gridFit) return;
+  const left = gridFit.until - Date.now();
+  if (left <= 0 || P.gridId !== gridFit.gid || !grid) return endGridFit();
+  const s = Math.ceil(left / 1000);
+  $('gridfit-info').textContent = `↔ Ränder ziehen · ${grid.cols} × ${grid.rows} Felder · noch ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+function endGridFit() {
+  if (!gridFit) return;
+  clearInterval(gridFit.timer);
+  for (const m of gridFit.marks) m.remove();
+  gridFit = null;
+  dragRect = null;
+  $('gridfitbar').hidden = true;
+  redraw();
+}
+$('gridfit-done').addEventListener('click', endGridFit);
+
 // Liste der Rastergebiete im Raster-Fenster: antippen = bearbeiten und hinzoomen
 function renderGridList() {
   const box = $('grid-list');
@@ -1547,7 +1594,7 @@ $('view-all').addEventListener('click', () => setAllVisible(true));
 $('grid-draw').addEventListener('click', () => { closePanels(); setTool('grid'); });
 $('grid-view').addEventListener('click', () => {
   const b = map.getBounds().pad(-0.08);
-  if (setArea({ north: b.getNorth(), south: b.getSouth(), west: b.getWest(), east: b.getEast() })) closePanels();
+  if (setArea({ north: b.getNorth(), south: b.getSouth(), west: b.getWest(), east: b.getEast() })) { closePanels(); startGridFit(); }
 });
 $('grid-remove').addEventListener('click', () => {
   const multi = allGrids(P).length > 1;
@@ -5625,6 +5672,7 @@ function startGps(jump) {
 
 // ---------- Suchgebiete (Projekte) ----------
 function switchProject(id) {
+  endGridFit();
   saveNow();
   db.currentId = id;
   P = db.projects[id];
@@ -6338,7 +6386,7 @@ document.querySelectorAll('.panel .close').forEach((b) => b.addEventListener('cl
 let tapSwallow = null; // {id, until}: Rest der verschluckten Tipp-Geste (pointerup, click) ebenfalls verschlucken
 function tapIsEmpty(t) {
   if (!t || t === document.body || t === document.documentElement || t === canvas) return true;
-  return !!(t.closest && t.closest('#map') && !t.closest('.leaflet-control, .leaflet-popup, button, a'));
+  return !!(t.closest && t.closest('#map') && !t.closest('.leaflet-control, .leaflet-popup, .gfit-h, button, a'));
 }
 function anyOpenThing() {
   return [...document.querySelectorAll('.panel')].some((p) => !p.hidden)
