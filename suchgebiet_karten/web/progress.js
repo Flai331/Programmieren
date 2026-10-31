@@ -66,13 +66,16 @@ export function stampChanges(p, base, by = '', now = Date.now()) {
 
 // ---------- Empfänger ("An wen?") ----------
 export const peerOf = (p, name) => (p.peers || []).find((x) => x.name === name) || null;
-export function setPeer(p, name, lastSent) {
+// lastSent: Stand, ab dem „neu“ gerechnet wird. real = tatsächlich gesendet (sonst nur Übernahme/Absender gemerkt):
+// nur dann gilt „zuletzt gesendet“ (x.sent), sonst „noch nie gesendet“
+export function setPeer(p, name, lastSent, real = true) {
   if (!name) return null;
   name = String(name).slice(0, 60);
   p.peers = p.peers || [];
   let x = peerOf(p, name);
-  if (!x) { x = { name, lastSent: 0 }; p.peers.push(x); }
+  if (!x) { x = { name, lastSent: 0, sent: 0 }; p.peers.push(x); }
   x.lastSent = lastSent;
+  if (real) x.sent = lastSent;
   return x;
 }
 
