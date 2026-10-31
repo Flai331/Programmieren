@@ -64,15 +64,17 @@ import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } fro
 import {
   newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor, cellsText,
   exportProject, importProject, uid, reorderMarks, MARK_COLORS, NO_TEAM, NO_TEAM_COLOR, assignTargets, assigneeName,
-  allGrids, activateGrid, startNewGrid, removeActiveGrid, gridView, gridLabel,
+  allGrids, activateGrid, startNewGrid, removeActiveGrid, gridView, gridLabel, loadProjects, mergeTrackBackup,
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v117';
+const APP_VERSION = 'v118';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
+let recWatch = null; // Weg-Aufzeichnung (HF): watchPosition-ID, siehe startRec
+let locked = false; // v118: ein anderes Fenster arbeitet (siehe „Nur ein Fenster“): dieses speichert und sendet nichts
 let handedOff = false; // dieser Tab hat eine Rückmeldung an einen offenen Tab abgegeben und speichert nichts mehr
 const OLD_KEY = 'suchgebiet-karten-v1';
 const COLORS = ['#d50000', '#1565c0', '#2e7d32', '#ef6c00', '#6a1b9a', '#f06292', '#000000', '#fdd835'];
@@ -112,25 +114,68 @@ let flushBusy = false; // Warteschlange wird gesendet
 let flushAgain = false;
 let gpxSelGrid = null; // zuletzt angetipptes Rastergebiet (für „Ganzes Raster“)
 
-function load() {
+// v118: defekte Einsätze beiseitelegen (höchstens 3, die ältesten fliegen), defekten Gesamtspeicher einmal sichern
+const QUARANTINE = 'sgk-quarantaene-';
+const CORRUPT_KEY = 'sgk-defekt-';
+const TRACK_KEY = 'sgk-track-';
+let startNotice = ''; // Hinweis nach dem Start (toast gibt es erst später)
+let trackKeysDone = []; // Weg-Sicherungen, die eingearbeitet sind und nach dem nächsten Speichern gelöscht werden
+function quarantine(id, raw) {
   try {
-    const s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    localStorage.setItem(`${QUARANTINE}${id}`, JSON.stringify({ t: Date.now(), id, raw }));
+    const all = Object.keys(localStorage).filter((k) => k.startsWith(QUARANTINE)).map((k) => {
+      let t = 0;
+      try { t = JSON.parse(localStorage.getItem(k)).t || 0; } catch { /* defekt -> älteste */ }
+      return { k, t };
+    }).sort((a, b) => b.t - a.t);
+    for (const x of all.slice(3)) localStorage.removeItem(x.k);
+  } catch { /* Speicher voll: egal */ }
+}
+function saveCorrupt(raw) {
+  try {
+    for (const k of Object.keys(localStorage)) if (k.startsWith(CORRUPT_KEY)) localStorage.removeItem(k);
+    localStorage.setItem(`${CORRUPT_KEY}${Date.now()}`, raw);
+  } catch { /* egal */ }
+}
+// Weg-Sicherungen (sgk-track-<Einsatz>) in die Wege der Einsätze einarbeiten
+function mergeTrackBackups(projects) {
+  for (const p of Object.values(projects)) {
+    if (!p.hf) continue;
+    let raw = null;
+    try { raw = localStorage.getItem(`${TRACK_KEY}${p.id}`); } catch { /* egal */ }
+    if (raw === null) continue;
+    try {
+      const r = mergeTrackBackup(p.hf.track, JSON.parse(raw));
+      if (r.merged) p.hf.track = r.track;
+    } catch { /* defekte Sicherung */ }
+    trackKeysDone.push(`${TRACK_KEY}${p.id}`);
+  }
+}
+function load() {
+  let raw = null;
+  try { raw = localStorage.getItem(STORE_KEY); } catch { /* privater Modus */ }
+  try {
+    const s = JSON.parse(raw || 'null');
     if (s && s.projects) db = { ...db, ...s };
     if (!['team', 'ua', 'el', 'other'].includes(db.shareTo)) db.shareTo = null; // v99: zuletzt gewählter Empfänger beim Teilen (pro Gerät)
     db.teamsOpen = !!db.teamsOpen; // v98: Team-Liste auf dem Handy offen (pro Gerät)
-  } catch { /* defekter Speicher -> Neustart */ }
+  } catch { if (raw) { saveCorrupt(raw); startNotice = '⚠️ Der Speicher war beschädigt und wurde gesichert (Mehr → Fehlerbericht senden)'; } } // defekter Speicher -> Neustart, Rohdaten bleiben erhalten
+  const ld = loadProjects(db.projects);
+  db.projects = ld.projects;
+  for (const b of ld.broken) quarantine(b.id, b.raw);
+  if (ld.broken.length) startNotice = '⚠️ Ein Einsatz war beschädigt und wurde beiseitegelegt (Mehr → Fehlerbericht senden)';
   if (!Object.keys(db.projects).length) {
     let p = null;
     try {
       const old = JSON.parse(localStorage.getItem(OLD_KEY) || 'null');
       if (old) p = migrateV1(old);
     } catch { /* ignorieren */ }
-    p = p || newProject('');
+    p = normalizeProject(p || newProject(''));
     db.projects[p.id] = p;
     db.currentId = p.id;
   }
-  for (const id of Object.keys(db.projects)) db.projects[id] = normalizeProject(db.projects[id]);
   if (!db.projects[db.currentId]) db.currentId = Object.keys(db.projects)[0];
+  mergeTrackBackups(db.projects);
   P = db.projects[db.currentId];
   syncGrid();
   restoreDrafts();
@@ -176,7 +221,7 @@ function save() {
 // true = gespeichert, false = Speicher voll (rote Leiste); wer „gespeichert“ meldet, prüft das
 function saveNow() {
   clearTimeout(saveTimer);
-  if (handedOff) return true;
+  if (handedOff || locked) return true;
   if (map) {
     const c = map.getCenter();
     P.view = { lat: c.lat, lon: c.lng, z: map.getZoom() };
@@ -564,8 +609,10 @@ function drawOffSquares(ctx) {
 
 map.on('move resize viewreset', redraw);
 map.on('zoomstart', () => { canvas.style.visibility = 'hidden'; });
-map.on('zoomend', () => { canvas.style.visibility = 'visible'; redraw(); save(); });
-map.on('moveend', save);
+// v118: während der Weg-Aufzeichnung verschiebt das Mitführen die Karte bei jedem Punkt – die Ansicht steht dann im 30-s-Speichern (recPersist)
+const saveView = () => { if (recWatch === null) save(); };
+map.on('zoomend', () => { canvas.style.visibility = 'visible'; redraw(); saveView(); });
+map.on('moveend', saveView);
 window.addEventListener('resize', () => { map.invalidateSize(); resizeCanvas(); });
 
 // ---------- Werkzeuge ----------
@@ -2973,10 +3020,25 @@ function pathLen(pts) {
 const fmtKm = (m) => (m >= 1000 ? `${(m / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km` : `${Math.round(m)} m`);
 
 // Weg aufzeichnen (Bildschirm bleibt an; Browser zeichnen bei gesperrtem Bildschirm nicht auf)
-let recWatch = null;
 let recSeg = null;
 let recLock = null;
 let recTimer = null;
+// v118: Jeder GPS-Punkt ruft nicht mehr save() auf (JSON.stringify des ganzen Speichers). Stattdessen: das laufende Wegstück
+// höchstens alle 5 s in einen kleinen eigenen Schlüssel, der Gesamtspeicher höchstens alle 30 s (sowie pagehide/hidden/Stopp).
+const REC_BACKUP_MS = 5000;
+const REC_FULL_MS = 30000;
+let recKey = null;
+let recBackupAt = 0;
+let recFullAt = 0;
+function recPersist() {
+  if (locked || !recSeg || !recKey) return;
+  const now = Date.now();
+  if (now - recBackupAt >= REC_BACKUP_MS) {
+    recBackupAt = now;
+    try { localStorage.setItem(recKey, JSON.stringify({ t0: recSeg.t0, pts: recSeg.pts })); } catch { /* Speicher voll */ }
+  }
+  if (now - recFullAt >= REC_FULL_MS) { recFullAt = now; saveNow(); }
+}
 function ensureHf() {
   if (!P.hf) P.hf = { id: uid(), team: 'Ich', hint: '', received: Date.now(), grids: allGrids(P).map((g) => g.id), track: [] };
 }
@@ -2987,6 +3049,9 @@ async function startRec(resume = false) {
   if (!navigator.geolocation) return toast('Standort wird nicht unterstützt');
   ensureHf();
   recSeg = null;
+  recKey = `${TRACK_KEY}${P.id}`;
+  recBackupAt = 0;
+  recFullAt = Date.now();
   if (!resume) {
     recSeg = { t0: Date.now(), pts: [] };
     P.hf.track.push(recSeg);
@@ -3006,7 +3071,7 @@ async function startRec(resume = false) {
     const last = recSeg.pts[recSeg.pts.length - 1];
     if (last && distance(last[0], last[1], pt[0], pt[1]) < 5) return;
     recSeg.pts.push(pt);
-    save();
+    recPersist();
     redraw();
   }, (err) => toast('GPS: ' + (err.message || 'kein GPS-Empfang')), { enableHighAccuracy: true, maximumAge: 0 });
   try { recLock = await navigator.wakeLock.request('screen'); } catch { if (bridge && bridge.keepScreenOn) bridge.keepScreenOn(true); }
@@ -3015,6 +3080,7 @@ async function startRec(resume = false) {
   toast(resume ? 'Aufzeichnung läuft weiter, sobald der Standort genau ist (⏳)' : 'Weg wird aufgezeichnet – Bildschirm bleibt an. Nicht sperren!', 6000);
 }
 function stopRec() {
+  if (locked) return;
   if (recWatch !== null) navigator.geolocation.clearWatch(recWatch);
   recWatch = null;
   if (recLock) recLock.release().catch(() => {});
@@ -3024,7 +3090,8 @@ function stopRec() {
   if (recSeg && recSeg.pts.length < 2) P.hf.track = P.hf.track.filter((sg) => sg !== recSeg);
   recSeg = null;
   if (P.hf) P.hf.recOn = false;
-  saveNow();
+  if (saveNow() && recKey) { try { localStorage.removeItem(recKey); } catch { /* egal */ } } // Sicherung erst weg, wenn der Gesamtspeicher steht
+  recKey = null;
   updateRecBtn();
   redraw();
 }
@@ -3084,6 +3151,7 @@ $('hf-mark').addEventListener('click', () => {
 });
 async function fundLive(text, pos) {
   const res = await sendStatus({ s: 'ort', cat: 'fund', txt: text, pos: { lat: pos.lat, lon: pos.lon }, quiet: true });
+  if (res === 'rejected') return;
   if (res === 'queued') toast('✅ Fund markiert – wartet auf Netz, wird automatisch an die Einsatzleitung gemeldet', 6000);
   else if (res === 'saved') toast('✅ Fund markiert – geht mit der nächsten QR-Rückmeldung an die Einsatzleitung', 6000);
   else toast('✅ Fund markiert und an die Einsatzleitung gemeldet', 5000);
@@ -3722,7 +3790,7 @@ async function askClose(x, reported) {
 // Rückfrage, sobald Meldung „abgeschlossen“ und QR-Rückmeldung eines Auftrags da sind (egal in welcher Reihenfolge)
 let closeBusy = false;
 async function checkCloseAsk() {
-  if (closeBusy || db.mode !== 'el' || !P || P.closed) return;
+  if (locked || closeBusy || db.mode !== 'el' || !P || P.closed) return;
   const x = (P.sent || []).find((q) => closeAsk(q, allMsgs()));
   if (!x) return;
   if (!$('dlg').hidden) return setTimeout(checkCloseAsk, 4000); // ein anderes Fenster steht – gleich nochmal
@@ -4084,6 +4152,7 @@ async function sendKor(m, f) {
   if (!h.ls) return toast(`${what} – geht mit der nächsten QR-Rückmeldung an die Einsatzleitung`, 6000);
   toast(`${what} – wird gesendet …`, 3000);
   await flushStatus();
+  if ((h.log.find((x) => x.id === k.id) || {}).rej) return; // abgelehnt: flushStatus hat gewarnt
   toast(h.outbox.some((x) => x.id === k.id) ? `⏳ ${what}: wartet auf Netz – wird automatisch nachgesendet` : `✓ ${what} ${hhmm(Date.now())}`, 5000);
 }
 // Eigene Meldung antippen: Notiz ändern, verlegen, Standort entfernen, löschen
@@ -4131,7 +4200,7 @@ async function hfMyList() {
   const m = await openDlg((box, close) => {
     dlgHead(box, `🗂 Meine Meldungen (${list.length})`, 'Antippen zum Ändern, Verlegen oder Löschen.');
     if (!list.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = 'Noch nichts gemeldet.'; box.appendChild(p); }
-    for (const x of list) dlgButton(box, `${msgLabel(x)} ${hhmm(x.t)}${x.lat != null ? ' 📍' : ''}${x.txt ? ` – ${esc(x.txt)}` : ''}${x.ed ? ' ✏️' : ''}${seen.has(x.id) ? ' ✓ gesehen' : ''}`, 'my-msg', () => close(x));
+    for (const x of list) dlgButton(box, `${msgLabel(x)} ${hhmm(x.t)}${x.lat != null ? ' 📍' : ''}${x.txt ? ` – ${esc(x.txt)}` : ''}${x.ed ? ' ✏️' : ''}${seen.has(x.id) ? ' ✓ gesehen' : ''}${x.rej ? ' ⚠️ nicht zugestellt' : ''}`, 'my-msg', () => close(x));
     dlgButton(box, 'Schließen', 'primary', () => close(null));
   });
   if (m) hfMsgDialog(m);
@@ -4190,11 +4259,14 @@ async function sendStatus(o) {
   if (!o.quiet) toast(`${msgLabel(m)} – wird gesendet${pos || NO_POS.includes(m.s) ? '' : ' (ohne Standort)'} …`, 4000);
   await flushStatus();
   const queued = h.outbox.some((x) => x.id === m.id);
+  const rej = (h.log.find((x) => x.id === m.id) || {}).rej; // v118: vom Server abgelehnt (flushStatus hat schon gewarnt)
+  if (rej) return o.quiet ? 'rejected' : undefined;
   if (o.quiet) return queued ? 'queued' : 'sent'; // der Aufrufer zeigt seinen eigenen Hinweis
   toast(queued ? `⏳ ${msgLabel(m)}: wartet auf Netz – wird automatisch nachgesendet` : `✓ ${msgLabel(m)} gesendet ${hhmm(Date.now())}`, 5000);
 }
 // Warteschlange aller Aufträge senden (sofort, bei „online“, alle 60 s, beim Start)
 async function flushStatus() {
+  if (locked) return;
   if (flushBusy) { flushAgain = true; return; }
   flushBusy = true;
   try {
@@ -4204,15 +4276,20 @@ async function flushStatus() {
         const l = p.live;
         if (l && l.outbox && l.outbox.length) { // v117: Quittungen/Nachrichten der Einsatzleitung
           const r = await flushOutbox([l.url, l.key], l.outbox);
-          if (r.sent.length) { l.outbox = r.left; saveNow(); }
+          if (r.sent.length || r.rejected.length) { l.outbox = r.left; saveNow(); } // v118: abgelehnte fliegen raus (nur ein Zusatz der EL, kein Protokolleintrag)
+          for (const x of r.rejected) { const o = (l.out || []).find((q) => q.id === x.id); if (o) o.rej = x.reason; }
+          if (r.rejected.length) toast(`⚠️ Meldung vom Server abgelehnt: ${r.rejected[0].reason}`, 7000);
         }
         const h = p.hf;
         if (!h || !h.ls || !h.outbox.length) continue;
         const r = await flushOutbox(h.ls, h.outbox);
-        if (!r.sent.length) continue;
+        if (!r.sent.length && !r.rejected.length) continue;
         h.outbox = r.left;
         for (const id of r.sent) { const l = h.log.find((x) => x.id === id); if (l) l.ok = Date.now(); }
+        // v118: vom Server dauerhaft abgelehnt: im Protokoll markieren, nicht endlos wiederholen
+        for (const x of r.rejected) { const l = h.log.find((q) => q.id === x.id); if (l) l.rej = x.reason; }
         saveNow();
+        if (r.rejected.length) toast(`⚠️ Meldung vom Server abgelehnt: ${r.rejected[0].reason}`, 7000);
       }
     } while (flushAgain);
   } catch { /* nächster Versuch */ } finally { flushBusy = false; }
@@ -4251,7 +4328,7 @@ function sendReadAck(ids) {
 async function pollHf() {
   const proj = P;
   const h = proj && proj.hf;
-  if (db.mode !== 'hf' || !h || !h.ls || hfPollBusy || document.hidden || !navigator.onLine) return;
+  if (locked || db.mode !== 'hf' || !h || !h.ls || hfPollBusy || document.hidden || !navigator.onLine) return;
   hfPollBusy = true;
   try {
     // erster Abruf: ab Auftragsübernahme minus 10 min, nicht der ganze Raum (7 Tage)
@@ -4333,7 +4410,8 @@ function statusLine() {
   if (!h.ls) return 'Kein Status-Server in diesem Auftrag: Meldungen gehen mit der nächsten QR-Rückmeldung mit.';
   const n = h.outbox.length;
   const ok = [...h.log].reverse().find((x) => x.ok);
-  return n ? `⏳ wartet auf Netz (${n})` : ok ? `✓ gesendet ${hhmm(ok.t)}` : 'Noch nichts gemeldet';
+  const rej = h.log.filter((x) => x.rej).length;
+  return n ? `⏳ wartet auf Netz (${n})` : rej && h.log[h.log.length - 1].rej ? '⚠️ nicht zugestellt (vom Server abgelehnt)' : ok ? `✓ gesendet ${hhmm(ok.t)}` : 'Noch nichts gemeldet';
 }
 function updateStatusLine() { const l = $('dlg-box').querySelector('.st-line'); if (l) l.textContent = statusLine(); }
 const confirmSend = (label) => openDlg((box, close) => {
@@ -4866,6 +4944,7 @@ function renderBanner(ur, now) {
 $('tm-banner').addEventListener('click', () => { openUnread(); renderTeamBar(); });
 // Alle 15 s (und nach jedem Abholen): Banner / Piepton nach Regel
 function checkUnread() {
+  if (locked) return;
   if (db.mode !== 'el' || !P) { $('tm-banner').hidden = true; return; }
   const now = Date.now();
   if (P.msgSnooze && P.msgSnooze <= now) P.msgSnooze = 0;
@@ -4938,7 +5017,7 @@ function elRow(m) {
   d.querySelector('b').textContent = `✉️ An ${m.to === EL_ALL ? 'alle Teams' : teamNameOf(m.to)}${m.prio ? ' · ❗ wichtig' : ''}`;
   d.querySelector('span').textContent = m.txt || '';
   d.querySelector('small').textContent = [hhmm(m.t),
-    wait ? '⏳ wartet auf Netz' : rs.read.length ? `👁 gelesen: ${rs.read.map(teamNameOf).join(', ')}${rs.open.length ? ` · offen: ${rs.open.map(teamNameOf).join(', ')}` : ''}` : 'noch ungelesen'].join(' · ');
+    m.rej ? '⚠️ nicht zugestellt' : wait ? '⏳ wartet auf Netz' : rs.read.length ? `👁 gelesen: ${rs.read.map(teamNameOf).join(', ')}${rs.open.length ? ` · offen: ${rs.open.map(teamNameOf).join(', ')}` : ''}` : 'noch ungelesen'].join(' · ');
   return d;
 }
 // Eingabefeld „Nachricht an …“ im Statuspanel: Empfänger nur Teams mit Live-Kanal; sonst Hinweis. Auswahl bleibt beim Neuzeichnen erhalten.
@@ -5005,7 +5084,7 @@ window.matchMedia('(min-width: 700px)').addEventListener('change', () => { tbSig
 async function pollLive() {
   const proj = P;
   const l = proj && proj.live;
-  if (db.mode !== 'el' || !l || proj.closed || liveBusy || document.hidden || !navigator.onLine) return;
+  if (locked || db.mode !== 'el' || !l || proj.closed || liveBusy || document.hidden || !navigator.onLine) return;
   if (!(proj.sent || []).some((x) => x.live)) return;
   liveBusy = true;
   try {
@@ -5089,7 +5168,8 @@ async function sendElText() {
   $('el-prio').checked = false;
   renderStatusPanel();
   const ok = await elSend(m);
-  toast(ok ? `✉️ Nachricht gesendet ${hhmm(Date.now())}` : '⏳ Nachricht wartet auf Netz – wird automatisch nachgesendet', 4000);
+  const rej = P.live && (P.live.out.find((x) => x.id === m.id) || {}).rej; // v118: abgelehnt (flushStatus hat schon gewarnt)
+  if (!rej) toast(ok ? `✉️ Nachricht gesendet ${hhmm(Date.now())}` : '⏳ Nachricht wartet auf Netz – wird automatisch nachgesendet', 4000);
   renderStatusPanel();
 }
 $('el-go').addEventListener('click', sendElText);
@@ -5149,7 +5229,7 @@ function korToast(fresh) {
 async function showUrgent() {
   const proj = P;
   const l = proj && proj.live;
-  if (urgentOpen || db.mode !== 'el' || !l) return;
+  if (locked || urgentOpen || db.mode !== 'el' || !l) return;
   const todo = urgentTodo(proj);
   if (!todo.length) return;
   if (!$('dlg').hidden) return setTimeout(showUrgent, 4000); // ein anderes Fenster steht – gleich nochmal
@@ -5780,6 +5860,7 @@ if (tabs) {
   tabs.onmessage = async (e) => {
     const m = e.data || {};
     if (m.to && m.to !== tabId) return;
+    if (locked || !gateReady) return; // v118: ein gesperrtes Fenster nimmt nichts entgegen
     if (m.t === 'ping') tabs.postMessage({ t: 'pong', to: m.from, from: tabId, el: db.mode === 'el', visible: !document.hidden });
     if (m.t === 'take') {
       reloadFromStorage();
@@ -5827,7 +5908,9 @@ function reloadFromStorage(raw) {
     const cur = db.currentId;
     db = { ...db, ...s, currentId: s.projects[cur] ? cur : s.currentId };
   } catch { return; }
-  for (const id of Object.keys(db.projects)) db.projects[id] = normalizeProject(db.projects[id]);
+  db.projects = loadProjects(db.projects).projects; // v118: ein defekter Einsatz stoppt das Neulesen nicht
+  if (!Object.keys(db.projects).length) { const np = normalizeProject(newProject('')); db.projects[np.id] = np; db.currentId = np.id; }
+  mergeTrackBackups(db.projects);
   P = db.projects[db.currentId] || Object.values(db.projects)[0];
   syncGrid();
   restoreDrafts();
@@ -5841,9 +5924,95 @@ function reloadFromStorage(raw) {
   updateStatus();
 }
 window.addEventListener('storage', (e) => {
-  if (e.key === STORE_KEY && e.newValue && !handedOff) reloadFromStorage(e.newValue);
+  if (e.key === STORE_KEY && e.newValue && !handedOff && !gateOn) reloadFromStorage(e.newValue); // Rückfall, nur ohne Fenstersperre
 });
-window.addEventListener('hashchange', () => handleHash().catch(() => toast('Link/Code konnte nicht gelesen werden')));
+// ---------- v118: Nur ein Fenster arbeitet ----------
+// Das erste Fenster hält die Sperre „sgk-main“ (Web Locks; sonst Ping über BroadcastChannel „sgk-tabs“) und ist allein für den Speicher
+// und alle Sendungen zuständig. Ein zweites Fenster zeigt nur einen Hinweis mit „Hier weiterarbeiten“: das erste speichert sofort, sperrt
+// sich selbst und gibt die Sperre frei, das zweite liest den Speicher neu und arbeitet weiter. Die App der Android-App (ein Fenster) braucht das nicht.
+const GATE_LOCK = 'sgk-main';
+const hasLocks = !!(navigator.locks && navigator.locks.request);
+const gateCh = 'BroadcastChannel' in window ? new BroadcastChannel('sgk-tabs') : null;
+const gateOn = !bridge && (hasLocks || !!gateCh);
+let gateReady = !gateOn; // die Entscheidung „erstes / zweites Fenster“ ist gefallen
+let gateRelease = null;
+let statusStarted = false;
+const holdLock = (lk, res) => { res(true); return new Promise((done) => { gateRelease = done; }); };
+function gateTry() {
+  if (hasLocks) { // beim Neuladen gibt das alte Dokument die Sperre manchmal erst einen Moment später frei: kurz nochmal versuchen
+    const once = () => new Promise((res) => { navigator.locks.request(GATE_LOCK, { ifAvailable: true }, (lk) => (lk ? holdLock(lk, res) : res(false))).catch(() => res(true)); });
+    return (async () => { for (let i = 0; i < 8; i++) { if (await once()) return true; await new Promise((r) => setTimeout(r, 150)); } return false; })();
+  }
+  return new Promise((res) => { // ohne Web Locks: wer in 300 ms antwortet, ist das erste Fenster
+    const t = setTimeout(() => { gateCh.removeEventListener('message', on); res(true); }, 300);
+    const on = (e) => { if ((e.data || {}).t === 'here') { clearTimeout(t); gateCh.removeEventListener('message', on); res(false); } };
+    gateCh.addEventListener('message', on);
+    gateCh.postMessage({ t: 'hello' });
+  });
+}
+// dieses (erste) Fenster gibt ab: erst speichern, dann sperren; die Aufzeichnung hört hier nur auf (recOn bleibt, das andere Fenster macht weiter)
+function gateYield() {
+  saveNow();
+  locked = true;
+  if (recWatch !== null) { navigator.geolocation.clearWatch(recWatch); recWatch = null; }
+  if (recLock) recLock.release().catch(() => {});
+  recLock = null;
+  clearInterval(recTimer);
+  recSeg = null;
+  if (gateRelease) { gateRelease(); gateRelease = null; }
+  showTabLock();
+}
+if (gateCh) {
+  gateCh.onmessage = (e) => {
+    const m = e.data || {};
+    if (locked || !gateReady) return;
+    if (m.t === 'hello') gateCh.postMessage({ t: 'here' });
+    if (m.t === 'take') { gateYield(); gateCh.postMessage({ t: 'took' }); }
+  };
+}
+function claimGate() {
+  if (hasLocks) {
+    if (gateCh) gateCh.postMessage({ t: 'take' });
+    const ac = new AbortController();
+    const to = setTimeout(() => ac.abort(), 4000);
+    return new Promise((res) => {
+      navigator.locks.request(GATE_LOCK, { signal: ac.signal }, (lk) => { clearTimeout(to); return holdLock(lk, res); }).catch(() => res(false));
+    });
+  }
+  return new Promise((res) => { // ohne Web Locks: keine Antwort „took“ = niemand hält es mehr
+    const t = setTimeout(() => { gateCh.removeEventListener('message', on); res(true); }, 1500);
+    const on = (e) => { if ((e.data || {}).t === 'took') { clearTimeout(t); gateCh.removeEventListener('message', on); res(true); } };
+    gateCh.addEventListener('message', on);
+    gateCh.postMessage({ t: 'take' });
+  });
+}
+function showTabLock() { $('tab-lock-msg').hidden = true; $('tab-lock').hidden = false; }
+$('tab-lock-go').addEventListener('click', async () => {
+  const b = $('tab-lock-go');
+  b.disabled = true;
+  const ok = await claimGate();
+  b.disabled = false;
+  if (!ok) { $('tab-lock-msg').textContent = 'Das andere Fenster antwortet nicht. Bitte dort weiterarbeiten oder es schließen.'; $('tab-lock-msg').hidden = false; return; }
+  handedOff = false;
+  locked = false;
+  gateReady = true;
+  reloadFromStorage();
+  if (trackKeysDone.length) { if (saveNow()) for (const k of trackKeysDone) { try { localStorage.removeItem(k); } catch { /* egal */ } } trackKeysDone = []; }
+  $('tab-lock').hidden = true;
+  bootApp();
+});
+// Start: erstes Fenster -> los; zweites -> Hinweis (ein Rückmelde-Link wird wie bisher an das erste Fenster abgegeben)
+async function gateStart() {
+  if (!gateOn) return bootApp();
+  const got = await gateTry();
+  gateReady = true;
+  if (got) return bootApp();
+  locked = true;
+  const sh = parseShared(location.hash);
+  if (sh && ['r', 'e', 'i', 'f'].includes(sh.kind) && await handOff(location.hash)) return;
+  showTabLock();
+}
+window.addEventListener('hashchange', () => !locked && handleHash().catch(() => toast('Link/Code konnte nicht gelesen werden')));
 
 // Erster Start: Modus wählen (vorhandene Daten -> Einsatzleitung)
 async function chooseModeIfNeeded() {
@@ -9083,8 +9252,16 @@ window.addEventListener('online', () => { if (!$('lic-lock').hidden) licBackgrou
 // Modus anwenden, beim ersten Start fragen, Auftrag/Rückmeldung aus dem Link übernehmen
 applyMode();
 // ein fehlerhafter Link oder eine kaputte Datei darf den Start (Status-Abgleich, Aufzeichnung) nicht verhindern
-chooseModeIfNeeded().then(handleHash).then(() => window.onSharedFile()).catch(() => toast('Link/Code konnte nicht gelesen werden')).then(() => {
-  // App wurde während der Weg-Aufzeichnung geschlossen: weiter aufzeichnen
-  if (db.mode === 'hf' && P.hf && P.hf.recOn && recWatch === null) startRec(true);
-  startStatus();
-});
+function bootApp() {
+  if (startNotice) { toast(startNotice, 9000); startNotice = ''; } // gleich zeigen, nicht erst nach der Moduswahl
+  chooseModeIfNeeded().then(handleHash).then(() => window.onSharedFile()).catch(() => toast('Link/Code konnte nicht gelesen werden')).then(async () => {
+    // Weg-Sicherungen sind eingearbeitet: erst speichern, dann die kleinen Schlüssel löschen
+    if (trackKeysDone.length) { if (saveNow()) for (const k of trackKeysDone) { try { localStorage.removeItem(k); } catch { /* egal */ } } trackKeysDone = []; }
+    // App wurde während der Weg-Aufzeichnung geschlossen: weiter aufzeichnen
+    if (db.mode === 'hf' && P.hf && P.hf.recOn && recWatch === null) startRec(true);
+    if (statusStarted) { flushStatus(); pollLive(); pollHf(); return; }
+    statusStarted = true;
+    startStatus();
+  });
+}
+gateStart();

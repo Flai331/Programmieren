@@ -253,22 +253,36 @@ export function latestFor(list, a) {
 
 // ---------- Übertragung (fetchFn austauschbar für Tests) ----------
 const reqUrl = (url, q) => `${url}${url.includes('?') ? '&' : '?'}${q}`;
+// v118: Fehlerantworten des Servers, die dauerhaft gelten (Code.gs doPost) – alles andere (z. B. Schloss-Timeout) ist vorübergehend
+export const PERM_REJECT = ['Raum', 'ID', 'Daten'];
+// Netz- bzw. HTTP-Fehler / keine JSON-Antwort / vorübergehende Serverfehler -> Error('netz') (später nochmal);
+// dauerhaft abgelehnt (ok:false mit bekanntem Grund) -> Error mit rejected = true und reason
 export async function postMsg(url, room, id, d, f = fetchT) {
-  const res = await f(url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ r: room, id, d }) });
-  const j = await res.json();
-  if (!j || !j.ok) throw new Error('abgelehnt');
-  return true;
+  let j;
+  try {
+    const res = await f(url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ r: room, id, d }) });
+    if (res.ok === false) throw new Error('http');
+    j = await res.json();
+  } catch { throw new Error('netz'); }
+  if (j && j.ok) return true;
+  if (j && j.ok === false && PERM_REJECT.includes(j.fehler)) throw Object.assign(new Error('abgelehnt'), { rejected: true, reason: j.fehler });
+  throw new Error('netz');
 }
-// Warteschlange abarbeiten (der Reihe nach, bei Fehler Stopp). Liefert { sent: [ids], left: [Meldungen] }
+// Warteschlange abarbeiten (der Reihe nach). Netzfehler: Stopp; vom Server abgelehnt: aus der Warteschlange nehmen, weiter.
+// Liefert { sent: [ids], left: [Meldungen], rejected: [{ id, reason }] }
 export async function flushOutbox(ls, outbox, f = fetchT) {
   const [url, key] = ls;
   const room = await roomOf(key);
   const sent = [];
+  const rejected = [];
   for (const m of outbox) {
-    try { await postMsg(url, room, m.id, await encryptMsg(key, m), f); } catch { break; }
+    try { await postMsg(url, room, m.id, await encryptMsg(key, m), f); } catch (e) {
+      if (e && e.rejected) { rejected.push({ id: m.id, reason: e.reason }); continue; }
+      break;
+    }
     sent.push(m.id);
   }
-  return { sent, left: outbox.filter((m) => !sent.includes(m.id)) };
+  return { sent, left: outbox.filter((m) => !sent.includes(m.id) && !rejected.some((x) => x.id === m.id)), rejected };
 }
 // Neue Meldungen abholen: { msgs, since }. Nicht entschlüsselbare Zeilen (anderer Schlüssel) werden übergangen.
 export async function pollMessages(live, f = fetchT) {

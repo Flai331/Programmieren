@@ -84,13 +84,17 @@ export function isBlankProject(p) {
 // Fehlende Felder ergänzen (ältere Dateien, Importe)
 export function normalizeProject(p) {
   const base = newProject();
+  if (!p || typeof p !== 'object' || Array.isArray(p)) throw new Error('kein Einsatz');
   const out = { ...base, ...p };
-  if (!Array.isArray(out.marks)) out.marks = base.marks;
-  if (!Array.isArray(out.items)) out.items = [];
+  // v118: null-/Fremdeinträge in den Listen wegfiltern, bevor auf .kind/.id usw. zugegriffen wird
+  const objs = (l) => l.filter((x) => x && typeof x === 'object' && !Array.isArray(x));
+  out.marks = Array.isArray(out.marks) ? objs(out.marks) : base.marks;
+  out.items = Array.isArray(out.items) ? objs(out.items) : [];
   out.mission = normalizeMission(out.mission);
   out.lead = { ...base.lead, ...(out.lead && typeof out.lead === 'object' ? out.lead : {}) };
   if (!out.lead.name && out.leader) out.lead.name = out.leader;
-  for (const k of ['radio', 'contacts', 'pois']) if (!Array.isArray(out[k])) out[k] = [];
+  for (const k of ['radio', 'contacts', 'pois']) out[k] = Array.isArray(out[k]) ? out[k].filter((x) => x != null) : [];
+  out.contacts = objs(out.contacts);
   out.pois = normalizePois(out.pois);
   if (!out.poiDel || typeof out.poiDel !== 'object' || Array.isArray(out.poiDel)) out.poiDel = {};
   if (!out.msgDel || typeof out.msgDel !== 'object' || Array.isArray(out.msgDel)) out.msgDel = {};
@@ -387,6 +391,54 @@ function fromBase64(b64) {
   return new TextDecoder().decode(bytes);
 }
 
+// v118: Kopie ohne Live-Schlüssel und Status-Server-Zugang (für das PDF): live, hf.ls/outbox/inbox/elRead und jede Eigenschaft
+// „key“ bzw. „ls“ in beliebiger Tiefe. Raster, Umrisse, Teams, Felder und Markierungen bleiben.
+export function stripSecrets(p) {
+  const walk = (v) => {
+    if (Array.isArray(v)) return v.map(walk);
+    if (!v || typeof v !== 'object') return v;
+    const o = {};
+    for (const [k, x] of Object.entries(v)) if (k !== 'key' && k !== 'ls') o[k] = walk(x);
+    return o;
+  };
+  const { live, ...rest } = p;
+  const out = walk(rest);
+  if (out.hf && typeof out.hf === 'object') {
+    for (const k of ['outbox', 'inbox', 'elRead']) delete out.hf[k];
+    out.hf.since = 0;
+  }
+  if (Array.isArray(out.sent)) out.sent = out.sent.map(({ live: l, ...x }) => x);
+  return out;
+}
+
+// v118: Einsätze einzeln normalisieren; ein defekter fliegt raus statt den Start zu stoppen -> { projects, broken: [{ id, raw }] }
+export function loadProjects(raw) {
+  const projects = {};
+  const broken = [];
+  for (const [id, p] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
+    try { projects[id] = normalizeProject(p); } catch { broken.push({ id, raw: p }); }
+  }
+  return { projects, broken };
+}
+
+// v118: Weg-Sicherung (sgk-track-<Einsatz>) einarbeiten: track = Wege des Einsatzes [{ pts: [[lat, lon, t?], …] }, …],
+// backup = { t0, pts: […] } des laufenden Segments. Hat die Sicherung mehr Punkte als das letzte Segment, ersetzt sie es
+// (bzw. wird als neues Segment angehängt). Liefert { track, merged }; track wird nicht verändert.
+export function mergeTrackBackup(track, backup) {
+  const segs = Array.isArray(track) ? track : [];
+  const pts = backup && Array.isArray(backup.pts) ? backup.pts.filter((q) => Array.isArray(q) && Number.isFinite(q[0]) && Number.isFinite(q[1])) : [];
+  if (!pts.length) return { track: segs, merged: false };
+  const last = segs[segs.length - 1];
+  const lp = last && Array.isArray(last.pts) ? last.pts : null;
+  // gleiche Startzeit bzw. gleicher erster Punkt (oder noch leeres Segment) -> dasselbe Segment, nur länger
+  if (lp && ((backup.t0 && last.t0 === backup.t0) || !lp.length || (lp[0][0] === pts[0][0] && lp[0][1] === pts[0][1]))) {
+    if (pts.length <= lp.length) return { track: segs, merged: false };
+    return { track: [...segs.slice(0, -1), { ...last, pts }], merged: true };
+  }
+  if (lp && lp.length >= pts.length && lp.some((q) => q[0] === pts[0][0] && q[1] === pts[0][1])) return { track: segs, merged: false };
+  return { track: [...segs, { ...(backup.t0 ? { t0: backup.t0 } : {}), pts }], merged: true };
+}
+
 export function exportProject(p) {
   const { view, ...rest } = p;
   return JSON.stringify({ format: MARK, exported: new Date().toISOString(), project: { ...rest, view } }, null, 1);
@@ -394,7 +446,7 @@ export function exportProject(p) {
 
 // Eingebettet ins PDF (XMP-Metadaten), damit das PDF selbst wieder importiert werden kann
 export function embedMarker(p) {
-  return `${MARK}:${toBase64(exportProject(p))}:${MARK}`;
+  return `${MARK}:${toBase64(exportProject(stripSecrets(p)))}:${MARK}`; // v118: ohne Live-Schlüssel
 }
 
 // Nimmt JSON-Text oder den Inhalt eines PDFs (als latin1-Text) entgegen

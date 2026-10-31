@@ -1,13 +1,14 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v117**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v118**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v118 – 🛡️ Robustheit II**: abgelehnte Meldung blockiert die Warteschlange nicht mehr („⚠️ nicht zugestellt“); beschädigter Einsatz wird beim Start beiseitegelegt statt die App zu blockieren; Karten-PDF ohne Live-Schlüssel; zweites Fenster wird erkannt und gesperrt („Hier weiterarbeiten“); GPS-Weg wird getrennt und gebündelt gespeichert (kein Ruckeln, nichts geht bei Absturz verloren).
 - [~] **v117 – ✉️ Rückkanal Einsatzleitung → Hundeführer**: EL-Quittung „✓ gesehen“ kommt beim HF an (bei Fund/Hilfe mit Hinweis); EL schreibt Nachrichten an ein Team oder alle, „wichtig“ mit Ton und Fenster bis „Verstanden“; EL sieht, wer gelesen hat; ohne Netz wartet die Nachricht und geht später raus.
 - [~] **v116 – ✅ Entscheidungen vom 31.10.**: Notion-Token nicht mehr in der APK (Fehlerberichte über den Status-Server); Freigabe sperrt nie im laufenden Einsatz, Notfallcode entsperrt 24 h; „Markieren → Fund“ meldet sofort an die EL; Meldungen mit Ort in GPX (BaseCamp-Wegpunkte), Karten-PDF und Abschlussbericht; „Einsatz abschließen“ listet offene Punkte; HF: 🎯 Mein Gebiet, 🧭 Navigation, GPS startet beim Auftrag; PIN-Hinweis.
 - [~] **v115 – 👆 Bedienung (Prüfung 31.10.)**: Zoom-Knöpfe nicht mehr von Leisten verdeckt; Plakette und Aufträge zeigen die Meldungsart, Fund/Hilfe bleiben stehen; feste Team-Reihenfolge bei Chips und Aufträgen; „Standort melden“ ohne Vorauswahl; Rückfrage vor HF-Modus und vor Ersetzen eines laufenden Auftrags; Abschluss mit letztem Stand; zugeteilte Gebiete vorangekreuzt; GPX-Import ohne Duplikate; größere Tippziele, Dialoge im Querformat, bessere Kontraste und Texte.
