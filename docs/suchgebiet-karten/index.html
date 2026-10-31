@@ -178,7 +178,7 @@
       <button id="gridfit-done" class="primary">Fertig</button>
     </div>
     <div id="vtxbar" class="trackbar" hidden>
-      <span id="vtx-info">✋ Punkte ziehen · Mitte ziehen = neuer Punkt · Punkt antippen = löschen</span>
+      <span>✋ Punkte ziehen · Mitte ziehen = neuer Punkt · Punkt antippen = löschen</span>
       <button id="vtx-done" class="primary">Fertig</button>
     </div>
     <div id="gpxselbar" class="trackbar" hidden>
@@ -357,7 +357,7 @@
     <h2 class="sub">📥 Android-App</h2>
     <p class="small">Immer die neueste Version. Nach dem Download die Datei öffnen und „Aktualisieren“ bzw. „Installieren“ wählen; die Daten in der App bleiben erhalten.</p>
     <div class="row">
-      <a id="apk-link" class="btnlink" href="https://github.com/Flai331/Programmieren/releases/download/suchgebiet-karten/Suchgebiet-Karten.apk" target="_blank" rel="noopener">📥 Neueste APK herunterladen</a>
+      <a class="btnlink" href="https://github.com/Flai331/Programmieren/releases/download/suchgebiet-karten/Suchgebiet-Karten.apk" target="_blank" rel="noopener">📥 Neueste APK herunterladen</a>
     </div>
     <div id="upd-box" hidden>
       <p class="small" id="upd-ver"></p>
@@ -421,8 +421,8 @@
     <label>Raster <small>(anhaken = Raster mit Feldern mitschicken)</small></label>
     <div id="send-grids" class="checklist"></div>
     <div id="send-fields-sub" class="sub-list">
-      <label id="send-fields-label">Felder</label>
-      <div id="send-fields-box" class="checklist">
+      <label>Felder</label>
+      <div class="checklist">
         <label class="check"><input type="radio" name="send-fields" value="team" checked> nur die Felder des Teams hervorgehoben</label>
         <label class="check"><input type="radio" name="send-fields" value="all"> ganzes Gebiet mit allen Feldern, Team hervorgehoben</label>
         <label class="check"><input type="radio" name="send-fields" value="pick"> Felder auf der Karte antippen …</label>
@@ -812,6 +812,7 @@
     <div class="padwrap"><canvas id="pad-canvas"></canvas></div>
   </div>
 
+  <div id="save-warn" role="alert" hidden>⚠️ Speicher voll – Einsatz jetzt exportieren (Teilen → Einsatz-Datei) und alte Einsätze/Fotos löschen</div>
   <div id="toast" class="toast" hidden></div>
 
   <!-- v113: Sperrbildschirm der Freigabe (über allem) -->

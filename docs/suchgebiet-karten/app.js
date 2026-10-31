@@ -47,7 +47,7 @@ import {
   STATUS_LIST, CLOSE_STATUS, SPOT_LIST, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, buildKor, applyKor, mergeStatus, withoutDeleted, latestFor, flushOutbox, pollMessages, coverageGaps, areaShapes,
 } from './status.js';
 import {
-  teamChips, chipText, teamAssignments, teamMsgs, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, unreadAge, bannerText, parseSnooze,
+  teamChips, chipText, teamAssignments, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, unreadAge, bannerText, parseSnooze,
   snoozeUntilFrom, snoozeText, historyFilter, historyTeams, SNOOZE_PICKS,
 } from './statusbar.js';
 import { einsatzOffen, shouldOfferUpdate, updateText, PERMISSION_HINT } from './update.js';
@@ -66,7 +66,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v113';
+const APP_VERSION = 'v114';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -170,9 +170,10 @@ function save() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveNow, 300);
 }
+// true = gespeichert, false = Speicher voll (rote Leiste); wer „gespeichert“ meldet, prüft das
 function saveNow() {
   clearTimeout(saveTimer);
-  if (handedOff) return;
+  if (handedOff) return true;
   if (map) {
     const c = map.getCenter();
     P.view = { lat: c.lat, lon: c.lng, z: map.getZoom() };
@@ -181,7 +182,12 @@ function saveNow() {
   P.drafts = { track: draftTrack, pen: draftPen };
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(db));
-  } catch { toast('Speichern nicht möglich (Speicher voll?)'); }
+    $('save-warn').hidden = true;
+    return true;
+  } catch {
+    $('save-warn').hidden = false; // dauerhaft, bis ein Speichern wieder klappt
+    return false;
+  }
 }
 window.addEventListener('pagehide', saveNow);
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
@@ -2318,7 +2324,8 @@ async function runOffline(r) {
     }, ctrl.signal);
     Object.assign(r, { done: res.done, total: res.total, failed: res.failed, bytes: startBytes + res.bytes });
     r.finished = !ctrl.signal.aborted && res.done >= res.total;
-    toast(r.finished ? `Offline-Karte „${r.name}“ fertig` : `„${r.name}“ angehalten – ▶ lädt weiter`);
+    if (res.full) toast(`Speicher voll – „${r.name}“ angehalten. Alte Offline-Karten löschen, dann ▶ lädt weiter`, 9000);
+    else toast(r.finished ? `Offline-Karte „${r.name}“ fertig` : `„${r.name}“ angehalten – ▶ lädt weiter`);
   } catch (err) {
     toast('Offline-Karte: ' + err.message);
   } finally {
@@ -2575,7 +2582,7 @@ function renderWx() {
   }
   $('wx-more').textContent = more.join(' · ');
   // anderes Suchgebiet / Windpunkt weit weg vom geladenen Ort: neu laden
-  if (wx && !wxLoading && navigator.onLine && distance(wx.lat, wx.lon, pt.lat, pt.lon) > 3000) setTimeout(() => loadWeather(false), 0);
+  if (wx && !wxLoading && navigator.onLine && Date.now() - wxFailAt > 60e3 && distance(wx.lat, wx.lon, pt.lat, pt.lon) > 3000) setTimeout(() => loadWeather(false), 0);
   const box = $('wx-hours');
   box.innerHTML = '';
   for (const h of (wx && wx.hours) || []) {
@@ -2590,6 +2597,7 @@ function renderWx() {
   }
 }
 let wxLoading = false;
+let wxFailAt = 0; // letzter Fehlschlag: automatisches Nachladen aus renderWx frühestens 60 s danach
 async function loadWeather(manual) {
   if (!(db.wxOn || db.windArrows) || wxLoading) return;
   wxLoading = true;
@@ -2610,7 +2618,9 @@ async function loadWeather(manual) {
       }
     }
     saveNow();
+    wxFailAt = 0;
   } catch {
+    wxFailAt = Date.now();
     if (manual) toast('Wetter nicht abrufbar (kein Netz?) – angezeigt wird der letzte Stand');
   } finally {
     wxLoading = false;
@@ -2787,6 +2797,8 @@ function dlgHead(box, title, text) {
   box.appendChild(h);
   if (text) { const p = document.createElement('p'); p.className = 'small'; p.textContent = text; box.appendChild(p); }
 }
+// Fremdtext (Namen, Meldungstexte aus Links/QR) für dlgButton/wizBtn maskieren – diese setzen innerHTML
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 function dlgButton(box, label, cls, fn) {
   const b = document.createElement('button');
   b.innerHTML = label;
@@ -2945,7 +2957,7 @@ async function startRec(resume = false) {
     recSeg.pts.push(pt);
     save();
     redraw();
-  }, (err) => toast('GPS: ' + err.message), { enableHighAccuracy: true, maximumAge: 0 });
+  }, (err) => toast('GPS: ' + (err.message || 'kein GPS-Empfang')), { enableHighAccuracy: true, maximumAge: 0 });
   try { recLock = await navigator.wakeLock.request('screen'); } catch { if (bridge && bridge.keepScreenOn) bridge.keepScreenOn(true); }
   recTimer = setInterval(updateRecBtn, 5000);
   updateRecBtn();
@@ -3142,13 +3154,13 @@ function hfFieldTap(ll) {
 $('hf-wind').addEventListener('click', openWindMeter);
 
 // ---- QR-Code anzeigen / Link teilen ----
+const scriptLoads = {}; // src -> Promise: gleichzeitige Aufrufe warten auf dasselbe Laden
 function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+  return scriptLoads[src] ||= new Promise((resolve, reject) => {
     const el = document.createElement('script');
     el.src = src;
     el.onload = resolve;
-    el.onerror = () => reject(new Error(`${src} nicht ladbar`));
+    el.onerror = () => { el.remove(); delete scriptLoads[src]; reject(new Error(`${src} nicht ladbar`)); };
     document.head.appendChild(el);
   });
 }
@@ -4055,7 +4067,7 @@ async function hfMyList() {
   const m = await openDlg((box, close) => {
     dlgHead(box, `🗂 Meine Meldungen (${list.length})`, 'Antippen zum Ändern, Verlegen oder Löschen.');
     if (!list.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = 'Noch nichts gemeldet.'; box.appendChild(p); }
-    for (const x of list) dlgButton(box, `${msgLabel(x)} ${hhmm(x.t)}${x.lat != null ? ' 📍' : ''}${x.txt ? ` – ${x.txt}` : ''}${x.ed ? ' ✏️' : ''}`, 'my-msg', () => close(x));
+    for (const x of list) dlgButton(box, `${msgLabel(x)} ${hhmm(x.t)}${x.lat != null ? ' 📍' : ''}${x.txt ? ` – ${esc(x.txt)}` : ''}${x.ed ? ' ✏️' : ''}`, 'my-msg', () => close(x));
     dlgButton(box, 'Schließen', 'primary', () => close(null));
   });
   if (m) hfMsgDialog(m);
@@ -4097,10 +4109,10 @@ async function sendStatus(o) {
   if (!h.ls) {
     h.log = [...h.log, { ...m }].slice(-100);
     p.updated = Date.now();
-    saveNow();
+    const saved = saveNow();
     renderStatusBtn();
     redraw();
-    return toast(`${msgLabel(m)} gespeichert – geht mit der nächsten QR-Rückmeldung an die Einsatzleitung`, 6000);
+    return toast(saved ? `${msgLabel(m)} gespeichert – geht mit der nächsten QR-Rückmeldung an die Einsatzleitung` : `⚠️ ${msgLabel(m)} NICHT gespeichert – Speicher voll`, 6000);
   }
   h.outbox.push(m);
   h.log = [...h.log, { ...m }].slice(-100);
@@ -4122,15 +4134,14 @@ async function flushStatus() {
       for (const p of Object.values(db.projects)) {
         const h = p.hf;
         if (!h || !h.ls || !h.outbox.length) continue;
-        const r = await flushOutbox(h.ls, h.outbox, (...a) => fetch(...a));
+        const r = await flushOutbox(h.ls, h.outbox);
         if (!r.sent.length) continue;
         h.outbox = r.left;
         for (const id of r.sent) { const l = h.log.find((x) => x.id === id); if (l) l.ok = Date.now(); }
         saveNow();
       }
     } while (flushAgain);
-  } catch { /* nächster Versuch */ }
-  flushBusy = false;
+  } catch { /* nächster Versuch */ } finally { flushBusy = false; }
   renderStatusBtn();
   if (!$('dlg').hidden && $('dlg-box').querySelector('.st-line')) updateStatusLine();
 }
@@ -4735,7 +4746,7 @@ async function pollLive() {
   if (!(proj.sent || []).some((x) => x.live)) return;
   liveBusy = true;
   try {
-    const r = await pollMessages(l, (...a) => fetch(...a));
+    const r = await pollMessages(l);
     const known = new Set(l.msgs.map((m) => m.id));
     const fresh = r.msgs.filter((m) => !known.has(m.id) && !(proj.msgDel && proj.msgDel[m.id]));
     if (r.since !== l.since || fresh.length) {
@@ -4756,8 +4767,7 @@ async function pollLive() {
       }
       saveNow();
     }
-  } catch { /* kein Netz oder Server weg: nächster Versuch */ }
-  liveBusy = false;
+  } catch { /* kein Netz oder Server weg: nächster Versuch */ } finally { liveBusy = false; }
   showUrgent();
 }
 function beepShort() {
@@ -4859,6 +4869,9 @@ function startStatus() {
 
 // ---- Einsatzleitung: Rückmeldung übernehmen (Kamera oder eingefügter Link) ----
 async function handleShared(text) {
+  try { await handleShared1(text); } catch { toast('Link/Code konnte nicht gelesen werden'); }
+}
+async function handleShared1(text) {
   const sh = parseShared(text);
   if (!sh) return toast('Kein Code dieser App erkannt (Auftrag, Rückmeldung, Übergabe, Lage-Infos oder Fortschritt)');
   if (sh.kind === 'm') return toast('Teil eines mehrteiligen QR-Codes – bitte in der App über „Einsätze → 📷 Einsatz übernehmen“ scannen', 8000);
@@ -5258,7 +5271,7 @@ async function sendProgress() {
   // 1. An wen?
   const to = await openDlg((box, close) => {
     dlgHead(box, '🔄 Fortschritt senden', `Von „${from}“ an ein anderes Gerät der Einsatzleitung (EL, Unterabschnitt, ELW). Es geht nur das Neue seit dem letzten Senden an dieses Gerät. Dort wird nur ergänzt – nichts gelöscht.`);
-    for (const x of proj.peers) dlgButton(box, `${x.name}<small>${x.lastSent ? `zuletzt gesendet ${hhmm(x.lastSent)}` : 'noch nie gesendet'}</small>`, 'primary', () => close(x.name));
+    for (const x of proj.peers) dlgButton(box, `${esc(x.name)}<small>${x.lastSent ? `zuletzt gesendet ${hhmm(x.lastSent)}` : 'noch nie gesendet'}</small>`, 'primary', () => close(x.name));
     const inp = document.createElement('input');
     inp.type = 'text';
     inp.id = 'prog-new';
@@ -5317,7 +5330,7 @@ async function takeProgress(f) {
   // Absender als Empfänger merken; ein beim Übergeben angelegter Platzhalter („Gerät 14:03“) bekommt seinen Namen
   if (!peerOf(P, from)) {
     const ph = P.peers.find((x) => /^Gerät \d/.test(x.name) && x.name.endsWith('(UA)') === !!f.pe);
-    if (ph) ph.name = from; else setPeer(P, from, 0);
+    if (ph) ph.name = String(from).slice(0, 60); else setPeer(P, from, 0);
   }
   progBase.set(P, snapshotBase(P));
   markAccepted(P, allMsgsRaw());
@@ -5349,7 +5362,7 @@ $('dev-status-url').addEventListener('change', () => {
     return toast('Die Adresse muss mit https://script.google.com/ beginnen (siehe Anleitung im Ordner „apps-script“)', 6000);
   }
   db.statusUrl = v || null;
-  saveNow();
+  if (!saveNow()) return;
   toast(v ? '📣 Eigener Status-Server gespeichert – gilt für neue Einsätze' : '📣 Standard-Status-Server wird benutzt');
 });
 // Standard-Kartenart dieses Geräts (oder null): gilt für neue, übernommene und geladene Einsätze
@@ -5491,7 +5504,7 @@ function reloadFromStorage(raw) {
 window.addEventListener('storage', (e) => {
   if (e.key === STORE_KEY && e.newValue && !handedOff) reloadFromStorage(e.newValue);
 });
-window.addEventListener('hashchange', handleHash);
+window.addEventListener('hashchange', () => handleHash().catch(() => toast('Link/Code konnte nicht gelesen werden')));
 
 // Erster Start: Modus wählen (vorhandene Daten -> Einsatzleitung)
 async function chooseModeIfNeeded() {
@@ -5692,9 +5705,9 @@ function openContactForm(id) {
     if (!n.name) return toast('Bitte einen Namen eingeben');
     const i = db.contacts.findIndex((x) => x.id === n.id);
     if (i >= 0) db.contacts[i] = n; else db.contacts.push(n);
-    saveNow();
+    const saved = saveNow();
     closeContactForm();
-    toast(`Kontakt „${n.name}“ gespeichert`);
+    if (saved) toast(`Kontakt „${n.name}“ gespeichert`);
   });
   cancel.addEventListener('click', closeContactForm);
   if (del) {
@@ -5849,12 +5862,13 @@ function startGps(jump) {
     else if (gpsFollow() && Date.now() - userMovedAt > FOLLOW_PAUSE) map.panTo(ll, { animate: true, duration: 0.5 });
     updateStatus();
   }, (err) => {
-    toast('Standort nicht verfügbar: ' + err.message);
+    toast('Standort nicht verfügbar: ' + (err.message || 'kein GPS-Empfang'));
   }, { enableHighAccuracy: true, maximumAge: 5000 });
 }
 
 // ---------- Suchgebiete (Projekte) ----------
 function switchProject(id) {
+  if (recWatch !== null) stopRec(); // Aufzeichnung gehört zum alten Einsatz
   endGridFit();
   endVertex();
   saveNow();
@@ -6097,7 +6111,7 @@ const WIZ = {
     const setLead = (k) => (v) => { P.lead[k] = v; if (k === 'name') P.leader = v; };
     const last = lastLead(db.projects, P.id);
     if (last && !P.lead.name && !P.lead.phone) {
-      wizBtn(box, `↺ wie letzter Einsatz: ${[last.lead.name, last.lead.call].filter(Boolean).join(' · ') || 'Einsatzleitung'}`, () => {
+      wizBtn(box, `↺ wie letzter Einsatz: ${esc([last.lead.name, last.lead.call].filter(Boolean).join(' · ') || 'Einsatzleitung')}`, () => {
         P.lead = { ...P.lead, ...last.lead };
         P.leader = P.lead.name;
         if (!P.radio.length) P.radio = last.radio;
@@ -6256,7 +6270,7 @@ function wizMeetGps() {
   toast('Standort wird gesucht …', 20000);
   navigator.geolocation.getCurrentPosition(
     (pos) => setAt(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
-    (err) => toast(`Standort nicht verfügbar: ${err.message}`),
+    (err) => toast(`Standort nicht verfügbar: ${err.message || 'kein GPS-Empfang'}`),
     { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 },
   );
 }
@@ -6361,7 +6375,7 @@ async function addPoi() {
   toast('Standort wird gesucht …', 20000);
   navigator.geolocation.getCurrentPosition(
     (pos) => placePoi(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
-    (err) => { poiDraft = null; toast(`Standort nicht verfügbar: ${err.message}`); },
+    (err) => { poiDraft = null; toast(`Standort nicht verfügbar: ${err.message || 'kein GPS-Empfang'}`); },
     { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 },
   );
 }
@@ -7581,9 +7595,9 @@ const addPhoto = async (e) => {
   try {
     M().photos.push({ t: Date.now(), src: await shrinkPhoto(f) });
     touch();
-    saveNow();
+    const saved = saveNow();
     renderThumbs();
-    toast('Foto gespeichert');
+    toast(saved ? 'Foto gespeichert' : '⚠️ Foto NICHT gespeichert – Speicher voll', saved ? 3500 : 8000);
   } catch (err) {
     toast('Foto: ' + err.message);
   }
@@ -8334,7 +8348,7 @@ async function findCorner(q) {
     }
     showResults(list.map(asResult), 'Kreuzungen: © OpenStreetMap-Mitwirkende (Overpass API)');
   } catch (err) {
-    if (err.name === 'AbortError') return;
+    if (signal.aborted) return;
     const msg = err.message.startsWith('Kreuzungssuche') ? err.message : `Kreuzungssuche fehlgeschlagen: ${err.message}`;
     showResults([], navigator.onLine === false ? 'Keine Internetverbindung – Kreuzungssuche nicht möglich.' : msg);
   }
@@ -8355,15 +8369,15 @@ async function updateSuggestions(immediate = false) {
   }
   if (q.type !== 'address' || text.length < 3) { closeSearch(); return; }
   const run = async () => {
-    suggestAbort = new AbortController();
+    const ac = suggestAbort = new AbortController();
     const c = map.getCenter();
     try {
-      const list = await suggestPlaces(text, { lat: c.lat, lon: c.lng }, suggestAbort.signal);
+      const list = await suggestPlaces(text, { lat: c.lat, lon: c.lng }, ac.signal);
       if ($('search-input').value.trim() !== text) return; // inzwischen weitergetippt
       if (list.length) showResults(list.map(asResult), 'Vorschläge: © OpenStreetMap-Mitwirkende (Photon)');
       else showResults([], 'Nichts gefunden. Tipp: Ort mit angeben, z. B. „Waldweg 5, Musterstadt“.');
     } catch (err) {
-      if (err.name === 'AbortError') return;
+      if (ac.signal.aborted) return; // neu getippt; ein Zeitlimit geht weiter zum Ersatz
       if (!immediate) return; // beim Tippen still bleiben, Enter versucht es nochmal
       try {
         // Ersatz: Nominatim (nur auf Knopfdruck erlaubt)
@@ -8669,7 +8683,8 @@ window.addEventListener('online', () => { if (!$('lic-lock').hidden) licBackgrou
 
 // Modus anwenden, beim ersten Start fragen, Auftrag/Rückmeldung aus dem Link übernehmen
 applyMode();
-chooseModeIfNeeded().then(handleHash).then(() => window.onSharedFile()).then(() => {
+// ein fehlerhafter Link oder eine kaputte Datei darf den Start (Status-Abgleich, Aufzeichnung) nicht verhindern
+chooseModeIfNeeded().then(handleHash).then(() => window.onSharedFile()).catch(() => toast('Link/Code konnte nicht gelesen werden')).then(() => {
   // App wurde während der Weg-Aufzeichnung geschlossen: weiter aufzeichnen
   if (db.mode === 'hf' && P.hf && P.hf.recOn && recWatch === null) startRec(true);
   startStatus();

@@ -2,7 +2,7 @@
 // ohne Server: Inhalt kompakt als JSON, komprimiert (deflate) und Base64url – im Link
 // (#a=… / #r=…) oder im QR-Code. Reine Logik ohne DOM, damit sie testbar ist.
 
-import { newProject, normalizeProject, uid, allGrids, gridLabel } from './store.js';
+import { newProject, normalizeProject, uid, allGrids, gridLabel, isStatusUrl } from './store.js';
 import { compactContact, fromCompact } from './contacts.js';
 import { newLiveKey, mergeStatus, qrMsgs } from './status.js';
 import { makeGrid, cellBounds } from './grid.js';
@@ -76,6 +76,9 @@ export function decodePts(arr) {
 // Linie vereinfachen (Douglas-Peucker), Toleranz in Metern
 export function simplify(pts, tolM = 5) {
   if (pts.length < 3) return pts.slice();
+  // geschlossener Ring (erster = letzter Punkt): Anfang = Ende ergäbe nur Abstand 0 -> ohne Schlusspunkt vereinfachen, danach wieder schließen
+  const [f, l] = [pts[0], pts[pts.length - 1]];
+  if (pts.length > 3 && f[0] === l[0] && f[1] === l[1]) return [...simplify(pts.slice(0, -1), tolM), l];
   const k = Math.cos((pts[0][0] * Math.PI) / 180);
   const xy = pts.map(([la, lo]) => [lo * 111320 * k, la * 110540]);
   const keep = new Uint8Array(pts.length);
@@ -231,7 +234,7 @@ export function projectFromAssignment(a) {
     id: a.id, at: a.at, received: Date.now(), team: team.label, hint: a.h || '', ...(a.pr ? { prev: String(a.pr) } : {}), grids: a.g.map((g) => g.i),
     track: [], // aufgezeichnete Wege: [{ t0, pts: [[lat, lon]] }]
     outbox: [], log: [], // Status-Meldungen: noch nicht gesendet / alle eigenen
-    ...(Array.isArray(a.ls) && a.ls.length === 2 && /^https:\/\/script\.google\.com\//.test(String(a.ls[0])) ? { ls: [String(a.ls[0]), String(a.ls[1])] } : {}), // Status-Server: [Adresse, Schlüssel]
+    ...(Array.isArray(a.ls) && a.ls.length === 2 && isStatusUrl(a.ls[0]) ? { ls: [String(a.ls[0]), String(a.ls[1])] } : {}), // Status-Server: [Adresse, Schlüssel]
   };
   p.hfRescue = (a.rp || []).map(([n, lat, lon]) => ({ n, lat, lon }));
   return normalizeProject(p);
@@ -271,35 +274,43 @@ export function applyResult(p, r) {
   let ways = 0;
   let marks = 0;
   let fields = 0;
-  for (const s of r.tr || []) {
-    if (imp[key(`t${s.t}`)] === (s.p.length)) continue; // schon übernommen (gleich lang)
+  // erst alles lesen (wirft bei formal ungültiger Rückmeldung), dann übernehmen – sonst bliebe ein Teil hängen
+  const trs = (r.tr || []).map((s) => ({ s, pts: decodePts(s.p), n: s.p.length }));
+  const its = (r.i || []).map((x) => {
+    const k = key(`i${x.t}|${x.n}|${x.p[0]},${x.p[1]}`);
+    return { k, it: unpackItem({ ...x, c: x.c || color }, { resultKey: k }) };
+  });
+  const ds = (r.d || []).map((e) => {
+    const [gi, rest] = e.split(':');
+    return { gi: Number(gi), code: rest.slice(-1), cell: rest.slice(0, -1) };
+  });
+  const ws = (r.w || []).map(([t, from, strength, lat, lon]) => ({ t, from, strength, lat, lon }));
+  for (const { s, pts, n } of trs) {
+    if (imp[key(`t${s.t}`)] === n) continue; // schon übernommen (gleich lang)
     // ältere, kürzere Fassung desselben Wegs ersetzen
     p.items = p.items.filter((it) => it.resultKey !== key(`t${s.t}`));
-    p.items.push({ kind: 'track', open: true, color, w: 4, name: `Weg ${who} ab ${hh(s.t)}`, pts: decodePts(s.p), resultKey: key(`t${s.t}`) });
-    imp[key(`t${s.t}`)] = s.p.length;
+    p.items.push({ kind: 'track', open: true, color, w: 4, name: `Weg ${who} ab ${hh(s.t)}`, pts, resultKey: key(`t${s.t}`) });
+    imp[key(`t${s.t}`)] = n;
     ways++;
   }
-  for (const x of r.i || []) {
-    const k = key(`i${x.t}|${x.n}|${x.p[0]},${x.p[1]}`);
+  for (const { k, it } of its) {
     if (imp[k]) continue;
-    p.items.push(unpackItem({ ...x, c: x.c || color }, { resultKey: k }));
+    p.items.push(it);
     imp[k] = 1;
     marks++;
   }
   const grids = sent ? sent.grids : [];
   const statusId = (code) => (p.marks.find((m) => m.kind === 'status' && m.label === CODE_STATUS[code]) || {}).id;
-  for (const e of r.d || []) {
-    const [gi, rest] = e.split(':');
-    const gid = grids[Number(gi)];
-    const id = statusId(rest.slice(-1));
-    const cell = rest.slice(0, -1);
+  for (const { gi, code, cell } of ds) {
+    const gid = grids[gi];
+    const id = statusId(code);
     const g = gid && (gid === p.gridId ? p : (p.otherGrids || []).find((x) => x.id === gid));
     if (!g || !id) continue;
     if (g.status[cell] !== id) { g.status[cell] = id; fields++; }
   }
   let winds = 0;
   p.mission.wind = p.mission.wind || [];
-  for (const [t, from, strength, lat, lon] of r.w || []) {
+  for (const { t, from, strength, lat, lon } of ws) {
     const k = key(`w${t}`);
     if (imp[k]) continue;
     p.mission.wind.push({ t, from, strength, src: 'gemessen', lat, lon, by: who });

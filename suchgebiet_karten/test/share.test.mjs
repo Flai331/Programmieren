@@ -177,3 +177,11 @@ test('Status-Plakette: Mitte des Auftrags; Status-Meldungen gehen mit der QR-Rü
   assert.equal(el.qmsgs[0].pc, 40);
   assert.equal(applyResult(el, r).msgs, 0); // doppelt scannen
 });
+
+test('simplify: geschlossener Ring mit Schlusspunkt bleibt ein Ring', () => {
+  const sq = [[50, 8], [50, 8.001], [50.001, 8.001], [50.001, 8], [50, 8]];
+  const r = simplify(sq, 3);
+  assert.equal(r.length, 5);
+  assert.deepEqual(r[0], r[r.length - 1]);
+  assert.deepEqual(simplify(sq.slice(0, 4), 3).length, 4);
+});

@@ -319,9 +319,11 @@ class MainActivity : ComponentActivity() {
         val uri: Uri = when (i.action) {
             Intent.ACTION_SEND -> (if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
                 else @Suppress("DEPRECATION") i.getParcelableExtra(Intent.EXTRA_STREAM)) ?: return false
-            Intent.ACTION_VIEW -> i.data?.takeIf { it.scheme == "content" || it.scheme == "file" } ?: return false
+            Intent.ACTION_VIEW -> i.data ?: return false
             else -> return false
         }
+        // nur content:-Adressen (Manifest lässt für „Öffnen mit“ auch nur diese zu); file: würde eigene private Dateien lesen
+        if (uri.scheme != "content") return false
         try {
             var name = uri.lastPathSegment?.substringAfterLast('/') ?: "Datei"
             contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->

@@ -188,6 +188,11 @@ button, input, select { font: inherit; }
   max-width: 90%; text-align: center;
 }
 
+#save-warn {
+  position: fixed; left: 0; right: 0; top: 0; z-index: 3500; background: #c62828; color: #fff; font-weight: 700;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px; font-size: 14px; text-align: center;
+}
+
 .gps-dot {
   width: 16px; height: 16px; border-radius: 50%; background: #1e88e5; border: 3px solid #fff;
   box-shadow: 0 0 4px rgba(0,0,0,0.5);
@@ -634,13 +639,6 @@ body.closed :is(#pc-add, #pc-new) { pointer-events: none; opacity: 0.45; }
 html.night .sent-card.quiet, html.night .sent-card.wait { background: transparent; }
 
 /* Feld lange drücken: Team und Markierung */
-.fchips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
-.fchip-wrap { display: inline-flex; gap: 2px; }
-#dlg-box .fchip { display: inline-flex; align-items: center; gap: 6px; width: auto; margin: 0; padding: 8px 10px; font-size: 14px; }
-#dlg-box .fchip i { width: 14px; height: 14px; border-radius: 3px; flex: none; }
-#dlg-box .fchip.on { outline: 2px solid var(--red); font-weight: 700; }
-#dlg-box .fchip.add { border-style: dashed; }
-#dlg-box .fchip.edit { padding: 8px 8px; }
 #dlg-box select { width: 100%; margin-bottom: 8px; }
 
 /* v89: Status-Meldungen */

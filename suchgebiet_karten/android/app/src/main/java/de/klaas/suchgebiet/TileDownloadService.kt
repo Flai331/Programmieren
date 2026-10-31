@@ -246,6 +246,8 @@ class TileDownloadService : Service() {
                         OfflineTiles.addBytes(data.size.toLong())
                         return data.size.toLong()
                     }
+                    // 4xx (z. B. 404 außerhalb der Abdeckung): ein neuer Versuch bringt nichts
+                    if (c.responseCode in 400..499) return -1
                 } finally {
                     c.disconnect()
                 }
