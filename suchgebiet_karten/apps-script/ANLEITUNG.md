@@ -100,6 +100,54 @@ Hauptschalter pflegst du direkt in der Tabelle.
 **Grenzen:** Wer den Code kopiert oder eine eigene Tabelle benutzt, ist nicht betroffen. Die
 Daten bleiben auf dem Gerät; die Sperre verhindert nur das Bedienen der App, sie löscht nichts.
 
+### Notfallcode (seit v116)
+
+Mit dem Notfallcode lässt sich ein gesperrtes Gerät kurz entsperren, z. B. mitten in der Nacht,
+wenn niemand die Tabelle pflegen kann.
+
+1. Blatt **„Einstellungen“**: in **`B3`** (Zeile „Notfallcode“, `A3`) einen Code eintragen, z. B.
+   ein Wort mit Zahl. **Leer = kein Notfallcode.** `setup` legt die Zeile an (bei älteren Tabellen
+   einmal `setup` ausführen).
+2. Bei jeder Prüfung schickt der Server nur den **Hash** (SHA-256) des Codes mit, nie den Code selbst.
+   Die App speichert den Hash und kann den Code deshalb auch **ohne Internet** prüfen.
+3. Auf dem Sperrbildschirm: **„🔑 Notfallcode eingeben“**. Ein richtiger Code entsperrt das Gerät
+   **24 Stunden**, danach gilt wieder die normale Sperre. Ein falscher Code meldet „Falscher Code“.
+   Kennt das Gerät keinen Code (noch nie geprüft oder leer), steht dort „Kein Notfallcode
+   hinterlegt – Kontakt: …“.
+4. Code nach Gebrauch ändern oder leeren – er gilt für alle Geräte.
+
+### Nie im laufenden Einsatz (seit v116)
+
+Läuft auf dem Gerät ein Einsatz (Einsatzleitung: Einsatz offen, nicht abgeschlossen; Hundeführer:
+Auftrag vorhanden), erscheint der Sperrbildschirm **nicht**. Stattdessen steht unten ein kleiner
+Hinweis „Diese Installation ist gesperrt – nach Einsatzende nicht mehr nutzbar“. Das gilt für
+Sperre, Hauptschalter und abgelaufene Freigabe. Die Sperre greift beim nächsten Start bzw. bei der
+nächsten Prüfung, wenn kein Einsatz mehr offen ist.
+
+## Fehlerberichte (Notion)
+
+Die Android-App schickt Fehlerberichte (automatisch bei Abstürzen/Fehlern und über „🐛 Fehler melden“)
+an diesen Status-Server, der sie in die Notion-Fehlerzentrale (🐞 → 🐛 Suchgebiet-Karten) einträgt.
+Der Notion-Token steckt **nur hier im Skript** – nicht mehr in der APK. Einrichtung (einmalig):
+
+1. In Notion unter *Einstellungen → Verbindungen → Integrationen* die bisherige Integration öffnen und
+   den **alten Token widerrufen bzw. neu erzeugen** (der alte steckt in öffentlichen APK-Versionen bis v115).
+   Die Integration muss weiter Zugriff auf die Datenbank „🐛 Suchgebiet-Karten“ haben.
+2. Im Apps-Script-Editor links auf das **Zahnrad (Projekteinstellungen)**, nach unten zu
+   **„Skripteigenschaften“** → **„Skripteigenschaft hinzufügen“**: Name **`NOTION_TOKEN`**, Wert der
+   neue Token → **Speichern**.
+3. Den neuen `Code.gs` einfügen, speichern, einmal **`setup`** ausführen (Google fragt nach der
+   zusätzlichen Berechtigung „Externe Dienste“ → zulassen), dann **„Bereitstellen“ →
+   „Bereitstellungen verwalten“ → Stift → Version: „Neue Version“ → Bereitstellen**. Der Notion-Code
+   wird also erst mit dieser neuen Version wirksam. Die URL bleibt gleich.
+4. Prüfen: In der App unter „⚙️ Mehr“ **„🐛 Fehler melden“** → kurzen Text senden. Nach wenigen
+   Sekunden steht eine Seite in Notion.
+
+**Wichtig:** Ein Token gehört nie in den Code, in eine Datei im Repository oder in einen Chat.
+Fehlt die Skripteigenschaft, antwortet der Server `kein Token`; die App hebt die Berichte dann auf
+und sendet sie später erneut. Schutz vor Missbrauch: jedes Textfeld wird auf 2000 Zeichen gekürzt, es
+werden höchstens 30 Berichte pro Stunde angenommen (danach `zu viele`).
+
 ## Häufige Fragen
 
 - **„Es kommt nichts an.“** Hat das Hundeführer-Handy Internet? Ohne Netz wartet die Meldung

@@ -76,6 +76,7 @@ export function drawOverlay(ctx, toPx, state, opt) {
   if (state.rescue && state.rescue.length) drawRescue(ctx, toPx, state.rescue, s);
   if (state.pois && state.pois.length) drawPois(ctx, toPx, state.pois, s);
   if (state.meet) drawMeet(ctx, toPx, state.meet, s);
+  if (state.msgMarks && state.msgMarks.length) drawMsgMarks(ctx, toPx, state.msgMarks, s);
   for (const g of layers) {
     if (!opt.noGrid && !opt.noEdge) drawEdgeLabels(ctx, toPx, g.grid, opt, s);
     if (layers.length > 1 && g.name && !(opt.noGrid && opt.noEdge)) drawGridName(ctx, toPx, g.grid, g.name, s);
@@ -108,6 +109,35 @@ function drawRescue(ctx, toPx, pts, s) {
       ctx.strokeText(p.n, x + size * 0.7, y);
       ctx.fillStyle = '#1b5e20';
       ctx.fillText(p.n, x + size * 0.7, y);
+    }
+  }
+  ctx.textBaseline = 'alphabetic';
+}
+
+// v116: Meldungen mit Ort (Fund, Anzeige, Hilfe …) wie auf der Live-Karte: runde Plakette mit Symbol und kurzer Beschriftung
+// („Fund Bravo 00:21“); dringende (Fund/Hilfe) rot hinterlegt und größer
+function drawMsgMarks(ctx, toPx, marks, s) {
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const sorted = [...marks].sort((a, b) => Number(a.urgent) - Number(b.urgent)); // dringende zuletzt, also obenauf
+  for (const w of sorted) {
+    const [x, y] = toPx(w.lat, w.lon);
+    const r = (w.urgent ? 13 : 10) * s;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = w.urgent ? '#ffcdd2' : '#fff';
+    ctx.fill();
+    ctx.lineWidth = (w.urgent ? 3.5 : 2.5) * s;
+    ctx.strokeStyle = w.urgent ? '#c62828' : '#455a64';
+    ctx.stroke();
+    ctx.font = `${(w.urgent ? 15 : 11) * s}px sans-serif`;
+    ctx.fillStyle = '#000';
+    ctx.fillText(w.icon, x, y + 0.5 * s);
+    if (marks.length <= 150) {
+      ctx.font = `bold ${10 * s}px sans-serif`;
+      ctx.textAlign = 'left';
+      halo(ctx, w.name, x + r + 4 * s, y, w.urgent ? '#b71c1c' : '#263238', s);
+      ctx.textAlign = 'center';
     }
   }
   ctx.textBaseline = 'alphabetic';

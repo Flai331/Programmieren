@@ -5,6 +5,7 @@
 import { allGrids } from './store.js';
 import { makeGrid, cellAt } from './grid.js';
 import { hasArea, pointInPolygon } from './gpx.js';
+import { isUrgent, msgLabel } from './status.js';
 
 export const isDone = (x) => !!x && Number(x.done) > 0;
 
@@ -104,4 +105,21 @@ export function predecessorText(g) {
   const rest = g.items.length - ways;
   const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   return `Vom vorherigen Team (${g.label}) – ${[ways && pl(ways, 'Weg', 'Wege'), rest && pl(rest, 'Markierung', 'Markierungen')].filter(Boolean).join(', ')}`;
+}
+
+// ---------- v116: Einsatz abschließen – offene Punkte ----------
+// p: Einsatz (sent, marks, live.ack), msgs: Meldungen (ohne zurückgezogene/gelöschte, z. B. allMsgs()).
+// -> { open: offene Aufträge (nicht abgeschlossen), unacked: Fund-/Hilfe-Meldungen ohne „Gesehen“,
+//      noReturn: abgeschlossene Aufträge ohne eingelesene Rückgabe, count }
+// „Rückgabe“ = QR-Rückmeldung eingelesen und seither nichts Neueres (wie isReturned in statusbar.js)
+export function openPoints(p, msgs = []) {
+  const sent = (p && p.sent) || [];
+  const ack = (p && p.live && p.live.ack) || [];
+  const teamOf = (x) => { const t = ((p && p.marks) || []).find((m) => m.id === x.teamId); return t ? t.label : x.team || 'Team'; };
+  const returned = (x) => !!x.last && !msgs.some((m) => m.a === x.id && m.t > x.last);
+  const open = sent.filter((x) => !isDone(x)).map((x) => ({ id: x.id, team: teamOf(x), what: x.what || '', returned: returned(x) }));
+  const noReturn = sent.filter((x) => isDone(x) && !returned(x)).map((x) => ({ id: x.id, team: teamOf(x) }));
+  const unacked = msgs.filter((m) => m && isUrgent(m) && !m.gone && !ack.includes(m.id))
+    .map((m) => ({ id: m.id, team: m.tm || 'Team', label: msgLabel(m), t: m.t }));
+  return { open, unacked, noReturn, count: open.length + unacked.length + noReturn.length };
 }

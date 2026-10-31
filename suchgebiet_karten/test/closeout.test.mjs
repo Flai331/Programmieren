@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  isDone, msgPct, closeMsg, sentPct, closeAsk, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText,
+  isDone, openPoints, msgPct, closeMsg, sentPct, closeAsk, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText,
 } from '../web/closeout.js';
 import { msgLabel, msgIcon, statusLabel, NO_POS, STATUS_LIST, buildMsg } from '../web/status.js';
 import { teamChips } from '../web/statusbar.js';
@@ -171,4 +171,44 @@ test('Auftrag mit Vorgänger-Spuren: pv, Text, beim HF grau-gesperrt und nicht z
   assert.equal(r.i.length, 0); // nichts doppelt zurück
   // ohne Vorgänger: kein pr
   assert.equal(buildAssignment(p, { ...sel, prev: [] }).pr, undefined);
+});
+
+// ---------- v116: Einsatz abschließen prüft offene Punkte ----------
+test('openPoints: alles erledigt -> nichts offen', () => {
+  const p = { sent: [{ id: 'a1', teamId: 't1', team: 'Team 1', done: T0, last: T0 + min(5) }], marks: [{ id: 't1', label: 'Alpha' }], live: { ack: [] } };
+  const r = openPoints(p, [msg('m1', 'a1', 'fertig', 1, { pc: 100 })]);
+  assert.deepEqual([r.open, r.unacked, r.noReturn, r.count], [[], [], [], 0]);
+  assert.equal(openPoints({}, []).count, 0);
+  assert.equal(openPoints(null, undefined).count, 0);
+});
+
+test('openPoints: offene Aufträge mit Team, Rückgabe fehlt', () => {
+  const p = {
+    sent: [
+      { id: 'a1', teamId: 't1', team: 'Team 1', what: 'Nord' }, // offen, keine Rückgabe
+      { id: 'a2', teamId: 't2', team: 'Team 2', last: T0 + min(10) }, // offen, aber zurückgegeben
+      { id: 'a3', team: 'Team 3', last: T0 }, // offen, danach neue Meldung: Rückgabe fehlt
+      { id: 'a4', team: 'Team 4', done: T0 }, // abgeschlossen ohne Rückgabe
+    ],
+    marks: [{ id: 't1', label: 'Alpha' }], live: { ack: [] },
+  };
+  const r = openPoints(p, [msg('m1', 'a3', 'pause', 5)]);
+  assert.deepEqual(r.open.map((x) => [x.team, x.returned, x.what]), [['Alpha', false, 'Nord'], ['Team 2', true, ''], ['Team 3', false, '']]);
+  assert.deepEqual(r.noReturn.map((x) => x.team), ['Team 4']);
+  assert.equal(r.count, 4);
+});
+
+test('openPoints: unquittierte Funde/Hilfe, zurückgezogene und quittierte nicht', () => {
+  const p = { sent: [], marks: [], live: { ack: ['f2'] } };
+  const r = openPoints(p, [
+    msg('f1', 'a1', 'ort', 1, { cat: 'fund' }),
+    msg('f2', 'a1', 'ort', 2, { cat: 'hilfe' }), // quittiert
+    msg('f3', 'a1', 'ort', 3, { cat: 'fund', gone: T0 }), // zurückgezogen
+    msg('f4', 'a1', 'ort', 4, { cat: 'anzeige' }), // nicht dringend
+    msg('f5', 'a1', 'fund', 5), // alte Form (s: fund)
+  ]);
+  assert.deepEqual(r.unacked.map((x) => x.id), ['f1', 'f5']);
+  assert.equal(r.unacked[0].label, '🟢 Person gefunden');
+  assert.equal(r.count, 2);
+  assert.equal(openPoints({ sent: [], live: {} }, [msg('f1', 'a1', 'ort', 1, { cat: 'fund' })]).unacked.length, 1); // ohne ack-Liste
 });

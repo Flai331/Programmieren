@@ -442,6 +442,7 @@ function filterState(st, opts) {
   strip(st);
   st.others = (st.others || []).map((o) => strip({ ...o }));
   if (opts.rescue) st.rescue = opts.rescue;
+  if (opts.msgs && opts.msgs.length) st.msgMarks = opts.msgs; // v116: Meldungen mit Ort
   return st;
 }
 
@@ -497,6 +498,10 @@ export function contentBounds(state, aspect, mmW, pad = 0.06) {
     pts.push([m.lat, m.lon]);
     labels.push([m.lat, m.lon, m.text || 'B-Ort']);
   }
+  for (const w of state.msgMarks || []) {
+    pts.push([w.lat, w.lon]);
+    labels.push([w.lat, w.lon, w.name]);
+  }
   if (!pts.length) return null;
   let x0 = Infinity; let x1 = -Infinity; let y0 = Infinity; let y1 = -Infinity;
   const add = (x, y) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); };
@@ -523,7 +528,7 @@ export function contentBounds(state, aspect, mmW, pad = 0.06) {
 
 // Ausschnitt b so erweitern, dass auch alle Zeichnungen, Texte und der B-Ort drauf sind
 export function withItems(b, state) {
-  const ib = contentBounds({ items: state.items, meet: state.meet, pois: state.pois });
+  const ib = contentBounds({ items: state.items, meet: state.meet, pois: state.pois, msgMarks: state.msgMarks });
   if (!ib) return b;
   return {
     north: Math.max(b.north, ib.north), south: Math.min(b.south, ib.south),

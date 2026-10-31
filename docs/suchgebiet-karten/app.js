@@ -9,15 +9,16 @@ import {
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { buildGpx, mergeGpx, parseGpx, dedupeImport, parseKml, pointInPolygon, selectionGpx, gridWithLabels, gridPath, labelTracks, cellComponents, cellOutlines, hasArea, polygonArea, formatArea, trackDesc, trackLength, outlineName } from './gpx.js';
+import { areaBounds, navTargets } from './hfnav.js';
+import { buildGpx, mergeGpx, parseGpx, dedupeImport, parseKml, pointInPolygon, selectionGpx, gridWithLabels, gridPath, labelTracks, cellComponents, cellOutlines, hasArea, polygonArea, formatArea, trackDesc, trackLength, outlineName, msgWaypoints, msgRows } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
-import { buildReport, describeTarget, makeDedup, makeLog } from './report.js';
+import { buildReport, describeTarget, makeDedup, makeLog, validReportUrl } from './report.js';
 import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
 import { fileName } from './files.js';
 import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './infos.js';
 import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids } from './scope.js';
 import { MSG_VIEW, MSG_DELETE, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock, assignedOf, assignedCell, assignedGrid, markAccepted, isAccepted, unlockUntil } from './locks.js';
-import { isDone, msgPct, closeMsg, sentPct, closeAsk, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
+import { isDone, openPoints, msgPct, closeMsg, sentPct, closeAsk, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
 import { buildProgress, mergeProgress, progressSummary, progressPreview, progressTarget, snapshotBase, stampChanges, setPeer, peerOf } from './progress.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -53,7 +54,7 @@ import {
 import { einsatzOffen, shouldOfferUpdate, updateText, PERMISSION_HINT } from './update.js';
 import { tapVerdict, backdropAction } from './tapclose.js';
 import {
-  LIC_KEY, LIC_CHECK_MS, LIC_TIMEOUT, LIC_CONTACT, licenceState, applyLicenceReply, newLicence, normalizeLicence, checkUrl, lockTitle, lockText, mailtoHref,
+  LIC_KEY, LIC_CHECK_MS, LIC_TIMEOUT, LIC_CONTACT, DEFERRED_TEXT, licenceState, applyLicenceReply, applyEmergencyCode, newLicence, normalizeLicence, checkUrl, lockTitle, lockText, mailtoHref,
 } from './licence.js';
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
@@ -66,7 +67,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v115';
+const APP_VERSION = 'v116';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -81,7 +82,7 @@ const COLOR_NAMES = {
 
 const $ = (id) => document.getElementById(id);
 const bridge = window.AndroidBridge || null; // gesetzt in der Android-App
-// Fehlerberichte nur in der Android-App (Token liegt dort, nie in der Web-Version)
+// Fehlerberichte nur in der Android-App; sie gehen über den Status-Server an Notion (der Token liegt im Apps Script)
 const canReport = !!(bridge && bridge.reportError);
 const repLog = makeLog();
 const repDedup = makeDedup();
@@ -2847,7 +2848,7 @@ async function toHfMode() {
   toast('Hundeführer-Modus');
 }
 async function toElMode() {
-  const pin = await askPin('🔒 Einsatzleitung', 'PIN eingeben, um in die Einsatzleitung zu wechseln.');
+  const pin = await askPin('🔒 Einsatzleitung', 'PIN eingeben, um in die Einsatzleitung zu wechseln. Die PIN schützt vor versehentlichem Wechsel, nicht die Daten.');
   if (!pin) return false;
   if ((await pinHash(pin)) !== EL_PIN_HASH) { toast('Falsche PIN'); return false; }
   if (recWatch !== null) stopRec();
@@ -2862,7 +2863,7 @@ async function toElMode() {
 // Mehr -> Hundeführer-Modus: erst nachfragen, zurück geht nur mit der EL-PIN
 $('mode-hf').addEventListener('click', async () => {
   const go = await openDlg((box, close) => {
-    dlgHead(box, 'In den Hundeführer-Modus wechseln?', 'Zurück zur Einsatzleitung geht nur mit der EL-PIN.');
+    dlgHead(box, 'In den Hundeführer-Modus wechseln?', 'Zurück zur Einsatzleitung geht nur mit der EL-PIN. Die PIN schützt vor versehentlichem Wechsel, nicht die Daten.');
     dlgButton(box, '🐕 Wechseln', 'primary', () => close(true));
     dlgButton(box, 'Abbrechen', '', () => close(false));
   });
@@ -2905,6 +2906,10 @@ function renderHfInfo() {
     m.style.whiteSpace = 'pre-line';
   } else m.textContent = 'Noch kein Auftrag. QR-Code der Einsatzleitung scannen: Menü → „📷 Auftrag scannen“.';
   $('hfm-meet').disabled = !P.meet;
+  const hasArea = !!h && !!areaBounds(P);
+  $('hfm-area').disabled = !hasArea;
+  $('hfi-area').hidden = !hasArea;
+  $('hfm-nav').disabled = !h || !navTargets(P).length;
   $('hfm-contacts').hidden = !P.contacts.length;
   $('hfm-contacts').textContent = `📞 Kontakte (${P.contacts.length})`;
 }
@@ -2920,6 +2925,34 @@ $('hfm-contacts').addEventListener('click', () => {
 // direkt öffnen (openPanel schließt das Menü; closePanels davor ginge im Verlauf zurück und schlösse das neue Fenster gleich wieder)
 $('hfm-notes').addEventListener('click', () => $('btn-notes').click());
 $('hfm-projects').addEventListener('click', () => $('btn-projects').click());
+// v116: 🎯 Mein Gebiet – alle Gebiete des Auftrags (Felder des Teams, Umrisse) ins Bild
+function showMyArea() {
+  const b = areaBounds(P);
+  if (!b) return toast('Im Auftrag ist kein Gebiet eingetragen');
+  closePanels();
+  map.fitBounds(b, { paddingTopLeft: [30, 120], paddingBottomRight: [30, 90], maxZoom: 17 });
+}
+$('hfm-area').addEventListener('click', showMyArea);
+$('hfi-area').addEventListener('click', (e) => { e.stopPropagation(); showMyArea(); }); // der Tipp auf die Karte klappt sonst die Auftragskarte zu
+// Externen Link öffnen: in der Android-App über die WebView (die reicht https-Adressen an die Maps-App weiter), sonst neuer Tab
+function openLink(url) {
+  if (bridge) location.href = url;
+  else window.open(url, '_blank', 'noopener');
+}
+// v116: 🧭 Navigation – Parkplatz, B-Ort bzw. Treffpunkt, Gebiet (Mitte) als Ziel in Google Maps
+$('hfm-nav').addEventListener('click', () => {
+  const list = navTargets(P);
+  if (!list.length) return toast('Im Auftrag gibt es kein Ziel (Parkplatz, B-Ort, Gebiet)');
+  closePanels();
+  openDlg((box, close) => {
+    dlgHead(box, '🧭 Navigation', 'Wohin soll die Route gehen? Sie öffnet sich in der Karten-App.');
+    const l = document.createElement('div');
+    l.className = 'dlg-btns';
+    box.appendChild(l);
+    for (const t of list) dlgButton(l, `${t.icon} ${esc(t.label)}`, '', () => { close(true); openLink(t.url); });
+    dlgButton(box, 'Abbrechen', '', () => close(false));
+  });
+});
 $('hfm-meet').addEventListener('click', () => {
   if (!P.meet) return;
   closePanels();
@@ -3047,6 +3080,12 @@ $('hf-mark').addEventListener('click', () => {
     dlgButton(box, 'Abbrechen', '', () => close(false));
   });
 });
+async function fundLive(text, pos) {
+  const res = await sendStatus({ s: 'ort', cat: 'fund', txt: text, pos: { lat: pos.lat, lon: pos.lon }, quiet: true });
+  if (res === 'queued') toast('✅ Fund markiert – wartet auf Netz, wird automatisch an die Einsatzleitung gemeldet', 6000);
+  else if (res === 'saved') toast('✅ Fund markiert – geht mit der nächsten QR-Rückmeldung an die Einsatzleitung', 6000);
+  else toast('✅ Fund markiert und an die Einsatzleitung gemeldet', 5000);
+}
 function hfMarkDialog(pos, where) {
   openDlg((box, close) => {
     dlgHead(box, '📍 Markieren', where);
@@ -3064,6 +3103,9 @@ function hfMarkDialog(pos, where) {
         P.items.push({ kind: 'text', color: hfColor(), lat: pos.lat, lon: pos.lon, text, t: Date.now() });
         changed();
         close(true);
+        // v116: „✅ Fund“ geht zusätzlich sofort live an die Einsatzleitung (wie „📍 Standort melden → 🟢 Person gefunden“).
+        // Löschen der Markierung nimmt die Meldung nicht zurück – das geht über „🗂 Meine Meldungen“.
+        if (label === 'Fund' && Array.isArray(P.hf.log)) return fundLive(text.replace(`${ico} `, ''), pos); // ohne Symbol: PDF-Schrift kann kein Emoji
         toast(`${ico} ${label} markiert`);
       });
     }
@@ -3701,6 +3743,8 @@ const allMsgsRaw = () => mergeStatus((P.live && P.live.msgs) || [], P.qmsgs || [
 // v103: Korrekturen (s: 'kor') eingearbeitet; allMsgsK mit zurückgezogenen Fund/Hilfe (gone, nur Verlauf), allMsgs ohne sie
 const allMsgsK = () => withoutDeleted(applyKor(allMsgsRaw()), P.msgDel); // gelöschte (P.msgDel) bleiben weg
 const allMsgs = () => allMsgsK().filter((m) => !m.gone);
+// v116: Meldungen für GPX, PDF und Abschlussbericht – EL alle, HF-Gerät die eigenen (ohne zurückgezogene/gelöschte)
+const exportMsgs = () => (db.mode === 'hf' ? hfLog() : allMsgs());
 
 // ---- Status-Plakette an jedem Gebiet mit gesendetem Auftrag (Einsatzleitung) ----
 // Mitte: beim Senden gemerkt (ctr), bei älteren Aufträgen aus den Feldern des Teams bzw. dem Raster
@@ -4091,6 +4135,8 @@ async function hfMyList() {
 }
 // Standort im Moment der Meldung: bis 10 s auf ≤ 30 m warten, sonst der beste Wert; ohne GPS null
 function getFix(maxWait = 10000) {
+  // läuft die Standortanzeige schon (z. B. seit dem Auftrag, v116) und der letzte Wert ist frisch und genau, gilt er sofort
+  if (watchId !== null && lastFix && Date.now() - lastFix.t < 30000 && lastFix.acc <= 30) return Promise.resolve({ lat: lastFix.lat, lon: lastFix.lon, acc: lastFix.acc });
   return new Promise((res) => {
     let best = null;
     let done = false;
@@ -4129,6 +4175,7 @@ async function sendStatus(o) {
     const saved = saveNow();
     renderStatusBtn();
     redraw();
+    if (o.quiet) return 'saved';
     return toast(saved ? `${msgLabel(m)} gespeichert – geht mit der nächsten QR-Rückmeldung an die Einsatzleitung` : `⚠️ ${msgLabel(m)} NICHT gespeichert – Speicher voll`, 6000);
   }
   h.outbox.push(m);
@@ -4137,9 +4184,11 @@ async function sendStatus(o) {
   saveNow();
   renderStatusBtn();
   redraw();
-  toast(`${msgLabel(m)} – wird gesendet${pos || NO_POS.includes(m.s) ? '' : ' (ohne Standort)'} …`, 4000);
+  if (!o.quiet) toast(`${msgLabel(m)} – wird gesendet${pos || NO_POS.includes(m.s) ? '' : ' (ohne Standort)'} …`, 4000);
   await flushStatus();
-  toast(h.outbox.some((x) => x.id === m.id) ? `⏳ ${msgLabel(m)}: wartet auf Netz – wird automatisch nachgesendet` : `✓ ${msgLabel(m)} gesendet ${hhmm(Date.now())}`, 5000);
+  const queued = h.outbox.some((x) => x.id === m.id);
+  if (o.quiet) return queued ? 'queued' : 'sent'; // der Aufrufer zeigt seinen eigenen Hinweis
+  toast(queued ? `⏳ ${msgLabel(m)}: wartet auf Netz – wird automatisch nachgesendet` : `✓ ${msgLabel(m)} gesendet ${hhmm(Date.now())}`, 5000);
 }
 // Warteschlange aller Aufträge senden (sofort, bei „online“, alle 60 s, beim Start)
 async function flushStatus() {
@@ -4993,6 +5042,8 @@ async function takeAssignment(a) {
   saveNow();
   applyMode();
   toast(known ? 'Auftrag ist schon da' : `📲 Auftrag übernommen: ${p.hf.team}`, 5000);
+  // v116: Standortanzeige startet mit dem Auftrag (falls aus); Ablehnung bleibt ohne Nachfrage
+  if (!known && watchId === null) startGps(false, true);
   // Übernahme-Quittung an die Einsatzleitung (ohne GPS-Warten); ohne Status-Server geht sie mit der QR-Rückmeldung mit
   if (!known) sendStatus({ s: 'ok', pos: null });
 }
@@ -5846,6 +5897,7 @@ let watchId = null;
 let gpsMarker = null;
 let gpsCircle = null;
 let lastPos = null;
+let lastFix = null; // letzter Wert der Standortanzeige mit Genauigkeit und Zeit: { lat, lon, acc, t }
 const FOLLOW_PAUSE = 15000; // ms ohne Mitführen, nachdem die Karte von Hand verschoben wurde
 
 function updateStatus() {
@@ -5868,6 +5920,7 @@ function stopGps() {
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
   watchId = null;
   lastPos = null;
+  lastFix = null;
   if (gpsMarker) { map.removeLayer(gpsMarker); map.removeLayer(gpsCircle); gpsMarker = null; }
   $('btn-gps').classList.remove('on');
   updateStatus();
@@ -5884,14 +5937,16 @@ $('btn-gps').addEventListener('click', () => {
   }
   startGps(true);
 });
-function startGps(jump) {
-  if (!navigator.geolocation) return toast('Standort wird nicht unterstützt');
+// quiet: automatischer Start (z. B. beim Auftrag) – eine Ablehnung der Berechtigung schaltet still wieder aus, ohne Meldung
+function startGps(jump, quiet = false) {
+  if (!navigator.geolocation) return quiet ? undefined : toast('Standort wird nicht unterstützt');
   if (watchId !== null) return;
   gpsJump = jump;
   $('btn-gps').classList.add('on');
   watchId = navigator.geolocation.watchPosition((pos) => {
     const ll = [pos.coords.latitude, pos.coords.longitude];
     lastPos = ll;
+    lastFix = { lat: ll[0], lon: ll[1], acc: pos.coords.accuracy, t: Date.now() };
     if (!gpsMarker) {
       gpsCircle = L.circle(ll, { radius: pos.coords.accuracy, weight: 1, color: '#1e88e5', fillOpacity: 0.1 }).addTo(map);
       gpsMarker = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="gps-dot"></div>', iconSize: [22, 22] }) }).addTo(map);
@@ -5905,6 +5960,7 @@ function startGps(jump) {
     else if (gpsFollow() && Date.now() - userMovedAt > FOLLOW_PAUSE) map.panTo(ll, { animate: true, duration: 0.5 });
     updateStatus();
   }, (err) => {
+    if (quiet && err.code === 1) { stopGps(); return; } // abgelehnt: nicht weiter nachfragen
     toast('Standort nicht verfügbar: ' + (err.message || 'kein GPS-Empfang'));
   }, { enableHighAccuracy: true, maximumAge: 5000 });
 }
@@ -6989,6 +7045,7 @@ function pdfOpts() {
     view: $('pdf-view').checked,
     noGrid: $('pdf-nogrid').checked,
     areaLabels: 'edge',
+    msgs: msgWaypoints(exportMsgs()), // v116: Meldungen mit Ort auf der Karte
     title: P.title.trim() || 'Suchgebiet',
   };
 }
@@ -7159,6 +7216,7 @@ function gpxMarkOpts() {
     drawings: $('gpx-drawings').checked,
     teams: $('gpx-teams').checked,
     points: $('gpx-points').checked,
+    msgs: $('gpx-points').checked ? msgWaypoints(exportMsgs()) : [], // v116: Meldungen mit Ort als Wegpunkte
     gridIds: exportGrids().map((g) => g.id),
   };
 }
@@ -7847,7 +7905,17 @@ $('ms-close').addEventListener('click', async () => {
   const t = M().times;
   const now = new Date();
   const hm = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-  const ok = await openDlg((box, close) => {
+  // v116: offene Aufträge, unquittierte Funde/Hilfe und fehlende Rückgaben zuerst zeigen
+  const open = openPoints(P, allMsgs());
+  const ok = open.count ? await openDlg((box, close) => {
+    dlgHead(box, '⚠️ Noch offen', `„${P.title || 'Suchgebiet'}“ hat noch offene Punkte. Trotzdem abschließen?`);
+    const line = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; box.appendChild(d); };
+    for (const q of open.unacked) line('st-urgent close-open', `${q.team}: ${q.label} ${hhmm(q.t)} – noch nicht als gesehen bestätigt`);
+    for (const q of open.open) line('close-open', `📋 ${q.team}: Auftrag offen${q.what ? ` (${q.what})` : ''}${q.returned ? '' : ' – Rückgabe fehlt'}`);
+    for (const q of open.noReturn) line('close-open', `📲 ${q.team}: keine Rückgabe eingelesen`);
+    dlgButton(box, 'Trotzdem abschließen', 'close-anyway', () => close(true));
+    dlgButton(box, 'Zurück', '', () => close(false));
+  }) : await openDlg((box, close) => {
     dlgHead(box, '✅ Einsatz abschließen', t.end
       ? `„${P.title || 'Suchgebiet'}“ abschließen? Einsatzende bleibt ${t.end}.`
       : `„${P.title || 'Suchgebiet'}“ abschließen? Als Einsatzende wird ${hm} eingetragen.`);
@@ -8061,7 +8129,7 @@ window.addEventListener('resize', () => { if (!$('notepad').hidden) { applyPip()
 // Karte nur, wenn angekreuzt: ohne Raster, Flächen beschriftet, Liste am Rand
 async function reportPdf(sec, progress) {
   const withMap = !!sec.map;
-  const parts = { ...sec, legend: withMap };
+  const parts = { ...sec, legend: withMap, msgRows: msgRows(exportMsgs(), null, (la, lo) => formatMgrs(la, lo)) };
   const hasPad = parts.pad !== false && M().pages.some((pg) => pg.strokes.length);
   const hasPhotos = parts.photos !== false && M().photos.length;
   if (!hasReportText(parts) && !hasPad && !hasPhotos && !withMap) return null;
@@ -8483,8 +8551,10 @@ function reportPage() {
   return [open ? `Fenster ${open.id}` : 'Karte', `Werkzeug ${tool}`, !$('dlg').hidden ? 'Dialog offen' : ''].filter(Boolean).join(', ');
 }
 function sendReport(r) {
-  try { return bridge.reportError(JSON.stringify(r)); } catch { return 'none'; }
+  try { return bridge.reportError(JSON.stringify({ ...r, url: reportUrl() })); } catch { return 'none'; }
 }
+// Status-Server, über den der Bericht läuft (eingestellte Adresse, sonst der eingebaute); die App nimmt nur script.google.com an
+function reportUrl() { return validReportUrl(db.statusUrl) ? db.statusUrl : STATUS_URL; }
 function autoReport(error, stack) {
   if (!canReport) return;
   const r = buildReport({ kind: 'Auto-Fehler', error, stack, version: APP_VERSION, mode: db.mode, page: reportPage(), log: repLog.text() });
@@ -8681,17 +8751,24 @@ function licLoad() {
   lic = s || newLicence(uid() + uid(), now);
   if (!s) licSave();
 }
-const licNow = () => licenceState({ now: Date.now(), lastOk: lic.lastOk, firstStart: lic.firstStart, blocked: lic.blocked, inactive: lic.inactive });
+// Läuft ein Einsatz (EL: offen, HF: Auftrag da), sperrt die App nie – nur ein Hinweis (siehe 'deferred').
+// Solange noch kein Modus gewählt ist, gibt es keinen Einsatz.
+const licBusy = () => (db.mode === 'el' || db.mode === 'hf') && updEinsatzOffen();
+const licNow = () => licenceState({ now: Date.now(), lastOk: lic.lastOk, firstStart: lic.firstStart, blocked: lic.blocked, inactive: lic.inactive, busy: licBusy(), until: lic.until });
 function licShow() {
   const st = licNow();
   const box = $('lic-lock');
-  if (st === 'ok') { box.hidden = true; return false; }
+  const hint = $('lic-hint');
+  hint.hidden = st !== 'deferred';
+  if (st === 'deferred') hint.textContent = DEFERRED_TEXT;
+  if (st === 'ok' || st === 'deferred') { box.hidden = true; return false; }
   const kontakt = lic.kontakt || LIC_CONTACT;
   $('lic-title').textContent = lockTitle(st);
   $('lic-text').textContent = lockText(st);
   $('lic-mail').textContent = kontakt;
   $('lic-mail').href = mailtoHref(kontakt, lic.id);
   $('lic-id').textContent = lic.id;
+  $('lic-code-row').hidden = true;
   box.hidden = false;
   return true;
 }
@@ -8710,7 +8787,8 @@ async function licCheck() {
 async function licBackground() {
   if (!navigator.onLine) return;
   await licCheck();
-  if (!$('lic-lock').hidden) licShow();
+  // ein offener Sperrbildschirm schließt bei „ok“; ein Hinweis (Einsatz lief) wird zur Sperre, sobald kein Einsatz mehr offen ist
+  if (!$('lic-lock').hidden || !$('lic-hint').hidden) licShow();
 }
 licLoad();
 licShow();
@@ -8729,6 +8807,30 @@ $('lic-retry').addEventListener('click', async () => {
     $('lic-msg').hidden = false;
   }
 });
+// Notfallcode: richtiger Code entsperrt 24 Stunden, auch ohne Netz (Hash kommt bei jeder Prüfung vom Server)
+$('lic-emergency').addEventListener('click', () => {
+  const msg = $('lic-msg');
+  if (!lic.notfall) {
+    msg.textContent = `Kein Notfallcode hinterlegt – Kontakt: ${lic.kontakt || LIC_CONTACT}`;
+    msg.hidden = false;
+    return;
+  }
+  $('lic-code-row').hidden = false;
+  msg.hidden = true;
+  $('lic-code').focus();
+});
+async function licEmergencyOk() {
+  const next = await applyEmergencyCode(lic, $('lic-code').value, Date.now());
+  if (!next) { $('lic-msg').textContent = 'Falscher Code'; $('lic-msg').hidden = false; return; }
+  lic = next;
+  licSave();
+  $('lic-code').value = '';
+  $('lic-msg').hidden = true;
+  licShow();
+  toast('🔑 Notfallcode angenommen – 24 Stunden entsperrt');
+}
+$('lic-code-ok').addEventListener('click', licEmergencyOk);
+$('lic-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') licEmergencyOk(); });
 setTimeout(licBackground, 500);
 setInterval(licBackground, LIC_CHECK_MS);
 window.addEventListener('online', () => { if (!$('lic-lock').hidden) licBackground(); });

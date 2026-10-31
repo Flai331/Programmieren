@@ -65,7 +65,7 @@
   </div>
 
   <!-- Hundeführer: Auftrag oben, große Knöpfe unten -->
-  <div id="hfinfo" class="hfinfo" hidden><b id="hfi-title"></b><span id="hfi-text"></span></div>
+  <div id="hfinfo" class="hfinfo" hidden><b id="hfi-title"></b><span id="hfi-text"></span><button id="hfi-area" type="button" title="Mein Gebiet" aria-label="Mein Gebiet">🎯</button></div>
   <div id="hfbar" class="hfbar" hidden>
     <button id="hf-rec"><span>⏺</span><b>Weg</b></button>
     <button id="hf-mark"><span>📍</span><b>Markieren</b></button>
@@ -345,7 +345,7 @@
     <p class="small">Nur auf Geräten der Einsatzleitung nötig. Mit Adresse tragen neue Aufträge die Verbindung mit: Hundeführer melden dann bei Internet ihren Status und wichtige Standorte. Einrichtung: Ordner „apps-script“, ANLEITUNG.md. Leer lassen = der eingebaute Standard-Server wird benutzt. Ein Abschalten gibt es nicht; die QR-Rückmeldung funktioniert immer zusätzlich.</p>
     </div>
     <h2 class="sub">App-Modus</h2>
-    <p class="small">Einsatzleitung: alles. Hundeführer: stark vereinfacht (große Knöpfe, nur der eigene Auftrag). Zurück zur Einsatzleitung nur mit der PIN der Einsatzleitung.</p>
+    <p class="small">Einsatzleitung: alles. Hundeführer: stark vereinfacht (große Knöpfe, nur der eigene Auftrag). Zurück zur Einsatzleitung nur mit der PIN der Einsatzleitung. Die PIN schützt vor versehentlichem Wechsel, nicht die Daten.</p>
     <div class="row">
       <button id="mode-hf">🐕 Hundeführer-Modus</button>
     </div>
@@ -466,6 +466,8 @@
     <div class="list hfm-list">
       <button id="hfm-scan">📷 Auftrag scannen (QR-Code)</button>
       <button id="hfm-rp">🚑 Nächster Rettungspunkt</button>
+      <button id="hfm-area">🎯 Mein Gebiet</button>
+      <button id="hfm-nav">🧭 Navigation</button>
       <button id="hfm-meet">🎯 Zum B-Ort</button>
       <button id="hfm-contacts" hidden>📞 Kontakte</button>
       <button id="hfm-notes">📝 Notizen</button>
@@ -648,7 +650,7 @@
     <label class="check"><input type="checkbox" id="gpx-tracks" checked> Umrisse (als Tracks)</label>
     <label class="check"><input type="checkbox" id="gpx-drawings" checked> Stift-Markierungen (als Tracks)</label>
     <label class="check"><input type="checkbox" id="gpx-teams" checked> Team-Bereiche und Status (Umrisse)</label>
-    <label class="check"><input type="checkbox" id="gpx-points" checked> B-Ort und Textpunkte als Wegpunkte</label>
+    <label class="check"><input type="checkbox" id="gpx-points" checked> B-Ort, Textpunkte und Meldungen mit Ort als Wegpunkte</label>
     <div class="row">
       <button id="gpx-share" class="primary">📤 Teilen</button>
       <button id="gpx-save">💾 Speichern</button>
@@ -824,9 +826,13 @@
       <p class="small">Geräte-ID</p>
       <p><code id="lic-id"></code></p>
       <div class="lic-row"><button id="lic-copy" type="button">📋 ID kopieren</button><button id="lic-retry" type="button" class="primary">🔄 Erneut prüfen</button></div>
+      <div class="lic-row"><button id="lic-emergency" type="button">🔑 Notfallcode eingeben</button></div>
+      <div class="lic-row" id="lic-code-row" hidden><input id="lic-code" type="password" autocomplete="off" aria-label="Notfallcode"><button id="lic-code-ok" type="button" class="primary">OK</button></div>
       <p id="lic-msg" class="small" hidden></p>
     </div>
   </div>
+  <!-- v116: im laufenden Einsatz nur ein Hinweis statt der Sperre -->
+  <div id="lic-hint" role="status" hidden></div>
 
   <script src="lib/leaflet.js"></script>
   <script src="lib/jspdf.umd.min.js"></script>

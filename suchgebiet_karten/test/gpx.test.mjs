@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cellOutlines, buildGpx, garminColor, trackLength, labelTracks, polygonArea, formatArea, trackDesc, parseGpx, mergeGpx, dedupeImport } from '../web/gpx.js';
+import { cellOutlines, buildGpx, garminColor, trackLength, labelTracks, polygonArea, formatArea, trackDesc, parseGpx, mergeGpx, dedupeImport, msgWaypoints, msgRows } from '../web/gpx.js';
 import { CAP, FONT_CHARS, textPath } from '../web/font.js';
 import { makeZip, crc32 } from '../web/zip.js';
 import { planCustomMap, TILE, MAX_TILES } from '../web/kmz.js';
 import { makeGrid } from '../web/grid.js';
 import { newProject } from '../web/store.js';
+import { buildMsg, buildKor, applyKor } from '../web/status.js';
 
 test('Umriss eines L-förmigen Team-Bereichs', () => {
   // A1, B1, A2 -> ein geschlossener Umriss mit 6 Ecken
@@ -324,4 +325,59 @@ test('dedupeImport: gleicher Name + gleiche Punkte werden übersprungen', () => 
   assert.equal(r2.tracks.length + r2.waypoints.length, 0);
   // Track ohne Namen: Dateiname gilt
   assert.equal(dedupeImport([{ kind: 'track', name: 'datei', pts }], { tracks: [{ name: '', pts }], waypoints: [] }, 'datei').dup, 1);
+});
+
+// ---------- v116: Meldungen mit Ort ----------
+const MT = new Date(2026, 9, 31, 0, 21).getTime();
+const mk = (id, extra) => ({ v: 1, id, a: 'A1', tm: 'Bravo', t: MT, s: 'ort', lat: 52.5, lon: 9.7, ...extra });
+
+test('msgWaypoints: Name, Zeit, Text und Garmin-Symbol je Art', () => {
+  const w = msgWaypoints([
+    mk('1', { cat: 'fund', txt: 'am Bach' }),
+    mk('2', { cat: 'anzeige', t: MT + 60e3 }),
+    mk('3', { cat: 'hilfe', t: MT + 120e3 }),
+    mk('4', { cat: 'hinweis', t: MT + 180e3 }),
+    mk('5', { cat: 'gefahr', t: MT + 240e3 }),
+    mk('6', { s: 'da', t: MT + 300e3 }),
+  ]);
+  assert.deepEqual(w.map((x) => x.name), ['Fund Bravo 00:21', 'Anzeige Bravo 00:22', 'Hilfe Bravo 00:23', 'Hinweis Bravo 00:24', 'Gefahr Bravo 00:25', 'Parkplatz Bravo 00:26']);
+  assert.deepEqual(w.map((x) => x.sym), ['Flag, Red', 'Flag, Blue', 'Medical Facility', 'Flag, Green', 'Flag, Green', 'Flag, Green']);
+  assert.equal(w[0].desc, 'Person gefunden – am Bach');
+  assert.equal(w[0].time, new Date(MT).toISOString());
+  assert.deepEqual(w.map((x) => x.urgent), [true, false, true, false, false, false]);
+});
+
+test('msgWaypoints: ohne Ort, zurückgezogen, Korrekturen und gelöscht fehlen; Teamname aus teamsById', () => {
+  const fund = mk('1', { cat: 'fund' });
+  const kor = buildKor({ a: 'A1', tm: 'Bravo', ref: '1', del: true, t: MT + 1000 });
+  const list = applyKor([fund, mk('2', { s: 'start', lat: undefined, lon: undefined }), mk('3', { cat: 'anzeige' }), kor]);
+  // Fund zurückgezogen: bleibt als gone im Verlauf, kommt aber nicht in den Export
+  assert.ok(list.find((m) => m.id === '1').gone);
+  assert.deepEqual(msgWaypoints(list).map((x) => x.kind), ['anzeige']);
+  assert.deepEqual(msgWaypoints([kor]), []);
+  assert.deepEqual(msgWaypoints(null), []);
+  assert.equal(msgWaypoints([mk('9', { cat: 'fund' })], { A1: 'Team Nord' })[0].name, 'Fund Team Nord 00:21');
+});
+
+test('buildGpx: Meldungen als <wpt> mit time, desc und sym (nur mit points)', () => {
+  const p = newProject('Test');
+  p.area = { north: 52.51, south: 52.49, west: 9.69, east: 9.71 };
+  const msgs = msgWaypoints([mk('1', { cat: 'fund', txt: 'a & b' })]);
+  const gpx = buildGpx(p, null, { points: true, msgs }, 'Markierungen');
+  assert.match(gpx, /<wpt lat="52\.5000000" lon="9\.7000000">\n  <time>2026-10-3\dT\d\d:21:00\.000Z<\/time>\n  <name>Fund Bravo 00:21<\/name>/);
+  assert.match(gpx, /<desc>Person gefunden – a &amp; b<\/desc>\n  <sym>Flag, Red<\/sym>/);
+  assert.ok(!/<wpt/.test(buildGpx(p, null, { points: false, msgs }, 'x')));
+  assert.equal(parseGpx(gpx).waypoints[0].name, 'Fund Bravo 00:21');
+});
+
+test('msgRows: Zeit, Team, Art, Text, Koordinate für den Abschlussbericht', () => {
+  const rows = msgRows([mk('1', { cat: 'fund', txt: 'Bach' }), mk('2', { s: 'start', lat: undefined, lon: undefined })], null, (la, lo) => `UTM ${la}/${lo}`);
+  assert.deepEqual(rows, [{ time: '00:21', team: 'Bravo', art: 'Person gefunden', txt: 'Bach', coord: 'UTM 52.5/9.7' }]);
+  assert.equal(msgRows([mk('1', { cat: 'fund' })])[0].coord, '52.50000, 9.70000');
+});
+
+test('buildMsg: Fund aus „Markieren“ trägt Ort und Text', () => {
+  const m = buildMsg({ a: 'A1', tm: 'Bravo', s: 'ort', cat: 'fund', txt: '✅ Fund 00:21', pos: { lat: 52.5, lon: 9.7 } });
+  assert.deepEqual([m.s, m.cat, m.lat, m.lon, m.txt], ['ort', 'fund', 52.5, 9.7, '✅ Fund 00:21']);
+  assert.equal(msgWaypoints([m]).length, 1);
 });

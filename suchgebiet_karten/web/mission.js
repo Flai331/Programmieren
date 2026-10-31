@@ -77,6 +77,7 @@ export const REPORT_SECTIONS = [
   ['forces', 'Kräfte'],
   ['summary', 'Zusammenfassung'],
   ['notes', 'Notizen'],
+  ['msgs', 'Meldungen mit Ort'],
   ['pad', 'Notizblock'],
   ['photos', 'Fotos'],
   ['map', 'Karte'],
@@ -91,9 +92,9 @@ export const EXTRA_PARTS = [
   ['gpx', 'GPX für BaseCamp'],
 ];
 export const MAIL_PARTS = [...REPORT_SECTIONS, ...MAP_PARTS, ...EXTRA_PARTS];
-const TEXT_KEYS = ['times', 'person', 'forces', 'summary', 'notes'];
+const TEXT_KEYS = ['times', 'person', 'forces', 'summary', 'notes', 'msgs'];
 export function newMailTo() {
-  return { to: '', times: true, person: true, forces: true, summary: true, notes: true, pad: true, photos: true, map: false, mapTeams: true, mapStatus: true, juh: true, gpx: false };
+  return { to: '', times: true, person: true, forces: true, summary: true, notes: true, msgs: true, pad: true, photos: true, map: false, mapTeams: true, mapStatus: true, juh: true, gpx: false };
 }
 // sec: Häkchen einer Zeile (ohne Angabe: alles)
 const want = (sec, k) => !sec || sec[k] !== false;
@@ -309,6 +310,14 @@ export async function addReportPages(doc, project, grid, W, H, margin, parts = {
 
     if (want(parts, 'summary') && m.summary.trim()) { heading('Zusammenfassung'); text(m.summary.trim()); }
     if (want(parts, 'notes') && (project.notes || '').trim()) { heading('Notizen'); text(project.notes.trim()); }
+
+    // v116: Meldungen mit Ort (parts.msgRows aus der App: Zeit, Team, Art, Text, Koordinate)
+    if (want(parts, 'msgs') && parts.msgRows && parts.msgRows.length) {
+      heading('Meldungen mit Ort');
+      // Standardschrift des PDFs kann kein Emoji: nur Zeichen aus Windows-1252 (Latin-1, Gedankenstrich, Anführungszeichen, …)
+      const latin = (t) => String(t).replace(/[^\u0020-\u007E\u00A0-\u00FF\u2013\u2014\u2018-\u201E\u2026\u20AC]/g, '').replace(/\s+/g, ' ').trim();
+      for (const r of parts.msgRows) text(latin(`${r.time}  ${r.team}: ${r.art}${r.txt ? ` – ${r.txt}` : ''}  (${r.coord})`), 9.5);
+    }
 
     const lg = want(parts, 'legend') ? lineLegend(project) : [];
     if (lg.length) {

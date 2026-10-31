@@ -6,6 +6,7 @@ import { cellLabel, gridBounds } from './grid.js';
 import { markLabel, mapFor, cellsText } from './store.js';
 import { CAP, textPath } from './font.js';
 import { bearing, distance } from './rescue.js';
+import { msgLabel, msgIcon, isUrgent } from './status.js';
 
 const GARMIN_COLORS = {
   Black: [0, 0, 0], DarkRed: [139, 0, 0], DarkGreen: [0, 100, 0], DarkYellow: [139, 139, 0],
@@ -275,12 +276,46 @@ function trk(name, color, segments, desc = '') {
     + `${segs}\n </trk>\n`;
 }
 
-function wpt(lat, lon, name, sym, desc = '') {
-  return ` <wpt lat="${f6(lat)}" lon="${f6(lon)}">\n  <name>${esc(name)}</name>\n`
+function wpt(lat, lon, name, sym, desc = '', time = '') {
+  return ` <wpt lat="${f6(lat)}" lon="${f6(lon)}">\n${time ? `  <time>${time}</time>\n` : ''}  <name>${esc(name)}</name>\n`
     + `${desc ? `  <desc>${esc(desc)}</desc>\n` : ''}  <sym>${sym}</sym>\n </wpt>\n`;
 }
 
+// ---------- v116: Meldungen mit Ort (Fund, Anzeige, Hilfe, Hinweis, Gefahr, Parkplatz …) ----------
+const MSG_NAME = { fund: 'Fund', anzeige: 'Anzeige', hilfe: 'Hilfe', hinweis: 'Hinweis', gefahr: 'Gefahr', sonst: 'Meldung', da: 'Parkplatz' };
+// Garmin-Symbol je Art: Fund rote Flagge, Anzeige blaue Flagge, Hilfe Sanitätsstation, sonst grüne Flagge
+const MSG_SYM = { fund: 'Flag, Red', anzeige: 'Flag, Blue', hilfe: 'Medical Facility' };
+const hhmmOf = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+// Meldungen mit Ort -> Wegpunkte [{ lat, lon, name, time, t, desc, sym, kind, team, urgent, icon }] (nach Zeit sortiert).
+// Zurückgezogene (gone), gelöschte und Korrektur-Meldungen (kor) sowie Meldungen ohne Ort fehlen.
+// teamsById: optional { Auftrags-ID: Teamname }, sonst der Name in der Meldung (tm)
+export function msgWaypoints(msgs, teamsById = {}) {
+  const out = [];
+  for (const m of msgs || []) {
+    if (!m || m.s === 'kor' || m.gone || !Number.isFinite(m.lat) || !Number.isFinite(m.lon) || !Number.isFinite(m.t)) continue;
+    const kind = m.s === 'ort' ? m.cat : m.s;
+    const team = (teamsById && teamsById[m.a]) || m.tm || 'Team';
+    const label = msgLabel(m).replace(/^\S+\s/, ''); // ohne Symbol: „Person gefunden“
+    out.push({
+      lat: m.lat, lon: m.lon, t: m.t, kind, team, label, txt: m.txt || '',
+      name: `${MSG_NAME[kind] || 'Meldung'} ${team} ${hhmmOf(m.t)}`,
+      time: new Date(m.t).toISOString(),
+      desc: [label, m.txt].filter(Boolean).join(' – '),
+      sym: MSG_SYM[kind] || 'Flag, Green',
+      urgent: isUrgent(m),
+      icon: msgIcon(m),
+    });
+  }
+  return out.sort((a, b) => a.t - b.t);
+}
+
+// Zeilen für den Abschlussbericht: [{ time: 'HH:MM', team, art, txt, coord }]; coord = fmt(lat, lon), z. B. UTMREF
+export const msgRows = (msgs, teamsById, fmt) => msgWaypoints(msgs, teamsById).map((w) => ({
+  time: hhmmOf(w.t), team: w.team, art: w.label, txt: w.txt, coord: fmt ? fmt(w.lat, w.lon) : `${w.lat.toFixed(5)}, ${w.lon.toFixed(5)}`,
+}));
+
 // opts: { tracks, drawings, teams, grid: 'outline'|'all'|'none', cells: 'lines'|'all'|'none', points,
+//         msgs: Meldungen mit Ort (msgWaypoints, zusammen mit points),
 //         prefix: vor den Feldern in Team-Tracknamen, z. B. „Nord “ bei mehreren Rastergebieten }
 export function buildGpx(project, grid, opts, part = '') {
   const title = project.title || 'Suchgebiet';
@@ -298,6 +333,8 @@ export function buildGpx(project, grid, opts, part = '') {
     for (const it of project.items) {
       if (it.kind === 'text') wpts += wpt(it.lat, it.lon, it.text, 'Pin, Red');
     }
+    // v116: Meldungen mit Ort (opts.msgs aus msgWaypoints), je ein Wegpunkt mit Zeit
+    for (const w of opts.msgs || []) wpts += wpt(w.lat, w.lon, w.name, w.sym, w.desc, w.time);
   }
   // opts.cells: 'lines' = Feldnamen als Linienschrift (ein Track, siehe unten),
   // 'all' (oder true) = ein Wegpunkt je Feld, sonst keine
