@@ -825,6 +825,14 @@
   <div id="toast" class="toast" hidden></div>
 
   <!-- v113: Sperrbildschirm der Freigabe (über allem) -->
+  <div id="tab-lock" role="alertdialog" aria-modal="true" aria-labelledby="tab-lock-title" hidden>
+    <div class="lic-box">
+      <h1 id="tab-lock-title">Schon in einem anderen Fenster offen</h1>
+      <p>Die App ist schon in einem anderen Fenster offen. Bitte dort weiterarbeiten.</p>
+      <div class="lic-row"><button id="tab-lock-go" type="button" class="primary">Hier weiterarbeiten</button></div>
+      <p id="tab-lock-msg" class="small" hidden></p>
+    </div>
+  </div>
   <div id="lic-lock" role="alertdialog" aria-modal="true" aria-labelledby="lic-title" hidden>
     <div class="lic-box">
       <h1 id="lic-title"></h1>
