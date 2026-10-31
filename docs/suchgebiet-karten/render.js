@@ -74,9 +74,12 @@ export function drawOverlay(ctx, toPx, state, opt) {
   }
   drawItems(ctx, toPx, state.items || [], s, state.teamNames, state.detail ?? 3, state.noTeamGrey !== false);
   if (state.rescue && state.rescue.length) drawRescue(ctx, toPx, state.rescue, s);
-  if (state.pois && state.pois.length) drawPois(ctx, toPx, state.pois, s);
-  if (state.meet) drawMeet(ctx, toPx, state.meet, s);
-  if (state.msgMarks && state.msgMarks.length) drawMsgMarks(ctx, toPx, state.msgMarks, s);
+  // belegte Flächen: spätere Beschriftungen (B-Ort, Lage-Orte, Meldungen) weichen früheren aus und bleiben im Bild
+  const taken = [];
+  taken.bounds = opt.width && opt.height ? { w: opt.width, h: opt.height } : null;
+  if (state.meet) drawMeet(ctx, toPx, state.meet, s, taken);
+  if (state.pois && state.pois.length) drawPois(ctx, toPx, state.pois, s, taken);
+  if (state.msgMarks && state.msgMarks.length) drawMsgMarks(ctx, toPx, state.msgMarks, s, taken);
   for (const g of layers) {
     if (!opt.noGrid && !opt.noEdge) drawEdgeLabels(ctx, toPx, g.grid, opt, s);
     if (layers.length > 1 && g.name && !(opt.noGrid && opt.noEdge)) drawGridName(ctx, toPx, g.grid, g.name, s);
@@ -114,15 +117,35 @@ function drawRescue(ctx, toPx, pts, s) {
   ctx.textBaseline = 'alphabetic';
 }
 
+// Rechteck { x, y, w, h }; überlappen sich zwei?
+const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+// Platz für eine Beschriftung (Breite w, Höhe h) neben einer Plakette (Mitte x, y, Radius r): rechts, links, oben, unten,
+// schräg – die erste Stelle, die nichts Belegtes trifft; sonst rechts. Liefert { x, y, align, box } (y = Textmitte)
+// bounds { w, h } (Bildgröße): Stellen, die über den Rand ragen, gelten als belegt
+export function pickLabelPos(x, y, r, w, h, taken, gap = 4, bounds = null) {
+  const d = r + gap;
+  const cands = [
+    { x: x + d, y, align: 'left' }, { x: x - d, y, align: 'right' },
+    { x, y: y - d - h / 2, align: 'center' }, { x, y: y + d + h / 2, align: 'center' },
+    { x: x + d, y: y - d, align: 'left' }, { x: x + d, y: y + d, align: 'left' },
+    { x: x - d, y: y - d, align: 'right' }, { x: x - d, y: y + d, align: 'right' },
+  ].map((c) => ({ ...c, box: { x: c.align === 'left' ? c.x : c.align === 'right' ? c.x - w : c.x - w / 2, y: c.y - h / 2, w, h } }));
+  const inside = (b) => !bounds || (b.x >= 0 && b.y >= 0 && b.x + b.w <= bounds.w && b.y + b.h <= bounds.h);
+  return cands.find((c) => inside(c.box) && !taken.some((b) => hits(c.box, b))) || cands.find((c) => inside(c.box)) || cands[0];
+}
+const circleBox = (x, y, r) => ({ x: x - r, y: y - r, w: 2 * r, h: 2 * r });
+
 // v116: Meldungen mit Ort (Fund, Anzeige, Hilfe …) wie auf der Live-Karte: runde Plakette mit Symbol und kurzer Beschriftung
 // („Fund Bravo 00:21“); dringende (Fund/Hilfe) rot hinterlegt und größer
-function drawMsgMarks(ctx, toPx, marks, s) {
+function drawMsgMarks(ctx, toPx, marks, s, taken = []) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const sorted = [...marks].sort((a, b) => Number(a.urgent) - Number(b.urgent)); // dringende zuletzt, also obenauf
+  const rOf = (w) => (w.urgent ? 13 : 10) * s;
+  for (const w of sorted) { const [x, y] = toPx(w.lat, w.lon); taken.push(circleBox(x, y, rOf(w))); } // alle Plaketten zuerst belegen
   for (const w of sorted) {
     const [x, y] = toPx(w.lat, w.lon);
-    const r = (w.urgent ? 13 : 10) * s;
+    const r = rOf(w);
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fillStyle = w.urgent ? '#ffcdd2' : '#fff';
@@ -135,8 +158,10 @@ function drawMsgMarks(ctx, toPx, marks, s) {
     ctx.fillText(w.icon, x, y + 0.5 * s);
     if (marks.length <= 150) {
       ctx.font = `bold ${10 * s}px sans-serif`;
-      ctx.textAlign = 'left';
-      halo(ctx, w.name, x + r + 4 * s, y, w.urgent ? '#b71c1c' : '#263238', s);
+      const pos = pickLabelPos(x, y, r, ctx.measureText(w.name).width + 4 * s, 13 * s, taken, 4 * s, taken.bounds);
+      taken.push(pos.box);
+      ctx.textAlign = pos.align;
+      halo(ctx, w.name, pos.x, pos.y, w.urgent ? '#b71c1c' : '#263238', s);
       ctx.textAlign = 'center';
     }
   }
@@ -748,7 +773,7 @@ export function hitItem(items, toPx, x, y, tol, d = 3) {
 }
 
 // Lage-Orte: farbiger Kreis mit Symbol, Name daneben
-function drawPois(ctx, toPx, pois, s) {
+function drawPois(ctx, toPx, pois, s, taken = []) {
   for (const p of pois) {
     const c = poiCat(p.cat);
     const [x, y] = toPx(p.lat, p.lon);
@@ -766,14 +791,18 @@ function drawPois(ctx, toPx, pois, s) {
     ctx.fillStyle = '#000';
     ctx.fillText(c.icon, x, y + 1 * s);
     ctx.font = `bold ${13 * s}px sans-serif`;
-    ctx.textAlign = 'left';
-    halo(ctx, poiName(p), x + r + 5 * s, y, c.color, s);
+    taken.push(circleBox(x, y, r));
+    const pos = pickLabelPos(x, y, r, ctx.measureText(poiName(p)).width + 4 * s, 18 * s, taken, 5 * s, taken.bounds);
+    taken.push(pos.box);
+    ctx.textAlign = pos.align;
+    halo(ctx, poiName(p), pos.x, pos.y, c.color, s);
   }
 }
 
-function drawMeet(ctx, toPx, m, s) {
+function drawMeet(ctx, toPx, m, s, taken = []) {
   const [x, y] = toPx(m.lat, m.lon);
   const r = 11 * s;
+  taken.push(circleBox(x, y, r));
   ctx.fillStyle = '#0d47a1';
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 2.5 * s;
@@ -788,8 +817,10 @@ function drawMeet(ctx, toPx, m, s) {
   ctx.fillText('B', x, y + 0.5 * s);
   if (m.text) {
     ctx.font = `bold ${14 * s}px sans-serif`;
-    ctx.textAlign = 'left';
-    halo(ctx, m.text, x + r + 5 * s, y, '#0d47a1', s);
+    const pos = pickLabelPos(x, y, r, ctx.measureText(m.text).width + 4 * s, 20 * s, taken, 5 * s, taken.bounds);
+    taken.push(pos.box);
+    ctx.textAlign = pos.align;
+    halo(ctx, m.text, pos.x, pos.y, '#0d47a1', s);
   }
 }
 
