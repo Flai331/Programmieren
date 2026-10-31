@@ -37,7 +37,8 @@ const OLD_LIST = [
 ];
 export function statusLabel(code) {
   const s = find(STATUS_LIST, code) || find([CLOSE_STATUS], code) || find(OLD_LIST, code);
-  return s ? `${s.ico} ${s.label}` : code === 'ort' ? '📍 Standort' : code === 'ok' ? '📲 Auftrag übernommen' : String(code || '');
+  return s ? `${s.ico} ${s.label}` : code === 'ort' ? '📍 Standort' : code === 'ok' ? '📲 Auftrag übernommen'
+    : code === 'q' ? '✓ Gesehen' : code === 'el' ? '✉️ Nachricht der Einsatzleitung' : code === 'qel' ? '👁 gelesen' : String(code || '');
 }
 export function spotLabel(cat) {
   const s = find(SPOT_LIST, cat);
@@ -60,7 +61,7 @@ export const msgLabel = (m) => (m.s === 'ort' ? spotLabel(m.cat)
 export function msgIcon(m) {
   if (m.s === 'fertig') return done(m) ? '✅' : '📊';
   const s = m.s === 'ort' ? find(SPOT_LIST, m.cat) : find(STATUS_LIST, m.s) || find([CLOSE_STATUS], m.s) || find(OLD_LIST, m.s);
-  return s ? s.ico : m.s === 'ok' ? '📲' : '📍';
+  return s ? s.ico : m.s === 'ok' ? '📲' : m.s === 'q' ? '✓' : m.s === 'el' ? '✉️' : m.s === 'qel' ? '👁' : '📍';
 }
 export const isUrgent = (m) => URGENT.includes(m.s) || (m.s === 'ort' && URGENT.includes(m.cat));
 
@@ -161,6 +162,82 @@ export function qrMsgs(log, n = 20) {
 }
 // Gelöschte Meldungen (del: { id: Zeit }) aus der Liste nehmen
 export const withoutDeleted = (list, del) => (del && Object.keys(del).length ? (list || []).filter((m) => !del[m.id]) : list || []);
+// ---------- v117: Rückkanal Einsatzleitung -> Hundeführer ----------
+// Drei neue Arten im selben Raum und Format: 'q' (Quittung „Gesehen“, EL), 'el' (Nachricht der EL an ein Team oder alle),
+// 'qel' (Lesebestätigung des Hundeführers). Absender der EL ist fest a: 'EL'. Sie landen nie in der Meldungsliste der Teams.
+export const EL_A = 'EL';
+export const EL_ALL = '*';
+export const EL_KINDS = ['q', 'el', 'qel'];
+// Quittung: ref = ID der HF-Meldung, to = Auftrag (m.a der Meldung)
+export function buildAck({ ref, to, t, id }) {
+  const m = buildMsg({ a: EL_A, tm: 'Einsatzleitung', s: 'q', t, id });
+  m.ref = ref;
+  m.to = to;
+  return m;
+}
+// Nachricht der EL: to = Auftrags-ID oder '*' (alle), txt ≤ 300 Zeichen, prio 1 = wichtig (Ton und Fenster beim HF)
+export function buildElMsg({ to, txt, prio, t, id }) {
+  const m = buildMsg({ a: EL_A, tm: 'Einsatzleitung', s: 'el', txt: String(txt || '').trim(), t, id });
+  m.to = to || EL_ALL;
+  if (prio) m.prio = 1;
+  return m;
+}
+// Lesebestätigung des HF (a = sein Auftrag): ref = ID der EL-Nachricht
+export function buildReadAck({ a, tm, ref, t, id }) {
+  const m = buildMsg({ a, tm, s: 'qel', t, id });
+  m.ref = ref;
+  return m;
+}
+// Braucht diese Teammeldung eine Quittung? Nicht: Übernahme-Quittung, Korrekturen, Meldungen der EL
+export const needsAck = (m) => !!m && m.a !== EL_A && !EL_KINDS.includes(m.s) && m.s !== 'ok' && m.s !== 'kor';
+// Was ein HF mit Auftrag a sehen soll: Quittungen und Nachrichten der EL an ihn (bzw. an alle); alles andere im Raum nicht
+export const forHf = (msgs, a) => (msgs || []).filter((m) => m && m.a === EL_A && ((m.s === 'q' && m.to === a) || (m.s === 'el' && (m.to === a || m.to === EL_ALL))));
+// IDs der quittierten Meldungen
+export const ackedIds = (msgs) => new Set((msgs || []).filter((m) => m && m.s === 'q' && m.ref).map((m) => m.ref));
+// Aufträge, die die EL-Nachricht elId gelesen haben (aus qel-Meldungen)
+export const readBy = (msgs, elId) => [...new Set((msgs || []).filter((m) => m && m.s === 'qel' && m.ref === elId).map((m) => m.a))];
+// qel-Meldungen in die Lesekarte { elMsgId: { auftragId: Zeit } } einarbeiten (ändert base nicht)
+export function mergeReads(base, qels) {
+  const out = {};
+  for (const [k, v] of Object.entries(base || {})) out[k] = { ...v };
+  for (const m of qels || []) if (m && m.s === 'qel' && m.ref) out[m.ref] = { ...out[m.ref], [m.a]: Math.min(m.t, (out[m.ref] || {})[m.a] || Infinity) };
+  return out;
+}
+// Neu eingetroffene Zeilen aufteilen: team (Meldungen der Teams, ohne neue Arten), el (a === 'EL': q, el), reads (Lesekarte der qel)
+export function splitIncoming(fresh) {
+  const team = [];
+  const el = [];
+  const qel = [];
+  for (const m of fresh || []) {
+    if (!m) continue;
+    if (m.a === EL_A) el.push(m);
+    else if (m.s === 'qel') qel.push(m);
+    else team.push(m);
+  }
+  return { team, el, reads: mergeReads({}, qel) };
+}
+// Empfänger der EL-Nachrichten: je Team der neueste laufende Auftrag mit Status-Server -> [{ a, teamId, label }]
+export function elTargets(sent, marks) {
+  const by = new Map();
+  for (const x of sent || []) {
+    if (!x.live || Number(x.done) > 0) continue;
+    const k = x.teamId || `n:${x.team || ''}`;
+    const prev = by.get(k);
+    if (!prev || (x.at || 0) >= (prev.at || 0)) by.set(k, x);
+  }
+  return [...by.values()].map((x) => {
+    const t = (marks || []).find((q) => q.id === x.teamId);
+    return { a: x.id, teamId: x.teamId || '', label: t ? t.label : x.team || 'Team' };
+  });
+}
+// Lesestand einer EL-Nachricht: Empfänger (Aufträge, bei '*' alle Ziele) in gelesen / offen; reads = { elId: { a: Zeit } }
+export function readSummary(m, reads, targets) {
+  const got = Object.keys((reads || {})[m.id] || {});
+  const rec = m.to === EL_ALL ? targets.map((q) => q.a) : [m.to];
+  const all = [...new Set([...rec, ...got.filter((a) => m.to === EL_ALL || a === m.to)])];
+  return { read: all.filter((a) => got.includes(a)), open: all.filter((a) => !got.includes(a)) };
+}
+
 // Meldung, die an Chip, Plakette und Aufträge-Liste steht: die letzte dringende (Fund/Hilfe, nicht zurückgezogen),
 // sonst die letzte. Eine Routinemeldung danach verdrängt sie nicht, ein späterer Fund/Hilfe ersetzt sie.
 export function headMsg(list) {

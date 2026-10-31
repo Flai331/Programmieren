@@ -65,7 +65,7 @@
   </div>
 
   <!-- Hundeführer: Auftrag oben, große Knöpfe unten -->
-  <div id="hfinfo" class="hfinfo" hidden><b id="hfi-title"></b><span id="hfi-text"></span><button id="hfi-area" type="button" title="Mein Gebiet" aria-label="Mein Gebiet">🎯</button></div>
+  <div id="hfinfo" class="hfinfo" hidden><b id="hfi-title"></b><span id="hfi-text"></span><button id="hfi-area" type="button" title="Mein Gebiet" aria-label="Mein Gebiet">🎯</button><button id="hfi-msg" type="button" title="Nachrichten der Einsatzleitung" aria-label="Nachrichten der Einsatzleitung" hidden>✉️</button></div>
   <div id="hfbar" class="hfbar" hidden>
     <button id="hf-rec"><span>⏺</span><b>Weg</b></button>
     <button id="hf-mark"><span>📍</span><b>Markieren</b></button>
@@ -403,6 +403,12 @@
   <section id="panel-status" class="panel" hidden>
     <h2>📣 Status</h2>
     <div id="st-snz" class="st-snz" hidden></div>
+    <div id="st-send" class="st-send" hidden>
+      <label>✉️ Nachricht an <select id="el-to"></select></label>
+      <textarea id="el-txt" rows="2" maxlength="300" placeholder="Text an den Hundeführer (max. 300 Zeichen)"></textarea>
+      <div class="row"><label class="check"><input type="checkbox" id="el-prio"> Wichtig (Ton beim HF)</label><button type="button" id="el-go" class="primary">Senden</button></div>
+      <p id="el-hint" class="small" hidden></p>
+    </div>
     <label>Team <select id="st-filter"></select></label>
     <div id="st-list" class="st-list"></div>
     <button class="close">Schließen</button>
@@ -470,6 +476,7 @@
       <button id="hfm-nav">🧭 Navigation</button>
       <button id="hfm-meet">🎯 Zum B-Ort</button>
       <button id="hfm-contacts" hidden>📞 Kontakte</button>
+      <button id="hfm-msgs" hidden>✉️ Nachrichten der Einsatzleitung</button>
       <button id="hfm-notes">📝 Notizen</button>
       <button id="hfm-package">📦 Gebiet offline speichern</button>
       <button id="hfm-projects">📁 Frühere Aufträge</button>

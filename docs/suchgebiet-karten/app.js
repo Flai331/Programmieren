@@ -46,6 +46,7 @@ import {
 } from './share.js';
 import {
   STATUS_LIST, CLOSE_STATUS, SPOT_LIST, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, buildKor, applyKor, mergeStatus, withoutDeleted, latestFor, headMsg, flushOutbox, pollMessages, coverageGaps, areaShapes,
+  EL_ALL, EL_KINDS, buildAck, buildElMsg, buildReadAck, needsAck, forHf, ackedIds, mergeReads, splitIncoming, elTargets, readSummary,
 } from './status.js';
 import {
   teamChips, teamOrder, todoFirst, chipText, teamAssignments, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, unreadAge, bannerText, parseSnooze,
@@ -67,7 +68,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v116';
+const APP_VERSION = 'v117';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -2912,6 +2913,7 @@ function renderHfInfo() {
   $('hfm-nav').disabled = !h || !navTargets(P).length;
   $('hfm-contacts').hidden = !P.contacts.length;
   $('hfm-contacts').textContent = `📞 Kontakte (${P.contacts.length})`;
+  renderHfMsgBtn();
 }
 $('hfinfo').addEventListener('click', () => { db.hfInfoMin = !db.hfInfoMin; save(); renderHfInfo(); });
 $('btn-hfmenu').addEventListener('click', () => { renderHfInfo(); openPanel('panel-hfmenu'); });
@@ -3739,7 +3741,7 @@ const teamColorOf = (a) => {
   return t ? t.color : '#455a64';
 };
 // Alle Status-Meldungen der Einsatzleitung: über den Status-Server und aus QR-Rückmeldungen
-const allMsgsRaw = () => mergeStatus((P.live && P.live.msgs) || [], P.qmsgs || []);
+const allMsgsRaw = () => mergeStatus((P.live && P.live.msgs) || [], P.qmsgs || []).filter((m) => !EL_KINDS.includes(m.s)); // v117: Rückkanal-Arten (q, el, qel) sind keine Teammeldungen
 // v103: Korrekturen (s: 'kor') eingearbeitet; allMsgsK mit zurückgezogenen Fund/Hilfe (gone, nur Verlauf), allMsgs ohne sie
 const allMsgsK = () => withoutDeleted(applyKor(allMsgsRaw()), P.msgDel); // gelöschte (P.msgDel) bleiben weg
 const allMsgs = () => allMsgsK().filter((m) => !m.gone);
@@ -4125,10 +4127,11 @@ async function hfMsgDialog(m) {
 // 🗂 Meine Meldungen: alle eigenen, neueste oben
 async function hfMyList() {
   const list = [...hfLog()].reverse();
+  const seen = ackedIds(P.hf.inbox); // v117: von der Einsatzleitung gesehen
   const m = await openDlg((box, close) => {
     dlgHead(box, `🗂 Meine Meldungen (${list.length})`, 'Antippen zum Ändern, Verlegen oder Löschen.');
     if (!list.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = 'Noch nichts gemeldet.'; box.appendChild(p); }
-    for (const x of list) dlgButton(box, `${msgLabel(x)} ${hhmm(x.t)}${x.lat != null ? ' 📍' : ''}${x.txt ? ` – ${esc(x.txt)}` : ''}${x.ed ? ' ✏️' : ''}`, 'my-msg', () => close(x));
+    for (const x of list) dlgButton(box, `${msgLabel(x)} ${hhmm(x.t)}${x.lat != null ? ' 📍' : ''}${x.txt ? ` – ${esc(x.txt)}` : ''}${x.ed ? ' ✏️' : ''}${seen.has(x.id) ? ' ✓ gesehen' : ''}`, 'my-msg', () => close(x));
     dlgButton(box, 'Schließen', 'primary', () => close(null));
   });
   if (m) hfMsgDialog(m);
@@ -4198,6 +4201,11 @@ async function flushStatus() {
     do {
       flushAgain = false;
       for (const p of Object.values(db.projects)) {
+        const l = p.live;
+        if (l && l.outbox && l.outbox.length) { // v117: Quittungen/Nachrichten der Einsatzleitung
+          const r = await flushOutbox([l.url, l.key], l.outbox);
+          if (r.sent.length) { l.outbox = r.left; saveNow(); }
+        }
         const h = p.hf;
         if (!h || !h.ls || !h.outbox.length) continue;
         const r = await flushOutbox(h.ls, h.outbox);
@@ -4210,7 +4218,116 @@ async function flushStatus() {
   } catch { /* nächster Versuch */ } finally { flushBusy = false; }
   renderStatusBtn();
   if (!$('dlg').hidden && $('dlg-box').querySelector('.st-line')) updateStatusLine();
+  if (db.mode === 'el' && P && !$('panel-status').hidden) renderStatusPanel();
 }
+// ---- v117: Hundeführer holt Quittungen und Nachrichten der Einsatzleitung ab ----
+let hfPollBusy = false;
+let elPrioOpen = false;
+const hfElMsgs = () => (P && P.hf && P.hf.inbox ? P.hf.inbox.filter((m) => m.s === 'el') : []);
+const hfElUnread = () => hfElMsgs().filter((m) => !(P.hf.elRead || {})[m.id]);
+// Roter Punkt an ✉️ in der Auftragskarte und im Menü
+function renderHfMsgBtn() {
+  const on = db.mode === 'hf' && !!P && !!P.hf && !!P.hf.ls;
+  const n = on ? hfElUnread().length : 0;
+  for (const id of ['hfi-msg', 'hfm-msgs']) { $(id).hidden = !on; $(id).classList.toggle('dot', n > 0); }
+  $('hfm-msgs').textContent = `✉️ Nachrichten der Einsatzleitung${hfElMsgs().length ? ` (${hfElMsgs().length})` : ''}`;
+}
+// Lesebestätigung an die Einsatzleitung: über die normale Warteschlange, aber nicht im eigenen Protokoll (und damit nicht in QR/GPX/Abschluss)
+function sendReadAck(ids) {
+  const h = P && P.hf;
+  if (!h || !h.ls) return;
+  const now = Date.now();
+  for (const ref of ids) {
+    if (h.elRead[ref]) continue;
+    h.elRead[ref] = now;
+    h.outbox.push(buildReadAck({ a: h.id, tm: h.team, ref }));
+  }
+  P.updated = now;
+  saveNow();
+  renderHfMsgBtn();
+  renderStatusBtn();
+  flushStatus();
+}
+async function pollHf() {
+  const proj = P;
+  const h = proj && proj.hf;
+  if (db.mode !== 'hf' || !h || !h.ls || hfPollBusy || document.hidden || !navigator.onLine) return;
+  hfPollBusy = true;
+  try {
+    // erster Abruf: ab Auftragsübernahme minus 10 min, nicht der ganze Raum (7 Tage)
+    const since = h.since || Math.max(0, (h.received || Date.now()) - 10 * 60e3);
+    const r = await pollMessages({ url: h.ls[0], key: h.ls[1], since });
+    const mine = forHf(r.msgs, h.id);
+    const known = new Set(h.inbox.map((m) => m.id));
+    const fresh = mine.filter((m) => !known.has(m.id));
+    h.since = r.since;
+    if (fresh.length) {
+      h.inbox = mergeStatus(h.inbox, fresh).slice(-200);
+      proj.updated = Date.now();
+      // einmaliger Hinweis, wenn Fund/Hilfe gesehen wurde
+      const urgentIds = new Set(hfLog().filter((m) => isUrgent(m)).map((m) => m.id));
+      if (fresh.some((m) => m.s === 'q' && urgentIds.has(m.ref))) toast('✓ von der Einsatzleitung gesehen', 6000);
+      const els = fresh.filter((m) => m.s === 'el');
+      if (els.length) {
+        const last = els[els.length - 1];
+        toast(`✉️ Einsatzleitung: ${last.txt || ''}`, 8000);
+      }
+    }
+    saveNow();
+    renderHfMsgBtn();
+  } catch { /* kein Netz oder Server weg: nächster Versuch */ } finally { hfPollBusy = false; }
+  showElPrio();
+}
+// Wichtige Nachricht: Ton, Vibration, Fenster bleibt bis „Verstanden“; erst danach geht die Lesebestätigung raus
+async function showElPrio() {
+  if (elPrioOpen || db.mode !== 'hf' || !P || !P.hf || !P.hf.ls) return;
+  const todo = hfElUnread().filter((m) => m.prio);
+  if (!todo.length) return;
+  if (!$('dlg').hidden) return setTimeout(showElPrio, 4000);
+  elPrioOpen = true;
+  const proj = P;
+  beep();
+  const beeper = setInterval(beepShort, 15000);
+  await openDlg((box, close) => {
+    dlgHead(box, `✉️ Wichtig von der Einsatzleitung (${todo.length})`, 'Diese Nachricht bleibt, bis du sie als verstanden bestätigst.');
+    for (const m of todo) {
+      const d = document.createElement('div');
+      d.className = 'st-urgent';
+      d.textContent = `${hhmm(m.t)}${m.to === EL_ALL ? ' (an alle)' : ''}: ${m.txt || ''}`;
+      box.appendChild(d);
+    }
+    dlgButton(box, '✓ Verstanden', 'primary', () => close(true));
+  });
+  clearInterval(beeper);
+  elPrioOpen = false;
+  if (proj === P) sendReadAck(todo.map((m) => m.id));
+  showElPrio();
+}
+// ✉️: Liste der Nachrichten (neueste oben); ungelesene gewöhnliche gelten damit als gelesen
+async function hfElList() {
+  if (!P.hf || !P.hf.ls) return;
+  const list = [...hfElMsgs()].reverse();
+  const fresh = new Set(hfElUnread().map((m) => m.id));
+  sendReadAck(hfElUnread().filter((m) => !m.prio).map((m) => m.id));
+  const go = await openDlg((box, close) => {
+    dlgHead(box, `✉️ Nachrichten der Einsatzleitung (${list.length})`, list.length ? '' : 'Noch keine Nachrichten.');
+    for (const m of list) {
+      const d = document.createElement('div');
+      d.className = `hf-el${m.prio ? ' prio' : ''}${fresh.has(m.id) ? ' unread' : ''}`;
+      d.innerHTML = '<b></b><span></span><small></small>';
+      d.querySelector('b').textContent = `${hhmm(m.t)}${m.prio ? ' · ❗ wichtig' : ''}`;
+      d.querySelector('span').textContent = m.txt || '';
+      d.querySelector('small').textContent = m.to === EL_ALL ? 'an alle' : '';
+      d.querySelector('small').hidden = m.to !== EL_ALL;
+      box.appendChild(d);
+    }
+    dlgButton(box, 'Schließen', 'primary', () => close(true));
+  });
+  if (go) showElPrio();
+}
+$('hfi-msg').addEventListener('click', (e) => { e.stopPropagation(); hfElList(); });
+$('hfm-msgs').addEventListener('click', () => { closePanels(); hfElList(); });
+
 function statusLine() {
   const h = P.hf;
   if (!h.ls) return 'Kein Status-Server in diesem Auftrag: Meldungen gehen mit der nächsten QR-Rückmeldung mit.';
@@ -4407,6 +4524,7 @@ function readMsgs(list) {
   if (!l.length) return;
   markSeen(P.msgSeen, l);
   prune(P.msgSeen);
+  ackSeen(l); // v117: Lesebestätigung an den Hundeführer
   saveNow();
 }
 let tbSig = '';
@@ -4672,6 +4790,16 @@ function renderPop() {
   all.textContent = 'Alle Meldungen';
   all.addEventListener('click', () => { closePop(); openStatusPanel(c.teamId || ''); });
   box.appendChild(all);
+  // v117: Nachricht an dieses Team (Status-Panel mit vorgewähltem Empfänger)
+  const tg = canElSend() ? elTargets(P.sent, P.marks).find((q) => (c.teamId ? q.teamId === c.teamId : q.a === c.a)) : null;
+  if (tg) {
+    const msg = document.createElement('button');
+    msg.type = 'button';
+    msg.className = 'all el-msg';
+    msg.textContent = '✉️ Nachricht';
+    msg.addEventListener('click', () => { closePop(); elPreTo = tg.a; openStatusPanel(c.teamId || ''); setTimeout(() => $('el-txt').focus(), 100); });
+    box.appendChild(msg);
+  }
 }
 
 // ---- Erinnerung: Banner, Piepton, Schlummern ----
@@ -4769,11 +4897,16 @@ function renderStatusPanel() {
     sz.querySelector('span').textContent = `${snoozeText(P.msgSnooze)} – Erinnerung ruht (Fund/Hilfe nicht)`;
     sz.querySelector('button').addEventListener('click', unsnooze);
   }
+  renderElCompose();
   const box = $('st-list');
   box.innerHTML = '';
-  const list = historyFilter(allMsgsK(), P.sent, stFilter);
+  // v117: Nachrichten der Einsatzleitung (st-el) laufen in der Zeitleiste mit; mit Teamfilter nur die an dieses Team oder an alle
+  const ids = stFilter ? new Set(teamAssignments(P.sent, stFilter)) : null;
+  const els = P.live ? (liveInit(P.live).out).filter((m) => m.s === 'el' && (!ids || m.to === EL_ALL || ids.has(m.to))) : [];
+  const list = [...historyFilter(allMsgsK(), P.sent, stFilter), ...els].sort((a, b) => b.t - a.t);
   if (!list.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = 'Noch keine Meldungen.'; box.appendChild(p); }
   for (const m of list.slice(0, 300)) {
+    if (m.s === 'el') { box.appendChild(elRow(m)); continue; }
     const x = (P.sent || []).find((q) => q.id === m.a);
     const team = x && P.marks.find((q) => q.id === x.teamId);
     const d = document.createElement('div');
@@ -4789,6 +4922,53 @@ function renderStatusPanel() {
     box.appendChild(d);
   }
 }
+// v117: Zeile für eine Nachricht der Einsatzleitung: an wen, Text, wer sie gelesen hat
+function teamNameOf(a) {
+  const x = (P.sent || []).find((q) => q.id === a);
+  const t = x && P.marks.find((q) => q.id === x.teamId);
+  return t ? t.label : (x && x.team) || 'Team';
+}
+function elRow(m) {
+  const targets = elTargets(P.sent, P.marks);
+  const rs = readSummary(m, P.live.reads, targets);
+  const wait = P.live.outbox.some((q) => q.id === m.id);
+  const d = document.createElement('div');
+  d.className = `st-row st-el${m.prio ? ' prio' : ''}`;
+  d.innerHTML = '<div class="tx"><b></b><span></span><br><small></small></div>';
+  d.querySelector('b').textContent = `✉️ An ${m.to === EL_ALL ? 'alle Teams' : teamNameOf(m.to)}${m.prio ? ' · ❗ wichtig' : ''}`;
+  d.querySelector('span').textContent = m.txt || '';
+  d.querySelector('small').textContent = [hhmm(m.t),
+    wait ? '⏳ wartet auf Netz' : rs.read.length ? `👁 gelesen: ${rs.read.map(teamNameOf).join(', ')}${rs.open.length ? ` · offen: ${rs.open.map(teamNameOf).join(', ')}` : ''}` : 'noch ungelesen'].join(' · ');
+  return d;
+}
+// Eingabefeld „Nachricht an …“ im Statuspanel: Empfänger nur Teams mit Live-Kanal; sonst Hinweis. Auswahl bleibt beim Neuzeichnen erhalten.
+function renderElCompose() {
+  const box = $('st-send');
+  const el = db.mode === 'el' && P && P.live && !P.closed;
+  const targets = el ? elTargets(P.sent, P.marks) : [];
+  box.hidden = !targets.length;
+  const noLive = el ? (P.sent || []).filter((x) => !x.live && !(Number(x.done) > 0)) : [];
+  $('el-hint').hidden = !noLive.length || !targets.length;
+  $('el-hint').textContent = `Kein Live-Kanal (nur QR-Rückmeldung): ${[...new Set(noLive.map((x) => teamNameOf(x.id)))].join(', ')}`;
+  if (!targets.length) return;
+  const sel = $('el-to');
+  const sig = targets.map((q) => q.a).join('|');
+  if (sel.dataset.sig !== sig) {
+    const keep = sel.value || elPreTo;
+    sel.innerHTML = '';
+    for (const [v, l] of [[EL_ALL, 'Alle Teams'], ...targets.map((q) => [q.a, q.label])]) {
+      const o = document.createElement('option');
+      o.value = v;
+      o.textContent = l;
+      sel.appendChild(o);
+    }
+    sel.dataset.sig = sig;
+    sel.value = [...sel.options].some((o) => o.value === keep) ? keep : EL_ALL;
+  }
+  if (elPreTo && [...sel.options].some((o) => o.value === elPreTo)) { sel.value = elPreTo; }
+  elPreTo = '';
+}
+let elPreTo = '';
 function openStatusPanel(teamId = stFilter) {
   stFilter = teamId || '';
   stFresh = new Set(unreadNow().map((m) => m.id));
@@ -4830,9 +5010,23 @@ async function pollLive() {
   liveBusy = true;
   try {
     const r = await pollMessages(l);
+    const sp = splitIncoming(r.msgs); // v117: Teammeldungen / Rückkanal (EL-Nachrichten, Quittungen) / Lesebestätigungen trennen
     const known = new Set(l.msgs.map((m) => m.id));
-    const fresh = r.msgs.filter((m) => !known.has(m.id) && !(proj.msgDel && proj.msgDel[m.id]));
-    if (r.since !== l.since || fresh.length) {
+    const fresh = sp.team.filter((m) => !known.has(m.id) && !(proj.msgDel && proj.msgDel[m.id]));
+    liveInit(l);
+    const knownOut = new Set(l.out.map((m) => m.id));
+    const freshEl = sp.el.filter((m) => !knownOut.has(m.id)); // auch von anderen EL-Geräten
+    let readsNew = false;
+    for (const [k, v] of Object.entries(sp.reads)) {
+      const o = l.reads[k] || {};
+      if (Object.keys(v).some((a) => !o[a])) { l.reads[k] = { ...v, ...o }; readsNew = true; }
+    }
+    if (freshEl.length) {
+      l.out = mergeStatus(l.out, freshEl).slice(-200);
+      for (const m of freshEl) if (m.s === 'q' && m.ref && !l.qSent[m.ref]) l.qSent[m.ref] = m.t; // ein anderes EL-Gerät hat schon quittiert
+    }
+    if (freshEl.length || readsNew) { prune(l.qSent); if (proj === P && $('panel-status').hidden === false) renderStatusPanel(); }
+    if (r.since !== l.since || fresh.length || freshEl.length || readsNew) {
       l.since = r.since;
       if (fresh.length) {
         l.msgs = mergeStatus(l.msgs, fresh).slice(-500);
@@ -4853,6 +5047,54 @@ async function pollLive() {
   } catch { /* kein Netz oder Server weg: nächster Versuch */ } finally { liveBusy = false; }
   showUrgent();
 }
+// ---- v117: Rückkanal Einsatzleitung -> Hundeführer ----
+// Quittungen („✓ Gesehen“) und Nachrichten schreibt die EL selbst in den Raum des Einsatzes (derselbe Schlüssel wie im Auftrag, ls);
+// was nicht rausgeht, wartet in P.live.outbox und geht mit flushStatus nach (online, Sichtbarkeit, alle 60 s).
+function liveInit(l) {
+  for (const k of ['out', 'outbox']) if (!Array.isArray(l[k])) l[k] = [];
+  for (const k of ['reads', 'qSent']) if (!l[k] || typeof l[k] !== 'object') l[k] = {};
+  return l;
+}
+const canElSend = () => db.mode === 'el' && !!P && !!P.live && !P.closed && elTargets(P.sent, P.marks).length > 0;
+async function elSend(m) {
+  const l = P && P.live;
+  if (db.mode !== 'el' || !l || P.closed) return false;
+  liveInit(l);
+  l.outbox.push(m);
+  if (m.s === 'el') l.out = mergeStatus(l.out, [m]).slice(-200);
+  saveNow();
+  await flushStatus();
+  return !l.outbox.some((x) => x.id === m.id);
+}
+// Meldungen der Teams als gesehen quittieren (einmal je Meldung, nur bei Aufträgen mit Status-Server)
+function ackSeen(list) {
+  const l = P && P.live;
+  if (db.mode !== 'el' || !l || P.closed) return;
+  liveInit(l);
+  for (const m of list || []) {
+    if (!needsAck(m) || m.gone || l.qSent[m.id]) continue;
+    const x = (P.sent || []).find((q) => q.id === m.a);
+    if (!x || !x.live) continue;
+    l.qSent[m.id] = Date.now();
+    elSend(buildAck({ ref: m.id, to: m.a }));
+  }
+}
+// Nachricht aus dem Statuspanel senden
+async function sendElText() {
+  const txt = $('el-txt').value.trim();
+  if (!txt) return toast('Bitte einen Text eingeben');
+  if (!canElSend()) return toast('Kein Auftrag mit Live-Kanal – Nachricht nicht möglich');
+  const m = buildElMsg({ to: $('el-to').value, txt, prio: $('el-prio').checked });
+  $('el-txt').value = '';
+  $('el-prio').checked = false;
+  renderStatusPanel();
+  const ok = await elSend(m);
+  toast(ok ? `✉️ Nachricht gesendet ${hhmm(Date.now())}` : '⏳ Nachricht wartet auf Netz – wird automatisch nachgesendet', 4000);
+  renderStatusPanel();
+}
+$('el-go').addEventListener('click', sendElText);
+$('el-txt').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendElText(); });
+
 function beepShort() {
   try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch { /* egal */ }
   try {
@@ -4930,6 +5172,7 @@ async function showUrgent() {
   urgentOpen = false;
   urgentClose = null;
   l.ack.push(...todo.map((m) => m.id));
+  if (proj === P) ackSeen(todo); // v117: der Hundeführer sieht „✓ gesehen“
   saveNow();
   if (r && r.lat != null && proj === P) showStatusMark(r);
   showUrgent();
@@ -4941,13 +5184,15 @@ function startStatus() {
   showUrgent();
   setInterval(() => { if (navigator.onLine) flushStatus(); }, 60e3);
   setInterval(pollLive, 15e3); // Einsatzleitung: alle 15 s neue Status-Meldungen holen
+  pollHf();
+  setInterval(pollHf, 20e3); // v117: Hundeführer: Quittungen und Nachrichten der Einsatzleitung holen
   renderTeamBar();
   checkUnread();
   setInterval(checkUnread, 15e3); // Erinnerung bei ungelesenen Meldungen
   checkCloseAsk();
   setInterval(checkCloseAsk, 15e3);
-  window.addEventListener('online', () => { flushStatus(); pollLive(); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { flushStatus(); pollLive(); } });
+  window.addEventListener('online', () => { flushStatus(); pollLive(); pollHf(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { flushStatus(); pollLive(); pollHf(); } });
 }
 
 // ---- Einsatzleitung: Rückmeldung übernehmen (Kamera oder eingefügter Link) ----
