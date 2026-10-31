@@ -487,6 +487,36 @@ export function parseGpx(xml) {
   return { tracks, waypoints, skipped };
 }
 
+// Import ohne Duplikate: Tracks/Routen mit gleichem Namen und gleichen Punkten bzw. Wegpunkte mit gleichem Namen und Ort,
+// die es in items (Umrisse/Wege kind 'track', Texte kind 'text') schon gibt – auch doppelt in der Datei selbst – werden übersprungen.
+// base: Dateiname ohne Endung (Name für Tracks ohne Namen, wie beim Import). -> { tracks, waypoints, dup } (dup = Anzahl übersprungen)
+const r6 = (v) => Math.round(v * 1e6) / 1e6;
+const trackKey = (name, pts) => `t|${name}|${pts.map((q) => `${r6(q[0])},${r6(q[1])}`).join(';')}`;
+const pointKey = (name, lat, lon) => `w|${name}|${r6(lat)},${r6(lon)}`;
+export function dedupeImport(items, g, base = '') {
+  const have = new Set();
+  for (const it of items || []) {
+    if (it.kind === 'track' && it.pts) have.add(trackKey(it.name || '', it.pts));
+    else if (it.kind === 'text') have.add(pointKey(it.text, it.lat, it.lon));
+  }
+  let dup = 0;
+  const tracks = [];
+  for (const t of g.tracks) {
+    const k = trackKey(t.name || base, t.pts);
+    if (have.has(k)) { dup++; continue; }
+    have.add(k);
+    tracks.push(t);
+  }
+  const waypoints = [];
+  for (const w of g.waypoints) {
+    const k = pointKey(w.name, w.lat, w.lon);
+    if (have.has(k)) { dup++; continue; }
+    have.add(k);
+    waypoints.push(w);
+  }
+  return { tracks, waypoints, dup };
+}
+
 // KML (Google Earth, Behörden): Punkte als Wegpunkte, Linien als Wege, Flächen als Umrisse – gleiche Form wie parseGpx
 export function parseKml(xml) {
   if (!/<kml\b|<Placemark\b/i.test(xml)) throw new Error('keine KML-Datei');
