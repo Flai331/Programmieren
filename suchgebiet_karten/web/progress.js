@@ -331,7 +331,7 @@ export function mergeProgress(p, f) {
   p.msgDel = p.msgDel || {};
   for (const [id, t] of Object.entries(f.md && typeof f.md === 'object' && !Array.isArray(f.md) ? f.md : {})) if (!p.msgDel[id]) p.msgDel[id] = Number(t) || Date.now();
   if (!p.live && Array.isArray(f.lv) && f.lv.length === 2 && isStatusUrl(f.lv[0]) && f.lv[1]) {
-    p.live = { url: String(f.lv[0]), key: String(f.lv[1]), since: 0, ack: [], msgs: [] };
+    p.live = { url: String(f.lv[0]), key: String(f.lv[1]), since: 0, ack: [], msgs: [], out: [], outbox: [], reads: {}, qSent: {} };
   }
   if (p.live && Array.isArray(f.ms)) {
     const before = p.live.msgs.length;

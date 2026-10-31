@@ -742,6 +742,25 @@ html.night .st-urgent { background: transparent; color: inherit; }
 .st-row .tx b { display: block; }
 .st-row .tx small { color: #555; }
 .st-row .del { flex: none; border: 0; background: transparent; font-size: 18px; cursor: pointer; padding: 4px 6px; }
+.st-send { background: #e3f2fd; border-radius: 8px; padding: 6px 8px; margin: 4px 0 8px; }
+.st-send label { display: block; font-size: 13px; }
+.st-send select { width: 100%; }
+.st-send textarea { width: 100%; box-sizing: border-box; margin: 4px 0; font: inherit; font-size: 14px; }
+.st-send .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.st-send .row button { flex: none; padding: 6px 16px; }
+.st-send .check { margin: 0; }
+.st-row.st-el { background: #e3f2fd; border-left-color: #1565c0; margin-left: 28px; }
+.st-row.st-el.prio { background: #fff3e0; border-left-color: #e65100; }
+.tm-pop .el-msg { margin-top: 4px; }
+.hfinfo #hfi-msg { position: absolute; top: 4px; right: 46px; width: 34px; height: 34px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 18px; line-height: 1; padding: 0; cursor: pointer; }
+.hfinfo #hfi-msg.dot::after, #hfm-msgs.dot::after { content: ' ●'; color: #d50000; font-size: 14px; }
+.hfinfo #hfi-msg.dot::after { position: absolute; top: -4px; right: 0; margin: 0; }
+.hfinfo:has(#hfi-msg:not([hidden])) { padding-right: 84px; }
+.hf-el { background: #e3f2fd; border-left: 6px solid #1565c0; border-radius: 8px; margin: 5px 0; padding: 6px 8px; font-size: 14px; text-align: left; }
+.hf-el.prio { background: #fff3e0; border-left-color: #e65100; }
+.hf-el b, .hf-el span { display: block; }
+.hf-el small { display: block; color: #555; }
+.hf-el.unread b::after { content: ' ●'; color: #d50000; }
 .st-row.unread .tx b::after { content: ' ●'; color: #d50000; }
 .dlg-snz { width: 100%; margin: 8px 0; padding: 10px; font-size: 18px; text-align: center; border: 1px solid #bbb; border-radius: 8px; box-sizing: border-box; }
 html.night .tm-btn, html.night .tm-drop, html.night .tm-pop { filter: invert(1) hue-rotate(180deg); }

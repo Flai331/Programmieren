@@ -206,7 +206,7 @@ test('normalizeProject: kaputte live/hf-Angaben werden geradegezogen', () => {
   assert.deepEqual(p.hf.outbox, []);
   assert.deepEqual(p.hf.log, []);
   const q = normalizeProject({ ...newProject('x'), live: { url: 'https://script.google.com/macros/s/X/exec', key: 'k', msgs: 'x', ack: null } });
-  assert.deepEqual(q.live, { url: 'https://script.google.com/macros/s/X/exec', key: 'k', since: 0, ack: [], msgs: [] });
+  assert.deepEqual(q.live, { url: 'https://script.google.com/macros/s/X/exec', key: 'k', since: 0, ack: [], msgs: [], out: [], outbox: [], reads: {}, qSent: {} }); // v117: Rückkanal-Standardwerte
 });
 
 test('areaShapes: Felder des Teams, sonst ganzes Raster, sonst Umrisse', () => {

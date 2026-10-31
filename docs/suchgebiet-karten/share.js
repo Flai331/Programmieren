@@ -181,7 +181,7 @@ export function buildAssignment(p, sel) {
   if (sel.person && p.mission && p.mission.person) out.vp = p.mission.person.trim().slice(0, 400);
   if (sel.contacts && sel.contacts.length) out.ct = sel.contacts.map(compactContact);
   if (sel.liveUrl) {
-    if (!p.live) p.live = { url: sel.liveUrl, key: newLiveKey(), since: 0, ack: [], msgs: [] };
+    if (!p.live) p.live = { url: sel.liveUrl, key: newLiveKey(), since: 0, ack: [], msgs: [], out: [], outbox: [], reads: {}, qSent: {} };
     p.live.url = sel.liveUrl;
     out.ls = [p.live.url, p.live.key];
   }

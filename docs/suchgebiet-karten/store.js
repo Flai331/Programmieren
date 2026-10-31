@@ -125,6 +125,12 @@ export function normalizeProject(p) {
   if (out.live && typeof out.live === 'object' && isStatusUrl(out.live.url) && out.live.key) {
     const l = out.live;
     out.live = { url: String(l.url), key: String(l.key), since: Number(l.since) || 0, ack: Array.isArray(l.ack) ? l.ack : [], msgs: Array.isArray(l.msgs) ? l.msgs.slice(-500) : [] };
+    // v117: Rückkanal – out = Nachrichten/Quittungen der EL, reads = { Nachricht: { Auftrag: Zeit } }, qSent = quittierte Meldungen, outbox = noch nicht gesendet
+    const o = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+    out.live.out = Array.isArray(l.out) ? l.out.filter((m) => m && typeof m.id === 'string').slice(-200) : [];
+    out.live.outbox = Array.isArray(l.outbox) ? l.outbox.filter((m) => m && typeof m.id === 'string').slice(-200) : [];
+    out.live.reads = o(l.reads);
+    out.live.qSent = o(l.qSent);
   } else delete out.live;
   out.qmsgs = Array.isArray(out.qmsgs) ? out.qmsgs.slice(-500) : []; // Status-Meldungen aus QR-Rückmeldungen
   if (out.hf && typeof out.hf === 'object') {
@@ -132,6 +138,10 @@ export function normalizeProject(p) {
     if (!(Array.isArray(out.hf.ls) && out.hf.ls.length === 2 && out.hf.ls.every((x) => typeof x === 'string' && x) && isStatusUrl(out.hf.ls[0]))) delete out.hf.ls;
     for (const k of ['outbox', 'log']) if (!Array.isArray(out.hf[k])) out.hf[k] = [];
     out.hf.log = out.hf.log.slice(-100);
+    // v117: Rückkanal – inbox = Quittungen/Nachrichten der EL (≤ 200), since = Abholmarke, elRead = { Nachricht: Zeit } gelesen
+    out.hf.inbox = Array.isArray(out.hf.inbox) ? out.hf.inbox.filter((m) => m && typeof m.id === 'string').slice(-200) : [];
+    out.hf.since = Number(out.hf.since) > 0 ? Number(out.hf.since) : 0;
+    out.hf.elRead = out.hf.elRead && typeof out.hf.elRead === 'object' && !Array.isArray(out.hf.elRead) ? out.hf.elRead : {};
   }
   // v61: „Treffpunkt“ heißt jetzt „B-Ort“
   if (out.meet && out.meet.text === 'Treffpunkt') out.meet = { ...out.meet, text: 'B-Ort' };
