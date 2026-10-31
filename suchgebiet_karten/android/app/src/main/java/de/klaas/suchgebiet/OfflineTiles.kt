@@ -79,7 +79,7 @@ object OfflineTiles {
         return File(File(root(), hex.substring(0, 2)), hex.substring(2))
     }
 
-    fun isTileHost(host: String?) = host != null && TILE_HOSTS.any { host.endsWith(it) }
+    fun isTileHost(host: String?) = host != null && TILE_HOSTS.any { host == it || host.endsWith(".$it") }
 
     // Für shouldInterceptRequest: gespeichertes Bild oder null (dann aus dem Netz)
     fun serve(url: String): WebResourceResponse? {

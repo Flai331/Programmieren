@@ -4,6 +4,7 @@
 // Kreuzungen über die Overpass API (gemeinsame Punkte zweier Straßen).
 
 import { parseCell } from './grid.js';
+import { fetchT } from './net.js';
 
 // -> {type: 'cell', c, r} | {type: 'coords', lat, lon} | {type: 'corner', a, b, place}
 //    | {type: 'address', q} | null
@@ -151,12 +152,12 @@ async function overpass(query, signal) {
   let last = null;
   for (const url of OVERPASS) {
     try {
-      const res = await fetch(url, {
+      const res = await fetchT(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: `data=${encodeURIComponent(query)}`,
         signal,
-      });
+      }, 30000); // Server-Limit 25 s
       if (res.ok) {
         const json = await res.json();
         // Zeitüberschreitung o. Ä. kommt als leere Antwort mit Hinweis -> nächster Server
@@ -166,7 +167,7 @@ async function overpass(query, signal) {
       }
       last = new Error(res.status === 429 ? 'Kreuzungssuche gerade überlastet – gleich nochmal versuchen' : `Kreuzungssuche antwortet nicht (${res.status})`);
     } catch (err) {
-      if (err.name === 'AbortError') throw err;
+      if (signal && signal.aborted) throw err; // Zeitlimit eines Servers: nächster Server
       last = err;
     }
   }
@@ -195,7 +196,7 @@ export async function searchAddress(q, view) {
     addressdetails: '0',
   });
   if (view) params.set('viewbox', [view.west, view.north, view.east, view.south].map((v) => v.toFixed(4)).join(','));
-  const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, { headers: { Accept: 'application/json' } });
+  const res = await fetchT(`https://nominatim.openstreetmap.org/search?${params}`, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Suchdienst antwortet nicht (${res.status})`);
   const list = await res.json();
   return list.map((r) => {
@@ -247,7 +248,7 @@ export async function suggestPlaces(q, center, signal) {
     params.set('lat', center.lat.toFixed(4));
     params.set('lon', center.lon.toFixed(4));
   }
-  const res = await fetch(`https://photon.komoot.io/api/?${params}`, { signal });
+  const res = await fetchT(`https://photon.komoot.io/api/?${params}`, { signal });
   if (!res.ok) throw new Error(`Suchdienst antwortet nicht (${res.status})`);
   const data = await res.json();
   return (data.features || []).map(photonPlace);

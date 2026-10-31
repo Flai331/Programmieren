@@ -4,7 +4,7 @@
 // es zuletzt bearbeitet hat (by === from) und neuer, nichts wird gelöscht, Löschvermerke des Empfängers
 // blockieren Wiederanlegen. Feldkonflikt: neuere Änderung gewinnt, im UA-Gebiet entscheidet der UA.
 // Richtung: UA -> EL nur UA-Gebiet + Neues des UA; EL -> UA alles, beim UA als lock 'base' (außer UA-eigenes).
-import { allGrids, uid, NO_TEAM } from './store.js';
+import { allGrids, uid, NO_TEAM, isStatusUrl } from './store.js';
 import { encodePts, decodePts, simplify } from './share.js';
 import { mergeStatus, withoutDeleted } from './status.js';
 import { normalizePois } from './pois.js';
@@ -68,6 +68,7 @@ export function stampChanges(p, base, by = '', now = Date.now()) {
 export const peerOf = (p, name) => (p.peers || []).find((x) => x.name === name) || null;
 export function setPeer(p, name, lastSent) {
   if (!name) return null;
+  name = String(name).slice(0, 60);
   p.peers = p.peers || [];
   let x = peerOf(p, name);
   if (!x) { x = { name, lastSent: 0 }; p.peers.push(x); }
@@ -326,7 +327,7 @@ export function mergeProgress(p, f) {
   // gelöschte Status-Meldungen ausblenden (Löschvermerke nur ergänzen)
   p.msgDel = p.msgDel || {};
   for (const [id, t] of Object.entries(f.md && typeof f.md === 'object' && !Array.isArray(f.md) ? f.md : {})) if (!p.msgDel[id]) p.msgDel[id] = Number(t) || Date.now();
-  if (!p.live && Array.isArray(f.lv) && f.lv.length === 2 && /^https:\/\/script\.google\.com\//.test(String(f.lv[0])) && f.lv[1]) {
+  if (!p.live && Array.isArray(f.lv) && f.lv.length === 2 && isStatusUrl(f.lv[0]) && f.lv[1]) {
     p.live = { url: String(f.lv[0]), key: String(f.lv[1]), since: 0, ack: [], msgs: [] };
   }
   if (p.live && Array.isArray(f.ms)) {
@@ -337,8 +338,6 @@ export function mergeProgress(p, f) {
   p.updated = Date.now();
   return res;
 }
-
-export const progressTotal = (r) => Object.values(r).reduce((a, x) => a + x, 0);
 
 // „12 Felder, 2 Wege, 3 Protokolleinträge“ bzw. leer, wenn nichts Neues dabei war
 export function progressSummary(r) {

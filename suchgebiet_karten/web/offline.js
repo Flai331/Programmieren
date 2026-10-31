@@ -115,7 +115,7 @@ export async function cachedTileUrl(url) {
 
 // Bereich herunterladen. region: { bounds, layerIds, zMin, zMax }, defs: Kartendienste.
 // Bereits gespeicherte Kacheln werden übersprungen (Fortsetzen nach Abbruch).
-// onProgress({ done, total, failed, bytes }); signal: AbortController.signal
+// onProgress({ done, total, failed, bytes }); full: true = Speicher voll, angehalten; signal: AbortController.signal
 export async function downloadRegion(region, defs, onProgress, signal, concurrency = 4) {
   if (!supported()) throw new Error('Dieser Browser kann keine Karten offline speichern.');
   const cache = await caches.open(TILE_CACHE);
@@ -139,10 +139,16 @@ export async function downloadRegion(region, defs, onProgress, signal, concurren
         const type = res.headers.get('content-type') || '';
         if (res.ok && type.startsWith('image/')) {
           const blob = await res.blob();
+          try {
+            await cache.put(url, new Response(blob, { headers: { 'content-type': type } }));
+          } catch (e) {
+            if (e && e.name === 'QuotaExceededError') { st.full = true; return; } // Speicher voll: kein Netzfehler, nicht wiederholen
+            throw e;
+          }
           st.bytes += blob.size;
-          await cache.put(url, new Response(blob, { headers: { 'content-type': type } }));
           return;
         }
+        if (res.status >= 400 && res.status < 500) { st.failed++; return; } // z. B. 404 außerhalb der Abdeckung: nicht wiederholen
       } catch (e) {
         if (signal && signal.aborted) return;
       }
@@ -152,10 +158,11 @@ export async function downloadRegion(region, defs, onProgress, signal, concurren
   }
   async function worker() {
     for (;;) {
-      if (signal && signal.aborted) return;
+      if ((signal && signal.aborted) || st.full) return;
       const next = queue.next();
       if (next.done) return;
       await fetchOne(next.value);
+      if (st.full) return;
       st.done++;
       report();
     }

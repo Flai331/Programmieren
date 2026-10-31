@@ -4,6 +4,7 @@
 
 import { allGrids } from './store.js';
 import { makeGrid, cellBounds } from './grid.js';
+import { fetchT } from './net.js';
 
 export const STATUS_LIST = [
   { code: 'da', ico: '🅿️', label: 'Parkplatz Auto' }, // am Suchgebiet angekommen, Auto abgestellt
@@ -168,14 +169,14 @@ export function latestFor(list, a) {
 
 // ---------- Übertragung (fetchFn austauschbar für Tests) ----------
 const reqUrl = (url, q) => `${url}${url.includes('?') ? '&' : '?'}${q}`;
-export async function postMsg(url, room, id, d, f = fetch) {
+export async function postMsg(url, room, id, d, f = fetchT) {
   const res = await f(url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ r: room, id, d }) });
   const j = await res.json();
   if (!j || !j.ok) throw new Error('abgelehnt');
   return true;
 }
 // Warteschlange abarbeiten (der Reihe nach, bei Fehler Stopp). Liefert { sent: [ids], left: [Meldungen] }
-export async function flushOutbox(ls, outbox, f = fetch) {
+export async function flushOutbox(ls, outbox, f = fetchT) {
   const [url, key] = ls;
   const room = await roomOf(key);
   const sent = [];
@@ -186,7 +187,7 @@ export async function flushOutbox(ls, outbox, f = fetch) {
   return { sent, left: outbox.filter((m) => !sent.includes(m.id)) };
 }
 // Neue Meldungen abholen: { msgs, since }. Nicht entschlüsselbare Zeilen (anderer Schlüssel) werden übergangen.
-export async function pollMessages(live, f = fetch) {
+export async function pollMessages(live, f = fetchT) {
   const room = await roomOf(live.key);
   const res = await f(reqUrl(live.url, `r=${encodeURIComponent(room)}&since=${live.since || 0}`));
   const j = await res.json();

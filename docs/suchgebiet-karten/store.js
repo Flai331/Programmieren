@@ -6,6 +6,9 @@ import { normalizeContact } from './contacts.js';
 import { rangeLabel } from './grid.js';
 import { normalizePois } from './pois.js';
 
+// Status-Server: nur Google-Apps-Script-Adressen (Daten aus Links/Dateien dürfen ihn nicht auf einen Fremdserver setzen)
+export const isStatusUrl = (u) => /^https:\/\/script\.google\.com\//.test(String(u || ''));
+
 export const TEAM_COLORS = ['#d50000', '#1565c0', '#ef6c00', '#6a1b9a', '#00838f', '#ad1457', '#4e342e', '#558b2f'];
 // v107: „ohne Team“ ist fest Dunkelgrau (Umrisse und Felder); Grau gibt es nicht mehr als Team-/Markierungsfarbe
 export const NO_TEAM_COLOR = '#616161';
@@ -111,7 +114,7 @@ export function normalizeProject(p) {
   if (!out.eid) out.eid = out.id;
   // v90: Zeichnungen bekommen feste ID, Änderungszeit (t) und Gerät (by); Sperren (lock) nur 'base' | 'ua'
   for (const k of ['itemDel', 'cellT', 'cellBy', 'gridT', 'glock', 'gown']) if (!out[k] || typeof out[k] !== 'object' || Array.isArray(out[k])) out[k] = {};
-  out.peers = (Array.isArray(out.peers) ? out.peers : []).filter((x) => x && typeof x.name === 'string' && x.name).map((x) => ({ name: x.name, lastSent: Number(x.lastSent) || 0 }));
+  out.peers = (Array.isArray(out.peers) ? out.peers : []).filter((x) => x && typeof x.name === 'string' && x.name).map((x) => ({ name: x.name.slice(0, 60), lastSent: Number(x.lastSent) || 0 }));
   out.items = out.items.map((it) => {
     const x = { ...it, id: it.id || uid(), t: Number(it.t) || out.updated || Date.now(), by: String(it.by || '') };
     if (x.lock !== 'base' && x.lock !== 'ua') delete x.lock;
@@ -119,14 +122,14 @@ export function normalizeProject(p) {
   });
   if (out.meet && typeof out.meet === 'object' && !out.meet.t) out.meet = { ...out.meet, t: out.updated || Date.now() };
   // v89: Status-Meldungen – EL: live { url, key, since, ack, msgs }, HF: hf.ls = [url, key], Warteschlange hf.outbox, eigene Meldungen hf.log
-  if (out.live && typeof out.live === 'object' && out.live.url && out.live.key) {
+  if (out.live && typeof out.live === 'object' && isStatusUrl(out.live.url) && out.live.key) {
     const l = out.live;
     out.live = { url: String(l.url), key: String(l.key), since: Number(l.since) || 0, ack: Array.isArray(l.ack) ? l.ack : [], msgs: Array.isArray(l.msgs) ? l.msgs.slice(-500) : [] };
   } else delete out.live;
   out.qmsgs = Array.isArray(out.qmsgs) ? out.qmsgs.slice(-500) : []; // Status-Meldungen aus QR-Rückmeldungen
   if (out.hf && typeof out.hf === 'object') {
     out.hf = { ...out.hf };
-    if (!(Array.isArray(out.hf.ls) && out.hf.ls.length === 2 && out.hf.ls.every((x) => typeof x === 'string' && x))) delete out.hf.ls;
+    if (!(Array.isArray(out.hf.ls) && out.hf.ls.length === 2 && out.hf.ls.every((x) => typeof x === 'string' && x) && isStatusUrl(out.hf.ls[0]))) delete out.hf.ls;
     for (const k of ['outbox', 'log']) if (!Array.isArray(out.hf[k])) out.hf[k] = [];
     out.hf.log = out.hf.log.slice(-100);
   }

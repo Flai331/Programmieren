@@ -2,6 +2,8 @@
 // über den kostenlosen Dienst Bright Sky (brightsky.dev, ohne Anmeldung). Dazu der von Hand
 // gemessene Wind (Kompass + leicht/mittel/stark), der immer Vorrang hat.
 
+import { fetchT } from './net.js';
+
 const API = 'https://api.brightsky.dev';
 
 const DIR16 = ['N', 'NNO', 'NO', 'ONO', 'O', 'OSO', 'SO', 'SSO', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -72,8 +74,8 @@ export async function fetchWeather(lat, lon, now = new Date()) {
   const from = new Date(now.getTime() - 3600e3).toISOString();
   const to = new Date(now.getTime() + 12 * 3600e3).toISOString();
   const [cur, fc] = await Promise.all([
-    fetch(`${API}/current_weather?${q}`).then((r) => (r.ok ? r.json() : null)),
-    fetch(`${API}/weather?${q}&date=${encodeURIComponent(from)}&last_date=${encodeURIComponent(to)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    fetchT(`${API}/current_weather?${q}`).then((r) => (r.ok ? r.json() : null)),
+    fetchT(`${API}/weather?${q}&date=${encodeURIComponent(from)}&last_date=${encodeURIComponent(to)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
   ]);
   const current = parseCurrent(cur);
   if (!current) throw new Error('keine Wetterdaten');
@@ -98,12 +100,12 @@ export function parseStations(j, max = 6) {
 
 // Aktueller Wind an den Stationen rund um einen Punkt (Umkreis in km)
 export async function fetchStations(lat, lon, radiusKm = 40) {
-  const res = await fetch(`${API}/sources?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}&max_dist=${radiusKm * 1000}`);
+  const res = await fetchT(`${API}/sources?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}&max_dist=${radiusKm * 1000}`);
   if (!res.ok) throw new Error('keine Stationen');
   const stations = parseStations(await res.json());
   await Promise.all(stations.map(async (st) => {
     try {
-      const r = await fetch(`${API}/current_weather?dwd_station_id=${encodeURIComponent(st.id)}`);
+      const r = await fetchT(`${API}/current_weather?dwd_station_id=${encodeURIComponent(st.id)}`);
       const c = r.ok ? parseCurrent(await r.json()) : null;
       if (c) Object.assign(st, { from: c.from, kmh: c.kmh, gust: c.gust, t: c.t });
     } catch { /* Station ohne aktuelle Daten */ }

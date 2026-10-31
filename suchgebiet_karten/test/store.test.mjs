@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   newProject, migrateV1, cellRects, cellsText, assignments, resolveFills, exportProject, importProject,
-  embedMarker, normalizeProject,
+  embedMarker, normalizeProject, isStatusUrl,
 } from '../web/store.js';
 
 test('Felder werden zu Rechtecken zusammengefasst', () => {
@@ -122,4 +122,23 @@ test('Ältere Projekte bekommen Einsatzleitung, Kontakte, Lage-Orte und Einsatz-
   const q = normalizeProject({ ...p, contacts: [{ name: 'X', phone: '1' }] });
   assert.equal(q.contacts[0].role, '');
   assert.ok(q.contacts[0].id);
+});
+
+test('Status-Server: nur script.google.com, sonst verworfen', () => {
+  assert.equal(isStatusUrl('https://script.google.com/macros/s/X/exec'), true);
+  assert.equal(isStatusUrl('https://evil.example/'), false);
+  assert.equal(isStatusUrl('https://script.google.com.evil.example/'), false);
+  assert.equal(isStatusUrl(null), false);
+  const base = newProject('X');
+  const bad = normalizeProject({ ...base, live: { url: 'https://evil.example/', key: 'k' }, hf: { ls: ['https://evil.example/', 'k'] } });
+  assert.equal(bad.live, undefined);
+  assert.equal(bad.hf.ls, undefined);
+  const good = normalizeProject({ ...base, live: { url: 'https://script.google.com/macros/s/X/exec', key: 'k' }, hf: { ls: ['https://script.google.com/macros/s/X/exec', 'k'] } });
+  assert.equal(good.live.key, 'k');
+  assert.equal(good.hf.ls[1], 'k');
+});
+
+test('Namen von Geräten werden auf 60 Zeichen gekürzt', () => {
+  const p = normalizeProject({ ...newProject('X'), peers: [{ name: 'a'.repeat(100), lastSent: 1 }] });
+  assert.equal(p.peers[0].name.length, 60);
 });
