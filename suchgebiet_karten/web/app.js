@@ -9,7 +9,7 @@ import {
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { buildGpx, mergeGpx, parseGpx, parseKml, pointInPolygon, selectionGpx, gridWithLabels, gridPath, labelTracks, cellComponents, cellOutlines, hasArea, polygonArea, formatArea, trackDesc, trackLength, outlineName } from './gpx.js';
+import { buildGpx, mergeGpx, parseGpx, dedupeImport, parseKml, pointInPolygon, selectionGpx, gridWithLabels, gridPath, labelTracks, cellComponents, cellOutlines, hasArea, polygonArea, formatArea, trackDesc, trackLength, outlineName } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import { buildReport, describeTarget, makeDedup, makeLog } from './report.js';
 import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
@@ -44,10 +44,10 @@ import {
   assignmentCenter,
 } from './share.js';
 import {
-  STATUS_LIST, CLOSE_STATUS, SPOT_LIST, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, buildKor, applyKor, mergeStatus, withoutDeleted, latestFor, flushOutbox, pollMessages, coverageGaps, areaShapes,
+  STATUS_LIST, CLOSE_STATUS, SPOT_LIST, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, buildKor, applyKor, mergeStatus, withoutDeleted, latestFor, headMsg, flushOutbox, pollMessages, coverageGaps, areaShapes,
 } from './status.js';
 import {
-  teamChips, chipText, teamAssignments, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, unreadAge, bannerText, parseSnooze,
+  teamChips, teamOrder, todoFirst, chipText, teamAssignments, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, unreadAge, bannerText, parseSnooze,
   snoozeUntilFrom, snoozeText, historyFilter, historyTeams, SNOOZE_PICKS,
 } from './statusbar.js';
 import { einsatzOffen, shouldOfferUpdate, updateText, PERMISSION_HINT } from './update.js';
@@ -66,7 +66,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v114';
+const APP_VERSION = 'v115';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -102,6 +102,7 @@ let selMode = null; // 'export' (GPX direkt), 'share' (für „Weitergeben“), 
 let gapView = null; // „Lücken zeigen“ (Einsatzleitung): { a, step, pts }
 let moveTapAt = 0; // Zeit des letzten „Verlegen“-Tipps (der Klick danach öffnet nichts)
 let pendingMove = null; // „📍 Verlegen“ mit Tippen auf die Karte: { msg: Meldung } (Hundeführer) bzw. { item: Textpunkt }
+const NO_RP_HF = 'Die Einsatzleitung hat keine Rettungspunkte mitgeschickt.';
 let pendingSpot = null; // „Standort melden“ mit Tippen auf die Karte (Hundeführer): { cat, txt }
 let liveBusy = false; // Abholen der Status-Meldungen läuft
 let urgentOpen = false; // Dringend-Dialog steht
@@ -269,7 +270,9 @@ const AppTiles = L.TileLayer.extend({
 
 let baseLayer = null;
 let overlayLayers = [];
-function setLayer(id) {
+let layerByUser = false; // Karte aktiv gewählt (nicht beim Start): nur dann der PDF-Hinweis
+function setLayer(id, byUser = false) {
+  layerByUser = byUser;
   const l = layerById(id);
   P.layerId = l.id;
   if (baseLayer) map.removeLayer(baseLayer);
@@ -324,7 +327,7 @@ function makeTiles(l, cors, zIndex = 1) {
       if (bad === 6 && ok === 0 && navigator.onLine && baseLayer === layer) {
         map.removeLayer(layer);
         baseLayer = makeTiles(l, false).addTo(map);
-        toast('Diese Karte lässt sich nur anzeigen, aber nicht ins PDF übernehmen.');
+        if (layerByUser && db.mode === 'el') toast('Diese Karte lässt sich nur anzeigen, aber nicht ins PDF übernehmen.'); // HF hat kein PDF
       }
     });
   }
@@ -2390,7 +2393,7 @@ async function offlinePackage() {
       `🗺️ Karte „${short}“ für das Einsatzgebiet mit 500 m Rand (≈ ${km.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km²), Stufe ${z.zMin}–${z.zMax} (${ZOOMS[z.zMax] || ''})`,
       `≈ ${fmtMB(z.mb)} · Dauer ${fmtMin(z.minutes)} (je nach Netz)`,
       '🌦️ Wetter wird gespeichert',
-      rp ? `🚑 ${rp} Rettungspunkt${rp === 1 ? '' : 'e'} im Gebiet – schon offline` : rescuePts.length ? '🚑 Keine Rettungspunkte im Gebiet' : '🚑 Noch keine Rettungspunkte importiert (Karte → Rettungspunkte)',
+      rp ? `🚑 ${rp} Rettungspunkt${rp === 1 ? '' : 'e'} im Gebiet – schon offline` : rescuePts.length ? '🚑 Keine Rettungspunkte im Gebiet' : `🚑 ${db.mode === 'hf' ? NO_RP_HF : 'Noch keine Rettungspunkte importiert (Karte → Rettungspunkte)'}`,
       'Andere Kartenart? Vorher unter „Karte“ umstellen.',
     ].join('\n'));
     dlgButton(box, '📦 Jetzt laden', 'primary', () => close(true));
@@ -2461,7 +2464,7 @@ function rescueForExport() {
 function renderRescueInfo() {
   $('rp-info').textContent = rescuePts.length
     ? `${rescuePts.length.toLocaleString('de-DE')} Rettungspunkte gespeichert${db.rescueOn ? ' – sichtbar ab Zoomstufe 11' : ''}.`
-    : 'Noch keine Rettungspunkte importiert.';
+    : db.mode === 'hf' ? NO_RP_HF : 'Noch keine Rettungspunkte importiert.';
   $('rp-show').checked = !!db.rescueOn;
   $('rp-nearest').disabled = !rescuePts.length;
   $('rp-clear').disabled = !rescuePts.length;
@@ -2472,7 +2475,7 @@ loadRescue().then((pts) => { rescuePts = mergeRescue(pts, rescuePts); renderResc
 
 let rpMarker = null;
 function showNearestRescue() {
-  if (!rescuePts.length) return toast('Noch keine Rettungspunkte importiert (Karte → Rettungspunkte)');
+  if (!rescuePts.length) return toast(db.mode === 'hf' ? NO_RP_HF : 'Noch keine Rettungspunkte importiert (Karte → Rettungspunkte)');
   const fromGps = !!gpsMarker;
   const o = fromGps ? gpsMarker.getLatLng() : map.getCenter();
   const r = nearestRescue(rescuePts, o.lat, o.lng);
@@ -2856,10 +2859,23 @@ async function toElMode() {
   toast('Einsatzleitung');
   return true;
 }
-$('mode-hf').addEventListener('click', toHfMode);
+// Mehr -> Hundeführer-Modus: erst nachfragen, zurück geht nur mit der EL-PIN
+$('mode-hf').addEventListener('click', async () => {
+  const go = await openDlg((box, close) => {
+    dlgHead(box, 'In den Hundeführer-Modus wechseln?', 'Zurück zur Einsatzleitung geht nur mit der EL-PIN.');
+    dlgButton(box, '🐕 Wechseln', 'primary', () => close(true));
+    dlgButton(box, 'Abbrechen', '', () => close(false));
+  });
+  if (go) toHfMode();
+});
 $('hfm-el').addEventListener('click', toElMode);
 
 // ---- Hundeführer-Ansicht ----
+// Das Wetter-Fenster liegt im HF-Modus unter der Auftragskarte: deren Unterkante als CSS-Variable merken
+new ResizeObserver(() => {
+  const e = $('hfinfo');
+  document.documentElement.style.setProperty('--hfi-b', e.hidden ? '52px' : `${Math.round(e.getBoundingClientRect().bottom)}px`);
+}).observe($('hfinfo'));
 function hfColor() { return ((P.marks.find((m) => m.id === 'team') || {}).color) || '#d50000'; }
 function renderHfInfo() {
   const show = db.mode === 'hf';
@@ -2877,7 +2893,7 @@ function renderHfInfo() {
   const m = $('hfm-info');
   m.textContent = '';
   if (h) {
-    const lines = [`${h.team} – ${P.title}`, `Auftrag erhalten ${hhmm(h.received)}`];
+    const lines = [P.title.endsWith(` – ${h.team}`) ? P.title : `${h.team} – ${P.title}`, `Auftrag erhalten ${hhmm(h.received)}`];
     if (h.closed) lines.push(`✅ Auftrag abgeschlossen ${hhmm(h.closed)} – bitte zurückgeben`);
     if (h.prev) lines.push(`Vorher abgesucht: ${h.prev} (graue Wege und Markierungen)`);
     if (h.hint) lines.push(`Hinweis: ${h.hint}`);
@@ -3255,7 +3271,7 @@ function renderSend() {
     l.className = 'check';
     l.innerHTML = '<input type="checkbox"><span></span>';
     l.firstChild.value = g.id;
-    l.firstChild.checked = g.id in checked ? checked[g.id] : false; // Raster nur auf Wunsch
+    l.firstChild.checked = g.id in checked ? checked[g.id] : n > 0; // Raster mit Feldern des Teams vorangekreuzt, sonst nur auf Wunsch
     l.lastChild.textContent = `${gridLabel(P, g)}${sel.value ? ` (${n} Felder des Teams)` : ''}`;
     box.appendChild(l);
   }
@@ -3516,7 +3532,7 @@ function renderSentList() {
   renderTeamBar();
   const box = $('sent-list');
   box.innerHTML = '';
-  const list = [...(P.sent || [])].reverse();
+  const list = teamOrder([...(P.sent || [])].reverse(), P.marks); // feste Team-Reihenfolge, je Team neueste zuerst
   if (!list.length) return;
   const open = list.filter((x) => !isDone(x));
   const fin = list.filter(isDone);
@@ -3537,8 +3553,9 @@ function renderSentList() {
   const now = Date.now();
   for (const x of list) {
     const team = P.marks.find((m) => m.id === x.teamId);
-    const { last: lm, done: dm } = latestFor(allMsgs(), x.id);
-    const quiet = now - Math.max(x.last || 0, x.acc || x.at, lm ? lm.t : 0) > SENT_QUIET;
+    const { last: last0, done: dm } = latestFor(allMsgs(), x.id);
+    const lm = headMsg(allMsgs().filter((m) => m.a === x.id)); // dringende Meldung bleibt stehen
+    const quiet = now - Math.max(x.last || 0, x.acc || x.at, last0 ? last0.t : 0) > SENT_QUIET;
     const d = document.createElement('div');
     const acc = isAccepted(x);
     const fini = isDone(x);
@@ -3739,7 +3756,7 @@ function sentBadges() {
   if (db.mode !== 'el' || db.msgOff || isFree()) return [];
   const msgs = allMsgs();
   const out = [];
-  for (const x of P.sent || []) {
+  for (const x of teamOrder(P.sent || [], P.marks)) {
     const team = P.marks.find((m) => m.id === x.teamId);
     const name = team ? team.label : x.team;
     const color = team ? team.color : '#455a64';
@@ -3766,11 +3783,11 @@ function sentBadges() {
         continue;
       }
       // letzte sonstige Meldung, die dieses Gebiet betrifft (ohne Gebietsangabe = alle)
-      const st = [...own].reverse().find((m) => m.s !== 'fertig' && !(Array.isArray(m.gb) && m.gb.length && !m.gb.includes(area)));
+      const st = headMsg(own.filter((m) => m.s !== 'fertig' && !(Array.isArray(m.gb) && m.gb.length && !m.gb.includes(area))));
       const lines = [area ? `${name} · ${area}` : name];
       const info = [];
       if (!acc && !own.length) info.push('📲 wartet auf Übernahme');
-      else if (st) info.push(`${msgLabel({ s: st.s })} ${hhmm(st.t)}`);
+      else if (st) info.push(`${msgLabel(st)} ${hhmm(st.t)}`);
       if (pc != null) info.push(pc >= 100 ? '✅ fertig' : `📊 ${pc} %`);
       if (f.a && (!area || allGrids(P).some((g) => gridLabel(P, g) === area))) info.push(`▦ ${f.a}/${f.n} Felder`);
       if (!info.length) info.push(`📲 seit ${hhmm(x.acc || x.at)}`);
@@ -4215,18 +4232,23 @@ function areaPick(title) {
 async function spotDialog() {
   const r = await openDlg((box, close) => {
     dlgHead(box, '📍 Standort melden', 'Art wählen, dann Ort: hier oder auf der Karte.');
-    let cat = 'anzeige';
+    let cat = null; // keine Vorauswahl: erst bewusst eine Art wählen
     const list = document.createElement('div');
     list.className = 'dlg-btns two';
     box.appendChild(list);
-    const btns = SPOT_LIST.map((s) => dlgButton(list, `${s.ico} ${s.label}`, s.code === cat ? 'sel' : '', () => { cat = s.code; btns.forEach((b, i) => b.classList.toggle('sel', SPOT_LIST[i].code === cat)); }));
+    const btns = SPOT_LIST.map((s) => dlgButton(list, `${s.ico} ${s.label}`, '', () => {
+      cat = s.code;
+      btns.forEach((b, i) => b.classList.toggle('sel', SPOT_LIST[i].code === cat));
+      [here, onMap].forEach((b) => b.classList.remove('off'));
+    }));
     const txt = document.createElement('input');
     txt.type = 'text';
     txt.placeholder = 'Kurzer Text (optional)';
     txt.style.marginTop = '8px';
     box.appendChild(txt);
-    dlgButton(box, '📍 Hier melden', 'primary', () => close({ cat, txt: txt.value.trim(), here: true }));
-    dlgButton(box, '👆 Auf Karte tippen', '', () => close({ cat, txt: txt.value.trim(), here: false }));
+    const send = (here) => () => (cat ? close({ cat, txt: txt.value.trim(), here }) : toast('Bitte erst auswählen, was gemeldet wird'));
+    const here = dlgButton(box, '📍 Hier melden', 'primary off', send(true));
+    const onMap = dlgButton(box, '👆 Auf Karte tippen', 'off', send(false));
     dlgButton(box, 'Abbrechen', '', () => close(null));
   });
   if (!r) return;
@@ -4262,9 +4284,9 @@ function hfAreas() {
   return [...new Set(out)];
 }
 // Regler je Gebiet (bzw. ein Regler), vorausgefüllt mit dem letzten Stand (Stand- oder Abschluss-Meldung) -> [{ name, rng }]
-function pctRows(box, areas, multi) {
+function pctRows(box, areas, multi, dflt = 50) {
   const prev = [...hfLog()].reverse().find((m) => m.s === 'fertig' || m.s === 'zu');
-  const was = (name) => { const x = prev && (prev.ar || []).find((q) => q[0] === name); return x ? x[1] : prev && !multi && prev.pc != null ? prev.pc : 50; };
+  const was = (name) => { const x = prev && (prev.ar || []).find((q) => q[0] === name); return x ? x[1] : prev && !multi && prev.pc != null ? prev.pc : dflt; };
   return (multi ? areas : ['']).map((name) => {
     const big = document.createElement('div');
     big.className = 'st-pct';
@@ -4309,7 +4331,7 @@ async function closeDialog() {
   const multi = areas.length > 1;
   const r = await openDlg((box, close) => {
     dlgHead(box, '✅ Auftrag abschließen?', `${multi ? 'Wie viel ist je Gebiet abgesucht?' : 'Wie viel vom Gebiet ist abgesucht?'} Der Auftrag darf auch bei weniger als 100 % beendet oder abgebrochen werden.`);
-    const rows = pctRows(box, areas, multi);
+    const rows = pctRows(box, areas, multi, 100); // zuletzt gemeldeter Stand, ohne Stand 100 %
     const txt = document.createElement('input');
     txt.type = 'text';
     txt.placeholder = 'Grund, z. B. Hund müde, Dunkelheit (optional)';
@@ -4398,16 +4420,28 @@ function paintChips() {
   box.innerHTML = '';
   if (!isTablet() || db.mode !== 'el' || !lastChips.length) { box.hidden = true; return; }
   box.hidden = false;
-  const els = lastChips.map((q) => chipEl(q.c, q.unread, q.blink));
-  els.forEach((e) => box.appendChild(e));
-  chipsW = box.clientWidth;
-  const ws = els.map((e) => e.offsetWidth + 6);
   const MORE = 56;
-  let k = els.length;
-  const sum = (n) => ws.slice(0, n).reduce((a, b) => a + b, 0);
-  while (k > 1 && sum(k) + (k < els.length ? MORE : 0) > chipsW) k--;
+  // feste Team-Reihenfolge; passen nicht alle hin, rücken Teams mit ungequittiertem Fund/Hilfe nach vorn
+  const fit = (list) => {
+    const els = list.map((q) => chipEl(q.c, q.unread, q.blink));
+    els.forEach((e) => box.appendChild(e));
+    chipsW = box.clientWidth;
+    const ws = els.map((e) => e.offsetWidth + 6);
+    let k = els.length;
+    const sum = (n) => ws.slice(0, n).reduce((a, b) => a + b, 0);
+    while (k > 1 && sum(k) + (k < els.length ? MORE : 0) > chipsW) k--;
+    return { els, k };
+  };
+  let shown = lastChips;
+  let { els, k } = fit(shown);
+  if (k < els.length && lastChips.some((q) => q.c.todo)) {
+    box.innerHTML = '';
+    const first = todoFirst(lastChips.map((q) => q.c));
+    shown = first.map((c) => lastChips.find((q) => q.c === c));
+    ({ els, k } = fit(shown));
+  }
   if (k < els.length) {
-    const hidden = lastChips.slice(k);
+    const hidden = shown.slice(k);
     els.slice(k).forEach((e) => e.remove());
     const more = document.createElement('button');
     more.type = 'button';
@@ -4442,7 +4476,7 @@ function unreadRows(box, ur) {
 function renderTeamBar() {
   const el = db.mode === 'el' && !!P;
   const now = Date.now();
-  const chips = el ? teamChips(P.sent, allMsgs(), P.marks, P.items, areasText) : [];
+  const chips = el ? teamChips(P.sent, allMsgs(), P.marks, P.items, areasText, (P.live && P.live.ack) || []) : [];
   const ur = unreadNow();
   const cnt = $('st-count');
   cnt.hidden = !ur.length;
@@ -4454,7 +4488,7 @@ function renderTeamBar() {
   const newKeys = new Set(ur.filter((m) => now - (P.msgRecv[m.id] || 0) < 30e3).map((m) => teamKeyOf(m.a)));
   const hasSent = el && (P.sent || []).length > 0;
   const sig = JSON.stringify([el, tab, db.teamsOpen, unreadOpen, hasSent, ur.map((m) => m.id),
-    chips.map((c) => [c.key, c.status, c.areas, c.urgent, c.wait, c.color, c.team, c.dog, urKeys.has(c.key), newKeys.has(c.key)])]);
+    chips.map((c) => [c.key, c.status, c.areas, c.urgent, c.todo, c.wait, c.color, c.team, c.dog, urKeys.has(c.key), newKeys.has(c.key)])]);
   if (sig === tbSig) return;
   tbSig = sig;
   lastChips = chips.map((c) => ({ c, unread: urKeys.has(c.key), blink: newKeys.has(c.key) }));
@@ -4927,6 +4961,15 @@ async function takeAssignment(a) {
   let p = known;
   if (!p) {
     p = projectFromAssignment(a);
+    // Hundeführer mit laufendem (nicht abgeschlossenen) Auftrag: neuen Auftrag erst nach Rückfrage übernehmen (unlesbare Aufträge scheitern vorher)
+    if (db.mode === 'hf' && P && P.hf && !P.hf.closed) {
+      const ok = await openDlg((box, close) => {
+        dlgHead(box, '📲 Neuer Auftrag', `Neuer Auftrag für ${a.tm ? a.tm.l : a.t} – laufenden Auftrag ${P.hf.team}/${P.title.replace(/ – [^–]*$/, '')} ersetzen? (Er bleibt unter „Frühere Aufträge“.)`);
+        dlgButton(box, 'Neuen übernehmen', 'primary', () => close(true));
+        dlgButton(box, 'Abbrechen', '', () => close(false));
+      });
+      if (!ok) return;
+    }
     if (devLayer()) p.layerId = devLayer();
     db.projects[p.id] = p;
     if (p.hfRescue.length) {
@@ -4973,7 +5016,7 @@ async function startScan() {
   try {
     scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
   } catch (e) {
-    $('scan-text').textContent = 'Keine Kamera verfügbar oder nicht erlaubt. Alternativ: Link per WhatsApp schicken lassen und „Rückmeldung einfügen“.';
+    $('scan-text').textContent = 'Keine Kamera verfügbar oder nicht erlaubt. ' + (db.mode === 'hf' ? 'Alternativ: Den Link aus WhatsApp/SMS direkt antippen.' : 'Alternativ: Link per WhatsApp schicken lassen und „Rückmeldung einfügen“.');
     return;
   }
   const v = $('scan-video');
@@ -5174,7 +5217,7 @@ async function takeHandover(e) {
     snapshot();
     const r = mergeProgress(P, buildProgress(inc, { from: e.from || '', since: 0, full: true }));
     if (!r) return toast('Einsatz konnte nicht zusammengeführt werden');
-    if (e.from && !peerOf(P, e.from)) setPeer(P, e.from, Date.now());
+    if (e.from && !peerOf(P, e.from)) setPeer(P, e.from, Date.now(), false);
     progBase.set(P, snapshotBase(P));
     syncGrid();
     changed();
@@ -5197,7 +5240,7 @@ async function takeHandover(e) {
   renderProjects();
   applyMode();
   await askDeviceName(true);
-  setPeer(P, e.from || (P.parentEid ? 'Einsatzleitung' : 'Gerät'), Date.now()); // Absender als Empfänger für „Fortschritt senden“
+  setPeer(P, e.from || (P.parentEid ? 'Einsatzleitung' : 'Gerät'), Date.now(), false); // Absender als Empfänger für „Fortschritt senden“
   touch();
   toast(`📥 ${p.parentEid ? 'Unterabschnitt' : 'Einsatz'} „${p.title || 'Suchgebiet'}“ übernommen – Rückmeldungen jetzt hier scannen${e.np ? ` (ohne ${e.np} Foto${e.np === 1 ? '' : 's'})` : ''}`, 8000);
 }
@@ -5271,7 +5314,7 @@ async function sendProgress() {
   // 1. An wen?
   const to = await openDlg((box, close) => {
     dlgHead(box, '🔄 Fortschritt senden', `Von „${from}“ an ein anderes Gerät der Einsatzleitung (EL, Unterabschnitt, ELW). Es geht nur das Neue seit dem letzten Senden an dieses Gerät. Dort wird nur ergänzt – nichts gelöscht.`);
-    for (const x of proj.peers) dlgButton(box, `${esc(x.name)}<small>${x.lastSent ? `zuletzt gesendet ${hhmm(x.lastSent)}` : 'noch nie gesendet'}</small>`, 'primary', () => close(x.name));
+    for (const x of proj.peers) dlgButton(box, `${esc(x.name)}<small>${x.sent ? `zuletzt gesendet ${hhmm(x.sent)}` : 'noch nie gesendet'}</small>`, 'primary', () => close(x.name));
     const inp = document.createElement('input');
     inp.type = 'text';
     inp.id = 'prog-new';
@@ -5330,7 +5373,7 @@ async function takeProgress(f) {
   // Absender als Empfänger merken; ein beim Übergeben angelegter Platzhalter („Gerät 14:03“) bekommt seinen Namen
   if (!peerOf(P, from)) {
     const ph = P.peers.find((x) => /^Gerät \d/.test(x.name) && x.name.endsWith('(UA)') === !!f.pe);
-    if (ph) ph.name = String(from).slice(0, 60); else setPeer(P, from, 0);
+    if (ph) ph.name = String(from).slice(0, 60); else setPeer(P, from, 0, false);
   }
   progBase.set(P, snapshotBase(P));
   markAccepted(P, allMsgsRaw());
@@ -5774,7 +5817,7 @@ function renderLayerList() {
     const b = document.createElement('button');
     b.textContent = l.name;
     b.classList.toggle('active', l.id === P.layerId);
-    b.addEventListener('click', () => setLayer(l.id));
+    b.addEventListener('click', () => setLayer(l.id, true));
     box.appendChild(b);
   }
   const ovBox = $('overlay-list');
@@ -6526,10 +6569,11 @@ window.onSharedFile = async () => {
 };
 
 // GPX (z. B. aus BaseCamp) bzw. KML ins aktuelle Suchgebiet: Tracks/Routen als Umrisse, Wegpunkte als Text
-function importGeo(g, fileName) {
+function importGeo(g0, fileName) {
   if (isClosed()) return lockedToast();
   if (isFree()) createProject(wizTitle()); // Datei ohne offenen Einsatz: dafür einen neuen anlegen
   const base = fileName.replace(/\.(gpx|kml|xml)$/i, '');
+  const g = { ...g0, ...dedupeImport(P.items, g0, base) }; // schon vorhandene (gleicher Name, gleiche Punkte) überspringen
   const added = [];
   for (const t of g.tracks) {
     const [a, z] = [t.pts[0], t.pts[t.pts.length - 1]];
@@ -6538,20 +6582,28 @@ function importGeo(g, fileName) {
     added.push({ kind: 'track', name: t.name || base, color: t.color || db.color, w: 4, pts: t.pts, ...(open ? { open: true } : {}) });
   }
   for (const w of g.waypoints) added.push({ kind: 'text', color: db.color, lat: w.lat, lon: w.lon, text: w.name });
+  // Karte springt auf den Import – auch wenn alles schon da war (dann auf die Datei selbst)
+  const zoomTo = (list) => {
+    const pts = list.flatMap((it) => (it.pts ? it.pts : [[it.lat, it.lon]]));
+    if (pts.length) map.fitBounds(pts, { padding: [40, 40], maxZoom: 17 });
+  };
   if (!added.length) {
-    toast(g.skipped ? 'Nur Raster/Feldnamen in der Datei – nichts übernommen' : 'Keine Tracks oder Wegpunkte in der Datei');
+    if (g.dup) {
+      closePanels();
+      zoomTo([...g0.tracks, ...g0.waypoints.map((w) => ({ lat: w.lat, lon: w.lon }))]);
+      toast(`Nichts übernommen – ${g.dup} schon vorhanden`);
+    } else toast(g0.skipped ? 'Nur Raster/Feldnamen in der Datei – nichts übernommen' : 'Keine Tracks oder Wegpunkte in der Datei');
     return;
   }
   P.items.push(...added);
   save();
   redraw();
   closePanels();
-  const pts = added.flatMap((it) => (it.pts ? it.pts : [[it.lat, it.lon]]));
-  map.fitBounds(pts, { padding: [40, 40], maxZoom: 17 });
+  zoomTo(added);
   const parts = [];
   if (g.tracks.length) parts.push(`${g.tracks.length} Track${g.tracks.length > 1 ? 's' : ''}`);
   if (g.waypoints.length) parts.push(`${g.waypoints.length} Wegpunkt${g.waypoints.length > 1 ? 'e' : ''}`);
-  toast(`${parts.join(' und ')} übernommen${g.skipped ? ` (${g.skipped} Raster-Einträge übersprungen)` : ''}`);
+  toast(`${g.dup ? `${added.length} übernommen, ${g.dup} schon vorhanden` : `${parts.join(' und ')} übernommen`}${g0.skipped ? ` (${g0.skipped} Raster-Einträge übersprungen)` : ''}`);
 }
 
 // ---------- Panels ----------

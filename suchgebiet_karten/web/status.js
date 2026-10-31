@@ -161,6 +161,13 @@ export function qrMsgs(log, n = 20) {
 }
 // Gelöschte Meldungen (del: { id: Zeit }) aus der Liste nehmen
 export const withoutDeleted = (list, del) => (del && Object.keys(del).length ? (list || []).filter((m) => !del[m.id]) : list || []);
+// Meldung, die an Chip, Plakette und Aufträge-Liste steht: die letzte dringende (Fund/Hilfe, nicht zurückgezogen),
+// sonst die letzte. Eine Routinemeldung danach verdrängt sie nicht, ein späterer Fund/Hilfe ersetzt sie.
+export function headMsg(list) {
+  const l = list || [];
+  for (let i = l.length - 1; i >= 0; i--) if (isUrgent(l[i]) && !l[i].gone) return l[i];
+  return l[l.length - 1] || null;
+}
 // Letzte Meldung (und letzte „fertig“-Meldung) eines Auftrags
 export function latestFor(list, a) {
   const own = (list || []).filter((m) => m.a === a);

@@ -1,13 +1,14 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v114**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v115**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v115 – 👆 Bedienung (Prüfung 31.10.)**: Zoom-Knöpfe nicht mehr von Leisten verdeckt; Plakette und Aufträge zeigen die Meldungsart, Fund/Hilfe bleiben stehen; feste Team-Reihenfolge bei Chips und Aufträgen; „Standort melden“ ohne Vorauswahl; Rückfrage vor HF-Modus und vor Ersetzen eines laufenden Auftrags; Abschluss mit letztem Stand; zugeteilte Gebiete vorangekreuzt; GPX-Import ohne Duplikate; größere Tippziele, Dialoge im Querformat, bessere Kontraste und Texte.
 - [~] **v114 – 🛡️ Robustheit (Prüfung 31.10.)**: Speicher-voll-Warnung statt falschem „gespeichert“; kaputter Link stoppt die Status-Synchronisation nicht mehr; Netz-Zeitlimits (Funkloch blockiert nichts mehr); Wetter-Endlosschleife behoben; Umrisse mit Schlusspunkt bleiben beim Senden erhalten; fremde Gerätenamen werden nicht mehr als HTML ausgeführt; Status-Server nur Google; Offline-Kacheln ohne sinnlose Wiederholung; Aufräumen.
 - [~] **v113 – 🔒 Freigabe: Installationen abschalten**: jede Installation (APK und Web) meldet sich mit Geräte-ID beim Status-Server (Blatt „Geräte“); ein Eintrag in „Gesperrt“ sperrt ein Gerät, „App aktiv“ = NEIN im Blatt „Einstellungen“ sperrt alle. Wirkt beim nächsten Start; ohne Internet 14 Tage Frist. Sperrbildschirm mit Kontakt error.404.found@outlook.de, Geräte-ID und „Erneut prüfen“.
 - [~] **v112 – 📍 Gebiete-Knopf neben der Suche**: eigenes Piktogramm (gestrichelte Fläche mit Fadenkreuz) neben dem eingeklappten Suchfeld; öffnet die Liste aller Umrisse (Name, Team, Fläche) und Raster (Felder). Antippen zentriert und zoomt die Karte auf das Gebiet, zweiter Tipp auf den Knopf schließt die Liste.

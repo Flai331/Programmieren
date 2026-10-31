@@ -73,7 +73,7 @@
     <button id="hf-draw"><span>✏️</span><b>Bereich</b></button>
     <button id="hf-wind"><span>🧭</span><b>Wind</b></button>
     <button id="hf-status" hidden><span>📣</span><b>Status</b></button>
-    <button id="hf-back" class="primary"><span>📤</span><b>Zurück­geben</b></button>
+    <button id="hf-back" class="primary"><span>📤</span><b>Zurück<i class="lg">geben</i></b></button>
   </div>
 
   <!-- Dialoge: Modus, PIN, Markieren, QR-Code, Scanner, Einfügen -->
@@ -155,7 +155,7 @@
     <button id="quick-marks" class="on" title="Teams und Markierungen ein-/ausblenden"><span>▦</span>Felder</button>
     <button id="quick-rp" class="on plain" title="Nächster Rettungspunkt (von GPS-Standort oder Kartenmitte)" hidden><span>🚑</span>RP</button>
     <button id="quick-wx" class="plain" title="Wetter und Wind einblenden"><span>🌬️</span>Wetter</button>
-    <button id="quick-arrows" class="plain" title="Wind auf der Karte ein/aus (blau = DWD, grün = gemessen)"><span>➚</span>Wind</button>
+    <button id="quick-arrows" class="plain" title="Wind auf der Karte ein/aus (blau = DWD, grün = gemessen)"><span>➚</span>Windpfeile</button>
     <button id="quick-night" class="plain" title="Nachtmodus: aus → dunkel → rot"><span>🌙</span>Nacht</button>
     <div class="zoomslider">
       <button id="zs-in" title="Hineinzoomen">+</button>
@@ -293,7 +293,7 @@
     <h2 class="sub first">1. An wen?</h2>
     <div class="share-grid" id="share-to">
       <button data-to="team"><span>🐕</span><b>Hundeführer / Team</b><small>Auftrag fürs Handy</small></button>
-      <button data-to="ua"><span>🚐</span><b>Unterabschnitt (UA)</b><small>ein Gebiet bearbeiten</small></button>
+      <button data-to="ua"><span>🧭</span><b>Unterabschnitt (UA)</b><small>ein Gebiet bearbeiten</small></button>
       <button data-to="el"><span>🚐</span><b>EL / ELW</b><small>ganzer Einsatz</small></button>
       <button data-to="other"><span>👥</span><b>Sonstige</b><small>ohne App: Polizei, Druck, Garmin …</small></button>
     </div>
@@ -341,8 +341,8 @@
     <label>🗺️ Standard-Kartenart <select id="dev-layer"></select></label>
     <p class="small">Gilt auf diesem Gerät für neue Einsätze, übernommene Aufträge und Übergaben. Im laufenden Einsatz lässt sich die Karte unter „Karte“ jederzeit wechseln.</p>
     <div class="el-only">
-    <label>📣 Status-Server (Web-App-Adresse) <input id="dev-status-url" type="text" inputmode="url" autocomplete="off" placeholder="Standard (leer lassen)"></label>
-    <p class="small">Nur auf Geräten der Einsatzleitung nötig. Mit Adresse tragen neue Aufträge die Verbindung mit: Hundeführer melden dann bei Internet ihren Status und wichtige Standorte. Einrichtung: Ordner „apps-script“, ANLEITUNG.md. Leer lassen = nur QR-Rückmeldung.</p>
+    <label>📣 Status-Server (Web-App-Adresse) <input id="dev-status-url" type="text" inputmode="url" autocomplete="off" placeholder="leer = eingebauter Standard-Server"></label>
+    <p class="small">Nur auf Geräten der Einsatzleitung nötig. Mit Adresse tragen neue Aufträge die Verbindung mit: Hundeführer melden dann bei Internet ihren Status und wichtige Standorte. Einrichtung: Ordner „apps-script“, ANLEITUNG.md. Leer lassen = der eingebaute Standard-Server wird benutzt. Ein Abschalten gibt es nicht; die QR-Rückmeldung funktioniert immer zusätzlich.</p>
     </div>
     <h2 class="sub">App-Modus</h2>
     <p class="small">Einsatzleitung: alles. Hundeführer: stark vereinfacht (große Knöpfe, nur der eigene Auftrag). Zurück zur Einsatzleitung nur mit der PIN der Einsatzleitung.</p>
@@ -418,7 +418,7 @@
     <div id="send-items" class="checklist"></div>
     <label id="send-prev-label" hidden>🐕 Vom vorherigen Team <small>(Wege und Markierungen aus dem Gebiet – beim neuen Team grau, nur zum Ansehen)</small></label>
     <div id="send-prev" class="checklist sub-list" hidden></div>
-    <label>Raster <small>(anhaken = Raster mit Feldern mitschicken)</small></label>
+    <label>Raster <small>(anhaken = Raster mit Feldern mitschicken; mit Feldern des Teams ist es angehakt)</small></label>
     <div id="send-grids" class="checklist"></div>
     <div id="send-fields-sub" class="sub-list">
       <label>Felder</label>

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   STATUS_LIST, SPOT_LIST, newLiveKey, roomOf, encryptMsg, decryptMsg, statusLabel, msgLabel, isUrgent, buildMsg, mergeStatus,
-  latestFor, flushOutbox, pollMessages, coveragePct, coverageGaps, areaShapes,
+  latestFor, headMsg, flushOutbox, pollMessages, coveragePct, coverageGaps, areaShapes,
 } from '../web/status.js';
 import { buildAssignment, projectFromAssignment } from '../web/share.js';
 import { buildHandover, projectFromHandover } from '../web/handover.js';
@@ -317,4 +317,18 @@ test('QR-Auswahl: letzte n ohne kor samt ihrer Korrekturen', () => {
   assert.ok(q.some((m) => m.id === 'k1') && !q.some((m) => m.id === 'k2'));
   assert.ok(!q.some((m) => m.id === 'm0'));
   assert.equal(applyKor(q).find((m) => m.id === 'm24').txt, 'x');
+});
+
+test('headMsg: dringende Meldung bleibt, späterer Fund/Hilfe ersetzt, Routine verdrängt nicht', () => {
+  const f = { id: 'f', s: 'ort', cat: 'fund', t: 1 };
+  const h = { id: 'h', s: 'ort', cat: 'hilfe', t: 3 };
+  const r = { id: 'r', s: 'pause', t: 2 };
+  const o = { id: 'o', s: 'ort', cat: 'hinweis', t: 4 };
+  assert.equal(headMsg([]), null);
+  assert.equal(headMsg([r, o]), o);
+  assert.equal(headMsg([f, r]), f);
+  assert.equal(headMsg([f, r, h, o]), h);
+  assert.equal(headMsg([{ ...f, gone: 5 }, r]), r); // zurückgezogen zählt nicht
+  assert.equal(msgLabel(headMsg([f, r])), '🟢 Person gefunden'); // nicht „Standort“
+  assert.equal(msgLabel(o), '👕 Hinweis');
 });

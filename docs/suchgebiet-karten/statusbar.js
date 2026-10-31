@@ -1,6 +1,6 @@
 // v98: Team-Chips, Ungelesen-Logik, Erinnerung und Verlauf der Status-Meldungen (Einsatzleitung).
 // Reine Logik ohne DOM, damit sie testbar ist.
-import { msgLabel, isUrgent } from './status.js';
+import { msgLabel, isUrgent, headMsg } from './status.js';
 import { isAccepted } from './locks.js';
 import { isDone, closeMsg, msgPct } from './closeout.js';
 
@@ -30,8 +30,10 @@ export function isReturned(x, msgs) {
   return !(msgs || []).some((m) => m.a === x.id && m.t > x.last);
 }
 
-// Chips: einer je Team mit laufendem Auftrag. areasOf(x) -> Gebietsnamen als Text (optional)
-export function teamChips(sent, msgs, marks, items, areasOf) {
+// Chips: einer je Team mit laufendem Auftrag, in fester Team-Reihenfolge (marks); Teams ohne Eintrag in marks danach
+// (in der Reihenfolge der Aufträge). areasOf(x) -> Gebietsnamen als Text (optional); ack = quittierte Fund-/Hilfe-IDs.
+// Dringende Meldungen (Fund/Hilfe) bleiben als Chip-Text stehen, auch wenn danach Routinemeldungen kamen.
+export function teamChips(sent, msgs, marks, items, areasOf, ack = []) {
   const byTeam = new Map();
   for (const x of sent || []) {
     if (isDone(x)) continue; // abgeschlossen: Team gilt als frei
@@ -47,22 +49,32 @@ export function teamChips(sent, msgs, marks, items, areasOf) {
     const team = (marks || []).find((m) => m.id === x.teamId);
     const own = (msgs || []).filter((m) => m.a === x.id);
     const last = own[own.length - 1] || null;
+    const head = headMsg(own);
     const acc = isAccepted(x);
     let status;
     let t;
     if (last && last.s === 'zu') { const pc = msgPct(last); status = `✅ meldet abgeschlossen ${hm(last.t)}${pc != null ? ` (${pc} %)` : ''}`; t = last.t; }
-    else if (last && last.s !== 'ok') { status = `${msgLabel(last)} ${hm(last.t)}`; t = last.t; }
+    else if (last && last.s !== 'ok') { status = `${msgLabel(head)} ${hm(head.t)}`; t = last.t; }
     else if (last || acc) { const at = last ? last.t : x.acc; status = `📲 übernommen ${hm(at)}`; t = at; }
     else { status = '📲 wartet'; t = x.at || 0; }
     out.push({
       key, a: x.id, teamId: x.teamId || '', color: team ? team.color : '#455a64',
       team: team ? team.label : x.team || 'Team', dog: team && team.dog ? team.dog : '',
       areas: areasOf ? areasOf(x) : defaultAreas(x, items), status, t, wait: !last && !acc,
-      urgent: !!last && isUrgent(last), last,
+      urgent: !!head && isUrgent(head), todo: !!head && isUrgent(head) && !(ack || []).includes(head.id), last,
     });
   }
-  return out.sort((p, q) => q.t - p.t);
+  // feste Reihenfolge wie im Teams-Fenster; nicht gelistete Teams hinten (stabil)
+  return teamOrder(out, marks);
 }
+// Feste Team-Reihenfolge (wie im Teams-Fenster = Reihenfolge von marks); gleiche/unbekannte Teams behalten ihre Reihenfolge.
+// Elemente tragen die Team-ID als teamId.
+export function teamOrder(list, marks) {
+  const rank = (c) => { const i = (marks || []).findIndex((m) => m.id === c.teamId); return i < 0 ? 1e9 : i; };
+  return list.map((c, i) => [c, i]).sort((p, q) => rank(p[0]) - rank(q[0]) || p[1] - q[1]).map((e) => e[0]);
+}
+// Passen nicht alle Chips hin: Teams mit ungequittiertem Fund/Hilfe zuerst (sonst Reihenfolge unverändert)
+export const todoFirst = (chips) => [...chips.filter((c) => c.todo), ...chips.filter((c) => !c.todo)];
 export const chipText = (c) => [`${c.team}${c.dog ? ` (${c.dog})` : ''}`, c.areas, c.status].filter(Boolean).join(' · ');
 
 // Alle Aufträge eines Teams (IDs)

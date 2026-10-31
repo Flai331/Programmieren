@@ -358,3 +358,15 @@ test('Status-Schlüssel: UA bekommt ihn mit, Fortschritt bringt ihn zu einem Ger
   mergeProgress(r, { ...f, lv: ['https://evil.example/x', 'K9'] });
   assert.equal(r.live, undefined);
 });
+
+test('setPeer: „gesendet“ zählt erst beim echten Senden, nicht bei Übernahme', () => {
+  const p = newProject('X');
+  setPeer(p, 'A', 5000, false);
+  assert.equal(p.peers[0].lastSent, 5000);
+  assert.equal(p.peers[0].sent, 0);
+  setPeer(p, 'A', 6000);
+  assert.equal(p.peers[0].sent, 6000);
+  assert.equal(normalizeProject(JSON.parse(JSON.stringify(p))).peers[0].sent, 6000);
+  // älteres Projekt ohne „sent“: wie lastSent
+  assert.equal(normalizeProject({ ...newProject('Y'), peers: [{ name: 'B', lastSent: 7 }] }).peers[0].sent, 7);
+});

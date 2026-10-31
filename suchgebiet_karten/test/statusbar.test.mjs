@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  teamChips, chipText, teamMsgs, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, bannerText, parseSnooze,
+  teamChips, teamOrder, todoFirst, chipText, teamMsgs, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, bannerText, parseSnooze,
   historyFilter, historyTeams, isReturned, BANNER_MS, BEEP_MS, BEEP_EVERY_MS,
 } from '../web/statusbar.js';
 import { normalizeProject, newProject } from '../web/store.js';
@@ -43,9 +43,30 @@ test('teamChips: Quittung ok gilt als übernommen, Fund/Hilfe dringend', () => {
   const u = teamChips(sent, [msg('m1', 'A1', 'ort', 30, { cat: 'fund' })], marks, items).find((x) => x.teamId === 'T1');
   assert.equal(u.urgent, true);
 });
-test('teamChips: Sortierung neueste Aktivität zuerst', () => {
+test('teamChips: feste Team-Reihenfolge (wie marks), nicht nach Aktivität', () => {
   const c = teamChips(sent, [msg('m1', 'A1', 'pause', 20), msg('m2', 'A2', 'start', 30)], marks, items);
-  assert.deepEqual(c.map((x) => x.teamId), ['T2', 'T1']);
+  assert.deepEqual(c.map((x) => x.teamId), ['T1', 'T2']);
+  const d = teamChips(sent, [msg('m1', 'A2', 'ort', 40, { cat: 'fund' })], marks, items);
+  assert.deepEqual(d.map((x) => x.teamId), ['T1', 'T2']); // Fund hebt hervor, sortiert nicht nach vorn
+  assert.equal(d[1].urgent, true);
+  // Team nicht in marks: hinten
+  assert.deepEqual(teamChips(sent, [], marks.slice(1), items).map((x) => x.teamId), ['T2', 'T1']);
+});
+test('teamChips: Fund bleibt nach Routinemeldung stehen, späterer Fund/Hilfe ersetzt, ack quittiert', () => {
+  const f = msg('f1', 'A1', 'ort', 10, { cat: 'fund' });
+  let c = teamChips(sent, [f, msg('m2', 'A1', 'pause', 20)], marks, items).find((x) => x.teamId === 'T1');
+  assert.match(c.status, /^🟢 Person gefunden/);
+  assert.equal(c.urgent, true);
+  assert.equal(c.todo, true);
+  c = teamChips(sent, [f, msg('m2', 'A1', 'pause', 20)], marks, items, null, ['f1']).find((x) => x.teamId === 'T1');
+  assert.equal(c.todo, false);
+  c = teamChips(sent, [f, msg('m3', 'A1', 'ort', 25, { cat: 'hilfe' }), msg('m2', 'A1', 'pause', 30)], marks, items).find((x) => x.teamId === 'T1');
+  assert.match(c.status, /^🆘 Brauche Hilfe/);
+});
+test('teamOrder / todoFirst', () => {
+  const l = [{ teamId: 'X' }, { teamId: 'T2' }, { teamId: 'T1' }];
+  assert.deepEqual(teamOrder(l, marks).map((x) => x.teamId), ['T1', 'T2', 'X']);
+  assert.deepEqual(todoFirst([{ k: 1 }, { k: 2, todo: true }, { k: 3 }]).map((x) => x.k), [2, 1, 3]);
 });
 test('teamChips: nach QR-Rückmeldung weg, neuere Meldung holt ihn zurück', () => {
   const s = [{ ...sent[0], last: T0 + min(40) }, sent[1]];

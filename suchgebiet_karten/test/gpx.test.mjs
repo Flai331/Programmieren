@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cellOutlines, buildGpx, garminColor, trackLength, labelTracks, polygonArea, formatArea, trackDesc, parseGpx, mergeGpx } from '../web/gpx.js';
+import { cellOutlines, buildGpx, garminColor, trackLength, labelTracks, polygonArea, formatArea, trackDesc, parseGpx, mergeGpx, dedupeImport } from '../web/gpx.js';
 import { CAP, FONT_CHARS, textPath } from '../web/font.js';
 import { makeZip, crc32 } from '../web/zip.js';
 import { planCustomMap, TILE, MAX_TILES } from '../web/kmz.js';
@@ -305,4 +305,23 @@ test('Umriss-Name: Himmelsrichtung vom B-Ort + fortlaufende Nummer', async () =>
   assert.equal(outlineName([{ kind: 'track', name: 'Ost 5' }], meet, sq(52.0, 8.03)), 'Ost 6');
   assert.equal(outlineName([], null, sq(52.02, 8.0)), 'Umriss 1');
   assert.equal(outlineName([], meet, sq(52.0, 8.0)), 'Umriss 1');
+});
+
+test('dedupeImport: gleicher Name + gleiche Punkte werden übersprungen', () => {
+  const pts = [[52, 8], [52.001, 8], [52.001, 8.001]];
+  const items = [{ kind: 'track', name: 'Nord', pts: pts.map((q) => [...q]) }, { kind: 'text', text: 'Hochsitz', lat: 52.5, lon: 8.5 }];
+  const g = {
+    tracks: [{ name: 'Nord', pts }, { name: 'Nord', pts: [[1, 1], [2, 2]] }, { name: 'Süd', pts }, { name: 'Süd', pts }],
+    waypoints: [{ name: 'Hochsitz', lat: 52.5, lon: 8.5 }, { name: 'Hochsitz', lat: 52.6, lon: 8.5 }, { name: 'Hochsitz', lat: 52.6, lon: 8.5 }],
+  };
+  const r = dedupeImport(items, g, 'datei');
+  assert.deepEqual(r.tracks.map((t) => t.name), ['Nord', 'Süd']);
+  assert.equal(r.waypoints.length, 1);
+  assert.equal(r.dup, 4);
+  // zweiter Import derselben Datei: alles schon da
+  const items2 = [...items, ...r.tracks.map((t) => ({ kind: 'track', name: t.name, pts: t.pts })), ...r.waypoints.map((w) => ({ kind: 'text', text: w.name, lat: w.lat, lon: w.lon }))];
+  const r2 = dedupeImport(items2, g, 'datei');
+  assert.equal(r2.tracks.length + r2.waypoints.length, 0);
+  // Track ohne Namen: Dateiname gilt
+  assert.equal(dedupeImport([{ kind: 'track', name: 'datei', pts }], { tracks: [{ name: '', pts }], waypoints: [] }, 'datei').dup, 1);
 });
