@@ -27,6 +27,8 @@ function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
     var b = JSON.parse(e.postData.contents);
+    // Fehlerbericht der App (v116): { rep: { … } } -> Notion; alles andere ist eine normale Status-Meldung
+    if (b && b.rep && typeof b.rep === 'object') return antwort_(bericht_(b.rep));
     var r = String(b.r || '');
     var id = String(b.id || '');
     var d = String(b.d || '');
@@ -75,10 +77,22 @@ function einstellungenBlatt_() {
   var sh = ss.getSheetByName(BLATT_EINST);
   if (!sh) {
     sh = ss.insertSheet(BLATT_EINST);
-    sh.getRange(1, 1, 2, 2).setValues([['App aktiv', 'JA'], ['Kontakt', STANDARD_KONTAKT]]);
-    sh.getRange(1, 1, 2, 1).setFontWeight('bold');
+    sh.getRange(1, 1, 3, 2).setValues([['App aktiv', 'JA'], ['Kontakt', STANDARD_KONTAKT], ['Notfallcode', '']]);
+    sh.getRange(1, 1, 3, 1).setFontWeight('bold');
+    sh.getRange(3, 2).setNumberFormat('@');
   }
   return sh;
+}
+
+// Zeile 3 „Notfallcode“ (v116) nachrüsten, falls das Blatt älter ist; ein vorhandener Wert bleibt
+function notfallZeile_(sh) {
+  if (String(sh.getRange(3, 1).getValue() || '') === '') sh.getRange(3, 1).setValue('Notfallcode').setFontWeight('bold');
+  sh.getRange(3, 2).setNumberFormat('@'); // Text: führende Nullen bleiben
+}
+
+function sha256Hex_(text) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text, Utilities.Charset.UTF_8);
+  return bytes.map(function (b) { return ('0' + (b < 0 ? b + 256 : b).toString(16)).slice(-2); }).join('');
 }
 
 function kuerzen_(v) {
@@ -97,7 +111,7 @@ function istAktiv_(wert) {
   return !(t === 'nein' || t === 'false' || t === '0');
 }
 
-// Gerät melden: ?lic=<Geräte-ID>&m=&v=&p=&n=&ua= -> { ok, lic: true, aktiv, gesperrt, kontakt, now }
+// Gerät melden: ?lic=<Geräte-ID>&m=&v=&p=&n=&ua= -> { ok, lic: true, aktiv, gesperrt, kontakt, now, notfall? }
 function lizenz_(p) {
   var id = String(p.lic || '');
   if (!/^[A-Za-z0-9_-]{8,40}$/.test(id)) return antwort_({ ok: false, fehler: 'Geräte-ID' });
@@ -134,11 +148,95 @@ function lizenz_(p) {
     }
     var es = einstellungenBlatt_();
     var kontakt = String(es.getRange(2, 2).getValue() || '') || STANDARD_KONTAKT;
-    return antwort_({ ok: true, lic: true, aktiv: istAktiv_(es.getRange(1, 2).getValue()), gesperrt: gesperrt, kontakt: kontakt, now: jetzt });
+    var antw = { ok: true, lic: true, aktiv: istAktiv_(es.getRange(1, 2).getValue()), gesperrt: gesperrt, kontakt: kontakt, now: jetzt };
+    // Notfallcode (v116): nur der SHA-256-Hash geht zum Gerät; leer = nichts mitschicken
+    var code = String(es.getRange(3, 2).getDisplayValue() || '').replace(/^\s+|\s+$/g, '');
+    if (code) antw.notfall = sha256Hex_(code);
+    return antwort_(antw);
   } catch (err) {
     return antwort_({ ok: false, fehler: String(err) });
   } finally {
     try { lock.releaseLock(); } catch (x) { /* kein Schloss gehalten */ }
+  }
+}
+
+// ---------- Fehlerberichte (v116): Notion-Fehlerzentrale ----------
+// Der Token steht NUR in den Skripteigenschaften (Projekteinstellungen -> Skripteigenschaften -> NOTION_TOKEN),
+// nie im Code und nie in der App. Die Geräte schicken { rep: { … } }; hier wird daraus die Notion-Seite.
+var NOTION_DB = '5574dcecd7e84a0aa79446bab3915a47';
+var BERICHTE_PRO_STUNDE = 30;
+var BERICHT_MAX = 2000;
+
+function bText_(v, n) {
+  var t = String(v === undefined || v === null ? '' : v);
+  return t.substring(0, n || BERICHT_MAX);
+}
+
+// Höchstens 30 Berichte pro Stunde (Zähler im Skript-Cache); true = darf senden
+function berichtErlaubt_() {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    var cache = CacheService.getScriptCache();
+    var key = 'bericht-' + Math.floor(Date.now() / 3600000);
+    var n = Number(cache.get(key)) || 0;
+    if (n >= BERICHTE_PRO_STUNDE) return false;
+    cache.put(key, String(n + 1), 3700);
+    return true;
+  } finally {
+    try { lock.releaseLock(); } catch (x) { /* kein Schloss gehalten */ }
+  }
+}
+
+// rep -> Notion-Seite in der Datenbank „Suchgebiet-Karten“ (gleiche Felder wie früher ErrorReports.kt)
+function berichtSeite_(rep) {
+  function text(v) { return { rich_text: [{ text: { content: bText_(v) } }] }; }
+  function wahl(v, ersatz) { return { select: { name: bText_(v || ersatz, 100).replace(/,/g, ' ') || ersatz } }; }
+  var fehler = [bText_(rep.error, 500), bText_(rep.stack, 1400)].filter(function (x) { return x; }).join('\n');
+  var zeit = new Date(String(rep.time || ''));
+  return {
+    parent: { database_id: NOTION_DB },
+    properties: {
+      'Titel': { title: [{ text: { content: bText_(rep.title || 'Fehlerbericht', 200) } }] },
+      'Status': wahl('Offen', 'Offen'),
+      'Art': wahl(rep.kind, 'Auto-Fehler'),
+      'Plattform': wahl(rep.platform, 'Android'),
+      'Beschreibung': text(rep.desc),
+      'Fehler': text(fehler),
+      'Protokoll': text(rep.log),
+      'Seite': text(rep.page),
+      'Benutzerrolle': text(rep.role),
+      'Gerät': text(rep.device),
+      'OS': text(rep.os),
+      'Version': text(rep.version),
+      'Fingerprint': text(rep.fingerprint),
+      'Zeitstempel': { date: { start: (isNaN(zeit.getTime()) ? new Date() : zeit).toISOString() } }
+    }
+  };
+}
+
+// Antwort: { ok: true } (gesendet), { ok: true, verworfen: true } (Notion lehnt den Bericht ab: nicht wiederholen),
+// { ok: false, fehler } bzw. { ok: false } (später nochmal versuchen)
+function bericht_(rep) {
+  var token = PropertiesService.getScriptProperties().getProperty('NOTION_TOKEN');
+  if (!token) return { ok: false, fehler: 'kein Token' };
+  if (!berichtErlaubt_()) return { ok: false, fehler: 'zu viele' };
+  try {
+    var res = UrlFetchApp.fetch('https://api.notion.com/v1/pages', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'Authorization': 'Bearer ' + token, 'Notion-Version': '2022-06-28' },
+      payload: JSON.stringify(berichtSeite_(rep)),
+      muteHttpExceptions: true
+    });
+    var code = res.getResponseCode();
+    if (code >= 200 && code < 300) return { ok: true };
+    Logger.log('Notion ' + code + ': ' + String(res.getContentText()).substring(0, 300));
+    if (code >= 400 && code < 500 && code !== 429) return { ok: true, verworfen: true };
+    return { ok: false };
+  } catch (err) {
+    Logger.log('Notion-Fehler: ' + String(err).substring(0, 300));
+    return { ok: false };
   }
 }
 
@@ -187,7 +285,7 @@ function cleanup() {
 function setup() {
   blatt_();
   geraeteBlatt_();
-  einstellungenBlatt_();
+  notfallZeile_(einstellungenBlatt_());
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'cleanup') ScriptApp.deleteTrigger(t);
   });

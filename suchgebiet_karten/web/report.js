@@ -42,10 +42,15 @@ export function fingerprint(error, stack = '') {
   return `js-${h.toString(16).padStart(8, '0')}`;
 }
 
+// v116: Berichte gehen über den Status-Server (Apps Script) an Notion – der Token liegt dort, nicht in der App.
+// Nur Adressen des Apps-Script-Dienstes werden angenommen.
+export const REPORT_URL_PREFIX = 'https://script.google.com/';
+export const validReportUrl = (u) => typeof u === 'string' && u.startsWith(REPORT_URL_PREFIX) && u.length <= 400 && !/\s/.test(u);
+
 const cut = (s, n = MAX) => (String(s || '').length > n ? `${String(s).slice(0, n - 1)}…` : String(s || ''));
 
 // kind: 'Manuelle Meldung' | 'Auto-Fehler'
-export function buildReport({ kind, desc = '', error = '', stack = '', version, mode, page = '', log = '' }) {
+export function buildReport({ kind, desc = '', error = '', stack = '', version, mode, page = '', log = '', url = '' }) {
   const title = kind === 'Manuelle Meldung'
     ? `Meldung: ${cut(desc.split('\n')[0] || 'ohne Beschreibung', 80)}`
     : `Fehler: ${cut(error || 'unbekannt', 100)}`;
@@ -61,7 +66,16 @@ export function buildReport({ kind, desc = '', error = '', stack = '', version, 
     log: cut(log),
     fingerprint: kind === 'Manuelle Meldung' ? '' : fingerprint(error, stack),
     time: new Date().toISOString(),
+    url: validReportUrl(url) ? url : '', // Status-Server, an den die Android-App den Bericht schickt
   };
+}
+
+// POST-Body für den Status-Server: { rep: { …Bericht ohne url…, device, os, platform } }, alle Textfelder höchstens 2000 Zeichen.
+// Die Android-App (ErrorReports.kt) baut denselben Body.
+export function reportPayload(r, { device = '', os = '', platform = 'Android' } = {}) {
+  const rep = {};
+  for (const [k, v] of Object.entries(r || {})) if (k !== 'url') rep[k] = typeof v === 'string' ? cut(v) : v;
+  return { rep: { ...rep, device: cut(device), os: cut(os), platform } };
 }
 
 // Gleicher Fehler höchstens alle 30 s

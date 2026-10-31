@@ -14,9 +14,6 @@ android {
         // Fortlaufende Versionsnummer aus dem CI (-PversionCode=...), damit jede APK ein Update ist
         versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 1
         versionName = "1.0." + versionCode
-        // Notion-Token für Fehlerberichte (GitHub-Secret NOTION_TOKEN); leer = Meldung per Mail
-        val notionToken = (System.getenv("NOTION_TOKEN") ?: "").replace("\"", "")
-        buildConfigField("String", "NOTION_TOKEN", "\"$notionToken\"")
         // Release-Tag, aus dem sich die App aktualisiert (-PupdateTag=... im CI); leer = kein Update-Check
         val updateTag = ((project.findProperty("updateTag") as String?) ?: "").replace("\"", "")
         buildConfigField("String", "UPDATE_TAG", "\"$updateTag\"")

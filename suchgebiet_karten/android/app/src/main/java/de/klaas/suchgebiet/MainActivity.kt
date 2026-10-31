@@ -366,12 +366,13 @@ class MainActivity : ComponentActivity() {
     }
 
     inner class Bridge {
-        // Fehlerbericht aus der Web-App (JSON, ohne Einsatzdaten) an die Notion-Fehlerzentrale.
-        // Rückgabe: "sent" (wird gesendet), "mail" (kein Token: Mail-App geöffnet), "none" (Auto-Fehler ohne Token)
+        // Fehlerbericht aus der Web-App (JSON, ohne Einsatzdaten) über den Status-Server an die Notion-Fehlerzentrale.
+        // Rückgabe: "sent" (wird gesendet), "mail" (keine gültige Status-Server-Adresse im Bericht: Mail-App geöffnet),
+        // "none" (Auto-Fehler ohne Adresse)
         @JavascriptInterface
         fun reportError(json: String): String {
             val r = try { org.json.JSONObject(json) } catch (_: Exception) { return "none" }
-            if (ErrorReports.hasToken) {
+            if (ErrorReports.validUrl(r.optString("url"))) {
                 ErrorReports.send(this@MainActivity, r)
                 return "sent"
             }

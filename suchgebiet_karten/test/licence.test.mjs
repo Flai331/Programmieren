@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  licenceState, applyLicenceReply, newLicence, normalizeLicence, checkUrl, deviceModel, mailtoHref, LIC_MS,
+  licenceState, applyLicenceReply, applyEmergencyCode, sha256Hex, newLicence, normalizeLicence, checkUrl, deviceModel, mailtoHref, LIC_MS, LIC_UNLOCK_MS,
 } from '../web/licence.js';
 
 const D = 24 * 3600 * 1000;
@@ -65,4 +65,62 @@ test('checkUrl/deviceModel/mailtoHref', () => {
   assert.match(u, /^https:\/\/x\/exec\?lic=abcdefghijkl&m=hf&v=v113&p=web&n=Max%20%26%20Co&ua=Pixel%207$/);
   const m = mailtoHref('', 'abcdefghijkl');
   assert.match(m, /^mailto:error\.404\.found@outlook\.de\?subject=Suchgebiet-Karten%20Freigabe&body=Ger%C3%A4te-ID%3A%20abcdefghijkl$/);
+});
+
+test('licenceState: im laufenden Einsatz nie gesperrt, sondern deferred', () => {
+  assert.equal(licenceState({ now, firstStart: now, blocked: true, busy: true }), 'deferred');
+  assert.equal(licenceState({ now, firstStart: now, inactive: true, busy: true }), 'deferred');
+  assert.equal(licenceState({ now, firstStart: now - 30 * D, busy: true }), 'deferred'); // abgelaufen
+  assert.equal(licenceState({ now, firstStart: now, busy: true }), 'ok'); // nichts gesperrt: kein Hinweis
+  // kein Einsatz mehr offen: greift die Sperre
+  assert.equal(licenceState({ now, firstStart: now, blocked: true, busy: false }), 'blocked');
+  assert.equal(licenceState({ now, firstStart: now - 30 * D, busy: false }), 'expired');
+});
+
+test('licenceState: until (Notfallcode) entsperrt bis zum Ablauf', () => {
+  const base = { now, firstStart: now - 30 * D, blocked: true, inactive: true };
+  assert.equal(licenceState({ ...base, until: now + 1 }), 'ok');
+  assert.equal(licenceState({ ...base, until: now }), 'blocked'); // genau abgelaufen
+  assert.equal(licenceState({ ...base, until: now - 1 }), 'blocked');
+  assert.equal(licenceState({ ...base, until: now + 5, busy: true }), 'ok');
+  assert.equal(licenceState({ ...base, until: 0, busy: true }), 'deferred');
+});
+
+const HASH = 'a'.repeat(64);
+
+test('applyLicenceReply: notfall-Hash übernehmen, ohne Hash löschen; alte Server-Antwort ändert ihn nicht', () => {
+  const s = newLicence('abcdefghijkl', 5);
+  assert.equal(s.notfall, '');
+  let r = applyLicenceReply(s, { ok: true, lic: true, aktiv: true, gesperrt: true, notfall: HASH.toUpperCase() }, 50);
+  assert.equal(r.notfall, HASH);
+  r = applyLicenceReply(r, { ok: true, lic: true, aktiv: true, gesperrt: true, notfall: 'kein-hash' }, 60);
+  assert.equal(r.notfall, '');
+  r = applyLicenceReply({ ...r, notfall: HASH }, { ok: true, lic: true, aktiv: true, gesperrt: false }, 70);
+  assert.equal(r.notfall, ''); // Server schickt keinen: nicht hinterlegt
+  r = applyLicenceReply({ ...r, notfall: HASH }, { ok: true, info: 'alt' }, 80);
+  assert.equal(r.notfall, HASH);
+  r = applyLicenceReply({ ...r, until: 123 }, { ok: true, lic: true, aktiv: true, gesperrt: true }, 90);
+  assert.equal(r.until, 123); // Entsperrung bleibt bis zum Ablauf
+});
+
+test('normalizeLicence: notfall und until', () => {
+  const l = normalizeLicence({ id: 'abcdefghijkl', notfall: HASH, until: 77 }, 9);
+  assert.deepEqual([l.notfall, l.until], [HASH, 77]);
+  const k = normalizeLicence({ id: 'abcdefghijkl', notfall: 12, until: 'x' }, 9);
+  assert.deepEqual([k.notfall, k.until], ['', 0]);
+});
+
+test('sha256Hex/applyEmergencyCode: richtiger Code entsperrt 24 h, falscher nicht', async () => {
+  assert.equal(await sha256Hex('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  const s = { ...newLicence('abcdefghijkl', 5), blocked: true, notfall: await sha256Hex('Rettung-24') };
+  const ok = await applyEmergencyCode(s, '  Rettung-24 ', now);
+  assert.equal(ok.until, now + LIC_UNLOCK_MS);
+  assert.equal(LIC_UNLOCK_MS, 24 * 3600 * 1000);
+  const st = (u, t) => licenceState({ now: t, firstStart: now, blocked: ok.blocked, until: u });
+  assert.equal(st(ok.until, now + 1000), 'ok');
+  assert.equal(st(ok.until, now + LIC_UNLOCK_MS - 1), 'ok');
+  assert.equal(st(ok.until, now + LIC_UNLOCK_MS), 'blocked'); // nach 24 h wieder gesperrt
+  assert.equal(await applyEmergencyCode(s, 'falsch', now), null);
+  assert.equal(await applyEmergencyCode(s, '', now), null);
+  assert.equal(await applyEmergencyCode({ ...s, notfall: '' }, 'Rettung-24', now), null); // kein Code hinterlegt
 });

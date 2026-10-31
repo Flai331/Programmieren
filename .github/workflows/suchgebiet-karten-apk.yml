@@ -65,8 +65,6 @@ jobs:
         working-directory: suchgebiet_karten/android
         env:
           MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
-          # Notion-Token für die Fehlermeldung in der APK (fehlt er, meldet die App per Mail)
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
         # Fortlaufende Versionsnummer, damit Android jede neue APK als Update sieht.
         # updateTag: Release, aus dem sich die App selbst aktualisiert (main = live, Beta = Testversion, sonst leer).
         run: |

@@ -43,7 +43,7 @@ test('Empfänger: alte Liste wird zu einer Zeile, Adressen werden getrennt', asy
   const { mailAddresses } = await import('../web/mission.js');
   const m = normalizeMission({ recipients: 'a@b.de; c@d.de' });
   assert.equal(m.mailTo.length, 1);
-  assert.deepEqual({ ...m.mailTo[0], to: undefined }, { to: undefined, times: true, person: true, forces: true, summary: true, notes: true, pad: true, photos: true, map: false, mapTeams: true, mapStatus: true, juh: true, gpx: false });
+  assert.deepEqual({ ...m.mailTo[0], to: undefined }, { to: undefined, times: true, person: true, forces: true, summary: true, notes: true, msgs: true, pad: true, photos: true, map: false, mapTeams: true, mapStatus: true, juh: true, gpx: false });
   assert.deepEqual(mailAddresses(m.mailTo[0]), ['a@b.de', 'c@d.de']);
   assert.equal(m.recipients, '');
   assert.deepEqual(normalizeMission({}).mailTo, []);
@@ -51,7 +51,7 @@ test('Empfänger: alte Liste wird zu einer Zeile, Adressen werden getrennt', asy
 
 test('Empfänger-Zeilen älterer Versionen bekommen die heutigen Häkchen', () => {
   const m = normalizeMission({ mailTo: [{ to: 'a@b.de', report: true, map: true, notes: false, juh: false, gpx: true }, { to: 'c@d.de', juh: false, summary: false }] });
-  assert.deepEqual(m.mailTo[0], { to: 'a@b.de', times: true, person: true, forces: true, summary: true, notes: true, pad: false, photos: false, map: false, mapTeams: true, mapStatus: true, juh: false, gpx: true });
+  assert.deepEqual(m.mailTo[0], { to: 'a@b.de', times: true, person: true, forces: true, summary: true, notes: true, msgs: true, pad: false, photos: false, map: false, mapTeams: true, mapStatus: true, juh: false, gpx: true });
   assert.equal(m.mailTo[1].summary, false);
   assert.equal(m.mailTo[1].juh, false);
   assert.equal(m.mailTo[1].person, true);

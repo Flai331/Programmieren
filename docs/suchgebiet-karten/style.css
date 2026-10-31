@@ -538,6 +538,8 @@ body.hf #overlay { height: calc(100% - 136px); }
   position: fixed; top: 58px; left: 72px; right: 76px; z-index: 995; background: rgba(255,255,255,0.96); border-radius: 12px;
   box-shadow: 0 1px 6px rgba(0,0,0,0.3); padding: 6px 10px; font-size: 13px; cursor: pointer; border-left: 6px solid var(--team, #d50000);
 }
+.hfinfo { padding-right: 44px; }
+.hfinfo #hfi-area { position: absolute; top: 4px; right: 6px; width: 34px; height: 34px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 18px; line-height: 1; padding: 0; cursor: pointer; }
 .hfinfo b { display: block; font-size: 14px; }
 .hfinfo span { display: block; color: #333; overflow-wrap: anywhere; }
 .hfinfo.min span { display: none; }
@@ -785,3 +787,10 @@ html.night .sent-card.done { background: transparent; }
 #lic-lock .lic-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
 #lic-lock button { border: 1px solid #ccc; background: var(--btn); border-radius: 10px; padding: 12px 16px; font-size: 16px; cursor: pointer; }
 #lic-lock button.primary { background: var(--red); color: #fff; border-color: var(--red); }
+
+#lic-lock input { border: 1px solid #ccc; border-radius: 10px; padding: 12px; font-size: 16px; min-width: 0; flex: 1; max-width: 220px; }
+#lic-hint { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 900; max-width: 92vw; padding: 3px 10px; font-size: 12px; line-height: 1.3; color: #b71c1c; background: rgba(255, 255, 255, 0.92); border: 1px solid #e0b4b4; border-radius: 8px; text-align: center; pointer-events: none; }
+#dlg-box .close-open { margin: 6px 0; font-size: 15px; text-align: left; }
+#dlg-box .close-open:not(.st-urgent) { border-left: 6px solid #ef6c00; background: #fff3e0; border-radius: 8px; padding: 8px 10px; color: #000; }
+html.night #dlg-box .close-open:not(.st-urgent) { background: transparent; color: inherit; }
+#dlg-box button.close-anyway { background: var(--red); color: #fff; border-color: var(--red); }

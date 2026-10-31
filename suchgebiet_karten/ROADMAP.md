@@ -1,13 +1,14 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v115**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v116**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v116 – ✅ Entscheidungen vom 31.10.**: Notion-Token nicht mehr in der APK (Fehlerberichte über den Status-Server); Freigabe sperrt nie im laufenden Einsatz, Notfallcode entsperrt 24 h; „Markieren → Fund“ meldet sofort an die EL; Meldungen mit Ort in GPX (BaseCamp-Wegpunkte), Karten-PDF und Abschlussbericht; „Einsatz abschließen“ listet offene Punkte; HF: 🎯 Mein Gebiet, 🧭 Navigation, GPS startet beim Auftrag; PIN-Hinweis.
 - [~] **v115 – 👆 Bedienung (Prüfung 31.10.)**: Zoom-Knöpfe nicht mehr von Leisten verdeckt; Plakette und Aufträge zeigen die Meldungsart, Fund/Hilfe bleiben stehen; feste Team-Reihenfolge bei Chips und Aufträgen; „Standort melden“ ohne Vorauswahl; Rückfrage vor HF-Modus und vor Ersetzen eines laufenden Auftrags; Abschluss mit letztem Stand; zugeteilte Gebiete vorangekreuzt; GPX-Import ohne Duplikate; größere Tippziele, Dialoge im Querformat, bessere Kontraste und Texte.
 - [~] **v114 – 🛡️ Robustheit (Prüfung 31.10.)**: Speicher-voll-Warnung statt falschem „gespeichert“; kaputter Link stoppt die Status-Synchronisation nicht mehr; Netz-Zeitlimits (Funkloch blockiert nichts mehr); Wetter-Endlosschleife behoben; Umrisse mit Schlusspunkt bleiben beim Senden erhalten; fremde Gerätenamen werden nicht mehr als HTML ausgeführt; Status-Server nur Google; Offline-Kacheln ohne sinnlose Wiederholung; Aufräumen.
 - [~] **v113 – 🔒 Freigabe: Installationen abschalten**: jede Installation (APK und Web) meldet sich mit Geräte-ID beim Status-Server (Blatt „Geräte“); ein Eintrag in „Gesperrt“ sperrt ein Gerät, „App aktiv“ = NEIN im Blatt „Einstellungen“ sperrt alle. Wirkt beim nächsten Start; ohne Internet 14 Tage Frist. Sperrbildschirm mit Kontakt error.404.found@outlook.de, Geräte-ID und „Erneut prüfen“.
@@ -56,6 +57,9 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
     Eigenschaften: Titel, Status=Offen, Art (Absturz/Auto-Fehler/Manuelle Meldung),
     Plattform=Android, Beschreibung, Fehler, Protokoll, Seite, Benutzerrolle (EL/HF), Gerät,
     OS, Version, Fingerprint, Zeitstempel. Texte auf 2000 Zeichen je Feld kürzen.
+  - **Seit v116:** Der Token steckt nicht mehr in der APK. Die App schickt `{ rep: {…} }` an den Status-Server
+    (Apps Script, `bericht_`), der Token liegt dort in der Skripteigenschaft `NOTION_TOKEN` (siehe apps-script/ANLEITUNG.md).
+    Die folgenden Angaben zum Token gelten nur bis v115.
   - Token: `BuildConfig.NOTION_TOKEN` aus der Umgebungsvariable `NOTION_TOKEN` (GitHub-Secret,
     im Workflow schon durchgereicht). Ohne Token oder ohne Netz: Meldung in einer Warteschlange
     (SharedPreferences) speichern und beim nächsten Start erneut senden; bei manueller Meldung
