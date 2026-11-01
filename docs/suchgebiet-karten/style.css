@@ -267,7 +267,7 @@ body.hf .bottomstack:has(#vtxbar:not([hidden])) { display: flex !important; bott
 #dlg-box .mkpick small { opacity: 0.65; }
 #dlg-box .mkedit { width: auto; margin: 0; padding: 8px 12px; }
 .trackbar button { border: 1px solid #ccc; background: var(--btn); border-radius: 10px; padding: 8px 10px; cursor: pointer; }
-@media (max-width: 480px) and (min-height: 431px) { .trackbar { gap: 4px; } .trackbar button { padding: 8px 7px; } } /* Handy hochkant: Leiste ist schmaler (neben den Zoomknöpfen), Knöpfe sollen trotzdem in eine Zeile */
+@media (max-width: 480px) and (min-height: 431px) { .trackbar { gap: 4px; } .trackbar button { padding: 8px 6px; } #track-forest .lbl { display: none; } #track-info { flex: 1 1 calc(100% - 56px); order: -2; } #track-forest { order: -1; } } /* v121: 🌲 auf dem Handy neben der Infozeile */ /* Handy hochkant: Leiste ist schmaler (neben den Zoomknöpfen), Knöpfe sollen trotzdem in eine Zeile */
 .trackbar button.primary { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
 .trackbar button:disabled { opacity: 0.45; cursor: default; }
 
@@ -814,3 +814,26 @@ html.night .sent-card.done { background: transparent; }
 #dlg-box .close-open:not(.st-urgent) { border-left: 6px solid #ef6c00; background: #fff3e0; border-radius: 8px; padding: 8px 10px; color: #000; }
 html.night #dlg-box .close-open:not(.st-urgent) { background: transparent; color: inherit; }
 #dlg-box button.close-anyway { background: var(--red); color: #fff; border-color: var(--red); }
+
+/* v121: Wetter-Einträge (Sonnenuntergang, Dunkel ab …) nicht mitten im Eintrag umbrechen */
+.wx-item { white-space: nowrap; }
+
+/* v121: Wald erkennen und aufteilen */
+.forest-tip { background: rgba(255,255,255,0.92); border: 1px solid #555; border-radius: 6px; color: #111; font-weight: 600; font-size: 12px; padding: 2px 5px; box-shadow: none; }
+.forest-tip::before { display: none; }
+#dlg-box .wald-n { display: flex; gap: 4px; margin: 4px 0 8px; }
+#dlg-box .wald-n button { flex: 1 1 0; min-width: 0; padding: 8px 0; min-height: 44px; border: 1px solid #ccc; background: var(--btn); border-radius: 10px; font-size: 16px; cursor: pointer; }
+#dlg-box .wald-n button.primary { background: var(--red); border-color: var(--red); color: #fff; font-weight: 700; }
+#dlg-box .wald-row { border: 1px solid #ccc; border-left-width: 8px; border-radius: 10px; padding: 8px; margin: 6px 0; display: flex; flex-direction: column; gap: 6px; }
+#dlg-box .wald-row.bad { border-color: #c62828; }
+#dlg-box .wald-row input[type=text], #dlg-box .wald-row select { margin: 0; width: 100%; box-sizing: border-box; }
+#dlg-box .wald-pct { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+#dlg-box .wald-pct input { width: 80px; margin: 0; font-size: 16px; padding: 6px; box-sizing: border-box; }
+#dlg-box .wald-soll { font-weight: 600; font-size: 14px; }
+#dlg-box .wald-hint { color: #c62828; font-weight: 600; margin: 4px 0; }
+#dlg-box .wald-acts { position: sticky; bottom: -14px; z-index: 2; display: flex; gap: 6px; background: #fff; padding: 8px 0 2px; margin-top: 6px; }
+#dlg-box .wald-acts button { flex: 1 1 0; min-width: 0; min-height: 48px; padding: 6px 2px; font-size: 14px; white-space: nowrap; }
+#forestbar button { flex: 1 1 auto; }
+#forestbar button.primary { flex: 1 1 100%; order: 3; }
+.forest-tip small { font-weight: 400; }
+#track-forest .lbl { font-style: normal; }

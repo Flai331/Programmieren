@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  dirName, beaufort, approach, parseCurrent, parseForecast, circularMean, sunTimes, windLines, windChanged,
+  dirName, beaufort, approach, parseCurrent, parseForecast, circularMean, sunTimes, nextLightEvents, windLines, windChanged,
 } from '../web/weather.js';
 
 test('Richtung, Beaufort, Ansatz gegen den Wind', () => {
@@ -63,4 +63,17 @@ test('DWD-Stationen: nur aktuelle Messungen, jede Station einmal, nächste zuers
   ] });
   assert.deepEqual(list.map((s) => s.name), ['Osnabrück', 'Münster/Osnabrück']);
   assert.equal(list[0].km, 4);
+});
+
+test('v121: nächste Hell-/Dunkel-Wechsel (Osnabrück, 1. November)', () => {
+  const at = (h) => nextLightEvents(Date.UTC(2026, 10, 1) + h * 36e5, 52.27, 8.05);
+  const min = (t) => new Date(t).getUTCHours() * 60 + new Date(t).getUTCMinutes();
+  const day = at(12); // mittags: erst Sonnenuntergang (~16:00 UTC), dann dunkel (~16:36 UTC)
+  assert.deepEqual(day.map((e) => e.name), ['Sonnenuntergang', 'Dunkel']);
+  assert.ok(Math.abs(min(day[0].t) - 960) < 15 && Math.abs(min(day[1].t) - 996) < 15);
+  assert.deepEqual(at(16.4).map((e) => e.name), ['Dunkel', 'Sonnenaufgang']); // nach Untergang, noch Dämmerung
+  const night = at(22);
+  assert.deepEqual(night.map((e) => e.name), ['Hell', 'Sonnenaufgang']);
+  assert.ok(night[0].t > Date.UTC(2026, 10, 2) && night[0].t < night[1].t);
+  assert.deepEqual(nextLightEvents(Date.UTC(2026, 5, 21, 12), 78.2, 15.6), []); // Mitternachtssonne
 });
