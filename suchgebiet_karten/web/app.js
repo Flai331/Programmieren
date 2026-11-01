@@ -9,7 +9,7 @@ import {
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { areaBounds, navTargets } from './hfnav.js';
+import { areaBounds, navTargets, navTargetsAll, navUrl, boxCenter, cellCenter as navCellCenter } from './hfnav.js';
 import { buildGpx, mergeGpx, parseGpx, dedupeImport, parseKml, pointInPolygon, selectionGpx, gridWithLabels, gridPath, labelTracks, cellComponents, cellOutlines, hasArea, polygonArea, formatArea, trackDesc, trackLength, outlineName, msgWaypoints, msgRows } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import { buildReport, describeTarget, makeDedup, makeLog, validReportUrl } from './report.js';
@@ -69,7 +69,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v122';
+const APP_VERSION = 'v123';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1156,6 +1156,7 @@ function textDialog(i) {
     box.appendChild(inp);
     dlgButton(box, '💾 Speichern', 'primary', () => close({ text: inp.value }));
     dlgButton(box, '📍 Verlegen', '', () => close({ move: true }));
+    dlgNavButton(box, close, null, it.text || 'Text', it.lat, it.lon); // v123
     dlgButton(box, '🗑 Löschen', 'urgent', () => close({ del: true }));
     dlgButton(box, 'Abbrechen', '', () => close(null));
   }).then((r) => {
@@ -1234,6 +1235,8 @@ function outlineDialog(it, title, opts = {}) {
     box.appendChild(p);
     dlgButton(box, 'Speichern', 'primary', () => close({ name: name.value.trim(), to: sel.value, note: note.value.trim() }));
     if (opts.edit) {
+      const ctr = boxCenter(it.pts);
+      if (!it.open && (it.pts || []).length > 2 && ctr) dlgNavButton(box, close, null, it.name || 'Umriss', ctr[0], ctr[1]); // v123: nur gespeicherte, geschlossene Umrisse
       dlgButton(box, '✋ Punkte bearbeiten', '', () => close({ vtx: true }));
       dlgButton(box, '🗑 Löschen', 'urgent', () => close({ del: true }));
     }
@@ -2361,6 +2364,11 @@ map.on('click', (e) => {
     const ti = hitItem(P.items, toPx, e.containerPoint.x, e.containerPoint.y, 12);
     if (ti >= 0 && P.items[ti].kind === 'text') return textDialog(ti);
   }
+  // v123: B-Ort angetippt: Fenster mit „🧭 Navigieren“
+  if (tool === 'pan' && P.meet && !(P.hide || {}).meet) {
+    const [mx, my] = toPx(P.meet.lat, P.meet.lon);
+    if (Math.hypot(mx - e.containerPoint.x, my - e.containerPoint.y) <= 16) return meetDialog();
+  }
   // Linie eines Umrisses angetippt (Einsatzleitung): Name, Zuteilung, Notiz bearbeiten
   if (db.mode === 'el' && tool === 'pan') {
     const pi = poiAt(e.containerPoint.x, e.containerPoint.y);
@@ -3299,7 +3307,7 @@ function renderHfInfo() {
   const hasArea = !!h && !!areaBounds(P);
   $('hfm-area').disabled = !hasArea;
   $('hfi-area').hidden = !hasArea;
-  $('hfm-nav').disabled = !h || !navTargets(P).length;
+  $('hfm-nav').disabled = !h; // v123: auch ohne Ziel gibt es die Kartenmitte
   $('hfm-contacts').hidden = !P.contacts.length;
   $('hfm-contacts').textContent = `📞 Kontakte (${P.contacts.length})`;
   renderHfMsgBtn();
@@ -3330,20 +3338,55 @@ function openLink(url) {
   if (bridge) location.href = url;
   else window.open(url, '_blank', 'noopener');
 }
-// v116: 🧭 Navigation – Parkplatz, B-Ort bzw. Treffpunkt, Gebiet (Mitte) als Ziel in Google Maps
-$('hfm-nav').addEventListener('click', () => {
-  const list = navTargets(P);
-  if (!list.length) return toast('Im Auftrag gibt es kein Ziel (Parkplatz, B-Ort, Gebiet)');
+// v123: B-Ort angetippt (Werkzeug „Bewegen“)
+function meetDialog() {
+  const m = P.meet;
+  if (!m) return;
+  openDlg((box, close) => {
+    dlgHead(box, `🎯 ${m.text || 'B-Ort'}`, `${m.lat.toFixed(5)}, ${m.lon.toFixed(5)}${P.showUtm ? ` · ${formatMgrs(m.lat, m.lon)}` : ''}`);
+    dlgNavButton(box, close, null, m.text && m.text !== 'B-Ort' ? `B-Ort (${m.text})` : 'B-Ort', m.lat, m.lon);
+    dlgButton(box, 'Schließen', 'primary', () => close(null));
+  });
+}
+// v123: Auswahl Auto / zu Fuß für ein Ziel; die Route öffnet sich in Google Maps bzw. der Karten-App (Start ist der aktuelle Standort)
+function navChooser(label, lat, lon) {
+  return openDlg((box, close) => {
+    dlgHead(box, `🧭 Navigieren zu ${label}`, `${Number(lat).toFixed(5)}, ${Number(lon).toFixed(5)}`);
+    box.querySelector('h2').style.overflowWrap = 'anywhere';
+    dlgButton(box, '🚗 Auto', 'primary', () => { close(true); openLink(navUrl(lat, lon, 'driving')); });
+    dlgButton(box, '🚶 Zu Fuß', '', () => { close(true); openLink(navUrl(lat, lon, 'walking')); });
+    dlgButton(box, 'Abbrechen', '', () => close(false));
+  });
+}
+// v123: Knopf „🧭 Navigieren“ in Objekt-Fenstern (nur mit gültigem Ziel)
+// (schließt das Fenster wie „Abbrechen“ mit cancelVal und öffnet dann die Auswahl)
+function dlgNavButton(box, close, cancelVal, label, lat, lon) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+  dlgButton(box, '🧭 Navigieren', '', () => { close(cancelVal); navChooser(label, lat, lon); });
+}
+// v123: Zielliste (HF: Parkplatz, B-Ort, Gebiet; EL: alles) mit „⌖ Kartenmitte“ als letztem Eintrag; Antippen öffnet die Auswahl Auto / zu Fuß
+function navList(title, list) {
   closePanels();
   openDlg((box, close) => {
-    dlgHead(box, '🧭 Navigation', 'Wohin soll die Route gehen? Sie öffnet sich in der Karten-App.');
+    dlgHead(box, title, 'Wohin soll die Route gehen? Sie öffnet sich in der Karten-App.');
     const l = document.createElement('div');
     l.className = 'dlg-btns';
     box.appendChild(l);
-    for (const t of list) dlgButton(l, `${t.icon} ${esc(t.label)}`, '', () => { close(true); openLink(t.url); });
+    for (const t of list) {
+      dlgButton(l, `${t.icon} ${esc(t.label)}${t.sub ? ` <small>${esc(t.sub)}</small>` : ''}`, '', () => { close(true); navChooser(t.label, t.lat, t.lon); });
+    }
+    dlgButton(l, '⌖ Kartenmitte <small>(Karte vorher aufs Ziel schieben)</small>', '', () => {
+      close(true);
+      const c = map.getCenter();
+      navChooser('Kartenmitte', c.lat, c.lng);
+    });
     dlgButton(box, 'Abbrechen', '', () => close(false));
   });
-});
+}
+// v116: 🧭 Navigation – Parkplatz, B-Ort bzw. Treffpunkt, Gebiet (Mitte) als Ziel in Google Maps
+$('hfm-nav').addEventListener('click', () => navList('🧭 Navigation', navTargets(P)));
+// v123: Einsatzleitung: Panel „Mehr“ -> Navigation zu …
+$('more-nav').addEventListener('click', () => navList('🧭 Navigation zu …', navTargetsAll(P)));
 $('hfm-meet').addEventListener('click', () => {
   if (!P.meet) return;
   closePanels();
@@ -4399,6 +4442,7 @@ function statusText({ m }) {
 async function msgDialog(m, direct = false) {
   const del = direct || await openDlg((box, close) => {
     dlgHead(box, 'Meldung', statusText({ m }));
+    dlgNavButton(box, close, false, `${m.tm || 'Team'}: ${msgLabel(m)}`, m.lat, m.lon); // v123
     dlgButton(box, '🗑 Löschen', 'urgent', () => close(true));
     dlgButton(box, 'Schließen', 'primary', () => close(false));
   });
@@ -7199,6 +7243,7 @@ function poiTextDlg(p, isNew) {
     box.append(name, desc);
     dlgButton(box, isNew ? 'Speichern' : 'Übernehmen', 'primary', () => close({ name: name.value.trim(), desc: desc.value.trim() }));
     if (!isNew) {
+      dlgNavButton(box, close, null, poiName(p), p.lat, p.lon); // v123
       dlgButton(box, '🔁 Art ändern', '', () => close('cat'));
       dlgButton(box, '📍 Verschieben', '', () => close('move'));
       dlgButton(box, '🗑️ Löschen', '', () => close('delete'));
@@ -9110,13 +9155,10 @@ function showResults(list, credit, title = 'Suchergebnisse') {
   $('searchbar').dataset.kind = title === 'Suchergebnisse' ? 'search' : 'areas';
   const box = $('search-results');
   box.innerHTML = '';
-  for (const r of list) {
-    const b = document.createElement('button');
-    b.innerHTML = '<b></b><small></small>';
-    b.querySelector('b').textContent = r.name;
-    b.querySelector('small').textContent = r.sub || '';
-    // v120: erst beim Loslassen wählen, und nur ohne Wischen – sonst lässt sich die Liste mit dem Finger nicht scrollen.
-    // pointerdown mit preventDefault hält die Handy-Tastatur offen, bis gewählt ist (sonst verrutscht die Liste unter dem Finger)
+  // v120: erst beim Loslassen wählen, und nur ohne Wischen – sonst lässt sich die Liste mit dem Finger nicht scrollen.
+  // pointerdown mit preventDefault hält die Handy-Tastatur offen, bis gewählt ist (sonst verrutscht die Liste unter dem Finger)
+  // v123: als eigene Funktion, damit der 🧭-Knopf je Zeile dieselbe Wisch-Erkennung bekommt
+  const tapOnly = (b, fn) => {
     let down = null;
     b.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse' || e.button === 0) { e.preventDefault(); down = { x: e.clientX, y: e.clientY, top: $('searchbar').scrollTop }; } });
     b.addEventListener('pointercancel', () => { down = null; }); // Browser übernimmt das Scrollen
@@ -9125,10 +9167,29 @@ function showResults(list, credit, title = 'Suchergebnisse') {
       down = null;
       if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10 || Math.abs($('searchbar').scrollTop - d.top) > 4) return;
       $('search-input').blur();
-      r.go();
+      fn();
     });
-    b.addEventListener('click', (e) => { if (e.detail === 0) r.go(); }); // Tastatur (Enter/Leertaste)
-    box.appendChild(b);
+    b.addEventListener('click', (e) => { if (e.detail === 0) fn(); }); // Tastatur (Enter/Leertaste)
+  };
+  for (const r of list) {
+    const b = document.createElement('button');
+    b.innerHTML = '<b></b><small></small>';
+    b.querySelector('b').textContent = r.name;
+    b.querySelector('small').textContent = r.sub || '';
+    tapOnly(b, r.go);
+    if (!r.nav) { box.appendChild(b); continue; }
+    // v123: Zeile mit eigenem 🧭-Knopf (Route zur Mitte); wählt das Gebiet nicht aus
+    const row = document.createElement('div');
+    row.className = 'sr-row';
+    const nb = document.createElement('button');
+    nb.className = 'sr-nav';
+    nb.type = 'button';
+    nb.textContent = '🧭';
+    nb.title = 'Navigieren';
+    nb.setAttribute('aria-label', `Navigieren zu ${r.name}`);
+    tapOnly(nb, () => navChooser(r.navName || r.name, r.nav[0], r.nav[1]));
+    row.append(b, nb);
+    box.appendChild(row);
   }
   if (credit) {
     const p = document.createElement('p');
@@ -9182,6 +9243,8 @@ function areaResults(text = '') {
       name: `📐 ${name}`,
       sub: [who, hasArea(it) ? formatArea(polygonArea(it.pts)) : ''].filter(Boolean).join(' · '),
       go: () => fit(Math.min(...la), Math.max(...la), Math.min(...lo), Math.max(...lo)),
+      nav: boxCenter(it.pts), // v123: 🧭 Route zur Gebietsmitte
+      navName: name,
     });
   }
   for (const g of allGrids(P)) {
@@ -9190,7 +9253,10 @@ function areaResults(text = '') {
     if (t && !`${name} ${who}`.toLowerCase().includes(t)) continue;
     const gg = makeGrid(g.area, g.cellM);
     const b = gridBounds(gg);
-    out.push({ name: `# ${name}`, sub: `${who} · Raster · ${gg.cols} × ${gg.rows} Felder`, go: () => fit(b.south, b.north, b.west, b.east) });
+    out.push({
+      name: `# ${name}`, sub: `${who} · Raster · ${gg.cols} × ${gg.rows} Felder`, go: () => fit(b.south, b.north, b.west, b.east),
+      nav: [(b.north + b.south) / 2, (b.west + b.east) / 2], navName: name, // v123
+    });
   }
   return out;
 }
@@ -9249,7 +9315,13 @@ async function updateSuggestions(immediate = false) {
   const q = parseQuery(text);
   if (!q) { closeSearch(); return; }
   const local = localResult(q);
-  if (local) { showResults([local]); return; }
+  if (local) {
+    // v123: bei einem Feldnamen („C4“) zusätzlich „🧭 Navigieren zu C4“
+    const ctr = q.type === 'cell' && grid ? navCellCenter(grid, cellLabel(q.c, q.r)) : null;
+    const lbl = ctr ? cellLabel(q.c, q.r) : '';
+    showResults(ctr ? [local, { name: `🧭 Navigieren zu ${lbl}`, sub: 'Route in Google Maps (Auto oder zu Fuß)', go: () => { closeSearch(); navChooser(`Feld ${lbl}`, ctr[0], ctr[1]); } }] : [local]);
+    return;
+  }
   if (q.type === 'corner') {
     if (immediate) await findCorner(q);
     else showResults([cornerEntry(q)]);

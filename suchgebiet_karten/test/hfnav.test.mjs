@@ -12,7 +12,7 @@ const base = () => {
 };
 
 test('navUrl: Google-Maps-Route zum Ziel', () => {
-  assert.equal(navUrl(52.5, 9.7), 'https://www.google.com/maps/dir/?api=1&destination=52.500000,9.700000');
+  assert.equal(navUrl(52.5, 9.7), 'https://www.google.com/maps/dir/?api=1&destination=52.500000,9.700000&travelmode=driving'); // v123: Standard ist Auto
 });
 
 test('areaBounds: ganzes Raster, wenn das Team keine Felder hat; sonst nur die Felder des Teams', () => {
