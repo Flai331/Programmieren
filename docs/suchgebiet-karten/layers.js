@@ -69,6 +69,20 @@ export const OVERLAYS = [
 
 export const DEFAULT_OVERLAYS = ['paths'];
 
+// v122: Ersatzkarte, wenn die Kacheln des Bundesamts (BKG, sgx.geodatenzentrum.de) nicht kommen.
+// Nur zum Anzeigen – nicht fürs PDF und nicht für Offline-Karten (OSM-Nutzungsregeln verbieten Massenabruf).
+export const FALLBACK = {
+  id: 'osm-ersatz',
+  name: 'OpenStreetMap (Ersatzkarte)',
+  url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  maxNative: 19,
+  attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a> – Ersatzkarte, BKG-Karte gerade nicht erreichbar',
+  fallback: true,
+};
+
+// v122: kommt die Karte vom BKG-Server? (dann gibt es bei Störung die Ersatzkarte)
+export const isBkg = (l) => !!l && !l.fallback && /(^|\.)geodatenzentrum\.de\//.test(String(l.url || l.wms || '').replace(/^https?:\/\//, ''));
+
 // Grundkarte + gewählte Overlays (nur bei Luftbildern) als ein Objekt für PDF/KMZ
 export function layerStack(id, overlayIds = DEFAULT_OVERLAYS) {
   const base = layerById(id);
