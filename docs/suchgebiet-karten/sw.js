@@ -1,6 +1,6 @@
 // Service Worker: App offline verfügbar machen und angesehene Kartenkacheln
 // zwischenspeichern (hilft bei schlechtem Empfang im Gelände).
-const VERSION = 'v121';
+const VERSION = 'v122';
 const APP_CACHE = `suchgebiet-app-${VERSION}`;
 const TILE_CACHE = 'suchgebiet-tiles';
 const MAX_TILES = 4000;
@@ -44,10 +44,12 @@ self.addEventListener('fetch', (e) => {
       try {
         const res = await fetch(e.request);
         if (res.ok) {
-          cache.put(e.request, res.clone());
+          if (!url.searchParams.has('probe')) cache.put(e.request, res.clone()); // v122: Prüfanfragen nicht speichern
           if (Math.random() < 0.02) trimTiles();
+          return res;
         }
-        return res;
+        // v122: Server meldet Fehler (z. B. 503 bei Störung) -> gespeicherte Kachel, falls vorhanden
+        return (await cache.match(e.request)) || res;
       } catch (err) {
         const hit = await cache.match(e.request);
         if (hit) return hit;

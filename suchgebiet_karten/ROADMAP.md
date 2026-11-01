@@ -1,13 +1,14 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v121**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v122**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v122 – 🗺️ Ersatzkarte bei BKG-Störung**: Liefert der Kartenserver des Bundesamts (TopPlusOpen, basemap.de) keine Kacheln, zeigt die App automatisch OpenStreetMap mit Hinweis und schaltet von selbst zurück, sobald der BKG-Server wieder antwortet (Prüfung alle 2 min). Die gewählte Karte bleibt eingestellt; Ersatzkarte nur zur Anzeige (nicht PDF/Offline). Service Worker nimmt bei Serverfehlern gespeicherte Kacheln.
 - [~] **v121 – 🌲 Wald erkennen und aufteilen, 🌑 Dunkel/Hell im Wetter**: In der Umriss-Leiste „🌲 Wald“: Waldstück mit dem Finger umkreisen, die App holt Wald, Wege und Bäche aus OpenStreetMap und teilt die Waldfläche in 1–8 Teile (gleich groß oder kleiner/größer mit Prozentwert, je Teil Team); Grenzen folgen nach Möglichkeit Wegen/Bächen (±15 %), sonst gerade und exakt; Vorschau, dann als Umrisse übernehmen. Wetter zeigt den nächsten Sonnenauf-/-untergang und wann es dunkel bzw. wieder hell wird (bürgerliche Dämmerung), je mit Restzeit.
 - [~] **v120 – 👆 Gebiete-Liste mit dem Finger scrollbar**: Wischen in der Liste am Knopf „Gebiete“ (und in den Suchergebnissen) scrollt nur noch; ein Gebiet wird erst beim Antippen ohne Wischen gewählt. Die Liste zeigt jetzt auch bei Rastern das zugeteilte Team (bzw. „ohne Team“). Raster heißen „Raster 1, 2, …“ statt „Gebiet …“ (alte Namen werden umbenannt).
 - [~] **v119 – 🏷️ PDF-Beschriftungen überlappen nicht mehr**: Namen von B-Ort, Lage-Orten und Meldungen weichen einander aus (rechts, links, oben, unten, schräg) und bleiben innerhalb des Kartenbilds.

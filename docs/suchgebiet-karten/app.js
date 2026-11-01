@@ -5,7 +5,7 @@ import { cellEditable, cellLayers, canPaint } from './celledit.js';
 import { removeVertex, insertVertex, moveVertex, edgeMids, vertexCount, minPoints } from './vertex.js';
 import { drawOverlay, hitItem as hitItemAll, labelDetail, trackLabel, markHidden, outlineColor } from './render.js';
 import {
-  LAYERS, OVERLAYS, DEFAULT_OVERLAYS, layerById, layerStack, tileUrl,
+  LAYERS, OVERLAYS, DEFAULT_OVERLAYS, layerById, layerStack, tileUrl, FALLBACK, isBkg,
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
@@ -69,7 +69,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v121';
+const APP_VERSION = 'v122';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -319,10 +319,13 @@ const AppTiles = L.TileLayer.extend({
 let baseLayer = null;
 let overlayLayers = [];
 let layerByUser = false; // Karte aktiv gewählt (nicht beim Start): nur dann der PDF-Hinweis
+let fallbackFor = null; // v122: Karte, für die gerade die Ersatzkarte läuft
+let probeTimer = null;
 function setLayer(id, byUser = false) {
   layerByUser = byUser;
   const l = layerById(id);
   P.layerId = l.id;
+  stopFallback();
   if (baseLayer) map.removeLayer(baseLayer);
   baseLayer = makeTiles(l, true).addTo(map);
   updateOverlays();
@@ -378,8 +381,47 @@ function makeTiles(l, cors, zIndex = 1) {
         if (layerByUser && db.mode === 'el') toast('Diese Karte lässt sich nur anzeigen, aber nicht ins PDF übernehmen.'); // HF hat kein PDF
       }
     });
+  } else if (isBkg(l) && zIndex === 1) {
+    // v122: kommt die BKG-Karte auch ohne CORS nicht, Ersatzkarte zeigen
+    let ok = 0;
+    let bad = 0;
+    layer.on('tileload', () => { ok++; });
+    layer.on('tileerror', () => {
+      bad++;
+      if (bad === 6 && ok === 0 && navigator.onLine && baseLayer === layer) startFallback(l);
+    });
   }
   return layer;
+}
+
+// v122: Ersatzkarte (OpenStreetMap), solange der BKG-Server keine Kacheln liefert; alle 2 min nachsehen
+function startFallback(l) {
+  if (baseLayer) map.removeLayer(baseLayer);
+  fallbackFor = l;
+  baseLayer = makeTiles(FALLBACK, false).addTo(map);
+  toast('⚠️ Karte vom Bundesamt (BKG) lädt gerade nicht – Ersatzkarte OpenStreetMap wird gezeigt. Die App schaltet von selbst zurück.', 9000);
+  clearInterval(probeTimer);
+  probeTimer = setInterval(probeBkg, 120e3);
+}
+function stopFallback() {
+  clearInterval(probeTimer);
+  probeTimer = null;
+  fallbackFor = null;
+}
+function probeBkg() {
+  const l = fallbackFor;
+  if (!l || !navigator.onLine) return;
+  const z = Math.min(Math.max(Math.round(map.getZoom()), 5), 15);
+  const c = map.project(map.getCenter(), z).divideBy(256).floor();
+  const img = new Image();
+  img.onload = () => {
+    if (fallbackFor !== l) return;
+    stopFallback();
+    map.removeLayer(baseLayer);
+    baseLayer = makeTiles(l, true).addTo(map);
+    toast('✅ BKG-Karte ist wieder da.', 5000);
+  };
+  img.src = `${tileUrl(l, z, c.x, c.y)}?probe=${Date.now()}`;
 }
 
 // ---------- Overlay (Raster + Zeichnungen) ----------
@@ -9463,7 +9505,7 @@ console.info(`Suchgebiet-Karten bereit (${bridge ? 'Android-App' : 'Browser'})`)
 
 // Für Tests
 window.__app = {
-  get P() { return P; }, get grid() { return grid; }, get db() { return db; }, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread, sentBadges,
+  get P() { return P; }, get grid() { return grid; }, get db() { return db; }, get fallback() { return !!fallbackFor; }, probeBkg, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread, sentBadges,
 };
 
 // ---------- Freigabe (v113): Sperrbildschirm, Prüfung beim Status-Server ----------
