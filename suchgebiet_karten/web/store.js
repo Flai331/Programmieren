@@ -175,11 +175,14 @@ export function normalizeProject(p) {
   }
   for (const k of Object.keys(out.status)) if (kind[out.status[k]] !== 'status') delete out.status[k];
   if (!out.gridId) out.gridId = uid();
+  // v120: automatisch vergebene Namen hießen früher „Gebiet N“ – Raster heißen „Raster N“
+  const autoName = (n) => String(n || '').replace(/^Gebiet (\d+)$/, 'Raster $1');
+  out.gridName = autoName(out.gridName);
   out.otherGrids = (Array.isArray(out.otherGrids) ? out.otherGrids : [])
     .filter((g) => g && g.area)
     .map((g) => ({
       id: g.id || uid(),
-      name: String(g.name || ''),
+      name: autoName(g.name),
       area: g.area,
       cellM: Number(g.cellM) || 100,
       fills: Object.fromEntries(Object.entries(g.fills || {}).filter(([, id]) => kind[id] === 'team')),
@@ -189,22 +192,28 @@ export function normalizeProject(p) {
 }
 
 // ---------- Mehrere Rastergebiete ----------
-// Alle Rastergebiete, nach Namen sortiert („Gebiet 2“ vor „Gebiet 10“); active = gerade bearbeitet
+// Alle Rastergebiete, nach Namen sortiert („Raster 2“ vor „Raster 10“); active = gerade bearbeitet
 export function allGrids(p) {
   const own = p.area ? [{ id: p.gridId, name: p.gridName || '', area: p.area, cellM: p.cellM, fills: p.fills, status: p.status, active: true }] : [];
   return [...own, ...(p.otherGrids || []).map((g) => ({ ...g, active: false }))]
     .sort((a, b) => gridLabel(p, a).localeCompare(gridLabel(p, b), 'de', { numeric: true }));
 }
 
-// Anzeigename; das erste (ältere Stände: einzige) Gebiet heißt ohne Namen „Gebiet 1“
+// Anzeigename; das erste (ältere Stände: einzige) Gebiet heißt ohne Namen „Raster 1“
 export function gridLabel(p, g) {
-  return g.name || 'Gebiet 1';
+  return g.name || 'Raster 1';
 }
 function nextGridName(p) {
   const used = allGrids(p).map((g) => gridLabel(p, g));
   let n = 1;
-  while (used.includes(`Gebiet ${n}`)) n++;
-  return `Gebiet ${n}`;
+  while (used.includes(`Raster ${n}`)) n++;
+  return `Raster ${n}`;
+}
+
+// v120: Teams, denen Felder des Rasters zugeteilt sind (Reihenfolge wie in der Markierungsliste)
+export function gridTeams(p, g) {
+  const used = new Set(Object.values(g.fills || {}));
+  return (p.marks || []).filter((m) => m.kind === 'team' && used.has(m.id));
 }
 
 function parkActive(p) {

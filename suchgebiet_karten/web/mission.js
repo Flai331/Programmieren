@@ -189,7 +189,7 @@ export function missionText(project, grid, attach = 'Abschlussbericht im Anhang 
   if (want(sec, 'summary') && m.summary.trim()) out.push('', 'Zusammenfassung:', m.summary.trim());
   const others = project.otherGrids || [];
   if (grid && others.length) {
-    const list = [{ name: project.gridName, cellM: grid.cellM }, ...others].map((g) => `${g.name || 'Gebiet 1'} (${g.cellM} m)`);
+    const list = [{ name: project.gridName, cellM: grid.cellM }, ...others].map((g) => `${g.name || 'Raster 1'} (${g.cellM} m)`);
     out.push('', `Rastergebiete: ${list.join(', ')}; Felder je Gebiet ab A1 = Nordwest-Ecke.`);
   } else if (grid) out.push('', `Raster: ${grid.cellM} m Felder, A1 = Nordwest-Ecke.`);
   if (attach) out.push('', attach);
