@@ -122,8 +122,9 @@ export function circularMean(degs) {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
-// Sonnenauf-/-untergang (NOAA-Näherung, auf wenige Minuten genau) als Zeitstempel
-export function sunTimes(date, lat, lon) {
+// Sonnenauf-/-untergang (NOAA-Näherung, auf wenige Minuten genau) als Zeitstempel.
+// v121: alt = Sonnenhöhe in Grad; -6 = bürgerliche Dämmerung (danach ist es dunkel bzw. ab da hell)
+export function sunTimes(date, lat, lon, alt = -0.833) {
   const rad = Math.PI / 180;
   const day = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
   const n = Math.floor((day - Date.UTC(2000, 0, 1, 12)) / 864e5) + 1;
@@ -133,11 +134,27 @@ export function sunTimes(date, lat, lon) {
   const L = (M + C + 180 + 102.9372) % 360;
   const Jt = 2451545 + J + 0.0053 * Math.sin(M * rad) - 0.0069 * Math.sin(2 * L * rad);
   const dec = Math.asin(Math.sin(L * rad) * Math.sin(23.44 * rad));
-  const cosH = (Math.sin(-0.833 * rad) - Math.sin(lat * rad) * Math.sin(dec)) / (Math.cos(lat * rad) * Math.cos(dec));
+  const cosH = (Math.sin(alt * rad) - Math.sin(lat * rad) * Math.sin(dec)) / (Math.cos(lat * rad) * Math.cos(dec));
   if (cosH < -1 || cosH > 1) return null;
   const H = Math.acos(cosH) / rad / 360;
   const toMs = (jd) => (jd - 2440587.5) * 864e5;
   return { rise: toMs(Jt - H), set: toMs(Jt + H) };
+}
+
+// v121: die nächsten Hell-/Dunkel-Wechsel ab jetzt: nächster Sonnenauf- oder -untergang und
+// nächstes „dunkel“ (Ende der bürgerlichen Dämmerung) oder „hell“ (Beginn), zeitlich sortiert
+export function nextLightEvents(now, lat, lon) {
+  const out = [];
+  for (const [alt, up, down] of [[-0.833, 'Sonnenaufgang', 'Sonnenuntergang'], [-6, 'Hell', 'Dunkel']]) {
+    let best = null;
+    for (let d = -1; d <= 2; d++) {
+      const s = sunTimes(new Date(now + d * 864e5), lat, lon, alt);
+      if (!s) continue;
+      for (const [t, name] of [[s.rise, up], [s.set, down]]) if (t > now && (!best || t < best.t)) best = { t, name };
+    }
+    if (best) out.push(best);
+  }
+  return out.sort((a, b) => a.t - b.t);
 }
 
 const hhmm = (t) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });

@@ -38,7 +38,7 @@ import {
   distance, bearing as bearingDeg,
 } from './rescue.js';
 import {
-  fetchWeather, fetchStations, dirName, beaufort, approach, circularMean, sunTimes, windChanged, STRENGTHS, ICONS as WX_ICONS, CONDITIONS,
+  fetchWeather, fetchStations, dirName, beaufort, approach, circularMean, nextLightEvents, windChanged, STRENGTHS, ICONS as WX_ICONS, CONDITIONS,
 } from './weather.js';
 import {
   PUBLIC_URL, pack, unpack, parseShared, shareLink, appIntentUrl, assignmentSummary, sinceText, buildAssignment, projectFromAssignment, buildResult, applyResult,
@@ -60,7 +60,8 @@ import {
 import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { placeBadges, boxOf } from './badgeplace.js';
-import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } from './search.js';
+import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner, overpass } from './search.js';
+import { OSM_NOTE, MAX_PARTS, MAX_AREA_M2, MIN_OUTLINE_M, forestQuery, parseForest, originOf, toXY, toLL, forestInLasso, lassoPolygon, shares as forestShares, splitArea, toTracks, mpArea } from './forest.js';
 import {
   newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor, cellsText,
   exportProject, importProject, uid, reorderMarks, MARK_COLORS, NO_TEAM, NO_TEAM_COLOR, assignTargets, assigneeName,
@@ -68,7 +69,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v120';
+const APP_VERSION = 'v121';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -629,6 +630,7 @@ const HINTS = {
   hfmovept: 'Tippe auf die Karte, wo die Meldung hin soll.',
   textmove: 'Tippe auf die Karte, wo der Punkt hin soll.',
   hfdraw: 'Mit dem Finger einmal um den Bereich herum malen.',
+  forestdraw: 'Mit dem Finger einmal um den Wald herum malen. Die Karte bewegt sich dabei nicht.',
   hffield: 'Feld antippen: abgesucht → teilweise → nicht begehbar → zurück. „Feld“ nochmal tippen = fertig.',
   sendpick: 'Felder für den Auftrag antippen (blau umrandet). Dann „Weiter“.',
   gpxsel: 'Antippen, was als GPX mit soll. Ein Umriss nimmt alles mit, was darin liegt.',
@@ -651,8 +653,9 @@ function showForPaint(m) {
 }
 function setTool(t) {
   endVertex();
+  if (!$('forestbar').hidden && t !== 'pan') { const f = forestBarDone; forestClear(); if (f) f('cancel'); } // v121: Wald-Vorschau offen
   // Einzeichnen nur in einem offenen Einsatz (Offline-Bereich wählen u. Ä. geht immer)
-  if (['pen', 'text', 'fill', 'track', 'erase', 'meet', 'poi', 'grid'].includes(t) && isLocked()) { lockedToast(); t = 'pan'; }
+  if (['pen', 'text', 'fill', 'track', 'forestdraw', 'erase', 'meet', 'poi', 'grid'].includes(t) && isLocked()) { lockedToast(); t = 'pan'; }
   if (t !== tool) repLog.add(`Werkzeug ${t}`);
   // Texte/Zeichnungen sind erst ab Stufe 15 zu sehen: zum Einzeichnen dorthin zoomen
   if (['pen', 'text', 'erase', 'hfmarkpt', 'textmove'].includes(t) && labelDetail(map.getZoom()) === 0) map.setZoom(15);
@@ -857,6 +860,10 @@ canvas.addEventListener('pointerdown', (e) => {
   } else if (tool === 'hfdraw') {
     current = { kind: 'stroke', color: hfColor(), w: 4, pts: [[ll.lat, ll.lng]] };
     redraw();
+  } else if (tool === 'forestdraw') {
+    // v121: Wald umkreisen (nur Einsatzleitung)
+    current = { kind: 'stroke', color: '#2e7d32', w: 4, pts: [[ll.lat, ll.lng]] };
+    redraw();
   } else if (tool === 'grid' || tool === 'offrect') {
     dragRect = { a: ll, b: ll };
   } else if (tool === 'erase') {
@@ -871,7 +878,7 @@ canvas.addEventListener('pointerdown', (e) => {
 canvas.addEventListener('pointermove', (e) => {
   if (e.pointerId !== activePointer) return;
   const { x, y, ll } = eventLatLng(e);
-  if ((tool === 'pen' || tool === 'hfdraw') && current) {
+  if ((tool === 'pen' || tool === 'hfdraw' || tool === 'forestdraw') && current) {
     if (Math.hypot(x - lastPt.x, y - lastPt.y) < 2) return;
     current.pts.push([ll.lat, ll.lng]);
     lastPt = { x, y };
@@ -903,6 +910,12 @@ function finishPointer(e, cancelled) {
     setTool('pan');
     redraw();
     if (!cancelled) hfAreaDone(pts);
+  } else if (tool === 'forestdraw' && current) {
+    const pts = current.pts;
+    current = null;
+    setTool('pan');
+    redraw();
+    if (!cancelled) forestLassoDone(pts);
   } else if (tool === 'pen' && current) {
     // Antippen einer vorhandenen Zeichnung: benennen statt einen Punkt zu malen
     const tap = !cancelled && current.pts.length === 1 && Math.hypot(x - downPt.x, y - downPt.y) < 8;
@@ -1394,6 +1407,288 @@ $('track-cancel').addEventListener('click', () => {
   redraw();
   save();
 });
+
+// ---------- v121: Wald erkennen und aufteilen ----------
+// Waldstück mit dem Finger umkreisen -> Waldflächen aus OpenStreetMap (Overpass) -> in N Teile aufteilen (forest.js).
+// Die Teile werden als normale Umrisse (kind 'track') übernommen, mit einem Schritt Rückgängig.
+const forestPreview = L.layerGroup().addTo(map);
+const FOREST_COLORS = ['#d81b60', '#1e88e5', '#fb8c00', '#8e24aa', '#00897b', '#6d4c41', '#7cb342', '#3949ab'];
+const FOREST_LETTERS = 'ABCDEFGH';
+const forestHa = (m2) => (m2 / 1e4).toLocaleString('de-DE', { maximumFractionDigits: 1 });
+let forestBarDone = null; // wartet auf einen Knopf der Vorschau-Leiste
+
+function forestClear() {
+  forestPreview.clearLayers();
+  $('forestbar').hidden = true;
+  forestBarDone = null;
+}
+function forestStart() {
+  if (tool === 'forestdraw') return setTool('pan');
+  setTool('forestdraw');
+  if (tool === 'forestdraw') toast('Mit dem Finger einmal um den Wald herum malen', 5000);
+}
+$('track-forest').addEventListener('click', forestStart);
+$('more-forest').addEventListener('click', () => { closePanels(); forestStart(); });
+function forestBarWait() {
+  $('forestbar').hidden = false;
+  return new Promise((resolve) => { forestBarDone = resolve; });
+}
+for (const [id, v] of [['forest-edit', 'edit'], ['forest-ok', 'apply'], ['forest-cancel', 'cancel']]) {
+  $(id).addEventListener('click', () => { const f = forestBarDone; forestBarDone = null; $('forestbar').hidden = true; if (f) f(v); });
+}
+const forestLassoLayer = (pts) => L.polygon(pts, { color: '#2e7d32', weight: 3, dashArray: '2 6', fill: false, interactive: false });
+
+async function forestLassoDone(raw) {
+  // Punkte ausdünnen (ca. alle 3 m)
+  const pts = [];
+  for (const q of raw) {
+    const l = pts[pts.length - 1];
+    if (!l || distance(l[0], l[1], q[0], q[1]) >= 3) pts.push([Math.round(q[0] * 1e6) / 1e6, Math.round(q[1] * 1e6) / 1e6]);
+  }
+  if (pts.length < 3 || pathLen(pts) < MIN_OUTLINE_M) return toast('Zu klein – nochmal „🌲 Wald“ und größer umkreisen');
+  const o = originOf(pts);
+  const lassoMp = lassoPolygon(pts, o);
+  const lassoM2 = mpArea(lassoMp);
+  if (lassoM2 < 1) return toast('Zu klein – nochmal „🌲 Wald“ und größer umkreisen');
+  if (lassoM2 > MAX_AREA_M2) return toast('Bitte kleiner umkreisen (höchstens 25 km²)', 5000);
+  $('toast').hidden = true;
+  forestClear();
+  forestPreview.addLayer(forestLassoLayer(pts));
+  const la = pts.map((q) => q[0]);
+  const lo = pts.map((q) => q[1]);
+  const bbox = { south: Math.min(...la) - 0.0005, north: Math.max(...la) + 0.0005, west: Math.min(...lo) - 0.0008, east: Math.max(...lo) + 0.0008 };
+  // Laden (abbrechbar)
+  const ctl = new AbortController();
+  let closeLoad = null;
+  openDlg((box, close) => {
+    closeLoad = close;
+    dlgHead(box, '🌲 Waldflächen werden geladen …', OSM_NOTE);
+    dlgButton(box, 'Abbrechen', '', () => { ctl.abort(); close(null); });
+  }, { keep: true });
+  let data = null;
+  let reason = '';
+  try {
+    data = parseForest(await overpass(forestQuery(bbox), ctl.signal, 'Waldsuche'));
+  } catch (err) {
+    if (ctl.signal.aborted) { forestClear(); return; }
+    reason = (err && err.message) || 'Keine Verbindung';
+  }
+  if (closeLoad) closeLoad(null);
+  let mp = data ? forestInLasso(data.forests, pts, o) : [];
+  const lines = data ? data.lines.map((l) => l.map((q) => toXY(q, o))) : [];
+  let forest = true;
+  if (!mp.length) {
+    // v121: kein Wald erkannt oder Netzfehler -> die umkreiste Fläche selbst aufteilen?
+    const ok = await openDlg((box, close) => {
+      dlgHead(box, reason ? '🌲 Waldsuche fehlgeschlagen' : '🌲 Kein Wald erkannt', reason ? `${reason}. Die umkreiste Fläche selbst aufteilen?` : 'Kein Wald erkannt – die umkreiste Fläche selbst aufteilen?');
+      dlgButton(box, 'Umkreiste Fläche aufteilen', 'primary', () => close(true));
+      dlgButton(box, 'Abbrechen', '', () => close(false));
+    });
+    if (!ok) { forestClear(); return; }
+    mp = lassoMp;
+    forest = false;
+  }
+  await forestPlan({ mp, lines, o, forest, pts });
+}
+
+// Fenster „Wald aufteilen“, Vorschau und Übernehmen
+async function forestPlan(ctx) {
+  const total = mpArea(ctx.mp);
+  const st = { n: 2, follow: true, rows: [], base: outlineName(P.items, P.meet, ctx.pts) };
+  for (;;) {
+    while (st.rows.length < st.n) st.rows.push({ size: 'gleich', pct: '', name: `${st.base} ${FOREST_LETTERS[st.rows.length]}`, to: '' });
+    const act = await forestDialog(st, ctx, total);
+    if (act !== 'preview' && act !== 'apply') { forestClear(); return; }
+    if (isLocked()) { forestClear(); return lockedToast(); }
+    const res = await forestCompute(st, ctx, total);
+    if (!res) continue;
+    if (act === 'apply') { forestClear(); return forestCommit(res.tracks); }
+    forestShow(st, ctx, res);
+    const a = await forestBarWait();
+    if (a === 'apply') { forestClear(); return forestCommit(res.tracks); }
+    if (a !== 'edit') { forestClear(); return; }
+    forestPreview.clearLayers();
+    forestPreview.addLayer(forestLassoLayer(ctx.pts));
+  }
+}
+
+function forestDialog(st, ctx, total) {
+  const teams = assignTargets(P);
+  return openDlg((box, close) => {
+    const n0 = ctx.mp.length;
+    dlgHead(box, '🌲 Wald aufteilen', ctx.forest ? `Erkannt: ${forestHa(total)} ha Wald (${n0} Stück${n0 === 1 ? '' : 'e'})` : `Umkreiste Fläche: ${forestHa(total)} ha`);
+    const src = document.createElement('p');
+    src.className = 'small';
+    src.textContent = OSM_NOTE;
+    box.appendChild(src);
+    const lab = document.createElement('label');
+    lab.textContent = 'Anzahl Teile';
+    box.appendChild(lab);
+    const nbox = document.createElement('div');
+    nbox.className = 'wald-n';
+    box.appendChild(nbox);
+    const list = document.createElement('div');
+    box.appendChild(list);
+    const follow = document.createElement('label');
+    follow.className = 'check';
+    const fcb = document.createElement('input');
+    fcb.type = 'checkbox';
+    fcb.id = 'wald-follow';
+    fcb.checked = st.follow;
+    fcb.addEventListener('change', () => { st.follow = fcb.checked; });
+    follow.append(fcb, ' Grenzen an Wegen/Bächen ausrichten');
+    box.appendChild(follow);
+    const note = document.createElement('p');
+    note.className = 'small';
+    note.textContent = 'Mit Wegen sind die Flächen nur ungefähr gleich (± 15 %); ohne passenden Weg wird gerade geschnitten.';
+    box.appendChild(note);
+    const hint = document.createElement('p');
+    hint.className = 'wald-hint';
+    hint.id = 'wald-hint';
+    hint.hidden = true;
+    box.appendChild(hint);
+    // Knöpfe unten fest in einer Zeile (auf dem Handy sonst erst nach langem Scrollen erreichbar)
+    const acts = document.createElement('div');
+    acts.className = 'wald-acts';
+    box.appendChild(acts);
+    const bPrev = dlgButton(acts, '👁 Vorschau', '', () => close('preview'));
+    bPrev.id = 'wald-preview';
+    const bOk = dlgButton(acts, '✅ Übernehmen', 'primary', () => close('apply'));
+    bOk.id = 'wald-apply';
+    dlgButton(acts, 'Abbrechen', '', () => close(null));
+
+    const sollEls = [];
+    const rowEls = [];
+    const refresh = () => {
+      const r = forestShares(st.rows.slice(0, st.n).map((x) => ({ size: st.n === 1 ? 'gleich' : x.size, pct: x.pct })));
+      hint.hidden = !r.error;
+      hint.textContent = r.error || '';
+      bPrev.disabled = !!r.error;
+      bOk.disabled = !!r.error;
+      st.rows.slice(0, st.n).forEach((x, i) => {
+        const bad = st.n > 1 && forestShares([{ size: x.size, pct: x.pct }]).error;
+        rowEls[i].classList.toggle('bad', !!bad);
+        sollEls[i].textContent = r.shares ? `Soll ${forestHa(r.shares[i] * total)} ha` : 'Soll – ha';
+      });
+      follow.hidden = st.n === 1;
+      note.hidden = st.n === 1;
+    };
+    const build = () => {
+      nbox.innerHTML = '';
+      for (let k = 1; k <= MAX_PARTS; k++) {
+        const b = document.createElement('button');
+        b.textContent = String(k);
+        b.dataset.n = String(k);
+        if (k === st.n) b.className = 'primary';
+        b.addEventListener('click', () => {
+          st.n = k;
+          while (st.rows.length < k) st.rows.push({ size: 'gleich', pct: '', name: `${st.base} ${FOREST_LETTERS[st.rows.length]}`, to: '' });
+          build();
+        });
+        nbox.appendChild(b);
+      }
+      list.innerHTML = '';
+      sollEls.length = 0;
+      rowEls.length = 0;
+      st.rows.slice(0, st.n).forEach((x, i) => {
+        const row = document.createElement('div');
+        row.className = 'wald-row';
+        row.style.borderLeftColor = FOREST_COLORS[i];
+        const name = document.createElement('input');
+        name.type = 'text';
+        name.value = x.name;
+        name.setAttribute('aria-label', `Name Teil ${FOREST_LETTERS[i]}`);
+        name.addEventListener('input', () => { x.name = name.value; });
+        row.appendChild(name);
+        if (st.n > 1) {
+          const size = document.createElement('select');
+          size.setAttribute('aria-label', `Größe Teil ${FOREST_LETTERS[i]}`);
+          for (const v of ['gleich', 'kleiner', 'größer']) size.add(new Option(v === 'gleich' ? 'gleich groß' : v, v));
+          size.value = x.size;
+          row.appendChild(size);
+          const pl = document.createElement('label');
+          pl.className = 'wald-pct';
+          const pct = document.createElement('input');
+          pct.type = 'number';
+          pct.inputMode = 'numeric';
+          pct.step = 'any';
+          pct.value = x.pct;
+          pct.setAttribute('aria-label', `Prozent Teil ${FOREST_LETTERS[i]}`);
+          pl.append(pct, '% eines normalen Teils');
+          pl.hidden = x.size === 'gleich';
+          row.appendChild(pl);
+          size.addEventListener('change', () => { x.size = size.value; pl.hidden = x.size === 'gleich'; refresh(); });
+          pct.addEventListener('input', () => { x.pct = pct.value; refresh(); });
+        }
+        const team = document.createElement('select');
+        team.setAttribute('aria-label', `Team Teil ${FOREST_LETTERS[i]}`);
+        team.add(new Option('ohne Team', ''));
+        for (const t of teams) team.add(new Option(`${t.to.startsWith('u:') ? '🚒' : '🐕'} ${t.label}`, t.to));
+        team.value = [...team.options].some((op) => op.value === x.to) ? x.to : '';
+        team.addEventListener('change', () => { x.to = team.value; });
+        row.appendChild(team);
+        const soll = document.createElement('div');
+        soll.className = 'wald-soll';
+        row.appendChild(soll);
+        sollEls.push(soll);
+        rowEls.push(row);
+        list.appendChild(row);
+      });
+      refresh();
+    };
+    build();
+  });
+}
+
+// Aufteilen rechnen -> { parts, tracks, soll } oder null (Fehler, Fenster geht wieder auf)
+async function forestCompute(st, ctx, total) {
+  const rows = st.rows.slice(0, st.n);
+  const r = forestShares(rows.map((x) => ({ size: st.n === 1 ? 'gleich' : x.size, pct: x.pct })));
+  if (r.error) { toast(r.error); return null; }
+  toast('Wird berechnet …', 2000);
+  await new Promise((resolve) => setTimeout(resolve, 30)); // Meldung vor der Rechnung anzeigen
+  try {
+    const parts = splitArea(ctx.mp, r.shares, ctx.lines, { followWays: st.follow && st.n > 1 });
+    const tracks = toTracks(parts, rows.map((x, i) => x.name.trim() || `${st.base} ${FOREST_LETTERS[i]}`), rows.map((x) => x.to), ctx.o);
+    if (!tracks.length) { toast('Aufteilen ergab keine Fläche'); return null; }
+    $('toast').hidden = true;
+    return { parts, tracks, soll: r.shares.map((x) => x * total) };
+  } catch (err) {
+    repLog.add(`Wald aufteilen fehlgeschlagen: ${err && err.message}`);
+    toast('Aufteilen ging nicht – bitte anders umkreisen');
+    return null;
+  }
+}
+
+function forestShow(st, ctx, res) {
+  forestPreview.clearLayers();
+  forestPreview.addLayer(forestLassoLayer(ctx.pts));
+  const infos = [];
+  res.parts.forEach((part, i) => {
+    const c = FOREST_COLORS[i % FOREST_COLORS.length];
+    // zweizeilig und kurz: schmale Teile auf dem Handy dürfen sich nicht überdecken
+    const label = `${FOREST_LETTERS[i]} ${forestHa(part.area)} ha${part.onWay ? ' 🛤' : ''}${st.n > 1 ? `<br><small>Soll ${forestHa(res.soll[i])}</small>` : ''}`;
+    infos.push(`${FOREST_LETTERS[i]} ${forestHa(part.area)}${part.onWay ? '🛤' : ''}`);
+    part.polys.forEach((ring, k) => {
+      const poly = L.polygon(ring.map((q) => toLL(q, ctx.o)), { color: c, weight: 3, dashArray: '8 6', fillColor: c, fillOpacity: 0.18, interactive: false });
+      if (k === 0) poly.bindTooltip(label, { permanent: true, direction: 'center', className: 'forest-tip' });
+      forestPreview.addLayer(poly);
+    });
+  });
+  $('forest-info').textContent = `Vorschau (ha): ${infos.join(' · ')}`;
+}
+
+function forestCommit(tracks) {
+  snapshot();
+  for (const t of tracks) {
+    const m = t.to ? P.marks.find((x) => x.id === t.to) : null;
+    const it = { kind: 'track', name: t.name, color: m ? m.color : db.color, w: 4, pts: t.pts };
+    if (t.to) it.to = t.to;
+    P.items.push(it);
+  }
+  changed();
+  toast(`🌲 ${tracks.length} Umriss${tracks.length === 1 ? '' : 'e'} gespeichert (↶ macht es rückgängig) · ${OSM_NOTE}`, 6000);
+}
 
 // Palette
 const colorBox = $('palette').querySelector('.colors');
@@ -2624,15 +2919,20 @@ function renderWx() {
   if (c && c.temp != null) more.push(`${WX_ICONS[c.icon] || ''} ${Math.round(c.temp)} °C`.trim());
   if (c && c.rain) more.push(`Regen ${c.rain.toLocaleString('de-DE')} mm/h`);
   const pt = wxPoint();
-  const sun = sunTimes(new Date(), pt.lat, pt.lon);
-  if (sun) {
-    const now = Date.now();
-    if (now < sun.set && now > sun.rise) {
-      const left = Math.round((sun.set - now) / 60000);
-      more.push(`Sonnenuntergang ${hhmm(sun.set)} (noch ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} h)`);
-    } else more.push(`Sonnenaufgang ${hhmm(now > sun.set ? sun.rise + 864e5 : sun.rise)}`);
+  // v121: nächster Sonnenauf-/-untergang und wann es dunkel bzw. wieder hell wird (bürgerliche Dämmerung), je mit Restzeit
+  const now = Date.now();
+  for (const e of nextLightEvents(now, pt.lat, pt.lon)) {
+    const left = Math.round((e.t - now) / 60000);
+    const icon = { Sonnenuntergang: '🌇', Dunkel: '🌑', Hell: '🌄', Sonnenaufgang: '🌅' }[e.name];
+    more.push(`${icon} ${e.name === 'Dunkel' ? 'Dunkel ab' : e.name === 'Hell' ? 'Hell ab' : e.name} ${hhmm(e.t)} (noch ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} h)`);
   }
-  $('wx-more').textContent = more.join(' · ');
+  // v121: jeder Eintrag bleibt beim Umbruch zusammen (Handy)
+  $('wx-more').replaceChildren(...more.flatMap((t, i) => {
+    const sp = document.createElement('span');
+    sp.className = 'wx-item';
+    sp.textContent = t;
+    return i ? [' · ', sp] : [sp];
+  }));
   // anderes Suchgebiet / Windpunkt weit weg vom geladenen Ort: neu laden
   if (wx && !wxLoading && navigator.onLine && Date.now() - wxFailAt > 60e3 && distance(wx.lat, wx.lon, pt.lat, pt.lon) > 3000) setTimeout(() => loadWeather(false), 0);
   const box = $('wx-hours');

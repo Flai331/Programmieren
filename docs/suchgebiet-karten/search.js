@@ -148,7 +148,8 @@ export function cornerResults(json, a, b, ref) {
 
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
 
-async function overpass(query, signal) {
+// v121: `what` benennt die Suche in den Fehlertexten (Wald-Aufteilen nutzt dieselbe Abfrage)
+export async function overpass(query, signal, what = 'Kreuzungssuche') {
   let last = null;
   for (const url of OVERPASS) {
     try {
@@ -162,10 +163,10 @@ async function overpass(query, signal) {
         const json = await res.json();
         // Zeitüberschreitung o. Ä. kommt als leere Antwort mit Hinweis -> nächster Server
         if (!/error/i.test(json.remark || '')) return json;
-        last = new Error('Kreuzungssuche gerade überlastet – gleich nochmal versuchen');
+        last = new Error(`${what} gerade überlastet – gleich nochmal versuchen`);
         continue;
       }
-      last = new Error(res.status === 429 ? 'Kreuzungssuche gerade überlastet – gleich nochmal versuchen' : `Kreuzungssuche antwortet nicht (${res.status})`);
+      last = new Error(res.status === 429 ? `${what} gerade überlastet – gleich nochmal versuchen` : `${what} antwortet nicht (${res.status})`);
     } catch (err) {
       if (signal && signal.aborted) throw err; // Zeitlimit eines Servers: nächster Server
       last = err;

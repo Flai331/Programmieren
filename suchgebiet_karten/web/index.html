@@ -202,8 +202,15 @@
     <div id="trackbar" class="trackbar" hidden>
       <span id="track-info">Umriss: auf die Karte tippen</span>
       <button id="track-back">↶ Punkt</button>
+      <button id="track-forest" title="Wald umkreisen und in Teilgebiete aufteilen" aria-label="Wald umkreisen und aufteilen">🌲<em class="lbl"> Wald</em></button>
       <button id="track-done" class="primary">Fertig</button>
       <button id="track-cancel">Abbrechen</button>
+    </div>
+    <div id="forestbar" class="trackbar" hidden>
+      <span id="forest-info">Vorschau</span>
+      <button id="forest-edit">✏️ Ändern</button>
+      <button id="forest-ok" class="primary">✅ Übernehmen</button>
+      <button id="forest-cancel">Abbrechen</button>
     </div>
     <div id="palette" class="palette" hidden>
       <div class="colors"></div>
@@ -343,6 +350,11 @@
     <div class="el-only">
     <label>📣 Status-Server (Web-App-Adresse) <input id="dev-status-url" type="text" inputmode="url" autocomplete="off" placeholder="leer = eingebauter Standard-Server"></label>
     <p class="small">Nur auf Geräten der Einsatzleitung nötig. Mit Adresse tragen neue Aufträge die Verbindung mit: Hundeführer melden dann bei Internet ihren Status und wichtige Standorte. Einrichtung: Ordner „apps-script“, ANLEITUNG.md. Leer lassen = der eingebaute Standard-Server wird benutzt. Ein Abschalten gibt es nicht; die QR-Rückmeldung funktioniert immer zusätzlich.</p>
+    </div>
+    <div class="el-only">
+    <h2 class="sub">🌲 Wald</h2>
+    <p class="small">Waldstück mit dem Finger umkreisen: Die App erkennt die Waldflächen (OpenStreetMap) und teilt sie auf Wunsch in Teilgebiete auf, möglichst entlang von Wegen und Bächen.</p>
+    <div class="row"><button id="more-forest">🌲 Wald umkreisen und aufteilen</button></div>
     </div>
     <h2 class="sub">App-Modus</h2>
     <p class="small">Einsatzleitung: alles. Hundeführer: stark vereinfacht (große Knöpfe, nur der eigene Auftrag). Zurück zur Einsatzleitung nur mit der PIN der Einsatzleitung. Die PIN schützt vor versehentlichem Wechsel, nicht die Daten.</p>
