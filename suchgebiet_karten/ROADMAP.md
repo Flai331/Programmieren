@@ -1,13 +1,14 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v119**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v120**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v120 – 👆 Gebiete-Liste mit dem Finger scrollbar**: Wischen in der Liste am Knopf „Gebiete“ (und in den Suchergebnissen) scrollt nur noch; ein Gebiet wird erst beim Antippen ohne Wischen gewählt. Die Liste zeigt jetzt auch bei Rastern das zugeteilte Team (bzw. „ohne Team“). Raster heißen „Raster 1, 2, …“ statt „Gebiet …“ (alte Namen werden umbenannt).
 - [~] **v119 – 🏷️ PDF-Beschriftungen überlappen nicht mehr**: Namen von B-Ort, Lage-Orten und Meldungen weichen einander aus (rechts, links, oben, unten, schräg) und bleiben innerhalb des Kartenbilds.
 - [~] **v118 – 🛡️ Robustheit II**: abgelehnte Meldung blockiert die Warteschlange nicht mehr („⚠️ nicht zugestellt“); beschädigter Einsatz wird beim Start beiseitegelegt statt die App zu blockieren; Karten-PDF ohne Live-Schlüssel; zweites Fenster wird erkannt und gesperrt („Hier weiterarbeiten“); GPS-Weg wird getrennt und gebündelt gespeichert (kein Ruckeln, nichts geht bei Absturz verloren).
 - [~] **v117 – ✉️ Rückkanal Einsatzleitung → Hundeführer**: EL-Quittung „✓ gesehen“ kommt beim HF an (bei Fund/Hilfe mit Hinweis); EL schreibt Nachrichten an ein Team oder alle, „wichtig“ mit Ton und Fenster bis „Verstanden“; EL sieht, wer gelesen hat; ohne Netz wartet die Nachricht und geht später raus.

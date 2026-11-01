@@ -64,11 +64,11 @@ import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner } fro
 import {
   newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor, cellsText,
   exportProject, importProject, uid, reorderMarks, MARK_COLORS, NO_TEAM, NO_TEAM_COLOR, assignTargets, assigneeName,
-  allGrids, activateGrid, startNewGrid, removeActiveGrid, gridView, gridLabel, loadProjects, mergeTrackBackup,
+  allGrids, activateGrid, startNewGrid, removeActiveGrid, gridView, gridLabel, gridTeams, loadProjects, mergeTrackBackup,
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v119';
+const APP_VERSION = 'v120';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1722,7 +1722,7 @@ function updateGridInfo() {
     return;
   }
   $('grid-info').textContent = `${grid.cols} × ${grid.rows} Felder à ${formatMeters(grid.cellM)} · A1 bis ${cellLabel(grid.cols - 1, grid.rows - 1)} · `
-    + `Gebiet ${formatMeters(grid.cols * grid.cellM)} × ${formatMeters(grid.rows * grid.cellM)}`;
+    + `Fläche ${formatMeters(grid.cols * grid.cellM)} × ${formatMeters(grid.rows * grid.cellM)}`;
 }
 
 $('cell-size').addEventListener('change', () => {
@@ -8773,8 +8773,19 @@ function showResults(list, credit, title = 'Suchergebnisse') {
     b.innerHTML = '<b></b><small></small>';
     b.querySelector('b').textContent = r.name;
     b.querySelector('small').textContent = r.sub || '';
-    // pointerdown statt click: kommt vor dem Schließen der Handy-Tastatur
-    b.addEventListener('pointerdown', (e) => { e.preventDefault(); $('search-input').blur(); r.go(); });
+    // v120: erst beim Loslassen wählen, und nur ohne Wischen – sonst lässt sich die Liste mit dem Finger nicht scrollen.
+    // pointerdown mit preventDefault hält die Handy-Tastatur offen, bis gewählt ist (sonst verrutscht die Liste unter dem Finger)
+    let down = null;
+    b.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse' || e.button === 0) { e.preventDefault(); down = { x: e.clientX, y: e.clientY, top: $('searchbar').scrollTop }; } });
+    b.addEventListener('pointercancel', () => { down = null; }); // Browser übernimmt das Scrollen
+    b.addEventListener('pointerup', (e) => {
+      const d = down;
+      down = null;
+      if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10 || Math.abs($('searchbar').scrollTop - d.top) > 4) return;
+      $('search-input').blur();
+      r.go();
+    });
+    b.addEventListener('click', (e) => { if (e.detail === 0) r.go(); }); // Tastatur (Enter/Leertaste)
     box.appendChild(b);
   }
   if (credit) {
@@ -8833,10 +8844,11 @@ function areaResults(text = '') {
   }
   for (const g of allGrids(P)) {
     const name = gridLabel(P, g);
-    if (t && !name.toLowerCase().includes(t)) continue;
+    const who = gridTeams(P, g).map((m) => markLabel(m) || 'Team').join(', ') || 'ohne Team'; // v120: zugeteilte Teams zeigen
+    if (t && !`${name} ${who}`.toLowerCase().includes(t)) continue;
     const gg = makeGrid(g.area, g.cellM);
     const b = gridBounds(gg);
-    out.push({ name: `# ${name}`, sub: `Raster · ${gg.cols} × ${gg.rows} Felder`, go: () => fit(b.south, b.north, b.west, b.east) });
+    out.push({ name: `# ${name}`, sub: `${who} · Raster · ${gg.cols} × ${gg.rows} Felder`, go: () => fit(b.south, b.north, b.west, b.east) });
   }
   return out;
 }
