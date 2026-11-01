@@ -837,3 +837,8 @@ html.night #dlg-box .close-open:not(.st-urgent) { background: transparent; color
 #forestbar button.primary { flex: 1 1 100%; order: 3; }
 .forest-tip small { font-weight: 400; }
 #track-forest .lbl { font-style: normal; }
+
+/* v123: Gebiete-Liste mit 🧭-Knopf je Zeile (mindestens 44 px Tippziel) */
+#search-results .sr-row { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
+#search-results .sr-row button:first-child { flex: 1; min-width: 0; border-bottom: 0; }
+#search-results .sr-row .sr-nav { flex: none; width: 48px; min-height: 48px; padding: 0; text-align: center; font-size: 22px; border-bottom: 0; border-left: 1px solid var(--line); }
