@@ -8,10 +8,11 @@ import { encodePts, decodePts, simplify } from './share.js';
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
 // Einsatz -> kompakt. tol: Linien vereinfachen (Meter), pages: Notizblock mitnehmen. Fotos nie (nur per Datei).
-export function buildHandover(p, { tol = 2, pages = true, from = '' } = {}) {
+export function buildHandover(p, { tol = 2, pages = true, from = '', fromId = '' } = {}) {
   const c = JSON.parse(JSON.stringify(p));
   delete c.view;
   delete c.handedOver;
+  delete c.sentLinks; // v125: gemerkte Auftrags-Links nicht mitschicken
   delete c.peers; // Empfänger von „Fortschritt senden“ gehören zu diesem Gerät
   c.items = (c.items || []).map((it) => {
     if (!Array.isArray(it.pts)) return it;
@@ -19,7 +20,7 @@ export function buildHandover(p, { tol = 2, pages = true, from = '' } = {}) {
     return { ...rest, pe: encodePts(tol ? simplify(pts, tol) : pts) };
   });
   const m = c.mission || {};
-  const out = { v: 1, k: 'e', at: Date.now(), p: c, ...(from ? { from } : {}) }; // from: Name des sendenden Geräts
+  const out = { v: 1, k: 'e', at: Date.now(), p: c, ...(from ? { from } : {}), ...(fromId ? { fi: fromId } : {}) }; // from: Name des sendenden Geräts
   if (m.photos && m.photos.length) out.np = m.photos.length;
   m.photos = [];
   const used = (m.pages || []).filter((pg) => pg.strokes && pg.strokes.length);

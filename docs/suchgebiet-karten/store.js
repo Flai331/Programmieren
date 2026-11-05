@@ -65,7 +65,7 @@ export function newProject(title = '') {
     cellT: {}, // Änderungszeit je Feld { "Raster|c,r|f" (Team) bzw. "|s" (Status): Zeit }
     gridT: {}, // Änderungszeit je Rastergebiet { Raster-ID: Zeit }
     glock: {}, gown: {}, // Sperren je Rastergebiet (nur im Unterabschnitt)
-    peers: [], // Empfänger von „Fortschritt senden“: [{ name, lastSent, sent }]
+    peers: [], // Empfänger von „Fortschritt senden“: [{ name, lastSent, sent, id (Geräte-ID, v125) }]
     showUtm: false,
     view: null,
     mission: newMission(), // Einsatzprotokoll
@@ -118,7 +118,7 @@ export function normalizeProject(p) {
   if (!out.eid) out.eid = out.id;
   // v90: Zeichnungen bekommen feste ID, Änderungszeit (t) und Gerät (by); Sperren (lock) nur 'base' | 'ua'
   for (const k of ['itemDel', 'cellT', 'cellBy', 'gridT', 'glock', 'gown']) if (!out[k] || typeof out[k] !== 'object' || Array.isArray(out[k])) out[k] = {};
-  out.peers = (Array.isArray(out.peers) ? out.peers : []).filter((x) => x && typeof x.name === 'string' && x.name).map((x) => ({ name: x.name.slice(0, 60), lastSent: Number(x.lastSent) || 0, sent: x.sent != null ? Number(x.sent) || 0 : Number(x.lastSent) || 0 }));
+  out.peers = (Array.isArray(out.peers) ? out.peers : []).filter((x) => x && typeof x.name === 'string' && x.name).map((x) => ({ name: x.name.slice(0, 60), lastSent: Number(x.lastSent) || 0, sent: x.sent != null ? Number(x.sent) || 0 : Number(x.lastSent) || 0, ...(typeof x.id === 'string' && x.id ? { id: x.id.slice(0, 40) } : {}) })); // v125: id = Geräte-ID
   out.items = out.items.map((it) => {
     const x = { ...it, id: it.id || uid(), t: Number(it.t) || out.updated || Date.now(), by: String(it.by || '') };
     if (x.lock !== 'base' && x.lock !== 'ua') delete x.lock;

@@ -20,7 +20,10 @@ import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject, i
 import { MSG_VIEW, MSG_DELETE, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock, assignedOf, assignedCell, assignedGrid, markAccepted, isAccepted, unlockUntil } from './locks.js';
 import { isDone, openPoints, msgPct, closeMsg, sentPct, closeAsk, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
 import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts } from './elw.js'; // v124
-import { buildProgress, mergeProgress, progressSummary, progressPreview, progressTarget, snapshotBase, stampChanges, setPeer, peerOf } from './progress.js';
+import { nextTeamLabel, uaPrefix } from './uateam.js';
+import { CAM_KEY, backCameras, pickCamera, nextCamera, cameraConstraints, wantsContinuousFocus } from './camera.js';
+import { rebuildAssignment, teamsWithoutOrder, planAssign, applyAssign, planCount, assignText } from './sentops.js';
+import { buildProgress, mergeProgress, progressSummary, progressPreview, progressTarget, snapshotBase, stampChanges, setPeer, setPeerId, peerOf } from './progress.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
   MAIL_PARTS, REPORT_SECTIONS, MAP_PARTS, EXTRA_PARTS, hasReportText, newMailTo, mailAddresses,
@@ -47,7 +50,7 @@ import {
 } from './share.js';
 import {
   STATUS_LIST, CLOSE_STATUS, SPOT_LIST, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, buildKor, applyKor, mergeStatus, withoutDeleted, latestFor, headMsg, flushOutbox, pollMessages, coverageGaps, areaShapes,
-  EL_ALL, EL_KINDS, buildAck, buildElMsg, buildReadAck, needsAck, forHf, ackedIds, mergeReads, splitIncoming, elTargets, readSummary,
+  EL_ALL, EL_KINDS, buildAck, buildElMsg, buildReadAck, buildReply, replyContext, QUICK_REPLIES, needsAck, forHf, ackedIds, mergeReads, splitIncoming, elTargets, readSummary,
 } from './status.js';
 import {
   teamChips, teamOrder, todoFirst, chipText, teamAssignments, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, unreadAge, bannerText, parseSnooze,
@@ -70,7 +73,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v124';
+const APP_VERSION = 'v125';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -248,7 +251,9 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveN
 // v90: Änderungen erkennen (feste IDs, Änderungszeit, Löschvermerke) – Grundlage für „Fortschritt senden“
 const progBase = new WeakMap();
 const devBy = () => db.deviceName || (P.parentEid ? 'UA' : 'EL');
-function stamp() { progBase.set(P, stampChanges(P, progBase.get(P), devBy())); }
+// v125: eindeutige Geräte-ID (aus der Freigabe, licence.js) – Herkunft von Änderungen; der Name ist nur Anzeige
+const devId = () => { try { return (lic && lic.id) || ''; } catch { return ''; } };
+function stamp() { progBase.set(P, stampChanges(P, progBase.get(P), devBy(), Date.now(), devId())); }
 function snapshot() {
   if (!progBase.has(P)) progBase.set(P, snapshotBase(P));
   undoStack.push(JSON.stringify({
@@ -1782,8 +1787,7 @@ function renderPalette() {
 // ---------- Teams & Legende ----------
 // quick: aus der Feld-Leiste – nur nach dem Namen fragen, kein Teams-Fenster
 function addMark(kind, quick = false) {
-  const n = P.marks.filter((m) => m.kind === 'team').length + 1;
-  let label = kind === 'team' ? `Team ${n}` : 'Markierung';
+  let label = kind === 'team' ? nextTeamLabel(P) : 'Markierung'; // v125: im UA „N-Team 1“
   if (quick) {
     const t = prompt(kind === 'team' ? 'Name des Teams:' : 'Bedeutung der Markierung (z. B. „Fundstelle“, „Gefahr“):', label);
     if (t === null) return null;
@@ -3290,7 +3294,7 @@ function renderHfInfo() {
   const rec = h ? h.track.reduce((a, sg) => a + pathLen(sg.pts), 0) : 0;
   $('hfi-text').textContent = h
     ? [h.closed && `✅ abgeschlossen ${hhmm(h.closed)} – bitte zurückgeben`, h.prev && `🐕 Vorher: ${h.prev}`, h.hint && `⚠️ ${h.hint}`, `Auftrag ${hhmm(h.received)}`, rec ? `gelaufen ${fmtKm(rec)}` : ''].filter(Boolean).join(' · ')
-    : 'QR-Code der Einsatzleitung scannen: Menü → „📷 Auftrag scannen“.';
+    : 'QR-Code der Einsatzleitung scannen: Knopf „📷 Scannen“ rechts (oder Menü → „📷 Auftrag scannen“).';
   $('hfinfo').classList.toggle('min', !!db.hfInfoMin);
   $('hfinfo').classList.toggle('closed', !!(h && h.closed));
   const m = $('hfm-info');
@@ -3306,7 +3310,7 @@ function renderHfInfo() {
     if (el) lines.push(`Einsatzleitung: ${[el.name, el.call && `📻 ${el.call}`, el.phone && `📞 ${el.phone}`].filter(Boolean).join(' · ')}`);
     m.textContent = lines.join('\n');
     m.style.whiteSpace = 'pre-line';
-  } else m.textContent = 'Noch kein Auftrag. QR-Code der Einsatzleitung scannen: Menü → „📷 Auftrag scannen“.';
+  } else m.textContent = 'Noch kein Auftrag. QR-Code der Einsatzleitung scannen: Knopf „📷 Scannen“ rechts (oder Menü → „📷 Auftrag scannen“).';
   $('hfm-meet').disabled = !P.meet;
   const hasArea = !!h && !!areaBounds(P);
   $('hfm-area').disabled = !hasArea;
@@ -3912,8 +3916,12 @@ async function currentAssignment() {
   sendCache = { a, link, sel };
   return sendCache;
 }
+// v125: Sperren des Unterabschnitts beachten (Grund-Einsatz bleibt unverändert)
+const assignLocks = () => ({ canItem: (it) => canEdit(P, it), canCell: (gid, k) => canEditCell(P, gid, k) });
 async function updateSendSize() {
-  const { a, link } = await currentAssignment();
+  const { a, link, sel } = await currentAssignment();
+  const tm = P.marks.find((m) => m.id === sel.teamId);
+  $('send-assign').textContent = tm ? assignText(planAssign(P, sel, assignLocks()), tm.label) : '';
   const nf = a.g.reduce((x, g) => x + g.f.length, 0);
   const np = a.i.filter((x) => x.pv).length;
   $('send-size').textContent = `${a.g.length ? `${a.g.length} Rastergebiet${a.g.length === 1 ? '' : 'e'} · ${nf} hervorgehobene Felder · ` : ''}Umrisse/Zeichnungen: ${a.i.length - np} · ${np ? `Spuren des vorherigen Teams: ${np} · ` : ''}${a.po ? `Lage-Orte: ${a.po.length} · ` : ''}${a.rp ? `Rettungspunkte: ${a.rp.length} · ` : ''}${a.ct ? `Kontakte: ${a.ct.length} · ` : ''}`
@@ -4002,6 +4010,11 @@ async function prepareSend() {
   P.sent = P.sent || [];
   if (!P.sent.some((x) => x.id === c.a.id)) {
     const team = P.marks.find((m) => m.id === c.sel.teamId);
+    // v125: noch nicht zugeteilte Umrisse/Felder gehören ab jetzt diesem Team (ein Rückgängig-Schritt)
+    const plan = planAssign(P, c.sel, assignLocks());
+    if (planCount(plan)) { snapshot(); applyAssign(P, plan, c.sel.teamId); changed(); toast(`✅ ${assignText(plan, team ? team.label : 'Team', true)}`, 6000); }
+    // v125: Link merken, damit der QR-Code später unverändert erneut gezeigt werden kann (P.sentLinks)
+    if (c.link.length <= 30000) (P.sentLinks = P.sentLinks || {})[c.a.id] = c.link;
     // acc 0 = noch nicht übernommen; items/cells merken, was zum Auftrag gehört (Schutz nach der Übernahme)
     P.sent.push({
       id: c.a.id, teamId: c.sel.teamId, team: team ? team.label : 'ohne Team', grids: c.a.g.map((g) => g.i), at: Date.now(),
@@ -4034,6 +4047,28 @@ function renderSentList() {
   const box = $('sent-list');
   box.innerHTML = '';
   const list = teamOrder([...(P.sent || [])].reverse(), P.marks); // feste Team-Reihenfolge, je Team neueste zuerst
+  // v125: Teams mit Gebieten, aber noch ohne Auftrag
+  const wo = db.mode === 'el' && !P.closed ? teamsWithoutOrder(P) : [];
+  if (wo.length) {
+    const wh = document.createElement('h2');
+    wh.className = 'sub';
+    wh.textContent = `🕓 Teams ohne Auftrag (${wo.length})`;
+    box.appendChild(wh);
+    for (const w of wo) {
+      const d = document.createElement('div');
+      d.className = 'sent-card wait';
+      d.innerHTML = '<b><i></i><span></span></b><div class="what"></div>';
+      d.querySelector('i').style.background = w.team.color;
+      d.querySelector('b span').textContent = `${w.team.label}${w.team.dog ? ` – ${w.team.dog}` : ''}`;
+      d.querySelector('.what').textContent = [w.cells && `${w.cells} Feld${w.cells === 1 ? '' : 'er'}`, w.areas && `${w.areas} Umriss${w.areas === 1 ? '' : 'e'}`].filter(Boolean).join(' · ');
+      const nb = document.createElement('button');
+      nb.className = 'mini';
+      nb.textContent = '📲 Auftrag erstellen';
+      nb.addEventListener('click', () => openSendFor(w.team.id));
+      d.appendChild(nb);
+      box.appendChild(d);
+    }
+  }
   if (!list.length) return;
   const open = list.filter((x) => !isDone(x));
   const fin = list.filter(isDone);
@@ -4098,6 +4133,13 @@ function renderSentList() {
       }
     }
     const bar = document.createElement('div');
+    if (db.mode === 'el') { // v125: jeden Auftrags-QR erneut zeigen (laufend und abgeschlossen)
+      const qb = document.createElement('button');
+      qb.className = 'mini';
+      qb.textContent = '📲 QR-Code erneut zeigen';
+      qb.addEventListener('click', () => showSentQr(x));
+      bar.appendChild(qb);
+    }
     if (acc && !fini) {
       const cb = document.createElement('button');
       cb.className = 'mini';
@@ -4135,6 +4177,7 @@ function renderSentList() {
         dlgButton(box, 'Abbrechen', 'primary', () => close(false));
       }))) return;
       P.sent = P.sent.filter((y) => y !== x);
+      if (P.sentLinks) delete P.sentLinks[x.id];
       if (gapView && gapView.a === x.id) gapView = null;
       changed();
       redraw();
@@ -4152,6 +4195,27 @@ function renderSentList() {
     (fini ? finBox : box).appendChild(d);
   }
   if (finBox) box.appendChild(finBox);
+}
+// v125: Auftrags-QR erneut zeigen – gemerkter Link, sonst aus den Daten des Auftrags (gleiche ID, gleicher Live-Kanal)
+async function showSentQr(x) {
+  let link = (P.sentLinks || {})[x.id] || '';
+  let again = false;
+  if (!link) {
+    try { link = shareLink('a', await pack(rebuildAssignment(P, x)), PUBLIC_URL); again = true; } catch { return toast('QR-Code konnte nicht erstellt werden'); }
+  }
+  showQr(link, `📲 Auftrag ${x.team}`, `Gleicher Auftrag wie beim ersten Mal – nichts Neues angelegt. Mit der Kamera des Hundeführer-Handys scannen und den Link öffnen.${again ? ' (Hinweistext und Kontakte des ersten Codes sind hier nicht enthalten.)' : ''}`);
+}
+// v125: Auftrags-Fenster für ein Team öffnen (aus „Teams ohne Auftrag“)
+function openSendFor(teamId) {
+  $('send-grids').innerHTML = '';
+  $('send-items').innerHTML = '';
+  $('send-prev').innerHTML = '';
+  renderSend();
+  $('send-team').value = teamId;
+  $('send-grids').innerHTML = '';
+  $('send-items').innerHTML = '';
+  renderSend();
+  openPanel('panel-send');
 }
 // v101: Auftrag abschließen – Rückfrage. reported: das Team hat „✅ Auftrag abgeschlossen“ gemeldet und die Rückmeldung ist da
 async function askClose(x, reported) {
@@ -4445,7 +4509,7 @@ function statusText({ m }) {
 // EL: Meldung antippen – Text und Löschen (nach Warnung); gelöscht wird nur auf diesem Gerät (und per Fortschritt bei den anderen EL-Geräten)
 async function msgDialog(m, direct = false) {
   const del = direct || await openDlg((box, close) => {
-    dlgHead(box, 'Meldung', statusText({ m }));
+    dlgHead(box, 'Meldung', `${statusText({ m })}${replyContext(m, elMsgsAll()) ? `\n${replyContext(m, elMsgsAll())}` : ''}`);
     dlgNavButton(box, close, false, `${m.tm || 'Team'}: ${msgLabel(m)}`, m.lat, m.lon); // v123
     dlgButton(box, '🗑 Löschen', 'urgent', () => close(true));
     dlgButton(box, 'Schließen', 'primary', () => close(false));
@@ -4631,7 +4695,7 @@ async function sendStatus(o) {
     pos = await getFix();
   }
   if (o.s === 'start') delete h.closed; // wieder losgegangen: nicht mehr „abgeschlossen“
-  const m = buildMsg({ a: h.id, tm: h.team, s: o.s, cat: o.cat, txt: o.txt, pc: o.pc, ar: o.ar, gb: o.gb, pos });
+  const m = buildMsg({ a: h.id, tm: h.team, s: o.s, cat: o.cat, txt: o.txt, pc: o.pc, ar: o.ar, gb: o.gb, ref: o.ref, pos });
   if (!h.ls) {
     h.log = [...h.log, { ...m }].slice(-100);
     p.updated = Date.now();
@@ -4698,6 +4762,7 @@ function renderHfMsgBtn() {
   const on = db.mode === 'hf' && !!P && !!P.hf && !!P.hf.ls;
   const n = on ? hfElUnread().length : 0;
   for (const id of ['hfi-msg', 'hfm-msgs']) { $(id).hidden = !on; $(id).classList.toggle('dot', n > 0); }
+  $('hfm-reply').hidden = !(db.mode === 'hf' && !!P && !!P.hf); // v125: schreiben geht auch ohne Status-Server (mit der QR-Rückmeldung)
   $('hfm-msgs').textContent = `✉️ Nachrichten der Einsatzleitung${hfElMsgs().length ? ` (${hfElMsgs().length})` : ''}`;
 }
 // Lesebestätigung an die Einsatzleitung: über die normale Warteschlange, aber nicht im eigenen Protokoll (und damit nicht in QR/GPX/Abschluss)
@@ -4787,12 +4852,46 @@ async function hfElList() {
       d.querySelector('span').textContent = m.txt || '';
       d.querySelector('small').textContent = m.to === EL_ALL ? 'an alle' : '';
       d.querySelector('small').hidden = m.to !== EL_ALL;
+      // v125: direkt antworten
+      const rb = document.createElement('button');
+      rb.type = 'button';
+      rb.className = 'mini';
+      rb.textContent = '✍️ Antworten';
+      rb.addEventListener('click', () => close({ reply: m.id }));
+      d.appendChild(rb);
       box.appendChild(d);
     }
+    dlgButton(box, '✍️ Neue Nachricht an die EL', '', () => close({ reply: '' }));
     dlgButton(box, 'Schließen', 'primary', () => close(true));
   });
+  if (go && go.reply !== undefined) return hfReply(go.reply || null);
   if (go) showElPrio();
 }
+// v125: Hundeführer schreibt der Einsatzleitung (Freitext oder Schnellwahl), optional als Antwort auf eine EL-Nachricht (ref)
+async function hfReply(ref = null) {
+  if (!P.hf) return toast('Noch kein Auftrag – erst den QR-Code der Einsatzleitung scannen');
+  const proj = P;
+  const refMsg = ref ? hfElMsgs().find((m) => m.id === ref) : null;
+  const txt = await openDlg((box, close) => {
+    dlgHead(box, '✍️ Nachricht an die Einsatzleitung', refMsg ? `↩︎ Antwort auf: „${refMsg.txt || ''}“` : P.hf.ls ? 'Geht sofort an die Einsatzleitung (ohne Netz: sobald wieder Empfang ist).' : 'Dieser Auftrag hat keinen Status-Server: die Nachricht geht mit der nächsten QR-Rückmeldung mit.');
+    const list = document.createElement('div');
+    list.className = 'dlg-btns two';
+    box.appendChild(list);
+    for (const q of QUICK_REPLIES) dlgButton(list, esc(q), '', () => close(q));
+    const inp = document.createElement('textarea');
+    inp.id = 'hf-reply-txt';
+    inp.rows = 3;
+    inp.maxLength = 300;
+    inp.placeholder = 'Text an die Einsatzleitung …';
+    inp.style.cssText = 'width:100%;margin-top:8px';
+    box.appendChild(inp);
+    dlgButton(box, '📤 Senden', 'primary', () => (inp.value.trim() ? close(inp.value.trim()) : toast('Bitte einen Text eintragen oder eine Schnellwahl antippen')));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!txt || proj !== P) return;
+  sendStatus({ s: 'msg', txt, ref: refMsg ? refMsg.id : undefined });
+}
+$('hfm-reply').addEventListener('click', () => { closePanels(); hfReply(null); });
 $('hfi-msg').addEventListener('click', (e) => { e.stopPropagation(); hfElList(); });
 $('hfm-msgs').addEventListener('click', () => { closePanels(); hfElList(); });
 
@@ -5250,7 +5349,7 @@ function renderPop() {
   for (const m of ms) {
     const d = document.createElement('div');
     d.className = `ln${isUrgent(m) ? ' urgent' : ''}`;
-    d.textContent = `${hhmm(m.t)} · ${msgLabel(m)}${m.lat != null ? ' · 📍' : ''}${m.txt ? ` – ${m.txt}` : ''}`;
+    d.textContent = `${hhmm(m.t)} · ${msgLabel(m)}${m.lat != null ? ' · 📍' : ''}${m.txt ? ` – ${m.txt}` : ''}${replyContext(m, elMsgsAll()) ? ` · ${replyContext(m, elMsgsAll())}` : ''}`;
     box.appendChild(d);
   }
   const all = document.createElement('button');
@@ -5373,6 +5472,7 @@ function renderStatusPanel() {
   // v117: Nachrichten der Einsatzleitung (st-el) laufen in der Zeitleiste mit; mit Teamfilter nur die an dieses Team oder an alle
   const ids = stFilter ? new Set(teamAssignments(P.sent, stFilter)) : null;
   const els = P.live ? (liveInit(P.live).out).filter((m) => m.s === 'el' && (!ids || m.to === EL_ALL || ids.has(m.to))) : [];
+  const elAll = elMsgsAll(); // v125: für „↩︎ Antwort auf …“
   const list = [...historyFilter(allMsgsK(), P.sent, stFilter), ...els].sort((a, b) => b.t - a.t);
   if (!list.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = 'Noch keine Meldungen.'; box.appendChild(p); }
   for (const m of list.slice(0, 300)) {
@@ -5385,13 +5485,16 @@ function renderStatusPanel() {
     d.innerHTML = '<div class="tx"><b></b><span></span><br><small></small></div><button type="button" class="del" aria-label="Meldung löschen">🗑</button>';
     d.querySelector('b').textContent = `${team ? team.label : m.tm || 'Team'}${team && team.dog ? ` (${team.dog})` : ''}`;
     d.querySelector('span').textContent = `${msgLabel(m)}${m.lat != null ? ' 📍' : ''}${m.txt ? ` – ${m.txt}` : ''}`;
-    d.querySelector('small').textContent = `${hhmm(m.t)} (vor ${sinceText(m.t, now)})${m.gone ? ` · ↩ vom Team zurückgezogen ${hhmm(m.gone)}` : m.ed ? ` · ✏️ geändert ${hhmm(m.ed)}` : ''}`;
+    const rc = replyContext(m, elAll); // v125
+    d.querySelector('small').textContent = `${rc ? `${rc} · ` : ''}${hhmm(m.t)} (vor ${sinceText(m.t, now)})${m.gone ? ` · ↩ vom Team zurückgezogen ${hhmm(m.gone)}` : m.ed ? ` · ✏️ geändert ${hhmm(m.ed)}` : ''}`;
     if (m.gone) d.querySelector('span').style.textDecoration = 'line-through';
     if (m.lat != null && !m.gone) d.addEventListener('click', () => showStatusMark(m));
     d.querySelector('.del').addEventListener('click', (e) => { e.stopPropagation(); msgDialog(m, true); });
     box.appendChild(d);
   }
 }
+// v125: alle Nachrichten der Einsatzleitung (eigene und von anderen EL-Geräten) für den Bezug einer Antwort
+const elMsgsAll = () => (P.live ? [...liveInit(P.live).out, ...(P.live.msgs || []).filter((m) => m.s === 'el')] : []);
 // v117: Zeile für eine Nachricht der Einsatzleitung: an wen, Text, wer sie gelesen hat
 function teamNameOf(a) {
   const x = (P.sent || []).find((q) => q.id === a);
@@ -5997,13 +6100,64 @@ $('recv-paste').addEventListener('click', () => openDlg((box, close) => {
 // Kamera-Scanner: BarcodeDetector (falls vorhanden), sonst jsQR
 let scanStream = null;
 let scanRun = false;
+// v125: Hauptkamera statt Ultraweitwinkel. Erst die Freigabe über facingMode (damit die Kameras Namen haben), dann die
+// beste Rückkamera nach Namen mit deviceId, 1920x1080 und Dauerfokus; die Wahl (auch „🔄 Kamera wechseln“) wird gemerkt.
+let scanCams = [];
+const camSaved = () => { try { return localStorage.getItem(CAM_KEY) || ''; } catch { return ''; } };
+const camSave = (id) => { try { localStorage.setItem(CAM_KEY, id); } catch { /* ohne Speicher: gilt nur jetzt */ } };
+async function focusTrack(stream) {
+  try {
+    const tr = stream.getVideoTracks()[0];
+    const caps = tr && tr.getCapabilities ? tr.getCapabilities() : null;
+    if (wantsContinuousFocus(caps)) await tr.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+  } catch { /* Kamera kennt keinen Dauerfokus */ }
+}
+async function openScanCamera(forceId = '') {
+  const md = navigator.mediaDevices;
+  let stream = await md.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+  try {
+    const cur = (stream.getVideoTracks()[0].getSettings() || {}).deviceId || '';
+    scanCams = backCameras(await md.enumerateDevices());
+    const want = forceId ? scanCams.find((d) => d.deviceId === forceId) : pickCamera(scanCams, camSaved());
+    if (want && want.deviceId && want.deviceId !== cur) {
+      try {
+        const s2 = await md.getUserMedia(cameraConstraints(want.deviceId));
+        stream.getTracks().forEach((t) => t.stop());
+        stream = s2;
+      } catch { /* diese Kamera lässt sich nicht öffnen: bei der ersten bleiben */ }
+    } else {
+      try { await stream.getVideoTracks()[0].applyConstraints({ width: { ideal: 1920 }, height: { ideal: 1080 } }); } catch { /* egal */ }
+    }
+    const id = (stream.getVideoTracks()[0].getSettings() || {}).deviceId || '';
+    scanCams.curId = id;
+  } catch { /* ohne Kameraliste bleibt es bei facingMode */ }
+  $('scan-switch').hidden = scanCams.length < 2;
+  await focusTrack(stream);
+  return stream;
+}
+async function switchScanCamera() {
+  const next = nextCamera(scanCams, scanCams.curId);
+  if (!next) return;
+  const old = scanStream;
+  try {
+    $('scan-text').textContent = 'Kamera wird gewechselt …';
+    if (old) old.getTracks().forEach((t) => t.stop()); // zwei Kameras gleichzeitig öffnet Android oft nicht
+    const stream = await openScanCamera(next.deviceId);
+    scanStream = stream;
+    $('scan-video').srcObject = stream;
+    await $('scan-video').play().catch(() => {});
+    camSave(scanCams.curId || next.deviceId);
+    $('scan-text').textContent = `Kamera: ${next.label || 'Kamera'} – auf den QR-Code richten.`;
+  } catch { $('scan-text').textContent = 'Kamera lässt sich nicht wechseln.'; }
+}
+$('scan-switch').addEventListener('click', switchScanCamera);
 let scanParts = {};
 async function startScan() {
   scanParts = {};
   $('scanbox').hidden = false;
   $('scan-text').textContent = 'Kamera wird gestartet …';
   try {
-    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    scanStream = await openScanCamera();
   } catch (e) {
     $('scan-text').textContent = 'Keine Kamera verfügbar oder nicht erlaubt. ' + (db.mode === 'hf' ? 'Alternativ: Den Link aus WhatsApp/SMS direkt antippen.' : 'Alternativ: Link per WhatsApp schicken lassen und „Rückmeldung einfügen“.');
     return;
@@ -6155,13 +6309,13 @@ async function handoverQr(proj, whole) {
   let e = null;
   const from = devBy();
   for (const opt of [{ tol: 1, from }, { tol: 3, from }, { tol: 6, from }]) {
-    e = buildHandover(proj, opt);
+    e = buildHandover(proj, { ...opt, fromId: devId() });
     link = shareLink('e', await pack(e), PUBLIC_URL);
     if (link.length <= QR_MAX) break;
   }
   if (link.length > QR_MAX) {
     for (const opt of [{ tol: 1 }, { tol: 3 }, { tol: 6 }, { tol: 6, pages: false }, { tol: 15, pages: false }]) {
-      e = buildHandover(proj, { ...opt, from });
+      e = buildHandover(proj, { ...opt, from, fromId: devId() });
       const data = await pack(e);
       link = shareLink('e', data, PUBLIC_URL);
       parts = splitParts(data, 800).map((x) => shareLink('m', x, PUBLIC_URL));
@@ -6204,9 +6358,10 @@ async function takeHandover(e) {
     if (old !== P) switchProject(old.id);
     if (isClosed() && !(await reopenClosed())) return;
     snapshot();
-    const r = mergeProgress(P, buildProgress(inc, { from: e.from || '', since: 0, full: true }));
+    const r = mergeProgress(P, buildProgress(inc, { from: e.from || '', fromId: e.fi || '', since: 0, full: true }));
     if (!r) return toast('Einsatz konnte nicht zusammengeführt werden');
     if (e.from && !peerOf(P, e.from)) setPeer(P, e.from, Date.now(), false);
+    setPeerId(P, e.from, e.fi); // v125
     progBase.set(P, snapshotBase(P));
     syncGrid();
     changed();
@@ -6230,6 +6385,7 @@ async function takeHandover(e) {
   applyMode();
   await askDeviceName(true);
   setPeer(P, e.from || (P.parentEid ? 'Einsatzleitung' : 'Gerät'), Date.now(), false); // Absender als Empfänger für „Fortschritt senden“
+  setPeerId(P, e.from || (P.parentEid ? 'Einsatzleitung' : 'Gerät'), e.fi); // v125: Geräte-ID des Absenders
   touch();
   toast(`📥 ${p.parentEid ? 'Unterabschnitt' : 'Einsatz'} „${p.title || 'Suchgebiet'}“ übernommen – Rückmeldungen jetzt hier scannen${e.np ? ` (ohne ${e.np} Foto${e.np === 1 ? '' : 's'})` : ''}`, 8000);
 }
@@ -6318,7 +6474,7 @@ async function sendProgress() {
     // 2. Was ist neu?
     const peer = peerOf(proj, to);
     const since = all ? 0 : (peer ? peer.lastSent : 0);
-    const f = buildProgress(proj, { from, to, since });
+    const f = buildProgress(proj, { from, fromId: devId(), to, toId: peer && peer.id || '', since });
     const how = await openDlg((box, close) => {
       if (!f) {
         dlgHead(box, `🔄 An ${to}`, `Nichts Neues seit ${since ? hhmm(since) : 'Beginn'}.`);
@@ -6364,6 +6520,7 @@ async function takeProgress(f) {
     const ph = P.peers.find((x) => /^Gerät \d/.test(x.name) && x.name.endsWith('(UA)') === !!f.pe);
     if (ph) ph.name = String(from).slice(0, 60); else setPeer(P, from, 0, false);
   }
+  setPeerId(P, from, f.fi); // v125: Geräte-ID des Absenders merken (Herkunft statt Name vergleichen)
   progBase.set(P, snapshotBase(P));
   markAccepted(P, allMsgsRaw());
   syncGrid();
@@ -6386,7 +6543,16 @@ function renderDeviceName() {
   }
   sel.value = devLayer() || '';
   $('dev-status-url').value = db.statusUrl || '';
+  // v125: Kürzel für neue Teams im Unterabschnitt
+  $('ua-set').hidden = !P.parentEid;
+  if (P.parentEid) { $('ua-key').value = P.uaKey || ''; $('ua-key').placeholder = uaPrefix({ ...P, uaKey: '' }); $('ua-key-ex').textContent = uaPrefix(P); }
 }
+$('ua-key').addEventListener('change', () => {
+  P.uaKey = $('ua-key').value.trim().slice(0, 4);
+  $('ua-key-ex').textContent = uaPrefix(P);
+  changed();
+  toast(`Neue Teams heißen jetzt „${uaPrefix(P)}-Team …“`);
+});
 $('dev-status-url').addEventListener('change', () => {
   const v = $('dev-status-url').value.trim();
   if (v && !/^https:\/\/script\.google\.com\/\S+$/.test(v)) {
@@ -7516,11 +7682,13 @@ async function placePoi(lat, lon, acc = null) {
     d.move.lon = Math.round(lon * 1e6) / 1e6;
     d.move.t = Date.now();
     d.move.by = devBy();
+    d.move.bi = devId(); // v125
     changed();
     renderPois();
     return toast(`${poiLabel(d.move)} verschoben`);
   }
   const p = newPoi({ cat: d.cat, lat, lon, by: devBy() });
+  p.bi = devId(); // v125
   const r = await poiTextDlg(p, true);
   if (!r) return;
   p.name = r.name;
@@ -7560,6 +7728,7 @@ async function editPoi(p) {
   }
   p.t = Date.now();
   p.by = devBy();
+  p.bi = devId(); // v125
   changed();
   renderPois();
 }
