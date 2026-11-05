@@ -27,7 +27,7 @@ export const SPOT_LIST = [
 ];
 export const URGENT = ['fund', 'hilfe'];
 // Suchstand-Meldungen gehen ohne Standort; nur Markierungen („📍 Standort melden“) und der Parkplatz mit
-export const NO_POS = ['start', 'ende', 'pause', 'fertig', 'zu', 'zurueck', 'ok'];
+export const NO_POS = ['start', 'ende', 'pause', 'fertig', 'zu', 'zurueck', 'ok', 'msg']; // v125: msg = Nachricht/Antwort des Hundeführers
 
 const find = (list, code) => list.find((x) => x.code === code);
 // ältere Meldungen, die es als Taste nicht mehr gibt
@@ -38,7 +38,7 @@ const OLD_LIST = [
 export function statusLabel(code) {
   const s = find(STATUS_LIST, code) || find([CLOSE_STATUS], code) || find(OLD_LIST, code);
   return s ? `${s.ico} ${s.label}` : code === 'ort' ? '📍 Standort' : code === 'ok' ? '📲 Auftrag übernommen'
-    : code === 'q' ? '✓ Gesehen' : code === 'el' ? '✉️ Nachricht der Einsatzleitung' : code === 'qel' ? '👁 gelesen' : String(code || '');
+    : code === 'q' ? '✓ Gesehen' : code === 'msg' ? '✉️ Nachricht an die EL' : code === 'el' ? '✉️ Nachricht der Einsatzleitung' : code === 'qel' ? '👁 gelesen' : String(code || '');
 }
 export function spotLabel(cat) {
   const s = find(SPOT_LIST, cat);
@@ -61,7 +61,7 @@ export const msgLabel = (m) => (m.s === 'ort' ? spotLabel(m.cat)
 export function msgIcon(m) {
   if (m.s === 'fertig') return done(m) ? '✅' : '📊';
   const s = m.s === 'ort' ? find(SPOT_LIST, m.cat) : find(STATUS_LIST, m.s) || find([CLOSE_STATUS], m.s) || find(OLD_LIST, m.s);
-  return s ? s.ico : m.s === 'ok' ? '📲' : m.s === 'q' ? '✓' : m.s === 'el' ? '✉️' : m.s === 'qel' ? '👁' : '📍';
+  return s ? s.ico : m.s === 'ok' ? '📲' : m.s === 'q' ? '✓' : m.s === 'el' || m.s === 'msg' ? '✉️' : m.s === 'qel' ? '👁' : '📍';
 }
 export const isUrgent = (m) => URGENT.includes(m.s) || (m.s === 'ort' && URGENT.includes(m.cat));
 
@@ -99,7 +99,7 @@ export async function decryptMsg(key, d) {
 // ---------- Meldungen ----------
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
 // Neue Meldung (Klartext). pos: { lat, lon, acc? } oder null
-export function buildMsg({ a, tm, s, cat, txt, pos, pc, pa, ar, gb, t = Date.now(), id }) {
+export function buildMsg({ a, tm, s, cat, txt, pos, pc, pa, ar, gb, ref, t = Date.now(), id }) {
   const m = { v: 1, id: id || b64url(cr().getRandomValues(new Uint8Array(9))), a, tm, t, s };
   if (pos && Number.isFinite(pos.lat) && Number.isFinite(pos.lon)) {
     m.lat = r6(pos.lat);
@@ -113,6 +113,7 @@ export function buildMsg({ a, tm, s, cat, txt, pos, pc, pa, ar, gb, t = Date.now
   if (Array.isArray(gb) && gb.length) m.gb = gb.map((n) => String(n).slice(0, 40));
   if (Array.isArray(ar) && ar.length) m.ar = ar.map(([n, p]) => [String(n).slice(0, 40), Number(p)]);
   if (cat) m.cat = cat;
+  if (ref) m.ref = String(ref).slice(0, 40); // v125: Bezug (Antwort auf eine Nachricht der EL)
   return m;
 }
 const okMsg = (m) => m && typeof m === 'object' && typeof m.id === 'string' && Number.isFinite(m.t) && typeof m.s === 'string';
@@ -187,6 +188,22 @@ export function buildReadAck({ a, tm, ref, t, id }) {
   const m = buildMsg({ a, tm, s: 'qel', t, id });
   m.ref = ref;
   return m;
+}
+// v125: Der Hundeführer schreibt der EL (Freitext, optional als Antwort auf eine EL-Nachricht: ref).
+// Eine normale Teammeldung (s: 'msg', ohne Standort) – kommt über denselben Weg wie alle anderen Meldungen an.
+export const QUICK_REPLIES = ['Verstanden', 'Brauche Rückruf', 'Bin am B-Ort'];
+export function buildReply({ a, tm, txt, ref, t, id }) {
+  const x = String(txt || '').trim();
+  if (!x) return null;
+  return buildMsg({ a, tm, s: 'msg', txt: x, ref, t, id });
+}
+// „↩︎ Antwort auf: „Bitte Rückruf““ für eine Antwort (sonst ''): elMsgs = Nachrichten der EL (s: 'el')
+export function replyContext(m, elMsgs) {
+  if (!m || m.s !== 'msg' || !m.ref) return '';
+  const o = (elMsgs || []).find((x) => x && x.id === m.ref);
+  if (!o) return '↩︎ Antwort auf eine Nachricht der Einsatzleitung';
+  const t = String(o.txt || '');
+  return `↩︎ Antwort auf: „${t.length > 60 ? `${t.slice(0, 57)}…` : t}“`;
 }
 // Braucht diese Teammeldung eine Quittung? Nicht: Übernahme-Quittung, Korrekturen, Meldungen der EL
 export const needsAck = (m) => !!m && m.a !== EL_A && !EL_KINDS.includes(m.s) && m.s !== 'ok' && m.s !== 'kor';

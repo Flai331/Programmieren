@@ -97,6 +97,7 @@
       <h2>📷 QR-Code scannen</h2>
       <video id="scan-video" playsinline muted></video>
       <p id="scan-text" class="small">Kamera auf den QR-Code richten.</p>
+      <button id="scan-switch" hidden>🔄 Kamera wechseln</button>
       <button id="scan-close">Abbrechen</button>
     </div>
   </div>
@@ -347,6 +348,10 @@
     <h2 class="sub first">📛 Dieses Gerät</h2>
     <p>Name: <b id="dev-name">–</b> <button id="dev-edit" class="mini">✏️ Name</button></p>
     <p class="small">Geräte-ID: <code id="lic-id-more">–</code> (der Name wird beim nächsten Start dem Administrator mitgeteilt)</p>
+    <div id="ua-set" class="el-only" hidden>
+    <label>🧭 UA-Kürzel für neue Teams <input id="ua-key" type="text" maxlength="4" autocomplete="off" placeholder="z. B. N"></label>
+    <p class="small">Neue Teams in diesem Unterabschnitt heißen „<span id="ua-key-ex">N</span>-Team 1“ – so überschneiden sich die Namen nicht mit denen der Einsatzleitung.</p>
+    </div>
     <label>🗺️ Standard-Kartenart <select id="dev-layer"></select></label>
     <p class="small">Gilt auf diesem Gerät für neue Einsätze, übernommene Aufträge und Übergaben. Im laufenden Einsatz lässt sich die Karte unter „Karte“ jederzeit wechseln.</p>
     <div class="el-only">
@@ -471,6 +476,7 @@
     </div>
     <div id="send-ct-list" class="checklist sub-list"></div>
     <label>Hinweis an den Hundeführer <textarea id="send-hint" rows="2" placeholder="z. B. Achtung Bahnlinie im Osten, Rückmeldung 15:30"></textarea></label>
+    <p id="send-assign" class="small"></p>
     <p id="send-size" class="info"></p>
     <h2 class="sub">3. Übergeben</h2>
     <div class="row">
@@ -501,6 +507,7 @@
       <button id="hfm-meet">🎯 Zum B-Ort</button>
       <button id="hfm-contacts" hidden>📞 Kontakte</button>
       <button id="hfm-msgs" hidden>✉️ Nachrichten der Einsatzleitung</button>
+      <button id="hfm-reply" hidden>✍️ Nachricht an EL</button>
       <button id="hfm-notes">📝 Notizen</button>
       <button id="hfm-package">📦 Gebiet offline speichern</button>
       <button id="hfm-projects">📁 Frühere Aufträge</button>

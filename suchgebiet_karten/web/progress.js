@@ -9,6 +9,8 @@ import { encodePts, decodePts, simplify } from './share.js';
 import { mergeStatus, withoutDeleted } from './status.js';
 import { normalizePois } from './pois.js';
 import { infoTarget } from './infos.js';
+import { uniqueTeamLabel, uaName } from './uateam.js';
+import { compactContact, fromCompact } from './contacts.js';
 
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
 const bool = (x) => !!x;
@@ -16,7 +18,7 @@ const bool = (x) => !!x;
 // ---------- Änderungen erkennen (läuft nach jeder Bearbeitung) ----------
 // Hash einer Zeichnung ohne Zeit/Gerät/Sperre/Ausblenden (Linien nur grob: Länge + Enden)
 const ihash = (it) => {
-  const { t, by, lock, hidden, pts, pe, ...r } = it;
+  const { t, by, bi, lock, hidden, pts, pe, ...r } = it; // v125: bi = Geräte-ID der letzten Bearbeitung
   return JSON.stringify([r, pts ? [pts.length, pts[0], pts[pts.length - 1]] : 0]);
 };
 const cellMap = (p) => {
@@ -27,26 +29,30 @@ const cellMap = (p) => {
   }
   return m;
 };
+// v125: Kontakte haben keine Zeit – Änderung über einen Hash erkennen (p.contactsT)
+const ctHash = (p) => JSON.stringify((p.contacts || []).map(compactContact));
+// v125: Teams/Status-Marken: neues/umbenanntes Team allein ist schon „neu“ (p.marksT)
+const mkHash = (p) => JSON.stringify((p.marks || []).filter((m) => m.kind === 'team' || m.kind === 'status').map((m) => [m.id, m.label]));
 const gridSig = (p) => new Map(allGrids(p).map((g) => [g.id, JSON.stringify([g.area, g.cellM])]));
 
 // Ausgangsstand merken (vor einer Bearbeitung)
 export function snapshotBase(p) {
   return {
     items: new Map((p.items || []).filter((i) => i.id).map((i) => [i.id, ihash(i)])),
-    cells: cellMap(p), grids: gridSig(p), meet: p.meet ? JSON.stringify([p.meet.lat, p.meet.lon, p.meet.text]) : '',
+    cells: cellMap(p), grids: gridSig(p), ct: ctHash(p), mk: mkHash(p), meet: p.meet ? JSON.stringify([p.meet.lat, p.meet.lon, p.meet.text]) : '',
   };
 }
 
 // Vergleicht mit dem Ausgangsstand: neue/geänderte Zeichnungen bekommen id, t und by, gelöschte einen Löschvermerk,
 // geänderte Felder eine Zeit. Liefert den neuen Ausgangsstand.
-export function stampChanges(p, base, by = '', now = Date.now()) {
+export function stampChanges(p, base, by = '', now = Date.now(), bi = '') {
   if (!p.itemDel) p.itemDel = {};
   if (!p.cellT) p.cellT = {};
   if (!p.gridT) p.gridT = {};
   for (const it of p.items) {
-    if (!it.id) { it.id = uid(); it.t = now; it.by = by; continue; }
+    if (!it.id) { it.id = uid(); it.t = now; it.by = by; if (bi) it.bi = bi; continue; }
     const h = base && base.items.get(it.id);
-    if (h !== undefined && h !== ihash(it)) { it.t = now; it.by = by; }
+    if (h !== undefined && h !== ihash(it)) { it.t = now; it.by = by; if (bi) it.bi = bi; else delete it.bi; }
     delete p.itemDel[it.id]; // wieder da (Rückgängig)
   }
   if (base) {
@@ -56,9 +62,11 @@ export function stampChanges(p, base, by = '', now = Date.now()) {
     for (const [k, v] of cur) if (base.cells.get(k) !== v) { p.cellT[k] = now; if (p.cellBy) delete p.cellBy[k]; }
     for (const k of base.cells.keys()) if (!cur.has(k)) delete p.cellT[k];
     for (const [id, sig] of gridSig(p)) if (base.grids.get(id) !== sig) p.gridT[id] = now;
+    if (base.ct !== undefined && base.ct !== ctHash(p)) p.contactsT = now; // v125
+    if (base.mk !== undefined && base.mk !== mkHash(p)) p.marksT = now;
     if (p.meet) {
       const sig = JSON.stringify([p.meet.lat, p.meet.lon, p.meet.text]);
-      if (sig !== base.meet) { p.meet.t = now; p.meet.by = by; }
+      if (sig !== base.meet) { p.meet.t = now; p.meet.by = by; if (bi) p.meet.bi = bi; else delete p.meet.bi; }
     }
   }
   return snapshotBase(p);
@@ -79,6 +87,13 @@ export function setPeer(p, name, lastSent, real = true) {
   return x;
 }
 
+// v125: Geräte-ID des Empfängers merken (Name ist nur Anzeige und kann bei zwei Geräten gleich sein)
+export function setPeerId(p, name, id) {
+  const x = peerOf(p, name);
+  if (x && id) x.id = String(id).slice(0, 40);
+  return x;
+}
+
 // ---------- Senden ----------
 const packItem = (it) => {
   const { pts, hidden, ...r } = it;
@@ -88,15 +103,19 @@ const unpackItem = (x) => {
   const { pe, ...r } = x;
   return pe ? { ...r, pts: decodePts(pe) } : { ...r };
 };
-const packPoi = (x) => [x.id, x.cat, r6(x.lat), r6(x.lon), x.name || '', x.desc || '', x.t || 0, x.by || '', x.lock || ''];
+const packPoi = (x) => [x.id, x.cat, r6(x.lat), r6(x.lon), x.name || '', x.desc || '', x.t || 0, x.by || '', x.lock || '', x.bi || ''];
 
 // Neues/Geändertes seit since (0 = alles) für den Empfänger to. Leer -> null.
-export function buildProgress(p, { from = '', to = '', since = 0, now = Date.now(), full = false } = {}) {
+export function buildProgress(p, { from = '', fromId = '', to = '', toId = '', since = 0, now = Date.now(), full = false } = {}) {
   const ua = !!p.parentEid;
   const nw = (t) => !since || (t || 0) > since;
   const own = (x) => !ua || x.lock !== 'base'; // UA schickt nichts vom Grund-Einsatz zurück
-  const notTo = (x) => !to || x.by !== to; // was der Empfänger zuletzt bearbeitet hat, hat er schon
-  const out = { k: 'f', v: 1, ...(full ? { full: 1 } : {}), eid: p.eid || p.id, ti: p.title || '', from, at: now, ...(p.parentEid ? { pe: p.parentEid } : {}) };
+  // v125: Herkunft per Geräte-ID (bi) vergleichen; nur Altdaten ohne ID über den Namen. Zwei Geräte mit demselben
+  // Namen (z. B. Handy hieß früher „EL“) dürfen sich nicht gegenseitig das Neue wegfiltern.
+  const isTo = (bi, by) => (bi ? !!toId && bi === toId : !!to && by === to);
+  const notTo = (x) => !(to || toId) || !isTo(x.bi, x.by); // was der Empfänger zuletzt bearbeitet hat, hat er schon
+  const cellFromTo = (v) => !!v && (v[0] === '#' ? !!toId && v === `#${toId}` : !!to && v === to);
+  const out = { k: 'f', v: 1, ...(full ? { full: 1 } : {}), eid: p.eid || p.id, ti: p.title || '', from, ...(fromId ? { fi: fromId } : {}), at: now, ...(p.parentEid ? { pe: p.parentEid } : {}) };
   let n = 0;
   const items = (p.items || []).filter((x) => x.id && own(x) && nw(x.t) && notTo(x));
   if (items.length) { out.it = items.map(packItem); n += items.length; }
@@ -112,7 +131,7 @@ export function buildProgress(p, { from = '', to = '', since = 0, now = Date.now
         if (w && !w.has(k)) continue;
         const ck = `${g.id}|${k}|${tag}`;
         const t = cellT[ck] || 0;
-        if (nw(t) && !(to && (p.cellBy || {})[ck] === to)) o[k] = [v, t]; // vom Empfänger Gekommenes nicht zurückschicken
+        if (nw(t) && !((to || toId) && cellFromTo((p.cellBy || {})[ck]))) o[k] = [v, t]; // vom Empfänger Gekommenes nicht zurückschicken
       }
       return o;
     };
@@ -124,19 +143,23 @@ export function buildProgress(p, { from = '', to = '', since = 0, now = Date.now
       i: g.id, n: g.name || '', m: g.cellM, a: [r6(g.area.north), r6(g.area.south), r6(g.area.west), r6(g.area.east)], f, s,
       ...(gl ? { l: gl } : {}), ...(w ? { w: [...w] } : {}),
     });
-    n += cells;
+    n += cells || 1; // v125: auch ein neues/geändertes Raster ohne Felder zählt (sonst: „nichts Neu“)
   }
   if (gs.length) out.g = gs;
   const pois = (p.pois || []).filter((x) => own(x) && nw(x.t) && notTo(x));
   if (pois.length) { out.po = pois.map(packPoi); n += pois.length; }
-  if (p.meet && own(p.meet) && nw(p.meet.t) && notTo(p.meet)) out.me = { lat: r6(p.meet.lat), lon: r6(p.meet.lon), text: p.meet.text || '', t: p.meet.t || 0, by: p.meet.by || '', ...(p.meet.lock ? { lock: p.meet.lock } : {}) }, n++;
+  if (p.meet && own(p.meet) && nw(p.meet.t) && notTo(p.meet)) out.me = { lat: r6(p.meet.lat), lon: r6(p.meet.lon), text: p.meet.text || '', t: p.meet.t || 0, by: p.meet.by || '', ...(p.meet.bi ? { bi: p.meet.bi } : {}), ...(p.meet.lock ? { lock: p.meet.lock } : {}) }, n++;
   const m = p.mission || {};
   const wind = (m.wind || []).filter((x) => nw(x.t));
   if (wind.length) { out.w = wind; n += wind.length; }
-  if (!ua && (!since || (p.updated || 0) > since)) {
+  // v125: auch der UA schickt Kräfte und Eckzeiten (beim Empfänger wird nur Fehlendes ergänzt)
+  if (!since || (p.updated || 0) > since) {
     if ((m.forces || []).length) { out.fo = m.forces; n += m.forces.length; }
     if (Object.keys(m.times || {}).length) { out.tm = m.times; n++; }
   }
+  // v125: Kontakte (nur ergänzen), wenn sie sich seit dem letzten Senden geändert haben
+  if ((p.contacts || []).length && (!since || nw(p.contactsT))) { out.ct = p.contacts.map(compactContact); n += p.contacts.length; }
+  if (since && nw(p.marksT) && (p.marks || []).some((m) => m.kind === 'team')) n++; // v125: nur ein neues Team
   const imp = {};
   for (const it of items) if (it.resultKey && p.imported && p.imported[it.resultKey] != null) imp[it.resultKey] = p.imported[it.resultKey];
   if (Object.keys(imp).length) out.im = imp;
@@ -166,7 +189,7 @@ export function relation(p, f) {
   return '';
 }
 
-export const emptyRes = () => ({ fields: 0, ways: 0, items: 0, pois: 0, grids: 0, marks: 0, wind: 0, proto: 0, msgs: 0 });
+export const emptyRes = () => ({ fields: 0, ways: 0, items: 0, pois: 0, grids: 0, marks: 0, wind: 0, proto: 0, msgs: 0, contacts: 0 });
 
 // Ergänzt p um den Fortschritt f (ändert p) -> Zähler, bzw. null wenn f nicht zu p gehört
 export function mergeProgress(p, f) {
@@ -174,7 +197,8 @@ export function mergeProgress(p, f) {
   if (!rel) return null;
   const res = emptyRes();
   const from = String(f.from || '');
-  const sameBy = (x) => f.full || (from && x.by === from); // ganzer Stand (erneute Übergabe): jede Bearbeitung zählt, die neuere gewinnt
+  const fi = String(f.fi || '');
+  const sameBy = (x) => f.full || (fi && x.bi ? x.bi === fi : !!from && x.by === from); // ganzer Stand (erneute Übergabe): jede Bearbeitung zählt, die neuere gewinnt
   // Sperre eines neu ankommenden Elements: vom Grund-Einsatz -> 'base', in den Grund-Einsatz -> keine
   const newLock = (l) => (rel === 'base' ? 'base' : rel === 'ua' ? '' : l || '');
   p.itemDel = p.itemDel || {};
@@ -186,7 +210,13 @@ export function mergeProgress(p, f) {
   p.mission = p.mission || {};
 
   for (const m of Array.isArray(f.mk) ? f.mk : []) {
-    if (m && m.id && (m.kind === 'team' || m.kind === 'status') && !p.marks.some((x) => x.id === m.id)) { p.marks.push({ ...m }); res.marks++; }
+    if (m && m.id && (m.kind === 'team' || m.kind === 'status') && !p.marks.some((x) => x.id === m.id)) {
+      const nm = { ...m };
+      // v125: Team aus einem UA mit schon vergebenem Namen -> Zusatz „ (UA Nord)“
+      if (rel === 'ua' && m.kind === 'team') nm.label = uniqueTeamLabel(p.marks, nm, `UA ${uaName(f.ti) || f.from || ''}`.trim());
+      p.marks.push(nm);
+      res.marks++;
+    }
   }
 
   // Zeichnungen, Umrisse, Texte, Wege
@@ -253,11 +283,11 @@ export function mergeProgress(p, f) {
           ok = cur === undefined || (l !== 'ua' && t > lt); // im UA-Gebiet entscheidet bei Konflikt der UA
         } else if (rel === 'ua' && own(k)) ok = cur !== id;
         else ok = cur === undefined || t > lt;
-        if (cur === id) { if (t > lt) { p.cellT[ck] = t; p.cellBy[ck] = from; } continue; }
+        if (cur === id) { if (t > lt) { p.cellT[ck] = t; p.cellBy[ck] = fi ? `#${fi}` : from; } continue; }
         if (!ok) continue;
         dst[k] = id;
         p.cellT[ck] = t;
-        p.cellBy[ck] = from;
+        p.cellBy[ck] = fi ? `#${fi}` : from;
         res.fields++;
       }
     }
@@ -267,7 +297,7 @@ export function mergeProgress(p, f) {
   const del = p.poiDel && typeof p.poiDel === 'object' ? p.poiDel : {};
   p.pois = p.pois || [];
   const inc = normalizePois((Array.isArray(f.po) ? f.po : []).map((a) => Array.isArray(a) && ({
-    id: a[0], cat: a[1], lat: a[2], lon: a[3], name: a[4], desc: a[5], t: a[6], by: a[7] || '', lock: a[8] || '',
+    id: a[0], cat: a[1], lat: a[2], lon: a[3], name: a[4], desc: a[5], t: a[6], by: a[7] || '', lock: a[8] || '', ...(a[9] ? { bi: a[9] } : {}),
   })));
   for (const x of inc) {
     if (x.id in del) continue;
@@ -293,7 +323,7 @@ export function mergeProgress(p, f) {
   // B-Ort: nur ergänzen
   if (f.me && !p.meet && Number.isFinite(f.me.lat) && Number.isFinite(f.me.lon)) {
     const l = newLock(f.me.lock);
-    p.meet = { lat: f.me.lat, lon: f.me.lon, text: f.me.text || '', t: f.me.t || 0, by: f.me.by || '', ...(l ? { lock: l } : {}) };
+    p.meet = { lat: f.me.lat, lon: f.me.lon, text: f.me.text || '', t: f.me.t || 0, by: f.me.by || '', ...(f.me.bi ? { bi: f.me.bi } : {}), ...(l ? { lock: l } : {}) };
     res.pois++;
   }
 
@@ -327,6 +357,16 @@ export function mergeProgress(p, f) {
       if (x.cells && typeof x.cells === 'object' && !o.cells) o.cells = x.cells;
     }
   }
+  // v125: Kontakte nur ergänzen (Name + Nummer)
+  const ckey = (c) => `${c.name.toLowerCase()}|${c.phone.replace(/\D/g, '')}`;
+  const haveC = new Set((p.contacts || []).map(ckey));
+  for (const a of Array.isArray(f.ct) ? f.ct : []) {
+    const c = fromCompact(a);
+    if (!c.name || haveC.has(ckey(c))) continue;
+    haveC.add(ckey(c));
+    p.contacts = [...(p.contacts || []), c];
+    res.contacts++;
+  }
   // gelöschte Status-Meldungen ausblenden (Löschvermerke nur ergänzen)
   p.msgDel = p.msgDel || {};
   for (const [id, t] of Object.entries(f.md && typeof f.md === 'object' && !Array.isArray(f.md) ? f.md : {})) if (!p.msgDel[id]) p.msgDel[id] = Number(t) || Date.now();
@@ -347,7 +387,7 @@ export function progressSummary(r) {
   const pl = (n, one, many) => n && `${n} ${n === 1 ? one : many}`;
   return [
     pl(r.fields, 'Feld', 'Felder'), pl(r.ways, 'Weg', 'Wege'), pl(r.items, 'Zeichnung', 'Zeichnungen'), pl(r.grids, 'Rastergebiet', 'Rastergebiete'),
-    pl(r.pois, 'Lage-Ort', 'Lage-Orte'), pl(r.wind + r.proto, 'Protokolleintrag', 'Protokolleinträge'), pl(r.msgs, 'Status-Meldung', 'Status-Meldungen'),
+    pl(r.pois, 'Lage-Ort', 'Lage-Orte'), pl(r.wind + r.proto, 'Protokolleintrag', 'Protokolleinträge'), pl(r.msgs, 'Status-Meldung', 'Status-Meldungen'), pl(r.contacts, 'Kontakt', 'Kontakte'), pl(r.marks, 'Team', 'Teams'),
   ].filter(bool).join(', ');
 }
 
@@ -356,7 +396,7 @@ export function progressPreview(f) {
   const cells = (f.g || []).reduce((a, g) => a + Object.keys(g.f || {}).length + Object.keys(g.s || {}).length, 0);
   const tr = (f.it || []).filter((x) => x.kind === 'track').length;
   return progressSummary({
-    fields: cells, ways: tr, items: (f.it || []).length - tr, grids: 0, pois: (f.po || []).length + (f.me ? 1 : 0),
-    wind: (f.w || []).length, proto: (f.fo || []).length + (f.se || []).length + (f.tm ? 1 : 0), msgs: (f.ms || []).length,
+    fields: cells, ways: tr, items: (f.it || []).length - tr, grids: (f.g || []).filter((g) => !Object.keys(g.f || {}).length && !Object.keys(g.s || {}).length).length, pois: (f.po || []).length + (f.me ? 1 : 0),
+    wind: (f.w || []).length, contacts: (f.ct || []).length, proto: (f.fo || []).length + (f.se || []).length + (f.tm ? 1 : 0), msgs: (f.ms || []).length,
   });
 }
