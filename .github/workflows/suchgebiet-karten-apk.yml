@@ -94,8 +94,9 @@ jobs:
         # danach findet der Emulator-Schritt ihn schon installiert vor.
         run: |
           SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          SM="$(command -v sdkmanager || echo "$SDK/cmdline-tools/latest/bin/sdkmanager")"
           for i in 1 2 3; do
-            yes | sdkmanager --install emulator --channel=0 > /dev/null || true
+            yes | "$SM" --install emulator --channel=0 > /dev/null || true
             if [ -x "$SDK/emulator/emulator" ]; then echo "Emulator bereit (Versuch $i)"; exit 0; fi
             echo "Emulator-Download fehlgeschlagen (Versuch $i), neuer Versuch …"
             rm -rf "$SDK/emulator" "$SDK/.temp" 2>/dev/null || true
