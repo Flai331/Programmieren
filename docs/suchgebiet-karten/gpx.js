@@ -282,7 +282,7 @@ function wpt(lat, lon, name, sym, desc = '', time = '') {
 }
 
 // ---------- v116: Meldungen mit Ort (Fund, Anzeige, Hilfe, Hinweis, Gefahr, Parkplatz …) ----------
-const MSG_NAME = { fund: 'Fund', anzeige: 'Anzeige', hilfe: 'Hilfe', hinweis: 'Hinweis', gefahr: 'Gefahr', sonst: 'Meldung', da: 'Parkplatz' };
+const MSG_NAME = { fund: 'Fund', anzeige: 'Anzeige', hilfe: 'Hilfe', hinweis: 'Hinweis', gegenstand: 'Fundstück', gefahr: 'Gefahr', sonst: 'Meldung', da: 'Parkplatz' };
 // Garmin-Symbol je Art: Fund rote Flagge, Anzeige blaue Flagge, Hilfe Sanitätsstation, sonst grüne Flagge
 const MSG_SYM = { fund: 'Flag, Red', anzeige: 'Flag, Blue', hilfe: 'Medical Facility' };
 const hhmmOf = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
@@ -449,6 +449,8 @@ export function selectionGpx(sel, docName) {
     const c = poiCat(p.cat);
     wpts += wpt(p.lat, p.lon, poiName(p), c.gpx, [c.label, p.desc].filter(Boolean).join(' – '));
   }
+  // v127: Meldungen mit Ort (msgWaypoints) kommen auch im Schnellexport mit
+  for (const w of sel.msgs || []) wpts += wpt(w.lat, w.lon, w.name, w.sym, w.desc, w.time);
   let n = 0;
   for (const it of sel.items || []) {
     if (it.kind === 'text') wpts += wpt(it.lat, it.lon, it.text, 'Pin, Red');
@@ -488,6 +490,10 @@ function point(el) {
   return Number.isFinite(lat) && Number.isFinite(lon) ? [lat, lon] : null;
 }
 
+// v127: Namen unserer eigenen Hilfstracks im Export: „Raster …“, „Rasterlinien …“, „Feldnamen …“, „Suchgebiet …“ (Umrandung)
+// und die Umrisse der Team-Felder („Team 1: A1–B2“, „… (Innenrand)“) – kommen aus BaseCamp nicht als Umrisse zurück
+const OWN_TRACK = /^(Raster|Rasterlinien|Feldnamen|Suchgebiet)\b|^.+: [A-Z]{1,2}\d{1,3}(?![\w])|\(Innenrand\)$/;
+
 // Liest Tracks, Routen und Wegpunkte. Raster und Feldnamen aus unserem eigenen Export
 // („Raster …“, Wegpunkte „A1“, „B12“ …) werden übersprungen.
 // -> { tracks: [{name, color, pts}], waypoints: [{name, lat, lon}], skipped }
@@ -499,7 +505,7 @@ export function parseGpx(xml) {
   let skipped = 0;
   const add = (el, segTag, ptTag) => {
     const name = tag(el.replace(new RegExp(`<${segTag || ptTag}\\b[\\s\\S]*`), ''), 'name');
-    if (/^Raster\b/.test(name)) { skipped++; return; }
+    if (OWN_TRACK.test(name)) { skipped++; return; }
     const c = tag(el, 'DisplayColor');
     const color = COLOR_HEX[c] || null;
     const segs = segTag ? blocks(el, segTag) : [el];
@@ -530,25 +536,50 @@ export function parseGpx(xml) {
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
 const trackKey = (name, pts) => `t|${name}|${pts.map((q) => `${r6(q[0])},${r6(q[1])}`).join(';')}`;
 const pointKey = (name, lat, lon) => `w|${name}|${r6(lat)},${r6(lon)}`;
-export function dedupeImport(items, g, base = '') {
+// v127: auch Striche (gleiche Punkte, Name egal), B-Ort und Lage-Orte (gleicher Name, höchstens 15 m entfernt) gelten als vorhanden.
+// extra: { meet, pois, msgs } des Einsatzes (msgs = msgWaypoints der Meldungen mit Ort)
+const NEAR_M = 15;
+const distM = (aLat, aLon, bLat, bLon) => {
+  const dy = (aLat - bLat) * 111320;
+  const dx = (aLon - bLon) * 111320 * Math.cos(((aLat + bLat) / 2) * Math.PI / 180);
+  return Math.hypot(dx, dy);
+};
+const ptsKey = (pts) => `s|${pts.map((q) => `${r6(q[0])},${r6(q[1])}`).join(';')}`;
+const nameKey = (n) => String(n || '').trim().toLowerCase();
+export function dedupeImport(items, g, base = '', extra = {}) {
   const have = new Set();
+  const spots = []; // benannte Orte, die es schon gibt: [name, lat, lon]
   for (const it of items || []) {
     if (it.kind === 'track' && it.pts) have.add(trackKey(it.name || '', it.pts));
-    else if (it.kind === 'text') have.add(pointKey(it.text, it.lat, it.lon));
+    else if (it.kind === 'stroke' && it.pts && it.pts.length > 1) {
+      have.add(ptsKey(it.pts));
+      have.add(ptsKey([...it.pts].reverse()));
+      have.add(ptsKey(it.pts.slice(0, -1))); // geschlossener Strich kommt ohne doppelten Endpunkt zurück
+    } else if (it.kind === 'text') { have.add(pointKey(it.text, it.lat, it.lon)); spots.push([nameKey(it.text), it.lat, it.lon]); }
   }
+  const m = extra.meet;
+  if (m && Number.isFinite(m.lat)) { spots.push([nameKey(m.text || 'B-Ort'), m.lat, m.lon]); spots.push(['b-ort', m.lat, m.lon]); }
+  for (const p of extra.pois || []) {
+    if (!Number.isFinite(p.lat)) continue;
+    spots.push([nameKey(poiName(p)), p.lat, p.lon]);
+    spots.push([nameKey(poiCat(p.cat).label), p.lat, p.lon]);
+  }
+  for (const w of extra.msgs || []) if (Number.isFinite(w.lat)) spots.push([nameKey(w.name), w.lat, w.lon]); // eigene Meldungs-Wegpunkte aus dem Export
   let dup = 0;
   const tracks = [];
   for (const t of g.tracks) {
     const k = trackKey(t.name || base, t.pts);
-    if (have.has(k)) { dup++; continue; }
+    if (have.has(k) || have.has(ptsKey(t.pts))) { dup++; continue; }
     have.add(k);
     tracks.push(t);
   }
   const waypoints = [];
   for (const w of g.waypoints) {
     const k = pointKey(w.name, w.lat, w.lon);
-    if (have.has(k)) { dup++; continue; }
+    const n = nameKey(w.name);
+    if (have.has(k) || spots.some(([sn, la, lo]) => sn === n && distM(la, lo, w.lat, w.lon) <= NEAR_M)) { dup++; continue; }
     have.add(k);
+    spots.push([n, w.lat, w.lon]);
     waypoints.push(w);
   }
   return { tracks, waypoints, dup };
@@ -565,7 +596,7 @@ export function parseKml(xml) {
     return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? [lat, lon] : null;
   }).filter(Boolean);
   for (const pm of blocks(xml, 'Placemark')) {
-    const name = tag(pm.replace(/<(Point|LineString|Polygon|MultiGeometry)\b[\s\S]*/, ''), 'name') || tag(pm, 'name');
+    const name = tag(pm.replace(/<(Point|LineString|Polygon|MultiGeometry|gx:Track|gx:MultiTrack)\b[\s\S]*/, ''), 'name') || tag(pm, 'name');
     for (const pt of blocks(pm, 'Point')) {
       const [p] = coords(tag(pt, 'coordinates'));
       if (p) waypoints.push({ name: name || 'Wegpunkt', lat: p[0], lon: p[1] });
@@ -574,6 +605,15 @@ export function parseKml(xml) {
     lines.forEach((ls, i) => {
       const pts = coords(tag(ls, 'coordinates'));
       if (pts.length > 1) tracks.push({ name: lines.length > 1 && i ? `${name} (${i + 1})` : name, color: null, pts });
+    });
+    // v127: Google-Earth-/Tracker-Export: <gx:Track> mit <gx:coord>lon lat alt</gx:coord> je Punkt
+    const gxs = blocks(pm, 'gx:Track');
+    gxs.forEach((gt, i) => {
+      const pts = (gt.match(/<gx:coord>[^<]*<\/gx:coord>/g) || []).map((c) => {
+        const [lon, lat] = c.replace(/<[^>]*>/g, '').trim().split(/\s+/).map(Number);
+        return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? [lat, lon] : null;
+      }).filter(Boolean);
+      if (pts.length > 1) tracks.push({ name: gxs.length > 1 && i ? `${name} (${i + 1})` : name, color: null, pts });
     });
     const polys = blocks(pm, 'Polygon');
     polys.forEach((pg, i) => {

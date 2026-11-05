@@ -188,6 +188,8 @@ button, input, select { font: inherit; }
   background: rgba(29,29,31,0.92); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 14px;
   max-width: 90%; text-align: center;
 }
+/* v127: bei offenem Dialog oben zeigen, damit der Hinweis keine Knöpfe unten im Dialog verdeckt */
+body:has(#dlg:not([hidden])) .toast { bottom: auto; top: calc(8px + env(safe-area-inset-top, 0px)); }
 
 #save-warn {
   position: fixed; left: 0; right: 0; top: 0; z-index: 3500; background: #c62828; color: #fff; font-weight: 700;

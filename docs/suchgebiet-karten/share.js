@@ -181,11 +181,20 @@ export function buildAssignment(p, sel) {
   if (sel.person && p.mission && p.mission.person) out.vp = p.mission.person.trim().slice(0, 400);
   if (sel.contacts && sel.contacts.length) out.ct = sel.contacts.map(compactContact);
   if (sel.liveUrl) {
-    if (!p.live) p.live = { url: sel.liveUrl, key: newLiveKey(), since: 0, ack: [], msgs: [], out: [], outbox: [], reads: {}, qSent: {} };
+    ensureLive(p, sel.liveUrl);
     p.live.url = sel.liveUrl;
     out.ls = [p.live.url, p.live.key];
   }
   return out;
+}
+
+// v127: Live-Kanal (Status-Server-Schlüssel) des Einsatzes anlegen, falls es noch keinen gibt – beim Anlegen des
+// Einsatzes und bei jeder Übergabe, damit „An ELW senden“ und die Meldungen ohne Umweg über einen Auftrag gehen.
+// Liefert true, wenn neu angelegt.
+export function ensureLive(p, url) {
+  if (!p || p.live || !url) return false;
+  p.live = { url, key: newLiveKey(), since: 0, ack: [], msgs: [], out: [], outbox: [], reads: {}, qSent: {} };
+  return true;
 }
 
 // Mitte eines Auftrags für die Status-Plakette der Einsatzleitung: Felder des Teams, sonst Raster, sonst Umrisse
@@ -267,7 +276,9 @@ export function applyResult(p, r) {
   let team = sent && p.marks.find((m) => m.id === sent.teamId);
   if (!team) team = p.marks.find((m) => m.kind === 'team' && m.label === r.tm);
   const color = team ? team.color : '#000000';
-  const who = team ? team.label : (r.tm || 'Hundeführer');
+  const dog = team ? String(team.dog || '').trim() : '';
+  const who0 = team ? team.label : (r.tm || 'Hundeführer');
+  const who = dog && !who0.includes(dog) ? `${who0} (${dog})` : who0; // v127: Hundename in den Wegnamen („Weg Team 1 (Rex) ab 19:47“)
   const hh = (t) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   const imp = p.imported || (p.imported = {});
   const key = (x) => `${r.a}|${x}`;
@@ -313,7 +324,7 @@ export function applyResult(p, r) {
   for (const { t, from, strength, lat, lon } of ws) {
     const k = key(`w${t}`);
     if (imp[k]) continue;
-    p.mission.wind.push({ t, from, strength, src: 'gemessen', lat, lon, by: who });
+    p.mission.wind.push({ t, from, strength, src: 'gemessen', lat, lon, by: who0 });
     imp[k] = 1;
     winds++;
   }
@@ -323,5 +334,5 @@ export function applyResult(p, r) {
   p.qmsgs = mergeStatus(p.qmsgs || [], (Array.isArray(r.sm) ? r.sm : []).filter((m) => m && m.a === r.a)).slice(-500);
   const msgs = p.qmsgs.length - before;
   p.updated = Date.now();
-  return { who, ways, marks, fields, winds, msgs, known: !!sent };
+  return { who: who0, ways, marks, fields, winds, msgs, known: !!sent };
 }

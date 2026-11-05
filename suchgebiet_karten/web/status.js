@@ -22,10 +22,13 @@ export const SPOT_LIST = [
   { code: 'fund', ico: '🟢', label: 'Person gefunden' },
   { code: 'hilfe', ico: '🆘', label: 'Brauche Hilfe' },
   { code: 'hinweis', ico: '👕', label: 'Hinweis' },
+  { code: 'gegenstand', ico: '🎒', label: 'Fundstück (Kleidung/Gegenstand)' }, // v127
   { code: 'gefahr', ico: '⚠️', label: 'Gefahr' },
   { code: 'sonst', ico: '📌', label: 'Sonstiges' },
 ];
 export const URGENT = ['fund', 'hilfe'];
+// v127: Textvorschläge bei „Fundstück“
+export const SPOT_HINTS = { gegenstand: ['Jacke', 'Schuh', 'Mütze', 'Rucksack'] };
 // Suchstand-Meldungen gehen ohne Standort; nur Markierungen („📍 Standort melden“) und der Parkplatz mit
 export const NO_POS = ['start', 'ende', 'pause', 'fertig', 'zu', 'zurueck', 'ok', 'msg']; // v125: msg = Nachricht/Antwort des Hundeführers
 

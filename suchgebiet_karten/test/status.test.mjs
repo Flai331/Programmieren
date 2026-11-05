@@ -36,7 +36,7 @@ test('Ver- und Entschlüsseln rund; falscher Schlüssel scheitert', async () => 
 
 test('Status-Tabellen und Beschriftungen', () => {
   assert.equal(STATUS_LIST.length, 6);
-  assert.equal(SPOT_LIST.length, 6);
+  assert.equal(SPOT_LIST.length, 7);
   assert.equal(statusLabel('pause'), '⏸ Pause');
   assert.equal(msgLabel({ s: 'ort', cat: 'gefahr' }), '⚠️ Gefahr');
   assert.ok(isUrgent({ s: 'hilfe' }) && isUrgent({ s: 'fund' }) && isUrgent({ s: 'ort', cat: 'fund' }));

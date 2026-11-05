@@ -9,7 +9,7 @@ import { encodePts, decodePts, simplify } from './share.js';
 import { mergeStatus, withoutDeleted } from './status.js';
 import { normalizePois } from './pois.js';
 import { infoTarget } from './infos.js';
-import { uniqueTeamLabel, uaName } from './uateam.js';
+import { uniqueTeamLabel, uniqueName, uaName } from './uateam.js';
 import { compactContact, fromCompact } from './contacts.js';
 
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
@@ -108,7 +108,10 @@ const packPoi = (x) => [x.id, x.cat, r6(x.lat), r6(x.lon), x.name || '', x.desc 
 // Neues/Geändertes seit since (0 = alles) für den Empfänger to. Leer -> null.
 export function buildProgress(p, { from = '', fromId = '', to = '', toId = '', since = 0, now = Date.now(), full = false } = {}) {
   const ua = !!p.parentEid;
-  const nw = (t) => !since || (t || 0) > since;
+  // v127: „neu“ = später entstanden ODER später hier angekommen (ra, wird nicht mitgesendet) – sonst geht beim
+  // Weiterreichen UA -> ELW -> EL alles verloren, was der UA nach dem letzten Senden des ELW übergeben hat
+  const ra = p.ra && typeof p.ra === 'object' ? p.ra : {};
+  const nw = (t, key) => !since || Math.max(t || 0, (key && ra[key]) || 0) > since;
   const own = (x) => !ua || x.lock !== 'base'; // UA schickt nichts vom Grund-Einsatz zurück
   // v125: Herkunft per Geräte-ID (bi) vergleichen; nur Altdaten ohne ID über den Namen. Zwei Geräte mit demselben
   // Namen (z. B. Handy hieß früher „EL“) dürfen sich nicht gegenseitig das Neue wegfiltern.
@@ -117,7 +120,7 @@ export function buildProgress(p, { from = '', fromId = '', to = '', toId = '', s
   const cellFromTo = (v) => !!v && (v[0] === '#' ? !!toId && v === `#${toId}` : !!to && v === to);
   const out = { k: 'f', v: 1, ...(full ? { full: 1 } : {}), eid: p.eid || p.id, ti: p.title || '', from, ...(fromId ? { fi: fromId } : {}), at: now, ...(p.parentEid ? { pe: p.parentEid } : {}) };
   let n = 0;
-  const items = (p.items || []).filter((x) => x.id && own(x) && nw(x.t) && notTo(x));
+  const items = (p.items || []).filter((x) => x.id && own(x) && nw(x.t, `i|${x.id}`) && notTo(x));
   if (items.length) { out.it = items.map(packItem); n += items.length; }
   const cellT = p.cellT || {};
   const gs = [];
@@ -131,14 +134,14 @@ export function buildProgress(p, { from = '', fromId = '', to = '', toId = '', s
         if (w && !w.has(k)) continue;
         const ck = `${g.id}|${k}|${tag}`;
         const t = cellT[ck] || 0;
-        if (nw(t) && !((to || toId) && cellFromTo((p.cellBy || {})[ck]))) o[k] = [v, t]; // vom Empfänger Gekommenes nicht zurückschicken
+        if (nw(t, `c|${ck}`) && !((to || toId) && cellFromTo((p.cellBy || {})[ck]))) o[k] = [v, t]; // vom Empfänger Gekommenes nicht zurückschicken
       }
       return o;
     };
     const f = pick(g.fills, 'f');
     const s = pick(g.status, 's');
     const cells = Object.keys(f).length + Object.keys(s).length;
-    if (!cells && !nw((p.gridT || {})[g.id])) continue;
+    if (!cells && !nw((p.gridT || {})[g.id], `g|${g.id}`)) continue;
     gs.push({
       i: g.id, n: g.name || '', m: g.cellM, a: [r6(g.area.north), r6(g.area.south), r6(g.area.west), r6(g.area.east)], f, s,
       ...(gl ? { l: gl } : {}), ...(w ? { w: [...w] } : {}),
@@ -146,11 +149,11 @@ export function buildProgress(p, { from = '', fromId = '', to = '', toId = '', s
     n += cells || 1; // v125: auch ein neues/geändertes Raster ohne Felder zählt (sonst: „nichts Neu“)
   }
   if (gs.length) out.g = gs;
-  const pois = (p.pois || []).filter((x) => own(x) && nw(x.t) && notTo(x));
+  const pois = (p.pois || []).filter((x) => own(x) && nw(x.t, `p|${x.id}`) && notTo(x));
   if (pois.length) { out.po = pois.map(packPoi); n += pois.length; }
-  if (p.meet && own(p.meet) && nw(p.meet.t) && notTo(p.meet)) out.me = { lat: r6(p.meet.lat), lon: r6(p.meet.lon), text: p.meet.text || '', t: p.meet.t || 0, by: p.meet.by || '', ...(p.meet.bi ? { bi: p.meet.bi } : {}), ...(p.meet.lock ? { lock: p.meet.lock } : {}) }, n++;
+  if (p.meet && own(p.meet) && nw(p.meet.t, 'me') && notTo(p.meet)) out.me = { lat: r6(p.meet.lat), lon: r6(p.meet.lon), text: p.meet.text || '', t: p.meet.t || 0, by: p.meet.by || '', ...(p.meet.bi ? { bi: p.meet.bi } : {}), ...(p.meet.lock ? { lock: p.meet.lock } : {}) }, n++;
   const m = p.mission || {};
-  const wind = (m.wind || []).filter((x) => nw(x.t));
+  const wind = (m.wind || []).filter((x) => nw(x.t, `w|${x.t}|${x.src || ''}|${x.by || ''}`));
   if (wind.length) { out.w = wind; n += wind.length; }
   // v125: auch der UA schickt Kräfte und Eckzeiten (beim Empfänger wird nur Fehlendes ergänzt)
   if (!since || (p.updated || 0) > since) {
@@ -163,10 +166,10 @@ export function buildProgress(p, { from = '', fromId = '', to = '', toId = '', s
   const imp = {};
   for (const it of items) if (it.resultKey && p.imported && p.imported[it.resultKey] != null) imp[it.resultKey] = p.imported[it.resultKey];
   if (Object.keys(imp).length) out.im = imp;
-  const se = (p.sent || []).filter((x) => nw(Math.max(x.last || 0, x.acc || 0, x.at || 0)));
+  const se = (p.sent || []).filter((x) => nw(Math.max(x.last || 0, x.acc || 0, x.at || 0), `s|${x.id}`));
   if (se.length) { out.se = se.map(({ unlock, ...x }) => x); n += se.length; } // Freigabe (unlock) bleibt auf diesem Gerät
-  const md = Object.fromEntries(Object.entries(p.msgDel || {}).filter(([, t]) => nw(t)));
-  const ms = p.live ? withoutDeleted(p.live.msgs || [], p.msgDel).filter((x) => nw(x.t)) : [];
+  const md = Object.fromEntries(Object.entries(p.msgDel || {}).filter(([id, t]) => nw(t, `d|${id}`)));
+  const ms = p.live ? withoutDeleted(p.live.msgs || [], p.msgDel).filter((x) => nw(x.t, `m|${x.id}`)) : [];
   if (ms.length) { out.ms = ms; n += ms.length; }
   if (Object.keys(md).length) { out.md = md; n += Object.keys(md).length; }
   if (!n) return null;
@@ -197,6 +200,9 @@ export function mergeProgress(p, f) {
   if (!rel) return null;
   const res = emptyRes();
   const from = String(f.from || '');
+  const now = Date.now();
+  p.ra = p.ra && typeof p.ra === 'object' && !Array.isArray(p.ra) ? p.ra : {};
+  const got = (key) => { p.ra[key] = now; }; // v127: Ankunftszeit hier merken (für „neu seit“ beim Weiterreichen)
   const fi = String(f.fi || '');
   const sameBy = (x) => f.full || (fi && x.bi ? x.bi === fi : !!from && x.by === from); // ganzer Stand (erneute Übergabe): jede Bearbeitung zählt, die neuere gewinnt
   // Sperre eines neu ankommenden Elements: vom Grund-Einsatz -> 'base', in den Grund-Einsatz -> keine
@@ -215,6 +221,7 @@ export function mergeProgress(p, f) {
       // v125: Team aus einem UA mit schon vergebenem Namen -> Zusatz „ (UA Nord)“
       if (rel === 'ua' && m.kind === 'team') nm.label = uniqueTeamLabel(p.marks, nm, `UA ${uaName(f.ti) || f.from || ''}`.trim());
       p.marks.push(nm);
+      if (m.kind === 'team') p.marksT = now;
       res.marks++;
     }
   }
@@ -230,18 +237,22 @@ export function mergeProgress(p, f) {
       const r = { ...inc };
       if (l) r.lock = l; else delete r.lock;
       if (o.hidden) r.hidden = true;
+      if (o.resultKey && inc.resultKey && o.name) r.name = o.name; // v127: automatischer Wegname bleibt (evtl. mit UA-Zusatz)
       return r;
     };
     // Weg derselben Rückmeldung unter anderer ID: nur die längere Fassung behalten
     const twin = inc.resultKey && p.items.find((i) => i.resultKey === inc.resultKey && i.id !== inc.id);
     if (twin) {
-      if ((inc.pts || []).length > (twin.pts || []).length) { p.items[p.items.indexOf(twin)] = keep(twin); res.ways++; }
+      if ((inc.pts || []).length > (twin.pts || []).length) { p.items[p.items.indexOf(twin)] = keep(twin); got(`i|${inc.id}`); res.ways++; }
       continue;
     }
     if (!old) {
       const l = newLock(inc.lock);
       if (l) inc.lock = l; else delete inc.lock;
+      // v127: Wege gleicher Rückmeldungs-Art mit schon vergebenem Namen („Weg Team 1 (Rex) ab 19:47“ aus zwei UAs) bekommen den UA-Zusatz
+      if (rel === 'ua' && inc.resultKey && inc.name) inc.name = uniqueName(p.items.filter((i) => i.resultKey).map((i) => i.name), inc.name, `UA ${uaName(f.ti) || f.from || ''}`.trim());
       p.items.push(inc);
+      got(`i|${inc.id}`);
       count(inc);
       continue;
     }
@@ -249,7 +260,7 @@ export function mergeProgress(p, f) {
     if (rel === 'base') ok = old.lock === 'base' && sameBy(inc) && inc.t > (old.t || 0); // UA: eigene Sachen bleiben
     else if (rel === 'ua' && inc.lock === 'ua') ok = inc.t !== old.t || ihash(inc) !== ihash(old); // im UA-Gebiet entscheidet der UA
     else ok = sameBy(inc) && inc.t > (old.t || 0);
-    if (ok && ihash(inc) !== ihash(old)) { p.items[p.items.indexOf(old)] = keep(old); count(inc); }
+    if (ok && ihash(inc) !== ihash(old)) { p.items[p.items.indexOf(old)] = keep(old); got(`i|${inc.id}`); count(inc); }
     else if (ok) old.t = inc.t;
   }
 
@@ -263,6 +274,7 @@ export function mergeProgress(p, f) {
       else p.otherGrids.push({ id: g.i, name: g.n || '', area, cellM: g.m, fills: {}, status: {} });
       if (rel === 'base') p.glock[g.i] = 'base';
       p.gridT[g.i] = f.at || 0;
+      got(`g|${g.i}`);
       loc = allGrids(p).find((x) => x.id === g.i);
       res.grids++;
     }
@@ -286,6 +298,7 @@ export function mergeProgress(p, f) {
         if (cur === id) { if (t > lt) { p.cellT[ck] = t; p.cellBy[ck] = fi ? `#${fi}` : from; } continue; }
         if (!ok) continue;
         dst[k] = id;
+        got(`c|${ck}`);
         p.cellT[ck] = t;
         p.cellBy[ck] = fi ? `#${fi}` : from;
         res.fields++;
@@ -306,6 +319,7 @@ export function mergeProgress(p, f) {
       const l = newLock(x.lock);
       if (l) x.lock = l; else delete x.lock;
       p.pois.push(x);
+      got(`p|${x.id}`);
       res.pois++;
       continue;
     }
@@ -316,6 +330,7 @@ export function mergeProgress(p, f) {
     if (ok) {
       const l = rel === 'same' ? x.lock : old.lock;
       Object.assign(old, x);
+      got(`p|${x.id}`);
       if (l) old.lock = l; else delete old.lock;
       res.pois++;
     }
@@ -323,6 +338,7 @@ export function mergeProgress(p, f) {
   // B-Ort: nur ergänzen
   if (f.me && !p.meet && Number.isFinite(f.me.lat) && Number.isFinite(f.me.lon)) {
     const l = newLock(f.me.lock);
+    got('me');
     p.meet = { lat: f.me.lat, lon: f.me.lon, text: f.me.text || '', t: f.me.t || 0, by: f.me.by || '', ...(f.me.bi ? { bi: f.me.bi } : {}), ...(l ? { lock: l } : {}) };
     res.pois++;
   }
@@ -332,7 +348,7 @@ export function mergeProgress(p, f) {
   const wk = (x) => `${x.t}|${x.src || ''}|${x.by || ''}`;
   const haveW = new Set(wind.map(wk));
   for (const x of Array.isArray(f.w) ? f.w : []) {
-    if (x && Number.isFinite(x.t) && !haveW.has(wk(x))) { wind.push(x); haveW.add(wk(x)); res.wind++; }
+    if (x && Number.isFinite(x.t) && !haveW.has(wk(x))) { wind.push(x); haveW.add(wk(x)); got(`w|${wk(x)}`); res.wind++; }
   }
   wind.sort((a, b) => a.t - b.t);
   p.mission.forces = p.mission.forces || [];
@@ -349,10 +365,10 @@ export function mergeProgress(p, f) {
   for (const x of Array.isArray(f.se) ? f.se : []) {
     if (!x || !x.id) continue;
     const o = p.sent.find((y) => y.id === x.id);
-    if (!o) { p.sent.push(x); res.proto++; } else {
-      if ((x.last || 0) > (o.last || 0)) { Object.assign(o, { n: x.n, last: x.last, lastSum: x.lastSum }); res.proto++; }
+    if (!o) { p.sent.push(x); got(`s|${x.id}`); res.proto++; } else {
+      if ((x.last || 0) > (o.last || 0)) { Object.assign(o, { n: x.n, last: x.last, lastSum: x.lastSum }); got(`s|${x.id}`); res.proto++; }
       // Übernahme: früheste Zeit > 0 gewinnt; Zugehöriges (Items, Felder) ergänzen
-      if (x.acc > 0 && !(o.acc > 0 && o.acc <= x.acc)) { o.acc = x.acc; res.proto++; }
+      if (x.acc > 0 && !(o.acc > 0 && o.acc <= x.acc)) { o.acc = x.acc; got(`s|${x.id}`); res.proto++; }
       if (Array.isArray(x.items) && !o.items) o.items = x.items;
       if (x.cells && typeof x.cells === 'object' && !o.cells) o.cells = x.cells;
     }
@@ -365,17 +381,20 @@ export function mergeProgress(p, f) {
     if (!c.name || haveC.has(ckey(c))) continue;
     haveC.add(ckey(c));
     p.contacts = [...(p.contacts || []), c];
+    p.contactsT = now;
     res.contacts++;
   }
   // gelöschte Status-Meldungen ausblenden (Löschvermerke nur ergänzen)
   p.msgDel = p.msgDel || {};
-  for (const [id, t] of Object.entries(f.md && typeof f.md === 'object' && !Array.isArray(f.md) ? f.md : {})) if (!p.msgDel[id]) p.msgDel[id] = Number(t) || Date.now();
+  for (const [id, t] of Object.entries(f.md && typeof f.md === 'object' && !Array.isArray(f.md) ? f.md : {})) if (!p.msgDel[id]) { p.msgDel[id] = Number(t) || Date.now(); got(`d|${id}`); }
   if (!p.live && Array.isArray(f.lv) && f.lv.length === 2 && isStatusUrl(f.lv[0]) && f.lv[1]) {
     p.live = { url: String(f.lv[0]), key: String(f.lv[1]), since: 0, ack: [], msgs: [], out: [], outbox: [], reads: {}, qSent: {} };
   }
   if (p.live && Array.isArray(f.ms)) {
     const before = p.live.msgs.length;
+    const had = new Set(p.live.msgs.map((m) => m.id));
     p.live.msgs = mergeStatus(p.live.msgs, f.ms).slice(-500);
+    for (const m of p.live.msgs) if (!had.has(m.id)) got(`m|${m.id}`);
     res.msgs = Math.max(0, p.live.msgs.length - before);
   }
   p.updated = Date.now();

@@ -24,6 +24,10 @@ export function sentPct(x, msgs) {
   return own.length ? msgPct(own[own.length - 1]) : null;
 }
 
+// v127: Schutz übernommener Aufträge (🔒 „Ändern freigeben“) gilt nur für laufende Aufträge: ein vom Team schon
+// abgeschlossener Auftrag (Meldung „zu“, auch wenn die EL ihn noch nicht bestätigt hat) schützt sein Gebiet nicht mehr
+export const guardApplies = (x, msgs) => !!x && !isDone(x) && !closeMsg(msgs, x.id);
+
 // Rückfrage „Auftrag abschließen?“ fällig? Liefert die Abschluss-Meldung, sonst null.
 // Fällig, sobald Meldung „zu“ UND eine QR-Rückmeldung dieses Auftrags (x.last) da sind – egal in welcher Reihenfolge.
 // Nach „Noch offen lassen“ (x.noAsk = { zu, n }) erst wieder bei neuer Meldung oder neuer Rückmeldung.

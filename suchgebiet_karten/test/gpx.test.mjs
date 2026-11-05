@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cellOutlines, buildGpx, garminColor, trackLength, labelTracks, polygonArea, formatArea, trackDesc, parseGpx, mergeGpx, dedupeImport, msgWaypoints, msgRows } from '../web/gpx.js';
+import { cellOutlines, buildGpx, garminColor, trackLength, labelTracks, polygonArea, formatArea, trackDesc, parseGpx, mergeGpx, parseKml, dedupeImport, msgWaypoints, msgRows } from '../web/gpx.js';
 import { CAP, FONT_CHARS, textPath } from '../web/font.js';
 import { makeZip, crc32 } from '../web/zip.js';
 import { planCustomMap, TILE, MAX_TILES } from '../web/kmz.js';
@@ -380,4 +380,74 @@ test('buildMsg: Fund aus „Markieren“ trägt Ort und Text', () => {
   const m = buildMsg({ a: 'A1', tm: 'Bravo', s: 'ort', cat: 'fund', txt: '✅ Fund 00:21', pos: { lat: 52.5, lon: 9.7 } });
   assert.deepEqual([m.s, m.cat, m.lat, m.lon, m.txt], ['ort', 'fund', 52.5, 9.7, '✅ Fund 00:21']);
   assert.equal(msgWaypoints([m]).length, 1);
+});
+
+// ---------- v127: BaseCamp-Re-Import (F8) und KML gx:Track (F9) ----------
+test('v127 F8: BaseCamp-Re-Export (7 Nachkommastellen, Hunde-Track dazu): nur „Rex“ kommt neu', () => {
+  const p = newProject('Vermisst Wald');
+  const g = makeGrid({ north: 52.63, south: 52.62, west: 10.06, east: 10.09 }, 100);
+  p.marks.push({ id: 't', kind: 'team', label: 'Team 1', dog: 'Kira', color: '#d50000' });
+  p.fills = { '0,0': 't', '1,0': 't' };
+  p.meet = { lat: 52.6247, lon: 10.0662, text: '' };
+  p.pois.push({ id: 'p1', cat: 'elw', lat: 52.6247, lon: 10.0662, name: '', desc: '' });
+  p.items.push(
+    { kind: 'track', name: 'Wald West', color: '#1565c0', pts: [[52.6250, 10.0610], [52.6280, 10.0650], [52.6260, 10.0700], [52.6230, 10.0640]] },
+    { kind: 'stroke', name: '', color: '#d50000', w: 4, group: 'g1', pts: [[52.6201234, 10.0611111], [52.6211234, 10.0621111], [52.6221234, 10.0631111]] },
+    { kind: 'text', text: 'Hochsitz', lat: 52.6255, lon: 10.0675, color: '#000' },
+  );
+  const o1 = buildGpx(p, g, { tracks: true, drawings: true, teams: true, grid: 'all', cells: 'lines', points: true });
+  const o2 = buildGpx(p, g, { grid: 'outline', cells: 'lines' });
+  const ours = mergeGpx([o1, o2, buildGpx(p, g, { grid: 'all' })]);
+  assert.match(ours, /<name>Raster Vermisst/);
+  assert.match(ours, /<name>Feldnamen /);
+  assert.match(ours, /<name>Suchgebiet Vermisst/);
+  // BaseCamp schreibt alles mit 7 Stellen zurück und hängt Rex an
+  const rex = `<trk><name>Rex 05 NOV 2026</name><trkseg>${[0, 1, 2, 3].map((i) => `<trkpt lat="52.62${i}0000" lon="10.07${i}0000"/>`).join('')}</trkseg></trk>`;
+  const back = ours.replace(/lat="(-?\d+\.\d+)" lon="(-?\d+\.\d+)"/g, (m, a, b) => `lat="${Number(a).toFixed(7)}" lon="${Number(b).toFixed(7)}"`).replace('</gpx>', `${rex}</gpx>`);
+  const parsed = parseGpx(back);
+  assert.ok(!parsed.tracks.some((t) => /^(Raster|Feldnamen|Suchgebiet)/.test(t.name)), 'Hilfstracks nicht eingelesen');
+  assert.ok(parsed.skipped >= 2);
+  const r = dedupeImport(p.items, parsed, 'datei', { meet: p.meet, pois: p.pois });
+  assert.deepEqual(r.tracks.map((t) => t.name), ['Rex 05 NOV 2026']);
+  assert.equal(r.waypoints.length, 0, 'B-Ort, ELW, Hochsitz sind schon da');
+  assert.ok(r.dup >= 3);
+});
+test('v127 F8: Rasterlinien-/Feldnamen-Tracks werden übersprungen, Wegpunkt mit gleichem Namen weiter weg ist neu', () => {
+  const xml = `<gpx version="1.1"><trk><name>Rasterlinien Einsatz</name><trkseg><trkpt lat="1" lon="1"/><trkpt lat="1" lon="2"/></trkseg></trk>
+<trk><name>Feldnamen Einsatz (1)</name><trkseg><trkpt lat="1" lon="1"/><trkpt lat="1" lon="2"/></trkseg></trk>
+<trk><name>Suchgebiet Einsatz</name><trkseg><trkpt lat="1" lon="1"/><trkpt lat="1" lon="2"/></trkseg></trk>
+<wpt lat="52.6247" lon="10.0662"><name>ELW</name></wpt><wpt lat="52.7" lon="10.0662"><name>ELW</name></wpt></gpx>`;
+  const g = parseGpx(xml);
+  assert.equal(g.tracks.length, 0);
+  assert.equal(g.skipped, 3);
+  const r = dedupeImport([], g, '', { pois: [{ id: 'p', cat: 'elw', lat: 52.62475, lon: 10.06621, name: '' }] });
+  assert.equal(r.waypoints.length, 1);
+  assert.equal(r.waypoints[0].lat, 52.7);
+});
+test('v127 F9: KML mit gx:Track (Google Earth/Tracker) wird gelesen', () => {
+  const kml = `<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2"><Document><Placemark><name>Luna Track</name><gx:Track>
+<when>2026-11-05T19:50:00Z</when><when>2026-11-05T19:50:15Z</when><when>2026-11-05T19:50:30Z</when>
+<gx:coord>10.067500 52.611200 0</gx:coord><gx:coord>10.068000 52.612000 0</gx:coord><gx:coord>10.068500 52.612500 12.5</gx:coord>
+</gx:Track></Placemark></Document></kml>`;
+  const g = parseKml(kml);
+  assert.equal(g.tracks.length, 1);
+  assert.equal(g.tracks[0].name, 'Luna Track');
+  assert.deepEqual(g.tracks[0].pts, [[52.6112, 10.0675], [52.612, 10.068], [52.6125, 10.0685]]);
+});
+
+test('v127 F7: selectionGpx (Schnellexport) schreibt Meldungen mit Ort als Wegpunkte', async () => {
+  const { selectionGpx } = await import('../web/gpx.js');
+  const msgs = msgWaypoints([{ id: 'm1', s: 'ort', cat: 'hinweis', tm: 'Team 1', t: Date.UTC(2026, 10, 5, 19, 47), lat: 52.5, lon: 8.5, txt: 'Blaue Jacke' }]);
+  const gpx = selectionGpx({ items: [], msgs }, 'x');
+  assert.match(gpx, /<name>Hinweis Team 1 \d\d:\d\d<\/name>/);
+  assert.match(gpx, /Blaue Jacke/);
+  assert.ok(!/<wpt/.test(selectionGpx({ items: [] }, 'x')));
+});
+
+test('v127 F8: eigene Meldungs-Wegpunkte („Fund Team 1 19:47“) gelten beim Re-Import als vorhanden', () => {
+  const msgs = [{ name: 'Fund Team 1 19:47', lat: 52.1, lon: 8.1 }, { name: 'Hinweis N-Team 1 (Kira) 20:33', lat: 52.2, lon: 8.2 }];
+  const g = { tracks: [], waypoints: [{ name: 'Fund Team 1 19:47', lat: 52.1000001, lon: 8.1 }, { name: 'Hinweis N-Team 1 (Kira) 20:33', lat: 52.2, lon: 8.2 }, { name: 'Hochsitz 12', lat: 52.4, lon: 8.4 }] };
+  const r = dedupeImport([], g, '', { msgs });
+  assert.deepEqual(r.waypoints.map((w) => w.name), ['Hochsitz 12']);
+  assert.equal(r.dup, 2);
 });

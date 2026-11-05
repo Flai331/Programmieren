@@ -54,7 +54,9 @@ test('mergeElwItems: nur ergänzen, zweimal = keine Duplikate, Gruppen und Teams
   assert.ok(new Set(p.items.map((i) => i.id)).size === 4);
   const r2 = mergeElwItems(p, m.items, 'O');
   assert.equal(r2.added.length, 0); assert.equal(p.items.length, 4);
-  assert.equal(mergeElwItems(p, m.items, 'O2').added.length, 3);
+  // v127: ein anderer Auftrag mit derselben Zeichnung legt sie nicht noch einmal an
+  const r3 = mergeElwItems(p, m.items, 'O2');
+  assert.equal(r3.added.length, 0); assert.equal(r3.skipped, 3); assert.equal(p.items.length, 4);
 });
 test('addElwIn: Duplikate weg, max. 50', () => {
   const o = (i) => ({ id: `o${i}`, t: i, items: [] });
@@ -72,4 +74,22 @@ test('HF sehen nichts davon, nichts wird quittiert, Vorlagen', () => {
 test('normalizeProject behält elwIn', () => {
   const p = normalizeProject({ ...newProject('E'), elwIn: [{ id: 'a', t: 1, items: [] }, { x: 1 }], elwSent: 5 });
   assert.equal(p.elwIn.length, 1); assert.equal(p.elwSent, 5);
+});
+
+test('v127 F1: Einfügen erkennt vorhandene Zeichnungen (Übergabe/Fortschritt/An-ELW-senden), meldet neu/schon da', () => {
+  const p = normalizeProject(newProject('E'));
+  // schon über die Übergabe da: volle Punktzahl und feinere Rundung
+  const full = { ...track(6), id: 'vorhanden', pts: track(6).pts.map(([a, b]) => [a + 0.0000004, b - 0.0000003]) };
+  const s1 = { kind: 'stroke', id: 'st', color: '#000', w: 5, name: '', pts: [[52.1, 8.1], [52.15, 8.12], [52.2, 8.2]] };
+  const tx = { kind: 'text', id: 'tx', color: '#000', lat: 52.5, lon: 8.5, text: 'ELW' };
+  p.items.push(full, s1, tx);
+  const m = buildElwOrder({ from: 'Tablet', items: [track(6), s1, tx, { kind: 'track', color: '#000', w: 4, name: 'Neu', pts: [[52.9, 8.9], [52.95, 8.95], [52.9, 8.99]] }], id: 'O9' });
+  const r = mergeElwItems(p, m.items, 'O9', { by: 'ELW' });
+  assert.equal(r.added.length, 1);
+  assert.equal(r.skipped, 3);
+  assert.equal(r.added[0].name, 'Neu');
+  assert.equal(p.items.length, 4);
+  // gleicher Name, andere Form = kein Duplikat
+  const m2 = buildElwOrder({ from: 'T', items: [{ ...track(6), pts: track(6).pts.map(([a, b]) => [a + 0.01, b]) }], id: 'O10' });
+  assert.equal(mergeElwItems(p, m2.items, 'O10').added.length, 1);
 });
