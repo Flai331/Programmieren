@@ -135,7 +135,13 @@ export function normalizeProject(p) {
     out.live.outbox = Array.isArray(l.outbox) ? l.outbox.filter((m) => m && typeof m.id === 'string').slice(-200) : [];
     out.live.reads = o(l.reads);
     out.live.qSent = o(l.qSent);
+    // v124: Aufträge an den ELW – eSince = Abholmarke, eParts = Teile großer Aufträge, die noch nicht komplett sind
+    if (Number(l.eSince) > 0) out.live.eSince = Number(l.eSince);
+    if (Array.isArray(l.eParts) && l.eParts.length) out.live.eParts = l.eParts.filter((m) => m && typeof m.id === 'string').slice(-200);
   } else delete out.live;
+  // v124: empfangene Aufträge an den ELW (elw.js), neueste zuerst; elwSent = Zeit des letzten Sendens an den ELW
+  out.elwIn = Array.isArray(out.elwIn) ? out.elwIn.filter((m) => m && typeof m.id === 'string' && Array.isArray(m.items)).slice(0, 50) : [];
+  out.elwSent = Number(out.elwSent) || 0;
   out.qmsgs = Array.isArray(out.qmsgs) ? out.qmsgs.slice(-500) : []; // Status-Meldungen aus QR-Rückmeldungen
   if (out.hf && typeof out.hf === 'object') {
     out.hf = { ...out.hf };

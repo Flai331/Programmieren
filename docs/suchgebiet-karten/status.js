@@ -167,7 +167,7 @@ export const withoutDeleted = (list, del) => (del && Object.keys(del).length ? (
 // 'qel' (Lesebestätigung des Hundeführers). Absender der EL ist fest a: 'EL'. Sie landen nie in der Meldungsliste der Teams.
 export const EL_A = 'EL';
 export const EL_ALL = '*';
-export const EL_KINDS = ['q', 'el', 'qel'];
+export const EL_KINDS = ['q', 'el', 'qel', 'elw', 'elwp']; // v124: elw/elwp = Zeichnung mit Auftrag an den ELW (elw.js)
 // Quittung: ref = ID der HF-Meldung, to = Auftrag (m.a der Meldung)
 export function buildAck({ ref, to, t, id }) {
   const m = buildMsg({ a: EL_A, tm: 'Einsatzleitung', s: 'q', t, id });

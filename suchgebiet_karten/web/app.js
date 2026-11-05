@@ -19,6 +19,7 @@ import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './in
 import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids } from './scope.js';
 import { MSG_VIEW, MSG_DELETE, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock, assignedOf, assignedCell, assignedGrid, markAccepted, isAccepted, unlockUntil } from './locks.js';
 import { isDone, openPoints, msgPct, closeMsg, sentPct, closeAsk, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
+import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts } from './elw.js'; // v124
 import { buildProgress, mergeProgress, progressSummary, progressPreview, progressTarget, snapshotBase, stampChanges, setPeer, peerOf } from './progress.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -69,7 +70,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v123';
+const APP_VERSION = 'v124';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -109,6 +110,9 @@ let moveTapAt = 0; // Zeit des letzten „Verlegen“-Tipps (der Klick danach ö
 let pendingMove = null; // „📍 Verlegen“ mit Tippen auf die Karte: { msg: Meldung } (Hundeführer) bzw. { item: Textpunkt }
 const NO_RP_HF = 'Die Einsatzleitung hat keine Rettungspunkte mitgeschickt.';
 let pendingSpot = null; // „Standort melden“ mit Tippen auf die Karte (Hundeführer): { cat, txt }
+let elwPollBusy = false; // v124: Abholen der Aufträge an den ELW läuft
+let elwLayer = null; // v124: Vorschau eines Auftrags auf der Karte
+let elwShown = ''; // v124: ID des Auftrags, dessen Vorschau steht
 let liveBusy = false; // Abholen der Status-Meldungen läuft
 let urgentOpen = false; // Dringend-Dialog steht
 let flushBusy = false; // Warteschlange wird gesendet
@@ -4511,6 +4515,7 @@ function toggleGaps(x) {
 // ---- Hundeführer: melden ----
 const hasLive = () => db.mode === 'hf' && !!P.hf; // ohne Status-Server (P.hf.ls) gehen Meldungen mit der QR-Rückmeldung
 function renderStatusBtn() {
+  renderElwBar(); // v124
   const b = $('hf-status');
   b.hidden = !hasLive();
   if (b.hidden) return;
@@ -5480,7 +5485,8 @@ async function pollLive() {
     const fresh = sp.team.filter((m) => !known.has(m.id) && !(proj.msgDel && proj.msgDel[m.id]));
     liveInit(l);
     const knownOut = new Set(l.out.map((m) => m.id));
-    const freshEl = sp.el.filter((m) => !knownOut.has(m.id)); // auch von anderen EL-Geräten
+    const freshEl = sp.el.filter((m) => !knownOut.has(m.id) && !ELW_KINDS.includes(m.s)); // auch von anderen EL-Geräten (v124: ELW-Aufträge nicht)
+    takeElw(proj, sp.el); // v124: Aufträge an den ELW
     let readsNew = false;
     for (const [k, v] of Object.entries(sp.reads)) {
       const o = l.reads[k] || {};
@@ -5560,6 +5566,225 @@ async function sendElText() {
 }
 $('el-go').addEventListener('click', sendElText);
 $('el-txt').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendElText(); });
+
+// ---- v124: Zeichnung mit Auftrag an den ELW (elw.js) ----
+// Ein EL-Gerät schickt Umrisse/Striche mit Auftragstext über den Live-Raum (verschlüsselt wie Statusmeldungen) an ein anderes
+// EL-Gerät. Der ELW zeigt nur an; Einfügen und BaseCamp-Datei löst der Mensch aus. Voraussetzung: P.live (Schlüssel + Server),
+// den auch die QR-Übergabe (buildHandover kopiert den ganzen Einsatz) und „Fortschritt senden“ (lv) mitbringen.
+const ELW_NAMES = ['ELW', 'PC EL'];
+const elwOpen = () => (P && P.elwIn ? P.elwIn.filter((o) => !o.done) : []);
+function elwClearPreview() {
+  if (elwLayer) { elwLayer.remove(); elwLayer = null; }
+  elwShown = '';
+  renderElwBar();
+}
+function elwPreview(o) {
+  elwClearPreview();
+  elwShown = o.id;
+  elwLayer = L.layerGroup().addTo(map);
+  for (const it of o.items) {
+    if (it.kind === 'text') L.circleMarker([it.lat, it.lon], { radius: 6, color: '#6a1b9a', weight: 3, fillOpacity: 0.4 }).bindTooltip(it.text || '', { permanent: true }).addTo(elwLayer);
+    else if (it.pts) (it.kind === 'track' && !it.open ? L.polygon : L.polyline)(it.pts, { color: '#6a1b9a', weight: 4, dashArray: '10 8', fillOpacity: 0.08 }).addTo(elwLayer);
+  }
+  renderElwBar();
+}
+// Plakette „📥 Aufträge (n)“ (nur EL, nur mit offenen Aufträgen) und „✕ Vorschau“
+function renderElwBar() {
+  const bar = $('elw-bar');
+  const n = db.mode === 'el' && P ? elwOpen().length : 0;
+  bar.hidden = !n && !elwShown;
+  $('elw-list').hidden = !n;
+  $('elw-list').textContent = `📥 Aufträge (${n})`;
+  $('elw-off').hidden = !elwShown;
+}
+$('elw-list').addEventListener('click', () => elwList());
+$('elw-off').addEventListener('click', elwClearPreview);
+$('more-elw-in').addEventListener('click', () => { closePanels(); elwList(true); });
+$('more-elw').addEventListener('click', () => { closePanels(); sendElw(); });
+
+// Empfangen: alle Raum-Meldungen durchsehen, Teile sammeln, neue Aufträge für dieses Gerät speichern und melden
+function takeElw(proj, msgs) {
+  const raw = (msgs || []).filter((m) => ELW_KINDS.includes(m.s));
+  const l = proj.live;
+  if (!l || !raw.length) return;
+  liveInit(l);
+  const parts = mergeStatus(l.eParts || [], raw.filter((m) => m.s === 'elwp'));
+  const full = joinElwParts([...raw.filter((m) => m.s === 'elw'), ...parts]);
+  const gone = new Set(full.map((o) => o.id));
+  l.eParts = parts.filter((m) => !gone.has(m.oid)).slice(-200);
+  proj.elwIn = proj.elwIn || [];
+  const r = addElwIn(proj.elwIn, elwInbox(full, devBy()));
+  if (!r.fresh.length) return;
+  proj.elwIn = r.list;
+  proj.updated = Date.now();
+  saveNow();
+  if (proj !== P) return;
+  renderElwBar();
+  const neu = r.fresh.filter((o) => o.t > Date.now() - 30 * 60e3); // alte Aufträge beim ersten Abruf: leise
+  if (!neu.length) return;
+  beepShort();
+  const o = neu[0];
+  const msg = `📥 Auftrag von ${o.from || 'EL'}: ${o.txt || elwCounts(o.items)} – hier tippen`;
+  toast(msg, 9000);
+  const tb = $('toast');
+  tb.onclick = () => { if (tb.textContent === msg) { tb.hidden = true; elwOpenOrder(o); } };
+}
+async function pollElw() {
+  const proj = P;
+  const l = proj && proj.live;
+  if (locked || db.mode !== 'el' || !l || proj.closed || elwPollBusy || document.hidden || !navigator.onLine) return;
+  if ((proj.sent || []).some((x) => x.live)) return; // pollLive holt dann alles in einem Abruf
+  elwPollBusy = true;
+  try {
+    const r = await pollMessages({ url: l.url, key: l.key, since: l.eSince || 0 });
+    takeElw(proj, r.msgs);
+    if (r.since !== l.eSince) { l.eSince = r.since; saveNow(); }
+  } catch { /* kein Netz: nächster Versuch */ } finally { elwPollBusy = false; }
+}
+
+// Senden
+async function sendElw() {
+  if (isFree()) return lockedToast();
+  if (db.mode !== 'el') return toast('Aufträge an den ELW gibt es nur in der Einsatzleitung');
+  if (!P.live) {
+    return openDlg((box, close) => {
+      dlgHead(box, '📤 Live-Kanal fehlt', 'Live-Kanal fehlt – Einsatz erst per QR übergeben (der Live-Schlüssel kommt dann mit) bzw. Status-Server einrichten und einen Auftrag mit Live-Kanal senden.');
+      dlgButton(box, 'OK', 'primary', () => close(true));
+    });
+  }
+  if (!db.deviceName) await askDeviceName(false);
+  stamp();
+  const proj = P;
+  // wählbar: Umrisse (je einer) und Stift-Zeichnungen (je Gruppe)
+  const rows = [];
+  const byGroup = new Map();
+  for (const it of proj.items) {
+    if (it.kind === 'track' && (it.pts || []).length > 1) rows.push({ key: it.id, label: `${it.open ? 'Weg' : 'Umriss'}: ${it.name || 'ohne Namen'}`, items: [it], t: it.t || 0 });
+    else if (it.kind === 'stroke') {
+      const k = it.group || it.id;
+      if (!byGroup.has(k)) { const r = { key: k, label: `Zeichnung: ${it.name || 'Stift'}`, items: [], t: 0 }; byGroup.set(k, r); rows.push(r); }
+      const r = byGroup.get(k);
+      r.items.push(it);
+      r.t = Math.max(r.t, it.t || 0);
+    }
+  }
+  if (!rows.length) return toast('Keine Umrisse oder Stift-Zeichnungen vorhanden');
+  const since = proj.elwSent || 0;
+  const newer = since ? rows.filter((r) => r.t > since) : [];
+  const pre = new Set((newer.length ? newer : rows).map((r) => r.key)); // neu/geändert seit dem letzten Senden, sonst alles
+  const names = [...new Set([...proj.peers.map((x) => x.name), ...ELW_NAMES])].filter((n) => n !== devBy());
+  const res = await openDlg((box, close) => {
+    dlgHead(box, '📤 An ELW senden', `Von „${devBy()}“. Der Empfänger bekommt die Zeichnungen und den Auftrag angezeigt; nichts wird automatisch geteilt oder zugewiesen.${since ? ` Zuletzt gesendet ${hhmm(since)}.` : ''}`);
+    const list = document.createElement('div');
+    list.className = 'st-list';
+    for (const r of rows) {
+      const lb = document.createElement('label');
+      lb.className = 'check';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'elw-pick';
+      cb.value = r.key;
+      cb.checked = pre.has(r.key);
+      lb.append(cb, ` ${r.label}`);
+      list.appendChild(lb);
+    }
+    box.appendChild(list);
+    const to = document.createElement('select');
+    to.id = 'elw-to';
+    to.add(new Option('an alle EL-Geräte', ''));
+    for (const n of names) to.add(new Option(n, n));
+    box.appendChild(to);
+    const nn = document.createElement('input');
+    nn.type = 'text';
+    nn.id = 'elw-to-new';
+    nn.placeholder = 'oder anderes Gerät: Name';
+    box.appendChild(nn);
+    const txt = document.createElement('input');
+    txt.type = 'text';
+    txt.id = 'elw-txt';
+    txt.maxLength = 300;
+    txt.placeholder = 'Auftrag (z. B. In 2 Gebiete aufteilen)';
+    box.appendChild(txt);
+    const q = document.createElement('div');
+    q.className = 'elw-tpl';
+    for (const t of elwTemplates) dlgButton(q, esc(t), 'mini', () => { txt.value = t; });
+    box.appendChild(q);
+    dlgButton(box, '📤 Senden', 'primary', () => {
+      const keys = [...box.querySelectorAll('.elw-pick:checked')].map((c) => c.value);
+      if (!keys.length) return toast('Bitte mindestens eine Zeichnung wählen');
+      close({ keys, to: nn.value.trim() || to.value, txt: txt.value.trim() });
+    });
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!res) return;
+  if (proj !== P || !P.live) return;
+  const items = rows.filter((r) => res.keys.includes(r.key)).flatMap((r) => r.items);
+  const order = buildElwOrder({ from: devBy(), to: res.to, txt: res.txt, items, marks: proj.marks });
+  const parts = splitElwOrder(order);
+  const ok = await Promise.all(parts.map((m) => elSend(m)));
+  const ids = new Set(parts.map((m) => m.id));
+  const waiting = proj.live.outbox.some((m) => ids.has(m.id));
+  if (!waiting && !ok.every(Boolean)) return; // abgelehnt: flushStatus hat schon gewarnt
+  proj.elwSent = Date.now();
+  saveNow();
+  const wohin = res.to || 'alle EL-Geräte';
+  toast(waiting ? `⏳ Auftrag an ${wohin} wartet auf Netz – wird automatisch nachgesendet` : `✓ Auftrag an ${wohin} gesendet ${hhmm(Date.now())}${parts.length > 1 ? ` (${parts.length} Teile)` : ''}`, 5000);
+}
+
+// Anzeigen
+async function elwList(all) {
+  const list = all ? P.elwIn : elwOpen();
+  if (!list.length) return toast('Keine Aufträge');
+  const o = await openDlg((box, close) => {
+    dlgHead(box, `📥 Aufträge (${list.length})`, 'Antippen zum Öffnen. Erledigte bleiben grau in der Liste.');
+    for (const x of list) {
+      const b = dlgButton(box, `${esc(x.from || 'EL')} ${hhmm(x.t)}${x.done ? ' ✓' : ''}<small>${esc(x.txt || '–')} · ${esc(elwCounts(x.items))}</small>`, x.done ? '' : 'primary', () => close(x));
+      if (x.done) b.style.opacity = '0.55';
+    }
+    dlgButton(box, 'Schließen', '', () => close(null));
+  });
+  if (o) await elwOpenOrder(o);
+}
+async function elwOpenOrder(o) {
+  const proj = P;
+  elwPreview(o);
+  const had = proj.items.filter((i) => i.elw === o.id).length;
+  const r = await openDlg((box, close) => {
+    dlgHead(box, `📥 Auftrag von ${o.from || 'EL'} · ${hhmm(o.t)}${o.done ? ' · erledigt' : ''}`, `${elwCounts(o.items)} – auf der Karte gestrichelt (lila).`);
+    const t = document.createElement('div');
+    t.className = 'elw-txt';
+    t.textContent = o.txt || '(ohne Text)';
+    box.appendChild(t);
+    dlgButton(box, `➕ In laufenden Einsatz einfügen${had ? ` <small>schon ${had} eingefügt – ergänzt nur Fehlendes</small>` : ''}`, 'primary', () => close('insert'));
+    if (!bridge) dlgButton(box, '🗺️ In BaseCamp öffnen', '', () => close('bc'));
+    dlgButton(box, '👁 Zeigen', '', () => close('show'));
+    dlgButton(box, '🖨️ Karten-PDF <small>nach dem Einfügen: Karten-PDF-Dialog</small>', '', () => close('pdf'));
+    if (!o.done) dlgButton(box, '✓ Erledigt', '', () => close('done'));
+    dlgButton(box, 'Schließen', '', () => close(null));
+  });
+  const pts = elwPoints(o.items);
+  if (r === 'insert') {
+    if (isClosed()) { elwClearPreview(); return lockedToast(); }
+    snapshot(); // ein Rückgängig-Schritt
+    const m = mergeElwItems(proj, o.items, o.id, { by: devBy() });
+    changed();
+    toast(m.added.length ? `➕ ${m.added.length} Zeichnung${m.added.length === 1 ? '' : 'en'} eingefügt` : 'Schon eingefügt – nichts Neues', 4000);
+  } else if (r === 'bc') {
+    const gpx = selectionGpx({ items: o.items }, `Auftrag von ${o.from || 'EL'}`);
+    download(new Blob([gpx], { type: 'application/gpx+xml' }), safeName(`Auftrag ${o.from || 'EL'}`, '.gpx'));
+    toast('GPX geladen – unten im Browser anklicken, öffnet BaseCamp (wenn .gpx mit BaseCamp verknüpft ist)', 8000);
+  } else if (r === 'done') {
+    o.done = Date.now();
+    proj.updated = Date.now();
+    saveNow();
+  } else if (r === 'pdf') {
+    openExport();
+  }
+  if (r === 'show' || r === 'insert' || r === 'pdf') {
+    if (pts.length) map.fitBounds(pts, { padding: [40, 40], maxZoom: 18 });
+  }
+  if (r !== 'show') elwClearPreview(); else renderElwBar();
+}
 
 function beepShort() {
   try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch { /* egal */ }
@@ -5647,8 +5872,10 @@ function startStatus() {
   renderStatusBtn();
   flushStatus();
   pollLive();
+  pollElw();
   showUrgent();
   setInterval(() => { if (navigator.onLine) flushStatus(); }, 60e3);
+  setInterval(pollElw, 15e3); // v124: Aufträge an den ELW (auch ohne laufende Aufträge)
   setInterval(pollLive, 15e3); // Einsatzleitung: alle 15 s neue Status-Meldungen holen
   pollHf();
   setInterval(pollHf, 20e3); // v117: Hundeführer: Quittungen und Nachrichten der Einsatzleitung holen
@@ -5657,8 +5884,8 @@ function startStatus() {
   setInterval(checkUnread, 15e3); // Erinnerung bei ungelesenen Meldungen
   checkCloseAsk();
   setInterval(checkCloseAsk, 15e3);
-  window.addEventListener('online', () => { flushStatus(); pollLive(); pollHf(); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { flushStatus(); pollLive(); pollHf(); } });
+  window.addEventListener('online', () => { flushStatus(); pollLive(); pollElw(); pollHf(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { flushStatus(); pollLive(); pollElw(); pollHf(); } });
 }
 
 // ---- Einsatzleitung: Rückmeldung übernehmen (Kamera oder eingefügter Link) ----
@@ -8078,6 +8305,28 @@ async function runExportAll(btn, action) {
 }
 $('gpx-all-share').addEventListener('click', () => runExportAll($('gpx-all-share'), 'share'));
 $('gpx-all-save').addEventListener('click', () => runExportAll($('gpx-all-save'), 'save'));
+// v124: „In BaseCamp öffnen“: beide GPX-Dateien direkt laden (Desktop/Web); in der Android-App ausgeblendet (dort Teilen/Speichern)
+$('gpx-bc-row').hidden = $('gpx-bc-hint').hidden = !!bridge;
+$('gpx-bc').addEventListener('click', async () => {
+  const btn = $('gpx-bc');
+  btn.disabled = true;
+  try {
+    const files = [];
+    for (const build of [gridGpx(), markGpx()]) {
+      const f = await build();
+      if (f) files.push(f);
+    }
+    if (!files.length) return;
+    for (const f of files) {
+      download(f.blob, f.name);
+      await new Promise((r) => setTimeout(r, 400)); // Browser blockieren sonst den zweiten Download
+    }
+    toast('GPX geladen – unten im Browser anklicken, öffnet BaseCamp (wenn .gpx mit BaseCamp verknüpft ist)', 8000);
+  } catch (err) {
+    console.error(err);
+    toast('Fehler: ' + err.message);
+  } finally { btn.disabled = false; }
+});
 
 $('gpx-grid-share').addEventListener('click', () => runExport('gpx-grid', $('gpx-grid-share'), exportKey(gpxGridOpts()), gridGpx(), 'share'));
 $('gpx-grid-save').addEventListener('click', () => runExport('gpx-grid', $('gpx-grid-save'), exportKey(gpxGridOpts()), gridGpx(), 'save'));
