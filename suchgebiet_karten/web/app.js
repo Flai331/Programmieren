@@ -73,7 +73,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v125';
+const APP_VERSION = 'v126';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -5792,6 +5792,9 @@ async function sendElw() {
       list.appendChild(lb);
     }
     box.appendChild(list);
+    // v126: Beschriftungen „An“ / „Auftrag“ – zwei Textfelder ohne Titel wurden verwechselt
+    const lab = (t) => { const l = document.createElement('p'); l.className = 'small elw-lab'; l.textContent = t; box.appendChild(l); };
+    lab('An (Empfänger-Gerät):');
     const to = document.createElement('select');
     to.id = 'elw-to';
     to.add(new Option('an alle EL-Geräte', ''));
@@ -5802,6 +5805,7 @@ async function sendElw() {
     nn.id = 'elw-to-new';
     nn.placeholder = 'oder anderes Gerät: Name';
     box.appendChild(nn);
+    lab('Auftrag an den Empfänger:');
     const txt = document.createElement('input');
     txt.type = 'text';
     txt.id = 'elw-txt';
@@ -9892,8 +9896,11 @@ let updManual = false; // Suche per Knopf in „Mehr“
 let updDl = null; // Fortschrittsdialog {close, text}
 let updWaitInstall = false; // wartet auf die Erlaubnis „Unbekannte Apps installieren“
 let updTimer = null;
-const updEinsatzOffen = () => einsatzOffen({ mode: db.mode, free: isFree(), closed: isClosed(), hfAssigned: !!(P && P.hf) });
+// v126: HF – offen ist nur ein Auftrag, der noch nicht abgeschlossen ist
+const updEinsatzOffen = () => einsatzOffen({ mode: db.mode, free: isFree(), closed: isClosed(), hfAssigned: !!(P && P.hf && !P.hf.closed) });
+let updHf = false; // v126: Suche kam aus dem HF-Menü (dort gibt es kein „Mehr“-Panel) -> Meldungen als Toast
 function updMsg(text) {
+  if (updHf && text) toast(text, 5000);
   const m = $('upd-msg');
   m.textContent = text || '';
   m.hidden = !text;
@@ -9908,8 +9915,9 @@ async function updOffer(manual) {
   updBusy = true;
   const warn = manual && updEinsatzOffen();
   const go = await openDlg((box, close) => {
-    dlgHead(box, warn ? '⚠️ Einsatz läuft – trotzdem aktualisieren?' : '⬇️ Update verfügbar',
-      `${updateText(updInstalled.name, updAvail.name)}${warn ? '\n\nWährend des Updates ist die App kurz nicht benutzbar.' : ''}`);
+    const hf = db.mode === 'hf'; // v126: HF – Warnung nennt den offenen Auftrag
+    dlgHead(box, warn ? (hf ? '⚠️ Auftrag noch offen – trotzdem aktualisieren?' : '⚠️ Einsatz läuft – trotzdem aktualisieren?') : '⬇️ Update verfügbar',
+      `${updateText(updInstalled.name, updAvail.name)}${warn ? `\n\nWährend des Updates ist die App kurz nicht benutzbar.${hf ? ' Der Auftrag, der gelaufene Weg und noch nicht gesendete Meldungen bleiben gespeichert.' : ''}` : ''}`);
     dlgButton(box, 'Jetzt aktualisieren', 'primary', () => close(true));
     dlgButton(box, 'Später', '', () => close(false));
   });
@@ -9979,13 +9987,18 @@ if (updBridge) {
 if (updInstalled) {
   $('upd-ver').textContent = `Installierte App-Version: ${updInstalled.name}`;
   $('upd-box').hidden = false;
-  $('upd-check').addEventListener('click', () => {
+  const updSearch = (hf) => {
+    updHf = hf;
     if (!updInstalled.enabled) return updMsg('Diese Testversion der App hat keine Update-Suche.');
     if (updBusy) return;
     updManual = true;
     updMsg('Suche läuft …');
     updBridge.updateCheck();
-  });
+  };
+  $('upd-check').addEventListener('click', () => updSearch(false));
+  // v126: HF aktualisiert ohne PIN der Einsatzleitung; bei offenem Auftrag warnt updOffer vorher (sonst keine Warnung)
+  $('hfm-update').hidden = false;
+  $('hfm-update').addEventListener('click', () => { closePanels(); updSearch(true); });
   // bei jedem App-Start prüfen (kurz nach dem Laden)
   if (updInstalled.enabled) setTimeout(() => updBridge.updateCheck(), 4000);
 }
