@@ -11,6 +11,7 @@ import { normalizePois } from './pois.js';
 import { infoTarget } from './infos.js';
 import { uniqueTeamLabel, uniqueName, uaName } from './uateam.js';
 import { compactContact, fromCompact } from './contacts.js';
+import { fillUnit } from './units.js';
 
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
 const bool = (x) => !!x;
@@ -32,7 +33,7 @@ const cellMap = (p) => {
 // v125: Kontakte haben keine Zeit – Änderung über einen Hash erkennen (p.contactsT)
 const ctHash = (p) => JSON.stringify((p.contacts || []).map(compactContact));
 // v125: Teams/Status-Marken: neues/umbenanntes Team allein ist schon „neu“ (p.marksT)
-const mkHash = (p) => JSON.stringify((p.marks || []).filter((m) => m.kind === 'team' || m.kind === 'status').map((m) => [m.id, m.label]));
+const mkHash = (p) => JSON.stringify((p.marks || []).filter((m) => m.kind === 'team' || m.kind === 'status').map((m) => [m.id, m.label, m.ty, m.org, m.fk, m.pers])); // v128: auch Typ, Organisation, Funkruf, Personen
 const gridSig = (p) => new Map(allGrids(p).map((g) => [g.id, JSON.stringify([g.area, g.cellM])]));
 
 // Ausgangsstand merken (vor einer Bearbeitung)
@@ -220,9 +221,15 @@ export function mergeProgress(p, f) {
       const nm = { ...m };
       // v125: Team aus einem UA mit schon vergebenem Namen -> Zusatz „ (UA Nord)“
       if (rel === 'ua' && m.kind === 'team') nm.label = uniqueTeamLabel(p.marks, nm, `UA ${uaName(f.ti) || f.from || ''}`.trim());
+      // v128: Team aus einem UA merkt sich den UA (für die UA-Übersicht beim Grund-Einsatz)
+      if (rel === 'ua' && m.kind === 'team' && !nm.ua) nm.ua = uaName(f.ti) || String(f.from || '');
       p.marks.push(nm);
       if (m.kind === 'team') p.marksT = now;
       res.marks++;
+    } else if (m && m.id && m.kind === 'team') {
+      // v128: Typ, Organisation, Funkruf, Personen, UA eines schon bekannten Teams nur ergänzen (nie überschreiben)
+      const old = p.marks.find((x) => x.id === m.id);
+      if (old && old.kind === 'team' && fillUnit(old, m)) { p.marksT = now; res.marks++; }
     }
   }
 

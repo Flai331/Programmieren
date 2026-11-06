@@ -176,7 +176,7 @@ export function lineLegend(project) {
 const fmtDate = (t) => new Date(t).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
 
 // Text für die Mail (die Zusammenfassung mit Verfasser, Kräften und Legende)
-export function missionText(project, grid, attach = 'Abschlussbericht im Anhang (PDF).', sec = null) {
+export function missionText(project, grid, attach = 'Abschlussbericht im Anhang (PDF).', sec = null, extra = {}) {
   const m = project.mission;
   const out = [`Einsatz: ${project.title || 'Suchgebiet'}`];
   if (project.leader) out.push(`Einsatzleitung: ${project.leader}`);
@@ -186,6 +186,10 @@ export function missionText(project, grid, attach = 'Abschlussbericht im Anhang 
   if (want(sec, 'times') && m.wind && m.wind.length) out.push('', 'Wind:', ...windLines(m));
   if (want(sec, 'person') && m.person.trim()) out.push('', 'Vermisste Person:', m.person.trim());
   if (want(sec, 'forces') && m.forces.length) out.push('', `Kräfte (${STRENGTH_HINT}):`, ...m.forces.map(forceLine), totalLine(m.forces));
+  // v128: Kräfte aus den Teams (wenn keine von Hand eingetragen sind), Einheiten und Einsatzzeiten der Teams
+  if (want(sec, 'forces') && !m.forces.length && (extra.forcesAuto || []).length) out.push('', 'Kräfte (aus den Teams):', ...extra.forcesAuto);
+  if (want(sec, 'forces') && (extra.unitRows || []).length) out.push('', 'Einheiten:', ...extra.unitRows.map((r) => `${r.team}: ${r.text}`));
+  if (want(sec, 'times') && (extra.timeRows || []).length) out.push('', 'Einsatzzeiten der Teams:', ...extra.timeRows.map((r) => `${r.team}: ${r.text}`), ...(extra.timeTotal ? [extra.timeTotal] : []));
   if (want(sec, 'summary') && m.summary.trim()) out.push('', 'Zusammenfassung:', m.summary.trim());
   const others = project.otherGrids || [];
   if (grid && others.length) {
@@ -308,6 +312,15 @@ export async function addReportPages(doc, project, grid, W, H, margin, parts = {
       text(`${t.people} Einsatzkräfte`, 9.5);
     }
 
+    // v128: Kräfte aus den Teams, Einheiten (Typ, Organisation, Funkruf) und Einsatzzeiten (Start, Pausen, Ablösung, Ende, Personenstunden)
+    const latin1 = (t) => String(t).replace(/[^\u0020-\u007E\u00A0-\u00FF\u2013\u2014\u2018-\u201E\u2026\u20AC]/g, '').replace(/\s+/g, ' ').trim();
+    if (want(parts, 'forces') && !m.forces.length && parts.forcesAuto && parts.forcesAuto.length) { heading('Kräfte (aus den Teams)'); for (const l of parts.forcesAuto) text(latin1(l)); }
+    if (want(parts, 'forces') && parts.unitRows && parts.unitRows.length) { heading('Einheiten'); for (const r of parts.unitRows) text(latin1(`${r.team}: ${r.text}`), 9.5); }
+    if (want(parts, 'times') && parts.timeRows && parts.timeRows.length) {
+      heading('Einsatzzeiten der Teams');
+      for (const r of parts.timeRows) text(latin1(`${r.team}: ${r.text}`), 9.5);
+      if (parts.timeTotal) text(latin1(parts.timeTotal), 10, true);
+    }
     if (want(parts, 'summary') && m.summary.trim()) { heading('Zusammenfassung'); text(m.summary.trim()); }
     if (want(parts, 'notes') && (project.notes || '').trim()) { heading('Notizen'); text(project.notes.trim()); }
 
@@ -342,7 +355,7 @@ export async function addReportPages(doc, project, grid, W, H, margin, parts = {
   if (!withImages) return pages;
   const imgs = [
     ...(want(parts, 'pad') ? m.pages : []).filter((p) => p.strokes.length).map((p, i) => ({ title: `Notizblock Seite ${i + 1} (${fmtDate(p.t)})`, src: notePageImage(p), ratio: PAGE_RATIO })),
-    ...(want(parts, 'photos') ? m.photos : []).map((p, i) => ({ title: `Foto ${i + 1} (${fmtDate(p.t)})`, src: p.src })),
+    ...(want(parts, 'photos') ? m.photos : []).map((p, i) => ({ title: `Foto ${i + 1} (${fmtDate(p.t)})${p.cap ? ` – ${String(p.cap).replace(/[^\u0020-\u007E\u00A0-\u00FF\u2013\u2014]/g, '').trim()}` : ''}`, src: p.src })),
   ];
   for (const im of imgs) {
     if (!im.ratio) {
