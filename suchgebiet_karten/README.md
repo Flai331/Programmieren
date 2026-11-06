@@ -1,4 +1,4 @@
-# Suchgebiet-Karten
+# RHS Einsatz (früher „Suchgebiet-Karten“)
 
 Web-App (auch als App auf Android installierbar) für Rettungshundestaffeln:
 Online-Karte wählen, ein festes Raster über das Suchgebiet legen, einzeichnen,

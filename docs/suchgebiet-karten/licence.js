@@ -81,12 +81,12 @@ export function checkUrl(base, { id, mode, version, platform, name, ua }) {
 
 export const DEFERRED_TEXT = 'Diese Installation ist gesperrt – nach Einsatzende nicht mehr nutzbar';
 
-export const lockTitle = (st) => (st === 'expired' ? '🔒 Freigabe abgelaufen' : '🔒 Suchgebiet-Karten ist gesperrt');
+export const lockTitle = (st) => (st === 'expired' ? '🔒 Freigabe abgelaufen' : '🔒 RHS Einsatz ist gesperrt');
 export const lockText = (st) => (st === 'expired'
   ? `Seit über ${LIC_DAYS} Tagen konnte die Freigabe nicht geprüft werden. Bitte mit dem Internet verbinden und erneut prüfen.`
   : 'Diese Installation wurde vom Administrator deaktiviert.');
 
 export function mailtoHref(kontakt, id) {
   const body = `Geräte-ID: ${id}`;
-  return `mailto:${kontakt || LIC_CONTACT}?subject=${encodeURIComponent('Suchgebiet-Karten Freigabe')}&body=${encodeURIComponent(body)}`;
+  return `mailto:${kontakt || LIC_CONTACT}?subject=${encodeURIComponent('RHS Einsatz Freigabe')}&body=${encodeURIComponent(body)}`;
 }

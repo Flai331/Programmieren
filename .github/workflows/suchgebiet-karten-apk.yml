@@ -123,7 +123,7 @@ jobs:
             adb shell pidof de.klaas.suchgebiet
             ! grep -qE "FATAL EXCEPTION" /tmp/logcat.txt
             ! grep -E "E SuchgebietJS" /tmp/logcat.txt | grep -q .
-            grep -q "Suchgebiet-Karten bereit (Android-App)" /tmp/logcat.txt
+            grep -q "RHS Einsatz bereit (Android-App)" /tmp/logcat.txt
             adb exec-out screencap -p > /tmp/start.png
 
       - name: Screenshot hochladen
@@ -150,10 +150,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            TAG=suchgebiet-karten; TITLE="Suchgebiet-Karten"
+            TAG=suchgebiet-karten; TITLE="RHS Einsatz"
             NOTES="Karten mit festem Raster für Rettungshunde-Einsätze. Automatisch gebaut. APK herunterladen und auf dem Handy installieren."
           else
-            TAG=suchgebiet-karten-beta; TITLE="Suchgebiet-Karten (Testversion)"
+            TAG=suchgebiet-karten-beta; TITLE="RHS Einsatz (Testversion)"
             NOTES="Testversion mit neuen Funktionen, noch nicht freigegeben. Installiert sich über die normale App; zurück mit der normalen APK."
           fi
           cp suchgebiet_karten/android/app/build/outputs/apk/release/app-release.apk Suchgebiet-Karten.apk

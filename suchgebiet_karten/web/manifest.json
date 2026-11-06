@@ -1,6 +1,6 @@
 {
-  "name": "Suchgebiet-Karten",
-  "short_name": "Suchgebiete",
+  "name": "RHS Einsatz",
+  "short_name": "RHS Einsatz",
   "description": "Karten mit festem Raster für Rettungshunde-Einsätze – zeichnen, PDF erstellen, per E-Mail senden.",
   "start_url": "./index.html",
   "scope": "./",

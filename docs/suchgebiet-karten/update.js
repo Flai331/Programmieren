@@ -21,4 +21,4 @@ export function updateText(installedName, latestName) {
   return `Neue Version ${latestName} verfügbar (installiert ${installedName}). Jetzt aktualisieren? Die Daten bleiben erhalten.`;
 }
 
-export const PERMISSION_HINT = 'Android fragt jetzt einmalig, ob Suchgebiet-Karten Apps installieren darf – bitte erlauben und danach hierher zurückkommen.';
+export const PERMISSION_HINT = 'Android fragt jetzt einmalig, ob RHS Einsatz Apps installieren darf – bitte erlauben und danach hierher zurückkommen.';

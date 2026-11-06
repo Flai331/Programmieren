@@ -234,7 +234,7 @@ class TileDownloadService : Service() {
                 val c = URL(url).openConnection() as HttpURLConnection
                 c.connectTimeout = 15000
                 c.readTimeout = 30000
-                c.setRequestProperty("User-Agent", "Suchgebiet-Karten (Android)")
+                c.setRequestProperty("User-Agent", "RHS Einsatz (Android)")
                 try {
                     val type = c.contentType ?: ""
                     if (c.responseCode == 200 && type.startsWith("image/")) {
