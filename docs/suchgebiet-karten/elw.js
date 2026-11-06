@@ -126,14 +126,35 @@ export function addElwIn(list, orders) {
 // Aufträge einfügen: nur ergänzen. Items bekommen neue IDs; Herkunft elw (Auftrags-ID) + ei (Nr.) merken,
 // damit dasselbe Einfügen nicht doppelt anlegt. Striche derselben Zeichnung bleiben eine Gruppe.
 // Team-Zuordnung: nur wenn es ein Team mit dem Namen toName gibt. -> { added: [Items], skipped: Anzahl }
+// v127: gleiche Zeichnung schon im Einsatz? (Art + Name/Text + Eckpunkte/Umfang, ~2 m Toleranz – der Versand
+// vereinfacht die Linien, daher nicht Punkt für Punkt vergleichen)
+const TOL = 2e-5;
+const near = (a, b) => Math.abs(a - b) <= TOL;
+function shapeKey(it) {
+  if (it.kind === 'text') return Number.isFinite(it.lat) ? { k: 'text', n: String(it.text || '').trim().toLowerCase(), a: [it.lat, it.lon], b: [it.lat, it.lon], box: [it.lat, it.lon, it.lat, it.lon] } : null;
+  if (!Array.isArray(it.pts) || it.pts.length < 2) return null;
+  const la = it.pts.map((q) => q[0]);
+  const lo = it.pts.map((q) => q[1]);
+  return { k: it.kind, n: String(it.name || '').trim().toLowerCase(), a: it.pts[0], b: it.pts[it.pts.length - 1], box: [Math.min(...la), Math.min(...lo), Math.max(...la), Math.max(...lo)] };
+}
+export function sameDrawing(x, y) {
+  const a = shapeKey(x);
+  const b = shapeKey(y);
+  if (!a || !b || a.k !== b.k || a.n !== b.n) return false;
+  const ends = (near(a.a[0], b.a[0]) && near(a.a[1], b.a[1]) && near(a.b[0], b.b[0]) && near(a.b[1], b.b[1]))
+    || (a.k !== 'track' && near(a.a[0], b.b[0]) && near(a.a[1], b.b[1]) && near(a.b[0], b.a[0]) && near(a.b[1], b.a[1]));
+  return ends && a.box.every((v, i) => near(v, b.box[i]));
+}
+
 export function mergeElwItems(p, items, oid, { by = '', now = Date.now() } = {}) {
   p.items = p.items || [];
   const have = new Set(p.items.filter((i) => i.elw === oid).map((i) => i.ei));
+  const existing = p.items.slice(); // nur gegen Bestehendes prüfen, nicht gegen Gleiches im selben Auftrag
   const groups = new Map();
   const added = [];
   let skipped = 0;
   (items || []).forEach((src, ei) => {
-    if (!src || have.has(ei)) { skipped++; return; }
+    if (!src || have.has(ei) || (src.id && existing.some((i) => i.id === src.id)) || existing.some((i) => sameDrawing(i, src))) { skipped++; return; }
     const it = { ...src, id: uid(), t: now, by, elw: oid, ei };
     if (Array.isArray(src.pts)) it.pts = src.pts.map((q) => [q[0], q[1]]);
     if (src.group) {

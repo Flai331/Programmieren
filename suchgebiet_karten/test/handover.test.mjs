@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pack, unpack, parseShared, shareLink, buildAssignment, buildResult, applyResult, projectFromAssignment } from '../web/share.js';
+import { pack, unpack, parseShared, shareLink, buildAssignment, buildResult, applyResult, projectFromAssignment, ensureLive } from '../web/share.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from '../web/handover.js';
 import { newProject, normalizeProject } from '../web/store.js';
 
@@ -84,4 +84,29 @@ test('Mehrteiliger QR-Code: Teile in beliebiger Reihenfolge, doppelt gelesen', (
   // neuer Code (andere Kennung) beginnt von vorn
   const other = splitParts('xyz', 1000);
   assert.equal(addPart(store, other[0]).done, 'xyz');
+});
+
+test('v127 L1: Übergabe eines frischen Einsatzes enthält den Live-Kanal; „An ELW senden“ braucht keinen Dummy-Auftrag mehr', async () => {
+  const p = elProject();
+  assert.equal(p.live, undefined);
+  const URL = 'https://script.google.com/macros/s/abc/exec';
+  const e = buildHandover(p, { tol: 2, liveUrl: URL });
+  assert.ok(p.live && p.live.key, 'Live-Kanal am Absender angelegt');
+  const q = projectFromHandover(await unpack(await pack(e)));
+  assert.equal(q.live.url, URL);
+  assert.equal(q.live.key, p.live.key);
+  // zweite Übergabe: gleicher Schlüssel (kein neuer Kanal)
+  const key = p.live.key;
+  buildHandover(p, { liveUrl: URL });
+  assert.equal(p.live.key, key);
+  // ohne Adresse (z. B. Hundeführer) entsteht nichts
+  assert.equal(buildHandover(elProject(), {}).p.live, undefined);
+});
+test('v127 L1: ensureLive legt genau einmal an', () => {
+  const p = elProject();
+  assert.equal(ensureLive(p, 'https://script.google.com/macros/s/abc/exec'), true);
+  const k = p.live.key;
+  assert.equal(ensureLive(p, 'https://script.google.com/macros/s/zzz/exec'), false);
+  assert.equal(p.live.key, k);
+  assert.equal(ensureLive(elProject(), ''), false);
 });

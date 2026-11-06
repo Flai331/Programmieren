@@ -71,3 +71,18 @@ export function markAccepted(p, msgs, now = Date.now()) {
   }
   return n;
 }
+
+// v127: Ein Unterabschnitt (UA) sieht nur Meldungen seiner eigenen Teams (Teams in seinem p.marks – Auftrag oder Teamname);
+// Fund und Hilfe (dringend) aller Teams bleiben überall sichtbar. Der Grund-Einsatz (kein UA) sieht alles.
+export function ownTeamMsgs(p, msgs, urgent) {
+  if (!isUA(p)) return msgs;
+  const teams = (p.marks || []).filter((m) => m.kind === 'team');
+  const ids = new Set(teams.map((m) => m.id));
+  const labels = new Set(teams.map((m) => String(m.label || '').trim().toLowerCase()));
+  const orders = new Map((p.sent || []).map((x) => [x.id, x.teamId]));
+  return (msgs || []).filter((m) => {
+    if (urgent && urgent(m)) return true;
+    if (m.a) return orders.has(m.a) && ids.has(orders.get(m.a)); // Auftrag eines anderen UA (bei gleichem Teamnamen!) gehört nicht dazu
+    return labels.has(String(m.tm || '').trim().toLowerCase());
+  });
+}

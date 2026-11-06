@@ -3,12 +3,13 @@
 // Reine Logik ohne DOM, damit sie testbar ist.
 
 import { normalizeProject, uid } from './store.js';
-import { encodePts, decodePts, simplify } from './share.js';
+import { encodePts, decodePts, simplify, ensureLive } from './share.js';
 
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
 // Einsatz -> kompakt. tol: Linien vereinfachen (Meter), pages: Notizblock mitnehmen. Fotos nie (nur per Datei).
-export function buildHandover(p, { tol = 2, pages = true, from = '', fromId = '' } = {}) {
+export function buildHandover(p, { tol = 2, pages = true, from = '', fromId = '', liveUrl = '' } = {}) {
+  ensureLive(p, liveUrl); // v127: Live-Kanal geht mit jeder Übergabe mit (entsteht hier, falls noch keiner da ist)
   const c = JSON.parse(JSON.stringify(p));
   delete c.view;
   delete c.handedOver;

@@ -19,12 +19,23 @@ export function uaPrefix(p) {
 // Standardname für ein neues Team: im UA „N-Team 1“ (nächste freie Nummer), sonst „Team n“
 export function nextTeamLabel(p) {
   const teams = (p.marks || []).filter((m) => m.kind === 'team');
-  if (!p.parentEid) return `Team ${teams.length + 1}`;
-  const base = `${uaPrefix(p)}-Team `;
   const used = new Set(teams.map((m) => String(m.label || '').trim().toLowerCase()));
+  if (!p.parentEid) { // v127: nächste freie Nummer (nicht doppelt, auch wenn ein Team gelöscht oder umbenannt wurde)
+    let k = teams.length + 1;
+    while (used.has(`team ${k}`)) k++;
+    return `Team ${k}`;
+  }
+  const base = `${uaPrefix(p)}-Team `;
   let n = teams.filter((m) => String(m.label || '').startsWith(base)).length + 1;
   while (used.has(`${base}${n}`.toLowerCase())) n++;
   return `${base}${n}`;
+}
+
+// v127: Gibt es schon ein anderes Team mit diesem Namen (Groß-/Kleinschreibung egal)? -> das Team oder null
+export function sameTeamName(marks, label, exceptId = '') {
+  const l = String(label || '').trim().toLowerCase();
+  if (!l) return null;
+  return (marks || []).find((m) => m.kind === 'team' && m.id !== exceptId && String(m.label || '').trim().toLowerCase() === l) || null;
 }
 
 // Name für ein ankommendes Team: schon von einem ANDEREN Team benutzt -> Zusatz „ (UA Nord)“ (bei Bedarf mit Nummer)
@@ -35,5 +46,16 @@ export function uniqueTeamLabel(marks, inc, uaLabel) {
   const suf = ` (${/^UA\b/.test(uaLabel) ? uaLabel : `UA ${uaLabel || '?'}`})`;
   let out = `${label}${suf}`;
   for (let n = 2; taken(out); n++) out = `${label}${suf} ${n}`;
+  return out;
+}
+
+// v127: Name eines ankommenden Wegs/Eintrags, der schon vergeben ist -> Zusatz „ (UA Nord)“ (bei Bedarf mit Nummer)
+export function uniqueName(taken, name, uaLabel) {
+  const has = (l) => taken.some((n) => String(n || '').trim().toLowerCase() === l.toLowerCase());
+  const label = String(name || '').trim();
+  if (!label || !has(label)) return name;
+  const suf = ` (${/^UA\b/.test(uaLabel) ? uaLabel : `UA ${uaLabel || '?'}`})`;
+  let out = `${label}${suf}`;
+  for (let n = 2; has(out); n++) out = `${label}${suf} ${n}`;
   return out;
 }

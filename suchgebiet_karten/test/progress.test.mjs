@@ -370,3 +370,44 @@ test('setPeer: „gesendet“ zählt erst beim echten Senden, nicht bei Übernah
   // älteres Projekt ohne „sent“: wie lastSent
   assert.equal(normalizeProject({ ...newProject('Y'), peers: [{ name: 'B', lastSent: 7 }] }).peers[0].sent, 7);
 });
+
+test('v127 F2 Relay UA -> ELW -> EL: was später am ELW ankommt, ist „neu“ (Ankunftszeit zählt, nicht Entstehung im UA)', async () => {
+  const elw = base();
+  const ua = makeUA(elw);
+  // UA arbeitet früh (t=5000), der ELW hat schon danach (8000) an den EL gesendet
+  edit(ua, 'UA1', 5000, (u) => {
+    u.fills['4,4'] = 'T1';
+    u.items.push({ kind: 'track', color: '#d50000', name: 'Garmin-Spur', pts: [[52.29, 8.0], [52.29, 8.01]] });
+    u.pois.push({ ...newPoi({ cat: 'sonst', lat: 52.29, lon: 8.0, by: 'UA1', name: 'Jacke' }, 5000), id: 'poi-ua' });
+  });
+  setPeer(elw, 'EL-Tablet', 8000);
+  const before = buildProgress(elw, { from: 'ELW', to: 'EL-Tablet', since: 8000 });
+  assert.equal(before, null); // nichts Neues – noch nicht angekommen
+  const f = await wire(buildProgress(ua, { from: 'UA1', since: 0 }));
+  const r = mergeProgress(elw, f);
+  assert.ok(r.items + r.ways >= 1 && r.fields === 1);
+  const out = buildProgress(elw, { from: 'ELW', to: 'EL-Tablet', since: 8000 });
+  assert.ok(out, 'Weiterleitung nicht leer');
+  assert.ok(out.it.some((i) => i.name === 'Garmin-Spur'));
+  assert.equal(out.g[0].f['4,4'][0], 'T1');
+  assert.ok((out.po || []).some((x) => x[0] === 'poi-ua'));
+  // Ankunftszeit geht nicht mit auf die Reise
+  assert.ok(!JSON.stringify(out).includes('"ra"'));
+  // Ende der Kette: Das Tablet bekommt es
+  const tablet = base();
+  const r2 = mergeProgress(tablet, await wire(out));
+  assert.ok(r2.fields === 1 && tablet.items.some((i) => i.name === 'Garmin-Spur'));
+  // und gesendet ist gesendet: danach nichts Neues mehr
+  assert.equal(buildProgress(elw, { from: 'ELW', to: 'EL-Tablet', since: Date.now() + 1 }), null);
+});
+
+test('v127 F2: Live-Meldungen, Wind und Teams, die am Relay ankommen, gehen weiter', async () => {
+  const elw = base();
+  const ua = makeUA(elw);
+  ua.live = { url: 'https://script.google.com/macros/s/x/exec', key: 'K', since: 0, ack: [], msgs: [{ id: 'm1', t: 4000, s: 'fund', n: 'Team 1', c: 'Rex' }], out: [], outbox: [], reads: {}, qSent: {} };
+  elw.live = { ...ua.live, msgs: [] };
+  const f = await wire(buildProgress(ua, { from: 'UA1', since: 0 }));
+  mergeProgress(elw, f);
+  const out = buildProgress(elw, { from: 'ELW', to: 'EL', since: 9000 });
+  assert.ok(out && (out.ms || []).some((m) => m.id === 'm1'));
+});

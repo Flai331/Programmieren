@@ -1,13 +1,14 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v126**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v127**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v127 – Fehler aus dem Einsatz-Durchlauf**: Fortschritt UA → ELW → EL verliert nichts mehr (Ankunftszeit zählt, Hinweis „weiterleiten?“); Live-Kanal entsteht beim Anlegen des Einsatzes und geht mit jeder Übergabe mit (kein Behelfs-Auftrag mehr); „Einfügen“ beim ELW überspringt Vorhandenes („n neu, m schon vorhanden“); BaseCamp-Re-Import ohne Rasterlinien/Feldnamen/Doppel-Striche/B-Ort; Umteilen eines Umrisses wirkt (abgeschlossene Aufträge sperren nicht); doppelte Teamnamen werden erkannt, Wegnamen mit Hund („Weg Team 1 (Rex) ab 19:47“); GPX-Schnellexport mit Meldungen; KML gx:Track; HF-Kategorie „🎒 Fundstück (Kleidung/Gegenstand)“; UA sieht nur Meldungen eigener Teams (Fund/Hilfe alle); Hinweise verdecken keine Dialog-Knöpfe mehr.
 - [~] **v126 – HF aktualisiert die App selbst**: Im Hundeführer-Menü „⬇️ App aktualisieren“ (Android-App) ohne PIN der Einsatzleitung; ist ein Auftrag offen, kommt vorher eine Warnung („Auftrag noch offen – trotzdem aktualisieren?“, Auftrag/Weg/Meldungen bleiben gespeichert), sonst keine. Ein abgeschlossener HF-Auftrag blockiert den automatischen Update-Hinweis nicht mehr. „An ELW senden“: Felder „An“ und „Auftrag“ beschriftet.
 - [~] **v125 – Unterabschnitt vollständig, Aufträge-QR jederzeit, HF antwortet, Scanner**: Fehler behoben: Fortschritt UA → EL verlor Neues, wenn beide Geräte gleich hießen (jetzt Geräte-ID statt Name), und neues leeres Raster wurde nicht gesendet. UA schickt alles zurück (Teams, Raster, Umrisse, Aufträge, Meldungen, Lage-Orte, Kontakte, Kräfte/Zeiten); UA-Teams mit eigenem Kürzel („N-Team 1“), Namensgleichheit beim EL mit Zusatz „(UA …)“. Jeder Auftrags-QR (laufend/abgeschlossen) erneut abrufbar, „Teams ohne Auftrag“ mit „Auftrag erstellen“. Gebiete ohne Team werden beim Auftrag dem Team zugeordnet (auch im UA). HF: „✍️ Antworten“ auf EL-Nachrichten und „Nachricht an EL“ mit Schnellwahl; Scannen-Knopf in der HF-Ansicht. Scanner nimmt die Hauptkamera statt Weitwinkel, „🔄 Kamera wechseln“.
 - [~] **v124 – 📤 Zeichnung mit Auftrag an den ELW, 🗺️ In BaseCamp öffnen**: Mehr → „📤 An ELW senden“: Umrisse/Stift-Zeichnungen auswählen, Auftrag per Schnellwahl oder Text („In 2 Gebiete aufteilen“, „2× DRK, 1× JUH“, „Aufzeichnen und drucken“), Empfänger ELW/PC EL/alle; Versand Ende-zu-Ende verschlüsselt über den Status-Server (Google Sheets), ohne Netz in der Warteschlange. Beim ELW: Ton + Hinweis, „📥 Aufträge“, Vorschau gestrichelt, „➕ In laufenden Einsatz einfügen“ (nur ergänzen, keine Duplikate), „🗺️ In BaseCamp öffnen“ (GPX direkt, ein Klick), Karten-PDF, Erledigt. Export-Dialog: „🗺️ In BaseCamp öffnen“.

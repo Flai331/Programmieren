@@ -212,3 +212,14 @@ test('openPoints: unquittierte Funde/Hilfe, zurückgezogene und quittierte nicht
   assert.equal(r.count, 2);
   assert.equal(openPoints({ sent: [], live: {} }, [msg('f1', 'a1', 'ort', 1, { cat: 'fund' })]).unacked.length, 1); // ohne ack-Liste
 });
+
+test('v127 F3: Schutz („Ändern freigeben“) gilt nur für laufende Aufträge, nicht für vom Team abgeschlossene', async () => {
+  const { guardApplies } = await import('../web/closeout.js');
+  const x = { id: 'A1', acc: 5, items: ['i1'] };
+  assert.equal(guardApplies(x, []), true);
+  assert.equal(guardApplies(x, [msg('m1', 'A1', 'start', 1)]), true);
+  assert.equal(guardApplies(x, [msg('m2', 'A1', 'zu', 2)]), false); // Team meldet „Auftrag abgeschlossen“
+  assert.equal(guardApplies(x, [msg('m3', 'A2', 'zu', 2)]), true); // anderer Auftrag
+  assert.equal(guardApplies({ ...x, done: 9 }, []), false);
+  assert.equal(guardApplies(null, []), false);
+});

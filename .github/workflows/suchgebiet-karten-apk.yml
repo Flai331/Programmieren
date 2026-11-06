@@ -89,6 +89,21 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Emulator vorab laden (mit Wiederholung)
+        # Der Download des Emulators bricht gelegentlich ab („Error reading Zip content“); hier bis zu 3 Versuche,
+        # danach findet der Emulator-Schritt ihn schon installiert vor.
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          SM="$(command -v sdkmanager || echo "$SDK/cmdline-tools/latest/bin/sdkmanager")"
+          for i in 1 2 3; do
+            yes | "$SM" --install emulator --channel=0 > /dev/null || true
+            if [ -x "$SDK/emulator/emulator" ]; then echo "Emulator bereit (Versuch $i)"; exit 0; fi
+            echo "Emulator-Download fehlgeschlagen (Versuch $i), neuer Versuch …"
+            rm -rf "$SDK/emulator" "$SDK/.temp" 2>/dev/null || true
+            sleep 15
+          done
+          echo "Emulator konnte nicht geladen werden"; exit 1
+
       - name: Starttest im Android-Emulator
         # Prüft, dass die App startet und die Web-App ohne JavaScript-Fehler lädt.
         # Jede Zeile läuft einzeln; schlägt eine fehl, scheitert der Schritt.
