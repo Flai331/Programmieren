@@ -39,6 +39,16 @@ export function closeAsk(x, msgs) {
   if (k && k.zu === zu.id && k.n === (x.n || 0)) return null;
   return zu;
 }
+// v128: Auto-Abschluss – meldet das Team „abgeschlossen“ mit 100 % (bei mehreren Gebieten alle 100 %), wird der Auftrag ohne
+// Rückfrage geschlossen (Toast mit Rückgängig). Nicht, wenn die EL ihn für genau diese Meldung wieder geöffnet hat (x.noAuto).
+export const AUTO_CLOSE_PCT = 100;
+export function autoCloseDue(x, msgs) {
+  if (!x || isDone(x)) return null;
+  const zu = closeMsg(msgs, x.id);
+  if (!zu || x.noAuto === zu.id) return null;
+  const pc = msgPct(zu);
+  return pc != null && pc >= AUTO_CLOSE_PCT ? zu : null;
+}
 // „Noch offen lassen“ merken
 export function declineClose(x, msgs) {
   const zu = closeMsg(msgs, x.id);
@@ -56,6 +66,8 @@ export function closeSent(x, msgs, now = Date.now()) {
 // Wieder öffnen; die Rückfrage kommt nicht gleich noch einmal
 export function reopenSent(x, msgs) {
   declineClose(x, msgs);
+  const zu = closeMsg(msgs, x.id);
+  if (zu) x.noAuto = zu.id; // v128: kein erneuter Auto-Abschluss für diese Abschlussmeldung
   delete x.done;
   return x;
 }

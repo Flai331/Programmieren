@@ -77,6 +77,19 @@ export function selectTeam(p, teamId) {
   return sel;
 }
 
+// v128: Mehrere Auswahlen zu einer vereinen (UA aus mehreren Gebieten): Zeichnungen, Lage-Orte, B-Ort, Felder, Raster-Ränder
+export function unionSel(list) {
+  const out = emptySel();
+  for (const s of list || []) {
+    for (const it of s.items) out.items.add(it);
+    for (const x of s.pois) out.pois.add(x);
+    if (s.meet) out.meet = true;
+    for (const id of s.edges) out.edges.add(id);
+    for (const [id, keys] of s.cells) addCells(out, id, keys);
+  }
+  return out;
+}
+
 // Kurzbeschreibung für das Fenster, z. B. „2 Umrisse · 1 Text · 6 Felder · B-Ort · 3 Lage-Orte“
 export function selSummary(p, sel) {
   const n = (k) => [...sel.items].filter((it) => it.kind === k).length;

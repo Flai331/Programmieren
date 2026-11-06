@@ -5,6 +5,7 @@ import { newMission, normalizeMission } from './mission.js';
 import { normalizeContact } from './contacts.js';
 import { rangeLabel } from './grid.js';
 import { normalizePois } from './pois.js';
+import { typeIcon } from './units.js';
 
 // Status-Server: nur Google-Apps-Script-Adressen (Daten aus Links/Dateien dürfen ihn nicht auf einen Fremdserver setzen)
 export const isStatusUrl = (u) => /^https:\/\/script\.google\.com\//.test(String(u || ''));
@@ -292,7 +293,7 @@ export function outlineColor(it, grey = true) {
 }
 // Umriss zugeteilt an ein Team (it.to = Team-ID) oder eine Einheit aus den Kräften (it.to = 'u:Name')
 export function assignTargets(p) {
-  const teams = p.marks.filter((m) => m.kind === 'team').map((m) => ({ to: m.id, label: markLabel(m) || 'Team', color: m.color }));
+  const teams = p.marks.filter((m) => m.kind === 'team').map((m) => ({ to: m.id, label: markLabel(m) || 'Team', color: m.color, ico: typeIcon(m) }));
   const orgs = [...new Set(((p.mission && p.mission.forces) || []).map((f) => String(f.org || '').trim()).filter(Boolean))];
   return [...teams, ...orgs.map((o) => ({ to: `u:${o}`, label: o, color: null }))];
 }

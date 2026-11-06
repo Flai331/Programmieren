@@ -142,7 +142,7 @@
     <button id="btn-mission" title="Einsatz: Stammdaten, Lage, Einsatzende"><span>📋</span>Einsatz</button>
     <button id="btn-notes" title="Notizen: getippt und handschriftlich"><span>📝</span>Notizen</button>
     <button id="btn-grid" title="Raster"><span>#</span>Raster</button>
-    <button id="btn-teams" title="Hunde-Teams, Aufträge an Hundeführer"><span>🐕</span>Hunde</button>
+    <button id="btn-teams" title="Teams (Hund, Trupp, Fahrzeug, Drohne), Aufträge und Rückmeldungen"><span>👥</span>Teams</button>
     <button id="btn-status" class="el-only" title="Status-Verlauf: alle Meldungen der Teams"><span>📣</span>Status<i id="st-count" hidden></i></button>
     <button id="btn-contacts" title="Kontakte: für diesen Einsatz und Adressbuch"><span>📇</span>Kontakte</button>
     <button id="btn-layers" title="Kartenart, Rettungspunkte, Offline-Karten"><span>🗺️</span>Karte</button>
@@ -314,6 +314,7 @@
       <div class="share-grid" id="share-scopes">
         <button data-scope="all"><span>🗂️</span><b>Ganzer Einsatz</b><small>alle Daten</small></button>
         <button data-scope="area"><span>🗺️</span><b>Ein Gebiet</b><small>Raster oder Umriss antippen</small></button>
+        <button data-scope="areas"><span>🗺️</span><b>Mehrere Gebiete</b><small>mehrere Raster/Umrisse</small></button>
         <button data-scope="pick"><span>🎯</span><b>Eigene Auswahl</b><small>einzeln antippen</small></button>
       </div>
       <p id="share-summary" class="info"></p>
@@ -349,6 +350,7 @@
     <p>Name: <b id="dev-name">–</b> <button id="dev-edit" class="mini">✏️ Name</button></p>
     <p class="small">Geräte-ID: <code id="lic-id-more">–</code> (der Name wird beim nächsten Start dem Administrator mitgeteilt)</p>
     <div id="ua-set" class="el-only" hidden>
+    <label>🧭 Name des Unterabschnitts <input id="ua-name" type="text" maxlength="40" autocomplete="off" placeholder="z. B. Nord"></label>
     <label>🧭 UA-Kürzel für neue Teams <input id="ua-key" type="text" maxlength="4" autocomplete="off" placeholder="z. B. N"></label>
     <p class="small">Neue Teams in diesem Unterabschnitt heißen „<span id="ua-key-ex">N</span>-Team 1“ – so überschneiden sich die Namen nicht mit denen der Einsatzleitung.</p>
     </div>
@@ -438,6 +440,12 @@
       <div class="row"><label class="check"><input type="checkbox" id="el-prio"> Wichtig (Ton beim HF)</label><button type="button" id="el-go" class="primary">Senden</button></div>
       <p id="el-hint" class="small" hidden></p>
     </div>
+    <div id="st-tools" class="row st-tools" hidden>
+      <button id="st-funk" class="keep">✍️ Meldung für Team eintragen</button>
+      <button id="st-find" class="keep">🔎 Fund/Hinweis eintragen</button>
+    </div>
+    <details id="st-ua" class="st-det" hidden><summary>🧭 Unterabschnitte (Übersicht)</summary><div id="st-ua-body"></div></details>
+    <details id="st-out" class="st-det" hidden><summary id="st-out-sum">🚶 Wer ist noch draußen?</summary><div id="st-out-body"></div></details>
     <label>Team <select id="st-filter"></select></label>
     <div id="st-list" class="st-list"></div>
     <button class="close">Schließen</button>
@@ -784,6 +792,9 @@
       <div id="ms-forces" class="forces"></div>
       <div class="row"><button id="ms-force-add">+ Organisation</button></div>
       <p id="ms-total" class="info"></p>
+      <p id="ms-forces-auto" class="info"></p>
+      <div class="row"><button id="ms-force-teams">👥 Aus den Teams übernehmen</button></div>
+      <datalist id="org-list"><option value="FF"><option value="BW"><option value="DRK"><option value="JUH"><option value="ASB"><option value="MHD"><option value="THW"><option value="Polizei"></datalist>
       <p class="small">Notizen, Notizblock und Fotos: Kachel „📝 Notizen“.</p>
     </div>
 

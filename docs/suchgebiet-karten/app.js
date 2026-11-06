@@ -16,11 +16,17 @@ import { buildReport, describeTarget, makeDedup, makeLog, validReportUrl } from 
 import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
 import { fileName } from './files.js';
 import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './infos.js';
-import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids } from './scope.js';
+import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids, unionSel } from './scope.js';
 import { MSG_VIEW, MSG_DELETE, ownTeamMsgs, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock, assignedOf, assignedCell, assignedGrid, markAccepted, isAccepted, unlockUntil } from './locks.js';
-import { isDone, openPoints, guardApplies, msgPct, closeMsg, sentPct, closeAsk, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
+import { isDone, openPoints, guardApplies, msgPct, closeMsg, sentPct, closeAsk, autoCloseDue, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
 import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts } from './elw.js'; // v124
-import { nextTeamLabel, uaPrefix, sameTeamName } from './uateam.js';
+import { nextTeamLabel, uaPrefix, sameTeamName, uaName, uaTitle, joinUaNames, renameUa } from './uateam.js';
+import { typeIcon, typeText, unitType, isDog, persons, unitLine, cleanUnit, UNIT_TYPES, ORGS, forcesFromTeams, forcesText, whoText } from './units.js'; // v128
+import { FUNK_KINDS, funkKind, funkLabel, timeOfDay, funkTargets, buildFunkMsg, addFunkMsg, buildFindMsg, msgSource } from './funk.js'; // v128
+import { FIND_KINDS, findKind, findLabel, FIND_A, forAllUa, checkText, isFind, findStatusText } from './finds.js'; // v128
+import { listTracks, trackInfo, importItems, noteImport, importTag, TRACK_KINDS, guessKind, durText } from './tracks.js'; // v128
+import { teamTimes, timeRows, outsideTeams, stateText, totalPersonHours, timeLine } from './times.js'; // v128
+import { uaOverview, levelIcon, agoText, hasUas, BASE_UA } from './uaover.js'; // v128
 import { CAM_KEY, backCameras, pickCamera, nextCamera, cameraConstraints, wantsContinuousFocus } from './camera.js';
 import { rebuildAssignment, teamsWithoutOrder, planAssign, applyAssign, planCount, assignText } from './sentops.js';
 import { buildProgress, mergeProgress, progressSummary, progressPreview, progressTarget, snapshotBase, stampChanges, setPeer, setPeerId, peerOf } from './progress.js';
@@ -49,7 +55,7 @@ import {
   assignmentCenter, ensureLive,
 } from './share.js';
 import {
-  STATUS_LIST, CLOSE_STATUS, SPOT_LIST, SPOT_HINTS, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, buildKor, applyKor, mergeStatus, withoutDeleted, latestFor, headMsg, flushOutbox, pollMessages, coverageGaps, areaShapes,
+  STATUS_LIST, CLOSE_STATUS, RELIEF_STATUS, SPOT_LIST, SPOT_HINTS, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, buildKor, applyKor, mergeStatus, withoutDeleted, latestFor, headMsg, flushOutbox, pollMessages, coverageGaps, areaShapes,
   EL_ALL, EL_KINDS, buildAck, buildElMsg, buildReadAck, buildReply, replyContext, QUICK_REPLIES, needsAck, forHf, ackedIds, mergeReads, splitIncoming, elTargets, readSummary,
 } from './status.js';
 import {
@@ -73,7 +79,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v128';
+const APP_VERSION = 'v129';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -120,7 +126,8 @@ let liveBusy = false; // Abholen der Status-Meldungen läuft
 let urgentOpen = false; // Dringend-Dialog steht
 let flushBusy = false; // Warteschlange wird gesendet
 let flushAgain = false;
-let gpxSelGrid = null; // zuletzt angetipptes Rastergebiet (für „Ganzes Raster“)
+let gpxSelGrid = null;
+let areaPicks = []; // v128: gewählte Gebiete beim UA aus mehreren Gebieten: [{ key, name, sel }] // zuletzt angetipptes Rastergebiet (für „Ganzes Raster“)
 
 // v118: defekte Einsätze beiseitelegen (höchstens 3, die ältesten fliegen), defekten Gesamtspeicher einmal sichern
 const QUARANTINE = 'sgk-quarantaene-';
@@ -679,6 +686,7 @@ const HINTS = {
   windpt: 'Tippe auf die Karte, wo der Wind (DWD) angezeigt werden soll.',
   hfmarkpt: 'Tippe auf die Karte, wo der Punkt hin soll.',
   hfspotpt: 'Tippe auf die Karte, wo der Standort gemeldet werden soll.',
+  ptpick: 'Tippe auf die Karte, wo der Ort sein soll.',
   hfmovept: 'Tippe auf die Karte, wo die Meldung hin soll.',
   textmove: 'Tippe auf die Karte, wo der Punkt hin soll.',
   hfdraw: 'Mit dem Finger einmal um den Bereich herum malen.',
@@ -709,6 +717,7 @@ function setTool(t) {
   // Einzeichnen nur in einem offenen Einsatz (Offline-Bereich wählen u. Ä. geht immer)
   if (['pen', 'text', 'fill', 'track', 'forestdraw', 'erase', 'meet', 'poi', 'grid'].includes(t) && isLocked()) { lockedToast(); t = 'pan'; }
   if (t !== tool) repLog.add(`Werkzeug ${t}`);
+  if (t !== 'ptpick') pendingPick = null; // v128
   // Texte/Zeichnungen sind erst ab Stufe 15 zu sehen: zum Einzeichnen dorthin zoomen
   if (['pen', 'text', 'erase', 'hfmarkpt', 'textmove'].includes(t) && labelDetail(map.getZoom()) === 0) map.setZoom(15);
   // Offene Zeichnung/Umriss bleibt beim Werkzeugwechsel erhalten (bis „Fertig“ oder „Abbrechen“)
@@ -922,7 +931,7 @@ canvas.addEventListener('pointerdown', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill') {
     fillAt(ll, true);
-  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'hfspotpt', 'hfmovept', 'textmove', 'gpxsel'].includes(tool)) {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'hfspotpt', 'ptpick', 'hfmovept', 'textmove', 'gpxsel'].includes(tool)) {
     panning = false;
   }
 });
@@ -942,7 +951,7 @@ canvas.addEventListener('pointermove', (e) => {
     eraseAt(x, y);
   } else if (tool === 'fill' && fillStroke) {
     fillAt(ll, false);
-  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'hfspotpt', 'hfmovept', 'textmove', 'gpxsel'].includes(tool)) {
+  } else if (['track', 'text', 'offsquares', 'hffield', 'sendpick', 'windpt', 'hfmarkpt', 'hfspotpt', 'ptpick', 'hfmovept', 'textmove', 'gpxsel'].includes(tool)) {
     // Im Track-Modus verschiebt Ziehen die Karte, Tippen setzt Punkte
     if (!panning && Math.hypot(x - lastPt.x, y - lastPt.y) < 8) return;
     panning = true;
@@ -1008,6 +1017,14 @@ function finishPointer(e, cancelled) {
       setTool('pan');
       hfMarkDialog({ lat: ll.lat, lon: ll.lng }, 'Position: auf der Karte angetippt.');
     }
+  } else if (tool === 'ptpick') {
+    if (!cancelled && !panning) {
+      const pp = pendingPick;
+      pendingPick = null;
+      setTool('pan');
+      if (pp) pp({ lat: ll.lat, lon: ll.lng });
+    }
+    panning = false;
   } else if (tool === 'hfspotpt') {
     if (!cancelled && !panning) {
       setTool('pan');
@@ -1235,7 +1252,7 @@ function outlineDialog(it, title, opts = {}) {
     const name = field('Name', Object.assign(document.createElement('input'), { type: 'text', value: it.name || '' }));
     const sel = field('Zugeteilt an', document.createElement('select'));
     sel.add(new Option('– niemand –', ''));
-    for (const t of assignTargets(P)) sel.add(new Option(`${t.to.startsWith('u:') ? '🚒' : '🐕'} ${t.label}`, t.to));
+    for (const t of assignTargets(P)) sel.add(new Option(`${t.ico || (t.to.startsWith('u:') ? '🚒' : '🐕')} ${t.label}`, t.to));
     if (it.to && ![...sel.options].some((o) => o.value === it.to)) sel.add(new Option(assigneeName(P, it.to) || '(gelöscht)', it.to));
     sel.value = it.to || '';
     const note = field('Notiz', Object.assign(document.createElement('textarea'), { rows: 2, value: it.note || '' }));
@@ -1678,7 +1695,7 @@ function forestDialog(st, ctx, total) {
         const team = document.createElement('select');
         team.setAttribute('aria-label', `Team Teil ${FOREST_LETTERS[i]}`);
         team.add(new Option('ohne Team', ''));
-        for (const t of teams) team.add(new Option(`${t.to.startsWith('u:') ? '🚒' : '🐕'} ${t.label}`, t.to));
+        for (const t of teams) team.add(new Option(`${t.ico || (t.to.startsWith('u:') ? '🚒' : '🐕')} ${t.label}`, t.to));
         team.value = [...team.options].some((op) => op.value === x.to) ? x.to : '';
         team.addEventListener('change', () => { x.to = team.value; });
         row.appendChild(team);
@@ -1774,7 +1791,7 @@ function renderPalette() {
     const b = document.createElement('button');
     b.innerHTML = '<i></i><span></span>';
     b.querySelector('i').style.background = m.color;
-    b.querySelector('span').textContent = m === NO_TEAM_MARK ? 'ohne Team' : m.label || '(ohne Namen)';
+    b.querySelector('span').textContent = m === NO_TEAM_MARK ? 'ohne Team' : `${m.kind === 'team' && !isDog(m) ? `${typeIcon(m)} ` : ''}${m.label || '(ohne Namen)'}`; // v128: Typ-Symbol (außer Hund)
     b.classList.toggle('active', act && act.id === m.id);
     b.addEventListener('click', () => { db.activeMark = m.id; showForPaint(m); renderPalette(); save(); });
     box.appendChild(b);
@@ -1800,7 +1817,7 @@ function addMark(kind, quick = false) {
   const used = new Set(P.marks.map((m) => m.color));
   const color = MARK_COLORS.find((c) => !used.has(c)) || MARK_COLORS[P.marks.length % MARK_COLORS.length];
   const m = kind === 'team'
-    ? { id: uid(), kind: 'team', label, dog: '', color }
+    ? { id: uid(), kind: 'team', label, dog: '', color, ...(P.parentEid ? { ua: uaName(P.title) } : {}) } // v128: im UA angelegt -> UA-Name (für die UA-Übersicht)
     : { id: uid(), kind: 'status', label, color };
   P.marks.push(m);
   db.activeMark = m.id;
@@ -1832,16 +1849,36 @@ function makeSortable(list, onDone) {
       const row = g.closest('[data-id]');
       const kind = row.dataset.kind;
       row.classList.add('dragging');
+      // v129: hohe Team-Zeilen (Typ, Organisation …) – am oberen/unteren Rand scrollt die Liste beim Ziehen mit
+      let sc = list.parentElement;
+      while (sc && sc !== document.body && !(sc.scrollHeight > sc.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement;
+      let lastY = e.clientY;
+      let dragging = true;
+      const place = (y) => {
+        const sibs = [...list.querySelectorAll(`[data-kind="${kind}"]`)].filter((x) => x !== row);
+        const next = sibs.find((x) => { const r = x.getBoundingClientRect(); return y < r.top + r.height / 2; });
+        if (next) { if (row.nextElementSibling !== next) list.insertBefore(row, next); } else { const last = sibs[sibs.length - 1]; if (last && last.nextElementSibling !== row) last.after(row); }
+      };
+      const tick = () => {
+        if (!dragging) return;
+        if (sc && sc !== document.body) {
+          const r = sc.getBoundingClientRect();
+          const edge = 60;
+          const dy = lastY < r.top + edge ? -Math.ceil((r.top + edge - lastY) / 4) : lastY > r.bottom - edge ? Math.ceil((lastY - r.bottom + edge) / 4) : 0;
+          if (dy) { const before = sc.scrollTop; sc.scrollTop += dy; if (sc.scrollTop !== before) place(lastY); }
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
       // Listener am Fenster: das Umhängen der Zeile im DOM beendet sonst ein setPointerCapture
       const move = (ev) => {
         if (ev.pointerId !== e.pointerId) return;
-        const sibs = [...list.querySelectorAll(`[data-kind="${kind}"]`)].filter((x) => x !== row);
-        const next = sibs.find((x) => { const r = x.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; });
-        if (next) list.insertBefore(row, next);
-        else { const last = sibs[sibs.length - 1]; if (last) last.after(row); }
+        lastY = ev.clientY;
+        place(ev.clientY);
       };
       const up = (ev) => {
         if (ev.pointerId !== e.pointerId) return;
+        dragging = false;
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
         window.removeEventListener('pointercancel', up);
@@ -1861,6 +1898,14 @@ function makeSortable(list, onDone) {
     });
   });
 }
+// v128: Typ-Felder gespeichert (Änderung für „Fortschritt“ merken), ohne die Liste neu aufzubauen
+function unitSaved() {
+  P.updated = Date.now();
+  stamp();
+  renderPalette();
+  redraw();
+  save();
+}
 function renderMarks() {
   const box = $('mark-list');
   box.innerHTML = '';
@@ -1878,14 +1923,23 @@ function renderMarks() {
       <button class="swatch" title="Zum Einfärben auswählen"></button>
       <div class="fields">
         <input type="text" class="name" placeholder="${m.kind === 'team' ? 'Teamname / Hundeführer' : 'Bedeutung'}">
-        ${m.kind === 'team' ? '<div class="pair"><label><small>Hund</small><input type="text" class="dog" placeholder="Name"></label><label><small>Suchhelfer</small><input type="number" class="helpers" min="0" inputmode="numeric" placeholder="Anzahl"></label></div>' : ''}
+        ${m.kind === 'team' ? `<div class="pair one"><label><small>Typ</small><select class="uty" aria-label="Typ der Einheit">${UNIT_TYPES.map((t) => `<option value="${t.code}">${t.ico} ${t.label}</option>`).join('')}</select></label></div>
+        <div class="pair"><label><small>Organisation</small><input type="text" class="uorg" list="org-list" placeholder="FF, DRK, …" maxlength="30"></label><label class="upers-l"><small>Personen</small><input type="number" class="upers" min="0" inputmode="numeric" placeholder="Anzahl"></label></div>
+        <div class="pair one"><label><small>Funkrufname</small><input type="text" class="ufk" placeholder="z. B. Florian 1" maxlength="40"></label></div>
+        <div class="pair dogrow"><label><small>Hund</small><input type="text" class="dog" placeholder="Name"></label><label><small>Suchhelfer</small><input type="number" class="helpers" min="0" inputmode="numeric" placeholder="Anzahl"></label></div>` : ''}
         <select class="color" aria-label="Farbe"></select>
         <div class="cells"></div>
       </div>
       <button class="del" title="Löschen">✕</button>`;
     el.querySelector('.swatch').style.background = m.color;
     el.querySelector('.name').value = m.label;
-    if (m.kind === 'team') { el.querySelector('.dog').value = m.dog || ''; el.querySelector('.helpers').value = m.helpers || ''; }
+    if (m.kind === 'team') {
+      el.querySelector('.dog').value = m.dog || ''; el.querySelector('.helpers').value = m.helpers || '';
+      el.querySelector('.uty').value = unitType(m); el.querySelector('.uorg').value = m.org || ''; el.querySelector('.ufk').value = m.fk || ''; el.querySelector('.upers').value = m.pers || '';
+      el.querySelector('.dogrow').hidden = !isDog(m); // Hund/Suchhelfer nur beim Hund-Team
+      el.querySelector('.upers-l small').textContent = isDog(m) ? 'Personen (gesamt)' : 'Personen';
+      el.querySelector('.upers').placeholder = isDog(m) ? `${persons({ ...m, pers: 0 })}` : 'Anzahl';
+    }
     const outl = m.kind === 'team' ? P.items.filter((it) => it.kind === 'track' && it.to === m.id).map((it) => it.name || 'Umriss') : [];
     el.querySelector('.cells').textContent = (a && a.count ? `${a.count} Feld${a.count > 1 ? 'er' : ''}: ${a.text}` : 'keine Felder')
       + (outl.length ? ` · Umriss${outl.length > 1 ? 'e' : ''}: ${outl.join(', ')}` : '');
@@ -1923,6 +1977,14 @@ function renderMarks() {
       prevLabel = m.label;
     });
     if (m.kind === 'team') {
+      // v128: Typ, Organisation, Funkrufname, Personenzahl
+      el.querySelector('.uty').addEventListener('change', (e) => { m.ty = e.target.value; cleanUnit(m); changed(); renderMarks(); renderPalette(); });
+      el.querySelector('.uorg').addEventListener('input', (e) => { m.org = e.target.value; cleanUnit(m); save(); });
+      el.querySelector('.uorg').addEventListener('change', unitSaved); // ohne Neuaufbau der Liste (Fokus bleibt im nächsten Feld)
+      el.querySelector('.ufk').addEventListener('input', (e) => { m.fk = e.target.value; cleanUnit(m); save(); });
+      el.querySelector('.ufk').addEventListener('change', unitSaved); // ohne Neuaufbau der Liste (Fokus bleibt im nächsten Feld)
+      el.querySelector('.upers').addEventListener('input', (e) => { m.pers = e.target.value; cleanUnit(m); save(); });
+      el.querySelector('.upers').addEventListener('change', unitSaved); // ohne Neuaufbau der Liste (Fokus bleibt im nächsten Feld)
       el.querySelector('.dog').addEventListener('input', (e) => { m.dog = e.target.value; save(); });
       el.querySelector('.helpers').addEventListener('input', (e) => { const n = parseInt(e.target.value, 10); if (n > 0) m.helpers = n; else delete m.helpers; save(); });
     }
@@ -2097,7 +2159,7 @@ $('show-utm').addEventListener('change', () => { P.showUtm = $('show-utm').check
 // Was auf der Arbeitskarte zu sehen ist – alles einzeln (nur Anzeige, PDF/Export unverändert)
 function itemName(it, n) {
   if (it.kind === 'text') return `Text: ${it.text}`;
-  if (it.kind === 'track') return `${it.open ? 'Track' : 'Umriss'}: ${it.name || 'ohne Namen'} (${trackDesc(it.pts, it.open)})`;
+  if (it.kind === 'track') return `${it.open ? 'Track' : 'Umriss'}: ${it.name || 'ohne Namen'} (${trackDesc(it.pts, it.open)}${importTag(it) ? ` · ${importTag(it)}` : ''})`; // v128: Kennzeichen + Zeit importierter Tracks
   return it.name ? `Zeichnung: ${it.name}` : `Stift ${n} (${COLOR_NAMES[it.color] || it.color})`;
 }
 function renderViewToggles() {
@@ -3778,7 +3840,7 @@ function renderSend() {
   const sel = $('send-team');
   const prev = sel.options.length ? sel.value : null; // beim ersten Öffnen: erstes Team
   sel.innerHTML = '';
-  for (const t of teams) sel.add(new Option(`${t.label}${t.dog ? ` – ${t.dog}` : ''}`, t.id));
+  for (const t of teams) sel.add(new Option(`${typeIcon(t)} ${t.label}${t.dog ? ` – ${t.dog}` : ''}`, t.id));
   sel.add(new Option('ohne Team (nur Gebiet)', ''));
   if (teams.some((t) => t.id === prev) || prev === '') sel.value = prev;
   const box = $('send-grids');
@@ -4075,7 +4137,7 @@ function renderSentList() {
       d.className = 'sent-card wait';
       d.innerHTML = '<b><i></i><span></span></b><div class="what"></div>';
       d.querySelector('i').style.background = w.team.color;
-      d.querySelector('b span').textContent = `${w.team.label}${w.team.dog ? ` – ${w.team.dog}` : ''}`;
+      d.querySelector('b span').textContent = `${typeIcon(w.team)} ${w.team.label}${w.team.dog ? ` – ${w.team.dog}` : ''}`;
       d.querySelector('.what').textContent = [w.cells && `${w.cells} Feld${w.cells === 1 ? '' : 'er'}`, w.areas && `${w.areas} Umriss${w.areas === 1 ? '' : 'e'}`].filter(Boolean).join(' · ');
       const nb = document.createElement('button');
       nb.className = 'mini';
@@ -4115,7 +4177,7 @@ function renderSentList() {
     d.className = 'sent-card' + (acc && quiet && !fini ? ' quiet' : '') + (acc ? '' : ' wait') + (fini ? ' done' : '');
     d.innerHTML = '<b><i></i><span></span></b><div class="what"></div><div class="since"></div><div class="back"></div>';
     d.querySelector('i').style.background = team ? team.color : '#999';
-    d.querySelector('b span').textContent = `${team ? team.label : x.team}${team && team.dog ? ` – ${team.dog}` : ''}`;
+    d.querySelector('b span').textContent = `${team && !isDog(team) ? `${typeIcon(team)} ` : ''}${team ? team.label : x.team}${team && team.dog ? ` – ${team.dog}` : ''}${team && team.org ? ` · ${team.org}` : ''}`;
     const what = x.what || allGrids(P).filter((g) => (x.grids || []).includes(g.id)).map((g) => gridLabel(P, g)).join(', ');
     d.querySelector('.what').textContent = what || 'Auftrag';
     d.querySelector('.since').textContent = acc ? `📲 Auftrag seit ${hhmm(x.acc)} (${sinceText(x.acc, now)}) – übernommen` : `⏳ QR erstellt ${hhmm(x.at)} – noch nicht übernommen`;
@@ -4155,6 +4217,13 @@ function renderSentList() {
       qb.textContent = '📲 QR-Code erneut zeigen';
       qb.addEventListener('click', () => showSentQr(x));
       bar.appendChild(qb);
+    }
+    if (!fini && db.mode === 'el' && canEnter()) {
+      const fb = document.createElement('button');
+      fb.className = 'mini';
+      fb.textContent = '✍️ Meldung eintragen';
+      fb.addEventListener('click', () => funkDialog(x.id));
+      bar.appendChild(fb);
     }
     if (acc && !fini) {
       const cb = document.createElement('button');
@@ -4260,6 +4329,7 @@ async function askClose(x, reported) {
 let closeBusy = false;
 async function checkCloseAsk() {
   if (locked || closeBusy || db.mode !== 'el' || !P || P.closed) return;
+  checkAutoClose(); // v128: abgeschlossen + 100 % -> ohne Rückfrage schließen
   const x = (P.sent || []).find((q) => closeAsk(q, allMsgs()));
   if (!x) return;
   if (!$('dlg').hidden) return setTimeout(checkCloseAsk, 4000); // ein anderes Fenster steht – gleich nochmal
@@ -4278,7 +4348,7 @@ const teamColorOf = (a) => {
   return t ? t.color : '#455a64';
 };
 // Alle Status-Meldungen der Einsatzleitung: über den Status-Server und aus QR-Rückmeldungen
-const allMsgsRaw = () => ownTeamMsgs(P, mergeStatus((P.live && P.live.msgs) || [], P.qmsgs || []).filter((m) => !EL_KINDS.includes(m.s)), isUrgent); // v117: Rückkanal-Arten (q, el, qel) sind keine Teammeldungen
+const allMsgsRaw = () => ownTeamMsgs(P, mergeStatus((P.live && P.live.msgs) || [], P.qmsgs || []).filter((m) => !EL_KINDS.includes(m.s)), (m) => forAllUa(m, isUrgent)); // v117: Rückkanal-Arten (q, el, qel) sind keine Teammeldungen
 // v103: Korrekturen (s: 'kor') eingearbeitet; allMsgsK mit zurückgezogenen Fund/Hilfe (gone, nur Verlauf), allMsgs ohne sie
 const allMsgsK = () => withoutDeleted(applyKor(allMsgsRaw()), P.msgDel); // gelöschte (P.msgDel) bleiben weg
 const allMsgs = () => allMsgsK().filter((m) => !m.gone);
@@ -4341,7 +4411,7 @@ function sentBadges() {
   const out = [];
   for (const x of teamOrder(P.sent || [], P.marks)) {
     const team = P.marks.find((m) => m.id === x.teamId);
-    const name = team ? team.label : x.team;
+    const name = `${team && !isDog(team) ? `${typeIcon(team)} ` : ''}${team ? team.label : x.team}`; // v128: Typ-Symbol (außer Hund)
     const color = team ? team.color : '#455a64';
     const acc = isAccepted(x);
     const fini = isDone(x);
@@ -4526,7 +4596,7 @@ function dogOfMsg(m) {
   return dog && !String(m.tm || '').includes(dog) ? dog : '';
 }
 function statusText({ m }) {
-  return [`${m.tm || 'Team'}${dogOfMsg(m) ? ` (${dogOfMsg(m)})` : ''}: ${msgLabel(m)}`, hhmm(m.t) + (m.acc != null ? ` (± ${m.acc} m)` : ''), m.txt && `„${m.txt}“`, m.ed && `✏️ geändert ${hhmm(m.ed)}`,
+  return [`${m.tm || 'Team'}${dogOfMsg(m) ? ` (${dogOfMsg(m)})` : ''}: ${msgLabel(m)}`, hhmm(m.t) + (m.acc != null ? ` (± ${m.acc} m)` : ''), m.txt && `„${m.txt}“`, findStatusText(m), msgSource(m), m.ph && '📷 Foto', m.ed && `✏️ geändert ${hhmm(m.ed)}`,
     ].filter(Boolean).join(' · ');
 }
 // EL: Meldung antippen – Text und Löschen (nach Warnung); gelöscht wird nur auf diesem Gerät (und per Fortschritt bei den anderen EL-Geräten)
@@ -4534,6 +4604,7 @@ async function msgDialog(m, direct = false) {
   const del = direct || await openDlg((box, close) => {
     dlgHead(box, 'Meldung', `${statusText({ m })}${replyContext(m, elMsgsAll()) ? `\n${replyContext(m, elMsgsAll())}` : ''}`);
     dlgNavButton(box, close, false, `${m.tm || 'Team'}: ${msgLabel(m)}`, m.lat, m.lon); // v123
+    if (isFind(m) && canEnter()) dlgButton(box, m.fs === 'g' ? '⏳ Wieder offen' : '✔ Als geprüft markieren', '', () => { close(false); findToggle(m); });
     dlgButton(box, '🗑 Löschen', 'urgent', () => close(true));
     dlgButton(box, 'Schließen', 'primary', () => close(false));
   });
@@ -4718,7 +4789,7 @@ async function sendStatus(o) {
     pos = await getFix();
   }
   if (o.s === 'start') delete h.closed; // wieder losgegangen: nicht mehr „abgeschlossen“
-  const m = buildMsg({ a: h.id, tm: h.team, s: o.s, cat: o.cat, txt: o.txt, pc: o.pc, ar: o.ar, gb: o.gb, ref: o.ref, pos });
+  const m = buildMsg({ a: h.id, tm: h.team, s: o.s, cat: o.cat, txt: o.txt, pc: o.pc, ar: o.ar, gb: o.gb, ref: o.ref, ty: h.ty, pos });
   if (!h.ls) {
     h.log = [...h.log, { ...m }].slice(-100);
     p.updated = Date.now();
@@ -4944,6 +5015,7 @@ async function openStatusDialog() {
     list.className = 'dlg-btns two';
     box.appendChild(list);
     for (const s of STATUS_LIST) dlgButton(list, `${s.ico} ${s.label}`, '', () => close(s.code));
+    dlgButton(list, `${RELIEF_STATUS.ico} ${RELIEF_STATUS.label}`, '', () => close(RELIEF_STATUS.code)); // v128: Ablösung
     dlgButton(box, `${CLOSE_STATUS.ico} Auftrag abschließen`, '', () => close('zu')); // getrennt vom Stand: auch bei 80 % beenden/abbrechen
     dlgButton(box, '📍 Standort melden', 'primary', () => close('ort'));
     dlgButton(box, `🗂 Meine Meldungen (${hfLog().length})`, '', () => close('mine'));
@@ -4993,7 +5065,7 @@ async function spotDialog() {
     const list = document.createElement('div');
     list.className = 'dlg-btns two';
     box.appendChild(list);
-    const btns = SPOT_LIST.map((s) => dlgButton(list, `${s.ico} ${s.label}`, '', () => {
+    const btns = SPOT_LIST.map((s) => dlgButton(list, esc(spotLabel(s.code, P.hf.ty)), '', () => { // v128: „Trupp zeigt an“ je Einheitentyp
       cat = s.code;
       btns.forEach((b, i) => b.classList.toggle('sel', SPOT_LIST[i].code === cat));
       [here, onMap].forEach((b) => b.classList.remove('off'));
@@ -5101,7 +5173,7 @@ async function closeDialog() {
     const rows = pctRows(box, areas, multi, 100); // zuletzt gemeldeter Stand, ohne Stand 100 %
     const txt = document.createElement('input');
     txt.type = 'text';
-    txt.placeholder = 'Grund, z. B. Hund müde, Dunkelheit (optional)';
+    txt.placeholder = `Grund, z. B. ${P.hf.ty === 'drohne' ? 'Akku leer' : P.hf.ty && P.hf.ty !== 'hund' ? 'Erschöpfung' : 'Hund müde'}, Dunkelheit (optional)`;
     txt.style.marginTop = '8px';
     box.appendChild(txt);
     dlgButton(box, '✅ Abschließen', 'primary', () => close(pctResult(rows, multi, txt)));
@@ -5168,7 +5240,7 @@ function chipEl(c, unread, blink) {
   b.style.setProperty('--tc', c.color);
   b.dataset.team = c.key;
   b.innerHTML = '<i></i><span></span>';
-  b.querySelector('span').textContent = chipText(c);
+  b.querySelector('span').textContent = `${c.ty && c.ty !== 'hund' ? `${c.ico} ` : ''}${chipText(c)}`; // v128: Typ-Symbol (außer Hund)
   b.title = chipText(c);
   b.addEventListener('click', () => chipTap(c));
   return b;
@@ -5256,7 +5328,7 @@ function renderTeamBar() {
   const newKeys = new Set(ur.filter((m) => now - (P.msgRecv[m.id] || 0) < 30e3).map((m) => teamKeyOf(m.a)));
   const hasSent = el && (P.sent || []).length > 0;
   const sig = JSON.stringify([el, tab, db.teamsOpen, unreadOpen, hasSent, ur.map((m) => m.id),
-    chips.map((c) => [c.key, c.status, c.areas, c.urgent, c.todo, c.wait, c.color, c.team, c.dog, urKeys.has(c.key), newKeys.has(c.key)])]);
+    chips.map((c) => [c.key, c.status, c.areas, c.urgent, c.todo, c.wait, c.color, c.team, c.dog, c.ty, urKeys.has(c.key), newKeys.has(c.key)])]);
   if (sig === tbSig) return;
   tbSig = sig;
   lastChips = chips.map((c) => ({ c, unread: urKeys.has(c.key), blink: newKeys.has(c.key) }));
@@ -5368,7 +5440,7 @@ function renderPop() {
   box.style.setProperty('--tc', c.color);
   const h = document.createElement('h3');
   const t = document.createElement('span');
-  t.textContent = `${c.team}${c.dog ? ` (${c.dog})` : ''}${c.areas ? ` · ${c.areas}` : ''}`;
+  t.textContent = `${c.ty && c.ty !== 'hund' ? `${c.ico} ` : ''}${c.team}${c.dog ? ` (${c.dog})` : ''}${c.areas ? ` · ${c.areas}` : ''}`;
   const x = document.createElement('button');
   x.type = 'button';
   x.textContent = '✕';
@@ -5384,6 +5456,14 @@ function renderPop() {
     d.className = `ln${isUrgent(m) ? ' urgent' : ''}`;
     d.textContent = `${hhmm(m.t)} · ${msgLabel(m)}${m.lat != null ? ' · 📍' : ''}${m.txt ? ` – ${m.txt}` : ''}${replyContext(m, elMsgsAll()) ? ` · ${replyContext(m, elMsgsAll())}` : ''}`;
     box.appendChild(d);
+  }
+  if (canEnter() && c.a) {
+    const fb = document.createElement('button');
+    fb.type = 'button';
+    fb.className = 'all funk-btn';
+    fb.textContent = '✍️ Meldung eintragen';
+    fb.addEventListener('click', () => { closePop(); funkDialog(c.a); });
+    box.appendChild(fb);
   }
   const all = document.createElement('button');
   all.type = 'button';
@@ -5500,6 +5580,8 @@ function renderStatusPanel() {
     sz.querySelector('button').addEventListener('click', unsnooze);
   }
   renderElCompose();
+  renderUaOverview(); // v128
+  $('st-tools').hidden = !(db.mode === 'el' && !P.closed);
   const box = $('st-list');
   box.innerHTML = '';
   // v117: Nachrichten der Einsatzleitung (st-el) laufen in der Zeitleiste mit; mit Teamfilter nur die an dieses Team oder an alle
@@ -5519,10 +5601,19 @@ function renderStatusPanel() {
     d.querySelector('b').textContent = `${team ? team.label : m.tm || 'Team'}${team && team.dog ? ` (${team.dog})` : ''}`;
     d.querySelector('span').textContent = `${msgLabel(m)}${m.lat != null ? ' 📍' : ''}${m.txt ? ` – ${m.txt}` : ''}`;
     const rc = replyContext(m, elAll); // v125
-    d.querySelector('small').textContent = `${rc ? `${rc} · ` : ''}${hhmm(m.t)} (vor ${sinceText(m.t, now)})${m.gone ? ` · ↩ vom Team zurückgezogen ${hhmm(m.gone)}` : m.ed ? ` · ✏️ geändert ${hhmm(m.ed)}` : ''}`;
+    d.querySelector('small').textContent = `${rc ? `${rc} · ` : ''}${[findStatusText(m), msgSource(m)].filter(Boolean).map((q) => `${q} · `).join('')}${hhmm(m.t)} (vor ${sinceText(m.t, now)})${m.gone ? ` · ↩ vom Team zurückgezogen ${hhmm(m.gone)}` : m.ed ? ` · ✏️ geändert ${hhmm(m.ed)}` : ''}`;
     if (m.gone) d.querySelector('span').style.textDecoration = 'line-through';
     if (m.lat != null && !m.gone) d.addEventListener('click', () => showStatusMark(m));
     d.querySelector('.del').addEventListener('click', (e) => { e.stopPropagation(); msgDialog(m, true); });
+    if (isFind(m) && canEnter() && !m.gone) { // v128: Fund offen <-> geprüft
+      const ft = document.createElement('button');
+      ft.type = 'button';
+      ft.className = 'del find-toggle';
+      ft.textContent = m.fs === 'g' ? '⏳' : '✔';
+      ft.title = m.fs === 'g' ? 'Wieder offen' : 'Als geprüft markieren';
+      ft.addEventListener('click', (e) => { e.stopPropagation(); findToggle(m); });
+      d.appendChild(ft);
+    }
     box.appendChild(d);
   }
 }
@@ -5588,6 +5679,294 @@ function openStatusPanel(teamId = stFilter) {
 }
 $('btn-status').addEventListener('click', () => openStatusPanel(''));
 $('st-filter').addEventListener('change', () => { stFilter = $('st-filter').value; renderStatusPanel(); });
+
+// ---- v128: Funkmeldung für ein Team eintragen, Fund/Hinweis der Einsatzleitung, UA-Übersicht, Auto-Abschluss ----
+// Alles geht am Handy/Tablet ohne ELW-Laptop: Fenster (openDlg) und Kartenpunkt per Tippen.
+let pendingPick = null; // Tippen auf die Karte: Funktion({ lat, lon })
+const canEnter = () => db.mode === 'el' && !!P && !P.closed && !isLocked();
+const hmNow = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+const lastPctOf = (x) => { const own = allMsgs().filter((m) => m.a === x.id && (m.s === 'fertig' || m.s === 'zu') && msgPct(m) != null); return own.length ? msgPct(own[own.length - 1]) : null; };
+// Zeile mit Beschriftung im Fenster
+function dlgField(box, label, el) {
+  const l = document.createElement('label');
+  l.textContent = label;
+  l.appendChild(el);
+  box.appendChild(l);
+  return el;
+}
+// Karte antippen lassen: Fenster ist zu, Tipp ruft fn auf
+function pickOnMap(msg, fn) {
+  closePanels();
+  pendingPick = fn;
+  setTool('ptpick');
+  toast(msg, 7000);
+}
+async function funkDialog(preA = '') {
+  if (!canEnter()) return;
+  const tg = funkTargets(P);
+  if (!tg.length) return toast('Kein laufender Auftrag – erst unter „Teams“ einen Auftrag erstellen', 6000);
+  const r = await openDlg((box, close) => {
+    dlgHead(box, '✍️ Meldung für Team eintragen', 'Funkmeldung eines Teams ohne App (Kette, Drohne, Feuerwehr …). Sie zählt wie eine Meldung aus der App und geht an alle EL-Geräte.');
+    const sel = dlgField(box, 'Team', document.createElement('select'));
+    sel.id = 'funk-team';
+    for (const { x, team } of tg) sel.add(new Option(`${team ? typeIcon(team) : '🐕'} ${team ? team.label : x.team}`, x.id));
+    if (preA && tg.some((t) => t.x.id === preA)) sel.value = preA;
+    const cur = () => tg.find((t) => t.x.id === sel.value);
+    let kind = null;
+    const list = document.createElement('div');
+    list.className = 'dlg-btns two';
+    list.id = 'funk-kinds';
+    box.appendChild(list);
+    const pctBox = document.createElement('div');
+    pctBox.hidden = true;
+    const big = document.createElement('div');
+    big.className = 'st-pct';
+    const rng = document.createElement('input');
+    rng.type = 'range'; rng.className = 'st-range'; rng.id = 'funk-pct'; rng.min = 0; rng.max = 100; rng.step = 10;
+    pctBox.append(big, rng);
+    box.appendChild(pctBox);
+    const showPct = () => { big.textContent = Number(rng.value) >= 100 ? '100 % – ✅ fertig' : `${rng.value} % abgesucht`; };
+    rng.addEventListener('input', showPct);
+    const txt = dlgField(box, 'Hinweis (optional)', Object.assign(document.createElement('input'), { type: 'text', id: 'funk-txt', maxLength: 300, placeholder: 'z. B. Böschung, Bach, Grund' }));
+    const tm = dlgField(box, 'Uhrzeit (Standard: jetzt)', Object.assign(document.createElement('input'), { type: 'time', id: 'funk-time', value: hmNow() }));
+    const btns = FUNK_KINDS.map((k) => dlgButton(list, '', '', () => {
+      kind = k;
+      btns.forEach((b, i) => b.classList.toggle('sel', FUNK_KINDS[i] === k));
+      pctBox.hidden = !k.pct;
+      if (k.pct) { const c = cur(); const l = lastPctOf(c.x); rng.value = k.code === 'zu' ? 100 : Math.round((l == null ? 50 : l) / 10) * 10; showPct(); }
+      go.innerHTML = k.pos ? '👆 Ort auf der Karte antippen' : '✍️ Eintragen';
+    }));
+    const label = () => FUNK_KINDS.forEach((k, i) => { btns[i].innerHTML = esc(`${k.ico} ${funkLabel(k, cur().team ? unitType(cur().team) : 'hund')}`); });
+    const go = dlgButton(box, '✍️ Eintragen', 'primary', () => {
+      if (!kind) return toast('Bitte erst wählen, was gemeldet wird');
+      const t = timeOfDay(tm.value, Date.now());
+      if (t == null) return toast('Uhrzeit nicht lesbar (z. B. 20:05)');
+      const c = cur();
+      close({ x: c.x, team: c.team, kind: kind.code, pc: kind.pct ? Number(rng.value) : undefined, txt: txt.value.trim(), t });
+    });
+    sel.addEventListener('change', label);
+    label();
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!r) return;
+  const k = funkKind(r.kind);
+  if (k.pos) return pickOnMap('Auf die Karte tippen: dort liegt der Ort der Meldung', (pos) => funkCommit({ ...r, pos }));
+  funkCommit(r);
+}
+function funkCommit(o) {
+  if (!canEnter()) return;
+  const m = buildFunkMsg({ ...o, by: devBy() });
+  if (!m) return toast('Meldung nicht möglich');
+  if (!P.live) ensureLive(P, liveUrlNow());
+  addFunkMsg(P, m);
+  if (P.live && isUrgent(m)) P.live.ack.push(m.id); // die Meldung stammt von diesem Gerät: kein Dringend-Fenster hier
+  P.updated = Date.now();
+  if (P.live) elSend(m).catch(() => {});
+  changed();
+  redraw();
+  renderSentList();
+  if ($('panel-status').hidden === false) renderStatusPanel();
+  checkCloseAsk();
+  toast(`✍️ ${m.tm}: ${msgLabel(m)}${m.pc != null && m.s !== 'fertig' && m.s !== 'zu' ? '' : ''} eingetragen (${hhmm(m.t)}, Funk)`, 5000);
+}
+
+// Fund/Hinweis eintragen (Kleidungsstück, Gegenstand, Spur, Wärmequelle …) – optional mit Foto und Prüfauftrag
+async function findDialog() {
+  if (!canEnter()) return;
+  const targets = P.live ? elTargets(P.sent, P.marks) : [];
+  const r = await openDlg((box, close) => {
+    dlgHead(box, '🔎 Fund/Hinweis eintragen', 'Der Fund steht danach mit Ort in der Meldungsliste, im Bericht, im GPX/PDF und bei allen Unterabschnitten.');
+    let art = null;
+    const list = document.createElement('div');
+    list.className = 'dlg-btns two';
+    list.id = 'find-kinds';
+    box.appendChild(list);
+    const hints = document.createElement('div');
+    hints.className = 'dlg-btns two';
+    box.appendChild(hints);
+    const txt = dlgField(box, 'Beschreibung', Object.assign(document.createElement('input'), { type: 'text', id: 'find-txt', maxLength: 300, placeholder: 'z. B. blaue Damenjacke, Größe M' }));
+    const row = document.createElement('div');
+    row.className = 'pair-row';
+    box.appendChild(row);
+    const tmW = document.createElement('div');
+    const tm = dlgField(tmW, 'Uhrzeit', Object.assign(document.createElement('input'), { type: 'time', id: 'find-time', value: hmNow() }));
+    const fiW = document.createElement('div');
+    const finder = dlgField(fiW, 'Finder (Team/Einheit/Person)', Object.assign(document.createElement('input'), { type: 'text', id: 'find-finder', maxLength: 60, placeholder: 'z. B. FF-Trupp 3' }));
+    finder.setAttribute('list', 'find-finder-list');
+    const dl = document.createElement('datalist');
+    dl.id = 'find-finder-list';
+    for (const t of P.marks.filter((m) => m.kind === 'team' && m.id !== NO_TEAM)) { const o = document.createElement('option'); o.value = t.label; dl.appendChild(o); }
+    fiW.appendChild(dl);
+    row.append(tmW, fiW);
+    // Foto
+    const file = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*', id: 'find-photo' });
+    file.setAttribute('capture', 'environment');
+    file.hidden = true;
+    const photoBtn = dlgButton(box, '📷 Foto aufnehmen / wählen', '', () => file.click());
+    file.addEventListener('change', () => { photoBtn.textContent = file.files[0] ? `📷 Foto: ${file.files[0].name.slice(0, 30)}` : '📷 Foto aufnehmen / wählen'; });
+    box.appendChild(file);
+    // Status, Dringend, Prüfauftrag
+    const st = dlgField(box, 'Status', document.createElement('select'));
+    st.id = 'find-status';
+    st.add(new Option('⏳ offen (noch zu prüfen)', 'o'));
+    st.add(new Option('✔ geprüft', 'g'));
+    const dr = document.createElement('label');
+    dr.className = 'check';
+    dr.innerHTML = '<input type="checkbox" id="find-urgent"><span>❗ Dringend melden (Fenster bei allen EL-Geräten)</span>';
+    box.appendChild(dr);
+    let chk = null;
+    if (targets.length) {
+      chk = dlgField(box, 'Prüfauftrag an Team (optional)', document.createElement('select'));
+      chk.id = 'find-check';
+      chk.add(new Option('– keiner –', ''));
+      for (const q of targets) chk.add(new Option(q.label, q.a));
+    }
+    const btns = FIND_KINDS.map((k) => dlgButton(list, esc(`${k.ico} ${k.label}`), '', () => {
+      art = k;
+      btns.forEach((b, i) => b.classList.toggle('sel', FIND_KINDS[i] === k));
+      dr.querySelector('input').checked = !!k.urgent;
+      hints.innerHTML = '';
+      for (const h of k.hints) dlgButton(hints, esc(h), '', () => { txt.value = h; });
+    }));
+    const need = () => { if (!art) { toast('Bitte erst die Art wählen'); return null; } const t = timeOfDay(tm.value, Date.now()); if (t == null) { toast('Uhrzeit nicht lesbar (z. B. 20:05)'); return null; } return t; };
+    const out = (t) => ({ art: art.code, txt: txt.value.trim(), t, finder: finder.value.trim(), geprueft: st.value === 'g', dringend: dr.querySelector('input').checked, file: file.files[0] || null, check: chk ? chk.value : '' });
+    dlgButton(box, '👆 Ort auf der Karte antippen', 'primary', () => { const t = need(); if (t != null) close({ ...out(t), where: 'map' }); });
+    dlgButton(box, '📍 Ort = mein Standort', '', () => { const t = need(); if (t != null) close({ ...out(t), where: 'gps' }); });
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!r) return;
+  if (r.where === 'gps') {
+    toast('📍 Standort wird bestimmt … (bis 10 s)', 11000);
+    const pos = await getFix();
+    if (!pos) return toast('Kein Standort – bitte „Ort auf der Karte antippen“ nehmen', 6000);
+    return findCommit(r, pos);
+  }
+  pickOnMap('Auf die Karte tippen: dort wurde es gefunden', (pos) => findCommit(r, pos));
+}
+async function findCommit(r, pos) {
+  if (!canEnter()) return;
+  const m = buildFindMsg({ art: r.art, txt: r.txt, pos, finder: r.finder, geprueft: r.geprueft, dringend: r.dringend, foto: !!r.file, t: r.t, by: devBy() });
+  if (!m) return toast('Fund nicht möglich');
+  if (r.file) {
+    try { M().photos.push({ t: r.t, src: await shrinkPhoto(r.file), cap: `Fund ${findLabel(r.art).replace(/^\S+\s/, '')} ${hhmm(r.t)}${r.txt ? `: ${r.txt}` : ''}`, mid: m.id }); } catch { toast('Foto konnte nicht gelesen werden – Fund ohne Foto', 5000); delete m.ph; }
+  }
+  if (!P.live) ensureLive(P, liveUrlNow());
+  addFunkMsg(P, m);
+  if (P.live && isUrgent(m)) P.live.ack.push(m.id);
+  P.updated = Date.now();
+  if (P.live) elSend(m).catch(() => {});
+  let pa = '';
+  if (r.check && P.live) {
+    const tg = elTargets(P.sent, P.marks).find((q) => q.a === r.check);
+    if (tg) {
+      const where = formatMgrs(pos.lat, pos.lon);
+      elSend(buildElMsg({ to: tg.a, txt: checkText(m, where), prio: 1 })).catch(() => {});
+      pa = ` · Prüfauftrag an ${tg.label}`;
+    }
+  }
+  changed();
+  redraw();
+  renderSentList();
+  if ($('panel-status').hidden === false) renderStatusPanel();
+  toast(`🔎 ${msgLabel(m)} eingetragen (${hhmm(m.t)})${m.ph ? ' mit Foto' : ''}${pa}`, 6000);
+}
+// Fund als geprüft (oder wieder offen) markieren: Korrektur-Meldung, geht an alle EL-Geräte
+function findToggle(m) {
+  if (!canEnter() || !isFind(m)) return;
+  const kor = buildKor({ a: m.a, tm: m.tm, ref: m.id, fs: m.fs === 'g' ? 'o' : 'g' });
+  if (!P.live) ensureLive(P, liveUrlNow());
+  addFunkMsg(P, kor);
+  if (P.live) elSend(kor).catch(() => {});
+  changed();
+  redraw();
+  renderSentList();
+  renderStatusPanel();
+  toast(kor.fs === 'g' ? '✔ Fund als geprüft markiert' : '⏳ Fund wieder offen');
+}
+$('st-funk').addEventListener('click', () => funkDialog());
+$('st-find').addEventListener('click', () => findDialog());
+
+// Auto-Abschluss: Team meldet „abgeschlossen“ mit 100 % -> Auftrag ohne Rückfrage geschlossen, Toast mit Rückgängig
+function checkAutoClose() {
+  if (locked || db.mode !== 'el' || !P || P.closed) return;
+  const msgs = allMsgs();
+  const done = [];
+  for (const x of P.sent || []) {
+    if (!autoCloseDue(x, msgs)) continue;
+    closeSent(x, msgs);
+    if (gapView && gapView.a === x.id) gapView = null;
+    done.push(x);
+  }
+  if (!done.length) return;
+  changed();
+  redraw();
+  renderSentList();
+  const names = done.map((x) => teamNameOf(x.id)).join(', ');
+  toastAction(`✅ ${names}: abgeschlossen, 100 % – Auftrag geschlossen`, '↩ Rückgängig', () => {
+    for (const x of done) reopenSent(x, allMsgs());
+    changed();
+    redraw();
+    renderSentList();
+    toast(`↩ Auftrag ${names} ist wieder offen`);
+  }, 12000);
+}
+
+// UA-Übersicht und „wer ist noch draußen?“ im Status-Fenster (jedes EL-Gerät des Grund-Einsatzes)
+function renderUaOverview() {
+  const det = $('st-ua');
+  const rows = db.mode === 'el' && P && !P.parentEid ? uaOverview(P, allMsgs()) : [];
+  const show = rows.length && hasUas(P);
+  det.hidden = !show;
+  const body = $('st-ua-body');
+  body.innerHTML = '';
+  if (show) {
+    const now = Date.now();
+    for (const u of rows) {
+      const d = document.createElement('div');
+      d.className = `ua-row ${u.level}`;
+      d.innerHTML = '<div class="ua-h"><b></b><span></span></div><div class="ua-t"></div>';
+      d.querySelector('b').textContent = `${levelIcon(u.level)} ${u.ua === BASE_UA ? 'Grund-Einsatz (ohne UA)' : `UA ${u.ua}`}`;
+      d.querySelector('.ua-h span').textContent = [u.pct != null ? `${u.pct} %` : '', `${u.open} offen`, u.last ? agoText(u.last, now) : 'noch keine Meldung'].filter(Boolean).join(' · ');
+      for (const t of u.teams) {
+        const l = document.createElement('div');
+        l.className = 'ua-team';
+        l.textContent = `${t.ico} ${t.label}: ${[t.pct != null ? `${t.pct} %` : 'Stand offen', t.lastText ? `${t.lastText} (${agoText(t.last, now)})` : 'keine Meldung', t.open ? `${t.open} Auftrag offen` : t.orders ? 'alle abgeschlossen' : 'kein Auftrag'].join(' · ')}`;
+        d.appendChild(l);
+      }
+      if (u.level === 'stale') { const w = document.createElement('div'); w.className = 'ua-warn'; w.textContent = '⚠️ Seit über 60 Minuten keine Rückmeldung – nachfragen?'; d.appendChild(w); }
+      body.appendChild(d);
+    }
+  }
+  // wer ist noch draußen?
+  const out = $('st-out');
+  const tt = db.mode === 'el' && P ? teamTimes(P.sent, allMsgs(), P.marks) : [];
+  const ob = $('st-out-body');
+  ob.innerHTML = '';
+  const outside = outsideTeams(tt);
+  out.hidden = !tt.some((r) => r.msgs);
+  if (!out.hidden) {
+    $('st-out-sum').textContent = `🚶 Wer ist noch draußen? (${outside.length})`;
+    for (const r of tt.filter((q) => q.msgs)) {
+      const d = document.createElement('div');
+      d.className = `ua-team${r.outside ? ' out' : ''}`;
+      d.textContent = `${r.outside ? '🔶' : '✅'} ${r.mark ? typeIcon(r.mark) : '🐕'} ${r.label}: ${stateText(r)}${r.start ? ` (seit ${hhmm(r.start)})` : ''}`;
+      ob.appendChild(d);
+    }
+  }
+}
+// Berichts-Zusätze (Kräfte aus Teams, Einheiten, Einsatzzeiten)
+function reportExtras() {
+  if (db.mode !== 'el') return {};
+  const teams = P.marks.filter((m) => m.kind === 'team' && m.id !== NO_TEAM && !m.hidden);
+  const tt = teamTimes(P.sent, exportMsgs(), P.marks);
+  const rows = timeRows(tt);
+  return {
+    forcesAuto: teams.length ? forcesText(forcesFromTeams(P.marks)) : [],
+    unitRows: teams.map((m) => ({ team: m.label, text: unitLine(m) })),
+    timeRows: rows,
+    timeTotal: rows.length ? `Gesamt: ${totalPersonHours(tt).toLocaleString('de-DE')} Personenstunden` : '',
+  };
+}
 
 // ---- Suchfeld (Tablet): eingeklappt als 🔍, Antippen klappt es auf ----
 const searchForm = $('search-form');
@@ -6610,8 +6989,19 @@ function renderDeviceName() {
   $('dev-status-url').value = db.statusUrl || '';
   // v125: Kürzel für neue Teams im Unterabschnitt
   $('ua-set').hidden = !P.parentEid;
-  if (P.parentEid) { $('ua-key').value = P.uaKey || ''; $('ua-key').placeholder = uaPrefix({ ...P, uaKey: '' }); $('ua-key-ex').textContent = uaPrefix(P); }
+  if (P.parentEid) { $('ua-name').value = uaName(P.title); $('ua-key').value = P.uaKey || ''; $('ua-key').placeholder = uaPrefix({ ...P, uaKey: '' }); $('ua-key-ex').textContent = uaPrefix(P); }
 }
+$('ua-name').addEventListener('change', () => { // v128: UA umbenennen (Titel „<Einsatz> – UA <Name>“, nie „UA UA …“)
+  const t = renameUa(P.title, $('ua-name').value);
+  if (t === P.title) { $('ua-name').value = uaName(P.title); return; }
+  P.title = t;
+  $('ua-name').value = uaName(t);
+  changed();
+  renderProjects();
+  $('ua-key').placeholder = uaPrefix({ ...P, uaKey: '' });
+  $('ua-key-ex').textContent = uaPrefix(P);
+  toast(`Unterabschnitt heißt jetzt „${t}“`);
+});
 $('ua-key').addEventListener('change', () => {
   P.uaKey = $('ua-key').value.trim().slice(0, 4);
   $('ua-key-ex').textContent = uaPrefix(P);
@@ -7899,18 +8289,66 @@ window.onSharedFile = async () => {
   await importFile(name, buf.buffer, true);
 };
 
+const g0Tracks = (pick) => pick.all;
+// v128: Auswahlliste der Tracks -> { tracks, all, choices: [{ i, teamId, kind }] } oder null (abgebrochen)
+function trackPickDialog(tracks, base) {
+  const rows = listTracks(tracks);
+  const teams = P.marks.filter((m) => m.kind === 'team' && m.id !== NO_TEAM);
+  return openDlg((box, close) => {
+    dlgHead(box, '📥 Tracks übernehmen', `${rows.length} Track${rows.length === 1 ? '' : 's'} in der Datei. Abgewählt sind Aufzeichnungen („ACTIVE LOG“) und Tracks, die älter als 24 Stunden sind. Mit Team/Auftrag zählt der Weg wie eine Rückmeldung (km, Zeit).`);
+    const list = document.createElement('div');
+    list.id = 'trk-list';
+    box.appendChild(list);
+    const ctl = [];
+    for (const r of rows) {
+      const d = document.createElement('div');
+      d.className = `trk-row${r.pre ? '' : ' off'}`;
+      d.innerHTML = '<label class="trk-h"><input type="checkbox"><span></span></label><div class="trk-sel"><select class="trk-team"></select><select class="trk-kind"></select></div>';
+      const cb = d.querySelector('input');
+      cb.checked = r.pre;
+      d.querySelector('.trk-h span').textContent = `${r.name || base} – ${trackInfo(r)}${r.why ? ` (${r.why})` : ''}`;
+      const ts = d.querySelector('.trk-team');
+      ts.add(new Option('– kein Team –', ''));
+      for (const t of teams) ts.add(new Option(`${typeIcon(t)} ${t.label}`, t.id));
+      const ks = d.querySelector('.trk-kind');
+      for (const k of TRACK_KINDS) ks.add(new Option(`${k.ico} ${k.label}`, k.code));
+      ks.value = guessKind(r.name, null);
+      let touched = false;
+      ks.addEventListener('change', () => { touched = true; });
+      ts.addEventListener('change', () => { if (!touched) ks.value = guessKind(r.name, teams.find((t) => t.id === ts.value)); });
+      cb.addEventListener('change', () => { d.classList.toggle('off', !cb.checked); upd(); });
+      list.appendChild(d);
+      ctl.push({ r, cb, ts, ks });
+    }
+    const go = dlgButton(box, '', 'primary', () => {
+      const on = ctl.filter((c) => c.cb.checked);
+      if (!on.length) return toast('Kein Track angehakt');
+      close({ all: tracks, tracks: on.map((c) => tracks[c.r.i]), choices: on.map((c) => ({ i: c.r.i, teamId: c.ts.value, kind: c.ks.value })) });
+    });
+    const upd = () => { go.textContent = `📥 ${ctl.filter((c) => c.cb.checked).length} importieren`; };
+    upd();
+    dlgButton(box, 'Alle / keine', '', () => { const all = ctl.some((c) => !c.cb.checked); ctl.forEach((c) => { c.cb.checked = all; c.cb.dispatchEvent(new Event('change')); }); });
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+}
+
 // GPX (z. B. aus BaseCamp) bzw. KML ins aktuelle Suchgebiet: Tracks/Routen als Umrisse, Wegpunkte als Text
-function importGeo(g0, fileName) {
+async function importGeo(g0, fileName) {
   if (isClosed()) return lockedToast();
   if (isFree()) createProject(wizTitle()); // Datei ohne offenen Einsatz: dafür einen neuen anlegen
   const base = fileName.replace(/\.(gpx|kml|xml)$/i, '');
   const g = { ...g0, ...dedupeImport(P.items, g0, base, { meet: P.meet, pois: P.pois, msgs: msgWaypoints(exportMsgs()) }) }; // schon vorhandene (gleicher Name, gleiche Punkte) überspringen
   const added = [];
-  for (const t of g.tracks) {
-    const [a, z] = [t.pts[0], t.pts[t.pts.length - 1]];
-    // geschlossen (Ende am Anfang, < 30 m): Fläche anzeigen, sonst offener Weg
-    const open = !t.closed && trackLength([a, z]) > 30;
-    added.push({ kind: 'track', name: t.name || base, color: t.color || db.color, w: 4, pts: t.pts, ...(open ? { open: true } : {}) });
+  let orders = [];
+  // v128: Auswahlliste vor dem Import (Name, Länge, Zeit, Häkchen, Team/Auftrag, Hund/Mensch/Drohne)
+  if (g.tracks.length) {
+    const pick = await trackPickDialog(g.tracks, base);
+    if (!pick) return;
+    g.tracks = pick.tracks;
+    const r = importItems(P, g0Tracks(pick), pick.choices, { base, color: db.color });
+    // geschlossene Umrisse (Fläche) bleiben wie bisher Umrisse; importItems macht daraus offene Wege nur, wenn Anfang und Ende auseinanderliegen
+    added.push(...r.items);
+    orders = r.orders;
   }
   for (const w of g.waypoints) added.push({ kind: 'text', color: db.color, lat: w.lat, lon: w.lon, text: w.name });
   // Karte springt auf den Import – auch wenn alles schon da war (dann auf die Datei selbst)
@@ -7927,6 +8365,8 @@ function importGeo(g0, fileName) {
     return;
   }
   P.items.push(...added);
+  for (const x of orders) noteImport(P, x); // zählt in der Auftrags-Übersicht (km, Zeit) wie eine HF-Rückmeldung
+  if (orders.length) { P.updated = Date.now(); changed(); renderSentList(); }
   save();
   redraw();
   closePanels();
@@ -8092,14 +8532,14 @@ function openShare() {
   const ts = $('share-team');
   const prev = ts.value;
   ts.innerHTML = '';
-  for (const t of teams) ts.add(new Option(`${t.label}${t.dog ? ` – ${t.dog}` : ''}`, t.id));
+  for (const t of teams) ts.add(new Option(`${typeIcon(t)} ${t.label}${t.dog ? ` – ${t.dog}` : ''}`, t.id));
   if (teams.some((t) => t.id === prev)) ts.value = prev;
   if (!shareInit) { // erstes Öffnen: zuletzt gewählter Empfänger dieses Geräts (Team wird nicht gemerkt)
     shareInit = true;
     if (SHARE_TO.includes(db.shareTo)) applyShareTo(db.shareTo);
   }
   // Rückkehr von der Kartenauswahl ohne passenden Empfänger -> „Sonstige“ (alle Wege außer QR)
-  if (!shareTo && (shareScope === 'pick' || shareScope === 'area') && shareSel) shareTo = 'other';
+  if (!shareTo && (shareScope === 'pick' || shareScope === 'area' || shareScope === 'areas') && shareSel) shareTo = 'other';
   if (shareTo === 'el' || shareScope === 'all') { if (shareTo) shareSel = selectAll(P); }
   if (shareScope === 'team') shareSel = selectTeam(P, ts.value);
   renderShare();
@@ -8143,6 +8583,17 @@ document.querySelectorAll('#share-to button').forEach((b) => b.addEventListener(
 document.querySelectorAll('#share-scopes button').forEach((b) => b.addEventListener('click', () => {
   const s = b.dataset.scope;
   if (s === 'all') { shareScope = 'all'; shareSel = selectAll(P); return renderShare(); }
+  if (s === 'areas') { // v128: mehrere Raster/Umrisse antippen -> ein UA
+    if (!allGrids(P).length && !P.items.some((it) => it.kind === 'track' && hasArea(it))) return toast('Kein Raster und kein Umriss vorhanden');
+    shareScope = 'areas';
+    closePanels();
+    areaPicks = [];
+    gpxSel = emptySel();
+    selMode = 'areas';
+    setTool('gpxsel');
+    updateGpxSelBar();
+    return redraw();
+  }
   if (s === 'area') {
     if (!allGrids(P).length && !P.items.some((it) => it.kind === 'track' && hasArea(it))) return toast('Kein Raster und kein Umriss vorhanden');
     shareScope = 'area';
@@ -8191,7 +8642,7 @@ $('share-qr').addEventListener('click', () => shareRun(async () => {
   stamp(); // feste IDs vor dem Ausschneiden eines Unterabschnitts
   if (shareTo === 'el') return handoverQr(P, true);
   if (shareTo === 'ua') ensureLive(P, liveUrlNow()); // v127: der UA bekommt den Live-Kanal des Grund-Einsatzes mit
-  if (shareTo === 'ua') return handoverQr(subsetProject(P, shareSel, `${P.title || 'Einsatz'} – UA ${shareLabel()}`, { base: true }), false);
+  if (shareTo === 'ua') return handoverQr(subsetProject(P, shareSel, uaTitle(P.title, shareLabel()), { base: true }), false); // v128: nie „UA UA …“
   if (shareTo === 'team') prefillSend(shareSel, $('share-team').value, shareScope === 'team' ? 'team' : 'pick');
 }));
 $('share-pdf').addEventListener('click', () => shareRun(async () => {
@@ -8595,15 +9046,15 @@ const gpxSelCount = () => selCount(gpxSel);
 function updateGpxSelBar() {
   if (!gpxSel) return;
   const n = gpxSelCount();
-  const area = selMode === 'area';
-  $('gpxsel-info').textContent = area ? 'Raster oder Umriss antippen' : n ? `${n} ausgewählt` : 'Antippen zum Auswählen';
+  const area = selMode === 'area' || selMode === 'areas';
+  $('gpxsel-info').textContent = selMode === 'areas' ? (areaPicks.length ? `${areaPicks.length} Gebiet${areaPicks.length === 1 ? '' : 'e'}: ${joinUaNames(areaPicks.map((a) => a.name))} – weitere antippen (nochmal = abwählen)` : 'Raster oder Umriss antippen (mehrere möglich)') : area ? 'Raster oder Umriss antippen' : n ? `${n} ausgewählt` : 'Antippen zum Auswählen';
   $('gpxsel-share').hidden = selMode !== 'export';
   $('gpxsel-save').hidden = selMode !== 'export';
   $('gpxsel-share').disabled = !n;
   $('gpxsel-save').disabled = !n;
   $('gpxsel-grid').hidden = area;
   $('gpxsel-grid').disabled = !allGrids(P).length;
-  $('gpxsel-done').textContent = selMode === 'share' ? '✓ Übernehmen' : area ? 'Abbrechen' : 'Fertig';
+  $('gpxsel-done').textContent = selMode === 'share' || selMode === 'areas' ? '✓ Übernehmen' : area ? 'Abbrechen' : 'Fertig';
 }
 // Alles innerhalb einer Fläche (Umriss oder Rasterrand) dazunehmen; Rückgabe: Anzahl neu
 function selectInside(inside, except = null) {
@@ -8625,7 +9076,7 @@ function selectInside(inside, except = null) {
   return n;
 }
 function gpxTap(x, y, ll) {
-  if (selMode === 'area') return areaTap(x, y, ll);
+  if (selMode === 'area' || selMode === 'areas') return areaTap(x, y, ll);
   const pi = poiAt(x, y);
   if (pi >= 0) {
     const p = P.pois[pi];
@@ -8679,22 +9130,45 @@ $('gpxsel-grid').addEventListener('click', () => {
 });
 // „Ein Gebiet“: Umriss oder Raster antippen -> alles darin, dazu B-Ort und Lage-Orte
 function areaTap(x, y, ll) {
+  const multi = selMode === 'areas';
   const i = hitItem(P.items, toPx, x, y, 12);
   const it = i >= 0 ? P.items[i] : null;
   let name = '';
+  let key = '';
+  let hit = null;
+  if (it && it.kind === 'track' && hasArea(it)) {
+    name = it.name || 'Umriss';
+    key = `i:${i}`;
+  } else {
+    const h = hitGrid(ll.lat, ll.lng);
+    hit = h && gridGeoms().find((x2) => x2.g.id === h.g.id);
+    if (!hit) return toast('Bitte einen geschlossenen Umriss oder ein Raster antippen');
+    name = gridLabel(P, hit.g);
+    key = `g:${hit.g.id}`;
+  }
+  // v128: bei „Mehrere Gebiete“ jedes Gebiet einzeln sammeln (nochmal tippen = wieder abwählen), erst „Übernehmen“ geht weiter
+  const prevSel = gpxSel;
+  if (multi && areaPicks.some((a) => a.key === key)) {
+    areaPicks = areaPicks.filter((a) => a.key !== key);
+    gpxSel = unionSel(areaPicks.map((a) => a.sel));
+    updateGpxSelBar();
+    return redraw();
+  }
+  if (multi) gpxSel = emptySel();
   if (it && it.kind === 'track' && hasArea(it)) {
     gpxSel.items.add(it);
     selectInside((pt) => pointInPolygon(pt, it.pts), it);
-    name = it.name || 'Umriss';
-  } else {
-    const h = hitGrid(ll.lat, ll.lng);
-    const hit = h && gridGeoms().find((x) => x.g.id === h.g.id);
-    if (!hit) return toast('Bitte einen geschlossenen Umriss oder ein Raster antippen');
-    selectGrid(hit);
-    name = gridLabel(P, hit.g);
-  }
+  } else selectGrid(hit);
   for (const p of P.pois) gpxSel.pois.add(p);
   gpxSel.meet = !!P.meet;
+  if (multi) {
+    areaPicks.push({ key, name, sel: gpxSel });
+    gpxSel = unionSel(areaPicks.map((a) => a.sel));
+    updateGpxSelBar();
+    toast(`${name} gewählt – weiteres Gebiet antippen oder „Übernehmen“`, 4000);
+    void prevSel;
+    return redraw();
+  }
   shareSel = gpxSel;
   shareName = name;
   setTool('pan');
@@ -8763,9 +9237,12 @@ $('gpxsel-save').addEventListener('click', () => gpxSelExport('save'));
 $('gpxsel-done').addEventListener('click', () => {
   const mode = selMode;
   if (mode === 'share') { shareSel = gpxSel; shareScope = 'pick'; }
+  if (mode === 'areas') {
+    if (areaPicks.length) { shareSel = gpxSel; shareName = joinUaNames(areaPicks.map((a) => a.name)); shareScope = 'areas'; } else shareScope = 'all';
+  }
   setTool('pan');
   redraw();
-  if (mode === 'share' || mode === 'area') openShare();
+  if (mode === 'share' || mode === 'area' || mode === 'areas') openShare();
 });
 $('gpxsel-open').addEventListener('click', () => { closePanels(); gpxSelGrid = null; gpxSel = emptySel(); selMode = 'export'; setTool('gpxsel'); updateGpxSelBar(); redraw(); });
 // Hervorhebung der Auswahl (gelb)
@@ -8941,7 +9418,17 @@ function renderTimes() {
 
 function renderTotal() {
   $('ms-total').textContent = M().forces.length ? totalLine(M().forces) : '';
+  // v128: Kräfte aus den Teams automatisch summiert (Anzeige), Knopf übernimmt sie in die Tabelle
+  const fa = forcesText(forcesFromTeams(P.marks));
+  $('ms-forces-auto').textContent = fa.length ? `Aus den Teams: ${fa.join(' · ')}` : '';
+  $('ms-force-teams').hidden = !fa.length;
 }
+$('ms-force-teams').addEventListener('click', () => {
+  M().forces = M().forces.filter((f) => !f.auto);
+  for (const f of forcesFromTeams(P.marks)) M().forces.push({ org: f.org, lead: String(f.lead), helpers: String(f.helpers), dogs: String(f.dogs), vehicles: String(f.vehicles), auto: true });
+  touch();
+  renderForces();
+});
 $('ms-force-add').addEventListener('click', () => {
   M().forces.push({ org: '', lead: '', helpers: '', dogs: '', vehicles: '' });
   touch();
@@ -9206,13 +9693,26 @@ $('ms-close').addEventListener('click', async () => {
   // v116: offene Aufträge, unquittierte Funde/Hilfe und fehlende Rückgaben zuerst zeigen
   const open = openPoints(P, allMsgs());
   const ok = open.count ? await openDlg((box, close) => {
-    dlgHead(box, '⚠️ Noch offen', `„${P.title || 'Suchgebiet'}“ hat noch offene Punkte. Trotzdem abschließen?`);
-    const line = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; box.appendChild(d); };
-    for (const q of open.unacked) line('st-urgent close-open', `${q.team}: ${q.label} ${hhmm(q.t)} – noch nicht als gesehen bestätigt`);
-    for (const q of open.open) line('close-open', `📋 ${q.team}: Auftrag offen${q.what ? ` (${q.what})` : ''}${q.returned ? '' : ' – Rückgabe fehlt'}`);
-    for (const q of open.noReturn) line('close-open', `📲 ${q.team}: keine Rückgabe eingelesen`);
-    dlgButton(box, 'Trotzdem abschließen', 'close-anyway', () => close(true));
-    dlgButton(box, 'Zurück', '', () => close(false));
+    // v128: je offenem Auftrag „Als erledigt markieren“, dazu „Alle als erledigt“ und „wer ist noch draußen?“
+    const draw = () => {
+      box.innerHTML = '';
+      const o = openPoints(P, allMsgs());
+      if (!o.count) { dlgHead(box, '✅ Alles erledigt', `„${P.title || 'Suchgebiet'}“ hat keine offenen Punkte mehr.`); } else dlgHead(box, '⚠️ Noch offen', `„${P.title || 'Suchgebiet'}“ hat noch offene Punkte. Trotzdem abschließen?`);
+      const line = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; box.appendChild(d); };
+      for (const q of o.unacked) line('st-urgent close-open', `${q.team}: ${q.label} ${hhmm(q.t)} – noch nicht als gesehen bestätigt`);
+      for (const q of o.open) {
+        line('close-open', `📋 ${q.team}: Auftrag offen${q.what ? ` (${q.what})` : ''}${q.returned ? '' : ' – Rückgabe fehlt'}`);
+        const b = dlgButton(box, '✓ Als erledigt markieren', 'mark-done', () => { const x = (P.sent || []).find((y) => y.id === q.id); if (x) { closeSent(x, allMsgs()); changed(); renderSentList(); } draw(); });
+        b.dataset.order = q.id;
+      }
+      if (o.open.length > 1) dlgButton(box, '✓ Alle als erledigt markieren', 'mark-all-done', () => { for (const q of o.open) { const x = (P.sent || []).find((y) => y.id === q.id); if (x) closeSent(x, allMsgs()); } changed(); renderSentList(); draw(); });
+      for (const q of o.noReturn) line('close-open', `📲 ${q.team}: keine Rückgabe eingelesen`);
+      const out = outsideTeams(teamTimes(P.sent, allMsgs(), P.marks));
+      if (out.length) line('close-open', `🚶 Noch draußen: ${out.map((r) => r.label).join(', ')}`);
+      dlgButton(box, 'Trotzdem abschließen', 'close-anyway', () => close(true));
+      dlgButton(box, 'Zurück', '', () => close(false));
+    };
+    draw();
   }) : await openDlg((box, close) => {
     dlgHead(box, '✅ Einsatz abschließen', t.end
       ? `„${P.title || 'Suchgebiet'}“ abschließen? Einsatzende bleibt ${t.end}.`
@@ -9427,7 +9927,7 @@ window.addEventListener('resize', () => { if (!$('notepad').hidden) { applyPip()
 // Karte nur, wenn angekreuzt: ohne Raster, Flächen beschriftet, Liste am Rand
 async function reportPdf(sec, progress) {
   const withMap = !!sec.map;
-  const parts = { ...sec, legend: withMap, msgRows: msgRows(exportMsgs(), null, (la, lo) => formatMgrs(la, lo)) };
+  const parts = { ...sec, legend: withMap, msgRows: msgRows(exportMsgs(), null, (la, lo) => formatMgrs(la, lo)), ...reportExtras() };
   const hasPad = parts.pad !== false && M().pages.some((pg) => pg.strokes.length);
   const hasPhotos = parts.photos !== false && M().photos.length;
   if (!hasReportText(parts) && !hasPad && !hasPhotos && !withMap) return null;
@@ -9455,7 +9955,7 @@ async function reportPdf(sec, progress) {
 async function buildReportFile(progress) {
   const f = await reportPdf({}, progress);
   $('ms-msg').textContent = `✔ Abschlussbericht mit ${f.pages} Seite${f.pages > 1 ? 'n' : ''} (${Math.round(f.blob.size / 1024)} KB)`;
-  return { ...f, text: missionText(P, grid, 'Abschlussbericht im Anhang (PDF).') };
+  return { ...f, text: missionText(P, grid, 'Abschlussbericht im Anhang (PDF).', null, reportExtras()) };
 }
 const reportKey = () => exportKey(['report', $('pdf-format').value]);
 $('ms-share').addEventListener('click', () => runExport('report', $('ms-share'), reportKey(), buildReportFile, 'share'));
@@ -9578,7 +10078,7 @@ async function sendMailRow(row, btn) {
     const files = await mailFiles(row, (t) => { btn.textContent = t; });
     if (!files.length) { toast('Nichts zum Senden – keine Notizblock-Seiten/Fotos bzw. kein Raster vorhanden.'); return; }
     const names = files.map((f) => f.name).join(', ');
-    const text = missionText(P, grid, `Im Anhang: ${names}`, row);
+    const text = missionText(P, grid, `Im Anhang: ${names}`, row, reportExtras());
     const title = `Einsatzbericht ${P.title.trim() || 'Suchgebiet'}`;
     if (bridge && bridge.emailFilesTo) {
       bridge.emailFilesTo(await filesPayload(files), title, text, to.join(','));
@@ -10095,7 +10595,7 @@ console.info(`RHS Einsatz bereit (${bridge ? 'Android-App' : 'Browser'})`);
 
 // Für Tests
 window.__app = {
-  get P() { return P; }, get grid() { return grid; }, get db() { return db; }, get fallback() { return !!fallbackFor; }, probeBkg, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread, sentBadges,
+  get P() { return P; }, reportExtras, funkDialog, findDialog, checkAutoClose, get grid() { return grid; }, get db() { return db; }, get fallback() { return !!fallbackFor; }, probeBkg, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread, sentBadges,
 };
 
 // ---------- Freigabe (v113): Sperrbildschirm, Prüfung beim Status-Server ----------

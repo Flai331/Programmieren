@@ -6,6 +6,7 @@ import { newProject, normalizeProject, uid, allGrids, gridLabel, isStatusUrl } f
 import { compactContact, fromCompact } from './contacts.js';
 import { newLiveKey, mergeStatus, qrMsgs } from './status.js';
 import { makeGrid, cellBounds } from './grid.js';
+import { packUnit, unpackUnit } from './units.js';
 
 export const PUBLIC_URL = 'https://flai331.github.io/Programmieren/suchgebiet-karten/';
 
@@ -169,7 +170,7 @@ export function buildAssignment(p, sel) {
     }
   }
   const out = { v: 1, k: 'a', id: uid(), t: p.title || 'Suchgebiet', at: Date.now(), g: grids, i: items };
-  if (team) out.tm = { l: team.label, c: team.color, d: team.dog || '' };
+  if (team) out.tm = { l: team.label, c: team.color, d: team.dog || '', ...packUnit(team) }; // v128: Typ, Organisation, Funkruf, Personen (kurz, nur gesetzte)
   if (sel.hint) out.h = sel.hint;
   const pvText = prev.filter((g) => (g.itemIdx || []).length).map((g) => (g.pct != null ? `${g.pct} % von ${g.team} abgesucht` : `${g.team} war schon hier`)).join(' · ');
   if (pvText) out.pr = pvText;
@@ -220,7 +221,7 @@ export function assignmentCenter(a) {
 // Auftrag -> neues Suchgebiet auf dem Handy des Hundeführers
 export function projectFromAssignment(a) {
   const p = newProject(`${a.t}${a.tm ? ` – ${a.tm.l}` : ''}`);
-  const team = { id: 'team', kind: 'team', label: a.tm ? a.tm.l : 'Mein Auftrag', color: a.tm ? a.tm.c : '#d50000', dog: a.tm ? a.tm.d : '' };
+  const team = { id: 'team', kind: 'team', label: a.tm ? a.tm.l : 'Mein Auftrag', color: a.tm ? a.tm.c : '#d50000', dog: a.tm ? a.tm.d : '', ...unpackUnit(a.tm) };
   const others = { id: 'others', kind: 'team', label: 'andere Teams', color: '#9e9e9e', dog: '' };
   p.marks = [team, ...(a.g.some((g) => g.o && g.o.length) ? [others] : []), ...p.marks];
   const statusId = (code) => (p.marks.find((m) => m.kind === 'status' && m.label === CODE_STATUS[code]) || {}).id;
@@ -240,7 +241,7 @@ export function projectFromAssignment(a) {
   p.pois = (a.po || []).map(([id, cat, lat, lon, name, desc]) => ({ id, cat, lat, lon, name, desc, t: a.at, by: 'Einsatzleitung' }));
   if (a.vp) p.mission.person = a.vp;
   p.hf = {
-    id: a.id, at: a.at, received: Date.now(), team: team.label, hint: a.h || '', ...(a.pr ? { prev: String(a.pr) } : {}), grids: a.g.map((g) => g.i),
+    id: a.id, at: a.at, received: Date.now(), team: team.label, ...(team.ty ? { ty: team.ty } : {}), hint: a.h || '', ...(a.pr ? { prev: String(a.pr) } : {}), grids: a.g.map((g) => g.i),
     track: [], // aufgezeichnete Wege: [{ t0, pts: [[lat, lon]] }]
     outbox: [], log: [], // Status-Meldungen: noch nicht gesendet / alle eigenen
     ...(Array.isArray(a.ls) && a.ls.length === 2 && isStatusUrl(a.ls[0]) ? { ls: [String(a.ls[0]), String(a.ls[1])] } : {}), // Status-Server: [Adresse, Schlüssel]

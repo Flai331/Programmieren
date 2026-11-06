@@ -3,6 +3,7 @@
 import { msgLabel, isUrgent, headMsg } from './status.js';
 import { isAccepted } from './locks.js';
 import { isDone, closeMsg, msgPct } from './closeout.js';
+import { unitType, typeIcon } from './units.js';
 
 export const BANNER_MS = 5 * 60e3; // so lange ungelesen: Banner
 export const BEEP_MS = 7 * 60e3; // so lange ungelesen: Piepton
@@ -59,7 +60,8 @@ export function teamChips(sent, msgs, marks, items, areasOf, ack = []) {
     else { status = '📲 wartet'; t = x.at || 0; }
     out.push({
       key, a: x.id, teamId: x.teamId || '', color: team ? team.color : '#455a64',
-      team: team ? team.label : x.team || 'Team', dog: team && team.dog ? team.dog : '',
+      team: team ? team.label : x.team || 'Team', dog: team && team.dog ? team.dog : '', ty: team ? unitType(team) : 'hund', ico: team ? typeIcon(team) : '🐕', // v128: Einheitentyp
+
       areas: areasOf ? areasOf(x) : defaultAreas(x, items), status, t, wait: !last && !acc,
       urgent: !!head && isUrgent(head), todo: !!head && isUrgent(head) && !(ack || []).includes(head.id), last,
     });

@@ -59,3 +59,18 @@ export function uniqueName(taken, name, uaLabel) {
   for (let n = 2; has(out); n++) out = `${label}${suf} ${n}`;
   return out;
 }
+
+// ---------- v128: Name des Unterabschnitts ----------
+// Name ohne führendes „UA “ („UA Nord“ -> „Nord“): so entsteht nie „UA UA Nord“
+export const stripUa = (name) => String(name || '').trim().replace(/^(?:UA\b[\s:–-]*)+/i, '').trim();
+// Mehrere Gebiete -> ein Name „Nord + Süd“ (ohne Doppelte, ohne „UA “)
+export const joinUaNames = (names) => [...new Set((names || []).map(stripUa).filter(Boolean))].join(' + ');
+// Titel des Unterabschnitts: „<Einsatz> – UA <Name>“
+export const uaTitle = (baseTitle, name) => `${String(baseTitle || 'Einsatz').trim() || 'Einsatz'} – UA ${stripUa(name) || 'Auswahl'}`;
+// Umbenennen: der Einsatzteil bleibt, nur der UA-Name wechselt (ohne „ – UA …“ im Titel wird er angehängt)
+export function renameUa(title, name) {
+  const n = stripUa(name);
+  if (!n) return String(title || '');
+  const base = String(title || '').replace(/\s*[–-]\s*UA\s+.*$/, '').trim();
+  return `${base || 'Einsatz'} – UA ${n}`;
+}

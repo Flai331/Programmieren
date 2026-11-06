@@ -7,6 +7,7 @@ import { markLabel, mapFor, cellsText } from './store.js';
 import { CAP, textPath } from './font.js';
 import { bearing, distance } from './rescue.js';
 import { msgLabel, msgIcon, isUrgent } from './status.js';
+import { isFind, findKind, findStatusText, msgSource } from './finds.js';
 
 const GARMIN_COLORS = {
   Black: [0, 0, 0], DarkRed: [139, 0, 0], DarkGreen: [0, 100, 0], DarkYellow: [139, 139, 0],
@@ -296,11 +297,13 @@ export function msgWaypoints(msgs, teamsById = {}) {
     const kind = m.s === 'ort' ? m.cat : m.s;
     const team = (teamsById && teamsById[m.a]) || m.tm || 'Team';
     const label = msgLabel(m).replace(/^\S+\s/, ''); // ohne Symbol: „Person gefunden“
+    // v128: Fund der Einsatzleitung (Art, Status offen/geprüft) und Meldungen per Funk (Gerät)
+    const extra = [isFind(m) ? findStatusText(m).replace(/^\S+\s/, '') : '', msgSource(m).replace(/^\S+\s/, '')].filter(Boolean).join(', ');
     out.push({
-      lat: m.lat, lon: m.lon, t: m.t, kind, team, label, txt: m.txt || '',
-      name: `${MSG_NAME[kind] || 'Meldung'} ${team} ${hhmmOf(m.t)}`,
+      lat: m.lat, lon: m.lon, t: m.t, kind, team, label, txt: m.txt || '', extra,
+      name: `${isFind(m) ? `Fund ${findKind(m.fa).label}` : MSG_NAME[kind] || 'Meldung'} ${team} ${hhmmOf(m.t)}`,
       time: new Date(m.t).toISOString(),
-      desc: [label, m.txt].filter(Boolean).join(' – '),
+      desc: [label, m.txt, extra].filter(Boolean).join(' – '),
       sym: MSG_SYM[kind] || 'Flag, Green',
       urgent: isUrgent(m),
       icon: msgIcon(m),
@@ -311,7 +314,7 @@ export function msgWaypoints(msgs, teamsById = {}) {
 
 // Zeilen für den Abschlussbericht: [{ time: 'HH:MM', team, art, txt, coord }]; coord = fmt(lat, lon), z. B. UTMREF
 export const msgRows = (msgs, teamsById, fmt) => msgWaypoints(msgs, teamsById).map((w) => ({
-  time: hhmmOf(w.t), team: w.team, art: w.label, txt: w.txt, coord: fmt ? fmt(w.lat, w.lon) : `${w.lat.toFixed(5)}, ${w.lon.toFixed(5)}`,
+  time: hhmmOf(w.t), team: w.team, art: w.extra ? `${w.label} [${w.extra}]` : w.label, txt: w.txt, coord: fmt ? fmt(w.lat, w.lon) : `${w.lat.toFixed(5)}, ${w.lon.toFixed(5)}`,
 }));
 
 // opts: { tracks, drawings, teams, grid: 'outline'|'all'|'none', cells: 'lines'|'all'|'none', points,
@@ -510,12 +513,26 @@ export function parseGpx(xml) {
     const color = COLOR_HEX[c] || null;
     const segs = segTag ? blocks(el, segTag) : [el];
     segs.forEach((seg, i) => {
-      const pts = blocks(seg, ptTag).map(point).filter(Boolean);
+      // v128: Zeit der Punkte (<time>) mitlesen: t0/t1 = erster/letzter Zeitstempel (ms), nur wenn die Datei Zeiten hat
+      const pts = [];
+      const times = [];
+      for (const b of blocks(seg, ptTag)) {
+        const q = point(b);
+        if (!q) continue;
+        pts.push(q);
+        const ms = Date.parse(tag(b, 'time'));
+        if (Number.isFinite(ms)) times.push(ms);
+      }
       // letzter Punkt = erster (so schreiben wir geschlossene Umrisse): wieder als Umriss ohne Doppelpunkt
       const z = pts[pts.length - 1];
       const closed = pts.length > 3 && z[0] === pts[0][0] && z[1] === pts[0][1];
       if (closed) pts.pop();
-      if (pts.length > 1) tracks.push({ name: segs.length > 1 && i ? `${name} (${i + 1})` : name, color, pts, ...(closed ? { closed } : {}) });
+      if (pts.length > 1) {
+        tracks.push({
+          name: segs.length > 1 && i ? `${name} (${i + 1})` : name, color, pts, ...(closed ? { closed } : {}),
+          ...(times.length ? { t0: Math.min(...times), t1: Math.max(...times) } : {}),
+        });
+      }
     });
   };
   for (const t of blocks(xml, 'trk')) add(t, 'trkseg', 'trkpt');
@@ -613,7 +630,8 @@ export function parseKml(xml) {
         const [lon, lat] = c.replace(/<[^>]*>/g, '').trim().split(/\s+/).map(Number);
         return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? [lat, lon] : null;
       }).filter(Boolean);
-      if (pts.length > 1) tracks.push({ name: gxs.length > 1 && i ? `${name} (${i + 1})` : name, color: null, pts });
+      const whens = (gt.match(/<when>[^<]*<\/when>/g) || []).map((w) => Date.parse(w.replace(/<[^>]*>/g, '').trim())).filter(Number.isFinite);
+      if (pts.length > 1) tracks.push({ name: gxs.length > 1 && i ? `${name} (${i + 1})` : name, color: null, pts, ...(whens.length ? { t0: Math.min(...whens), t1: Math.max(...whens) } : {}) });
     });
     const polys = blocks(pm, 'Polygon');
     polys.forEach((pg, i) => {

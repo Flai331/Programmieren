@@ -5,6 +5,8 @@
 import { allGrids } from './store.js';
 import { makeGrid, cellBounds } from './grid.js';
 import { fetchT } from './net.js';
+import { anzeigeText } from './units.js';
+import { findLabel, isFind, findKind } from './finds.js';
 
 export const STATUS_LIST = [
   { code: 'da', ico: '🅿️', label: 'Parkplatz Auto' }, // am Suchgebiet angekommen, Auto abgestellt
@@ -16,6 +18,8 @@ export const STATUS_LIST = [
 ];
 // v101: „✅ Auftrag abschließen“ – eigener Knopf, nicht in der Liste oben (Auftrag darf auch bei 80 % beendet/abgebrochen werden)
 export const CLOSE_STATUS = { code: 'zu', ico: '✅', label: 'Auftrag abgeschlossen' };
+// v128: Ablösung – das Team wird abgelöst (Einsatzzeit endet, die Ablösung rückt nach); eigener Knopf wie „Auftrag abschließen“
+export const RELIEF_STATUS = { code: 'abloes', ico: '🔄', label: 'Ablösung' };
 // „📍 Standort melden“: Markierungen mit Standort
 export const SPOT_LIST = [
   { code: 'anzeige', ico: '🐕', label: 'Hund zeigt an' },
@@ -30,7 +34,7 @@ export const URGENT = ['fund', 'hilfe'];
 // v127: Textvorschläge bei „Fundstück“
 export const SPOT_HINTS = { gegenstand: ['Jacke', 'Schuh', 'Mütze', 'Rucksack'] };
 // Suchstand-Meldungen gehen ohne Standort; nur Markierungen („📍 Standort melden“) und der Parkplatz mit
-export const NO_POS = ['start', 'ende', 'pause', 'fertig', 'zu', 'zurueck', 'ok', 'msg']; // v125: msg = Nachricht/Antwort des Hundeführers
+export const NO_POS = ['start', 'ende', 'pause', 'fertig', 'zu', 'zurueck', 'abloes', 'ok', 'msg']; // v125: msg = Nachricht/Antwort des Hundeführers
 
 const find = (list, code) => list.find((x) => x.code === code);
 // ältere Meldungen, die es als Taste nicht mehr gibt
@@ -39,12 +43,14 @@ const OLD_LIST = [
   { code: 'fund', ico: '🟢', label: 'Person gefunden' }, { code: 'hilfe', ico: '🆘', label: 'Brauche Hilfe' },
 ];
 export function statusLabel(code) {
-  const s = find(STATUS_LIST, code) || find([CLOSE_STATUS], code) || find(OLD_LIST, code);
+  const s = find(STATUS_LIST, code) || find([CLOSE_STATUS, RELIEF_STATUS], code) || find(OLD_LIST, code);
   return s ? `${s.ico} ${s.label}` : code === 'ort' ? '📍 Standort' : code === 'ok' ? '📲 Auftrag übernommen'
     : code === 'q' ? '✓ Gesehen' : code === 'msg' ? '✉️ Nachricht an die EL' : code === 'el' ? '✉️ Nachricht der Einsatzleitung' : code === 'qel' ? '👁 gelesen' : String(code || '');
 }
-export function spotLabel(cat) {
+// v128: ty = Einheitentyp („Trupp zeigt an“ statt „Hund zeigt an“)
+export function spotLabel(cat, ty) {
   const s = find(SPOT_LIST, cat);
+  if (s && cat === 'anzeige' && ty && ty !== 'hund') return `${s.ico} ${anzeigeText(ty)}`;
   return s ? `${s.ico} ${s.label}` : '📌 Standort';
 }
 // Stand-Meldung: erst bei 100 % (oder ohne Angabe) „Gebiet fertig“, sonst „40 % abgesucht“
@@ -54,7 +60,7 @@ const areaText = (m) => m.ar.map(([n, p]) => `${n} ${p >= 100 ? '✅' : `${p} %`
 // Abschluss-Meldung: Prozent je Gebiet bzw. gesamt, z. B. „80 %“ oder „Nord 80 % · Süd ✅“
 const closeText = (m) => (Array.isArray(m.ar) && m.ar.length ? areaText(m) : m.pc != null ? `${m.pc} %` : '');
 // Text einer Meldung: Standort-Meldungen nach ihrer Art
-export const msgLabel = (m) => (m.s === 'ort' ? spotLabel(m.cat)
+export const msgLabel = (m) => (m.s === 'ort' ? (isFind(m) ? findLabel(m.fa) : spotLabel(m.cat, m.ty))
   : Array.isArray(m.gb) && m.gb.length ? `${statusLabel(m.s)}: ${m.gb.join(', ')}` // Suche begonnen/beendet für bestimmte Gebiete
   : m.s === 'zu' ? `${statusLabel('zu')}${closeText(m) ? ` (${closeText(m)})` : ''}`
   : m.s === 'fertig' ? (Array.isArray(m.ar) && m.ar.length
@@ -63,10 +69,11 @@ export const msgLabel = (m) => (m.s === 'ort' ? spotLabel(m.cat)
 // Nur das Symbol (für die Karte)
 export function msgIcon(m) {
   if (m.s === 'fertig') return done(m) ? '✅' : '📊';
-  const s = m.s === 'ort' ? find(SPOT_LIST, m.cat) : find(STATUS_LIST, m.s) || find([CLOSE_STATUS], m.s) || find(OLD_LIST, m.s);
+  if (isFind(m)) return findKind(m.fa).ico;
+  const s = m.s === 'ort' ? find(SPOT_LIST, m.cat) : find(STATUS_LIST, m.s) || find([CLOSE_STATUS, RELIEF_STATUS], m.s) || find(OLD_LIST, m.s);
   return s ? s.ico : m.s === 'ok' ? '📲' : m.s === 'q' ? '✓' : m.s === 'el' || m.s === 'msg' ? '✉️' : m.s === 'qel' ? '👁' : '📍';
 }
-export const isUrgent = (m) => URGENT.includes(m.s) || (m.s === 'ort' && URGENT.includes(m.cat));
+export const isUrgent = (m) => URGENT.includes(m.s) || (m.s === 'ort' && URGENT.includes(m.cat)) || (m.s === 'ort' && m.dr === 1); // v128: dr = von Hand als dringend gemeldet (Fund der EL)
 
 // ---------- Base64url ----------
 const b64url = (bytes) => {
@@ -102,7 +109,7 @@ export async function decryptMsg(key, d) {
 // ---------- Meldungen ----------
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
 // Neue Meldung (Klartext). pos: { lat, lon, acc? } oder null
-export function buildMsg({ a, tm, s, cat, txt, pos, pc, pa, ar, gb, ref, t = Date.now(), id }) {
+export function buildMsg({ a, tm, s, cat, txt, pos, pc, pa, ar, gb, ref, ty, src, by, fa, fs, fb, dr, ph, t = Date.now(), id }) {
   const m = { v: 1, id: id || b64url(cr().getRandomValues(new Uint8Array(9))), a, tm, t, s };
   if (pos && Number.isFinite(pos.lat) && Number.isFinite(pos.lon)) {
     m.lat = r6(pos.lat);
@@ -117,6 +124,15 @@ export function buildMsg({ a, tm, s, cat, txt, pos, pc, pa, ar, gb, ref, t = Dat
   if (Array.isArray(ar) && ar.length) m.ar = ar.map(([n, p]) => [String(n).slice(0, 40), Number(p)]);
   if (cat) m.cat = cat;
   if (ref) m.ref = String(ref).slice(0, 40); // v125: Bezug (Antwort auf eine Nachricht der EL)
+  // v128: nur gesetzte Felder (kurz halten): Einheitentyp (nicht Hund), Quelle „Funk“ + Gerät, Fund der EL (Art, Status, Finder, Foto, dringend)
+  if (ty && ty !== 'hund') m.ty = ty;
+  if (src) m.src = String(src).slice(0, 8);
+  if (by) m.by = String(by).slice(0, 40);
+  if (fa) m.fa = String(fa).slice(0, 8);
+  if (fs) m.fs = fs === 'g' ? 'g' : 'o';
+  if (fb) m.fb = String(fb).slice(0, 60);
+  if (dr) m.dr = 1;
+  if (ph) m.ph = 1;
   return m;
 }
 const okMsg = (m) => m && typeof m === 'object' && typeof m.id === 'string' && Number.isFinite(m.t) && typeof m.s === 'string';
@@ -127,8 +143,9 @@ export function mergeStatus(list, msgs) {
   return [...byId.values()].sort((x, y) => x.t - y.t);
 }
 // v103: Korrektur-Meldung (s: 'kor', ref = ID der geänderten Meldung): del / neuer Ort (pos) / nopos / txt ('' = Notiz weg)
-export function buildKor({ a, tm, ref, del, pos, nopos, txt, t, id }) {
+export function buildKor({ a, tm, ref, del, pos, nopos, txt, fs, t, id }) {
   const m = buildMsg({ a, tm, s: 'kor', pos, txt, t, id });
+  if (fs) m.fs = fs === 'g' ? 'g' : 'o'; // v128: Fund als geprüft markieren
   m.ref = ref;
   if (del) m.del = 1;
   if (nopos) m.nopos = 1;
@@ -151,6 +168,7 @@ export function applyKor(list) {
       if (Number.isFinite(k.lat) && Number.isFinite(k.lon)) { r.lat = k.lat; r.lon = k.lon; delete r.acc; }
       if (k.nopos) { delete r.lat; delete r.lon; delete r.acc; }
       if (typeof k.txt === 'string') { if (k.txt) r.txt = k.txt; else delete r.txt; }
+      if (k.fs) r.fs = k.fs;
     }
     r.ed = ks[ks.length - 1].t;
     if (r.gone && !isUrgent(r)) continue;

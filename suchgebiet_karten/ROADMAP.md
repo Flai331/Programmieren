@@ -1,13 +1,14 @@
 # Suchgebiet-Karten – Fahrplan
 
 Dieser Fahrplan wird vom stündlichen Autopiloten abgearbeitet (siehe `AUTOPILOT.md`).
-Live ist **v128**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
+Live ist **v129**. Häkchen setzt der Autopilot; Klaas kann Einträge jederzeit ergänzen,
 umsortieren oder streichen.
 
 Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[x]` freigegeben und live
 
 ## Neue Funktionen (gehen erst nach Klaas' Test live)
 
+- [~] **v129 – Einheiten, Funkmeldungen, Track-Import, Funde der EL**: Teams mit Typ (🐕 Hund / 🚶 Fußtrupp-Kette / 🚙 Fahrzeug-Quad / 🚁 Drohne), Organisation, Funkrufname und Personenzahl – Typ-Symbol an Chips und Aufträgen, „Trupp zeigt an“ je Typ, Kräfte im Bericht automatisch aus den Teams; „✍️ Meldung für Team eintragen“ (Funkmeldung: Suche begonnen, Stand %, Fund/Hinweis mit Ort, Pause, Ablösung, abgeschlossen, zurück – mit Uhrzeit); Track-Import mit Auswahlliste (Länge, Zeit, „ACTIVE LOG“/ältere als 24 h abgewählt, Team/Auftrag und Hund/Mensch/Drohne zuordnen; zählt wie eine Rückmeldung); „🔎 Fund/Hinweis eintragen“ bei der EL (Art, Beschreibung, Uhrzeit, Finder, Foto, offen/geprüft, dringend, Prüfauftrag an ein Team); UA aus mehreren Gebieten, UA umbenennbar; Auto-Abschluss bei „abgeschlossen 100 %“ mit Rückgängig, „Als erledigt markieren“ im Abschlussdialog; UA-Übersicht mit Ampel (> 60 min ohne Meldung); Einsatzzeiten je Team (Start, Pausen, 🔄 Ablösung, zurück), Personenstunden im Bericht, „Wer ist noch draußen?“; Teams in langen Listen ziehen – die Liste scrollt mit. Alles auch nur mit Handy/Tablet bedienbar.
 - [~] **v128 – Neuer Name „RHS Einsatz“**: App-Name (Android-Symbol, Browser-Tab, installierte Web-App), Texte in der App, Sperrbildschirm, Freigabe-Mail, PDF/GPX-Hersteller und APK-Veröffentlichung heißen jetzt „RHS Einsatz“. Web-Adresse, APK-Download-Link und Update-Weg bleiben unverändert.
 - [~] **v127 – Fehler aus dem Einsatz-Durchlauf**: Fortschritt UA → ELW → EL verliert nichts mehr (Ankunftszeit zählt, Hinweis „weiterleiten?“); Live-Kanal entsteht beim Anlegen des Einsatzes und geht mit jeder Übergabe mit (kein Behelfs-Auftrag mehr); „Einfügen“ beim ELW überspringt Vorhandenes („n neu, m schon vorhanden“); BaseCamp-Re-Import ohne Rasterlinien/Feldnamen/Doppel-Striche/B-Ort; Umteilen eines Umrisses wirkt (abgeschlossene Aufträge sperren nicht); doppelte Teamnamen werden erkannt, Wegnamen mit Hund („Weg Team 1 (Rex) ab 19:47“); GPX-Schnellexport mit Meldungen; KML gx:Track; HF-Kategorie „🎒 Fundstück (Kleidung/Gegenstand)“; UA sieht nur Meldungen eigener Teams (Fund/Hilfe alle); Hinweise verdecken keine Dialog-Knöpfe mehr.
 - [~] **v126 – HF aktualisiert die App selbst**: Im Hundeführer-Menü „⬇️ App aktualisieren“ (Android-App) ohne PIN der Einsatzleitung; ist ein Auftrag offen, kommt vorher eine Warnung („Auftrag noch offen – trotzdem aktualisieren?“, Auftrag/Weg/Meldungen bleiben gespeichert), sonst keine. Ein abgeschlossener HF-Auftrag blockiert den automatischen Update-Hinweis nicht mehr. „An ELW senden“: Felder „An“ und „Auftrag“ beschriftet.
