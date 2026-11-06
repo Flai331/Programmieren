@@ -387,7 +387,7 @@ class MainActivity : ComponentActivity() {
                 "", "Protokoll:", r.optString("log"),
             ).joinToString("\n")
             val mail = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:klaasotte99@gmail.com")).apply {
-                putExtra(Intent.EXTRA_SUBJECT, "Suchgebiet-Karten: " + r.optString("title", "Fehlerbericht"))
+                putExtra(Intent.EXTRA_SUBJECT, "RHS Einsatz: " + r.optString("title", "Fehlerbericht"))
                 putExtra(Intent.EXTRA_TEXT, body)
             }
             runOnUiThread {

@@ -632,6 +632,6 @@ export async function buildPdf(project, grid, opts, layer, viewBounds, onProgres
   }
   // Suchgebiet ins PDF einbetten -> PDF kann in der App wieder geöffnet werden
   doc.addMetadata(embedMarker(project), 'https://flai331.github.io/suchgebiet-karten/');
-  doc.setProperties({ title: opts.title || 'Suchgebiet', subject: 'Suchgebiet-Karte', creator: 'Suchgebiet-Karten' });
+  doc.setProperties({ title: opts.title || 'Suchgebiet', subject: 'Suchgebiet-Karte', creator: 'RHS Einsatz' });
   return { blob: doc.output('blob'), pages: doc.getNumberOfPages(), missing };
 }

@@ -418,7 +418,7 @@ export function buildGpx(project, grid, opts, part = '') {
 
 function gpxDoc(docName, wpts, trks) {
   return '<?xml version="1.0" encoding="UTF-8"?>\n'
-    + '<gpx version="1.1" creator="Suchgebiet-Karten" xmlns="http://www.topografix.com/GPX/1/1"'
+    + '<gpx version="1.1" creator="RHS Einsatz" xmlns="http://www.topografix.com/GPX/1/1"'
     + ' xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3"'
     + ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
     + ' xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd'

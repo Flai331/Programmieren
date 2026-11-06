@@ -113,7 +113,7 @@ object Updater {
                 @Suppress("DEPRECATION")
                 val info = app.packageManager.getPackageArchiveInfo(part.absolutePath, 0)
                     ?: throw IllegalStateException("Die geladene Datei ist keine gültige App")
-                if (info.packageName != app.packageName) throw IllegalStateException("Die geladene App passt nicht zu Suchgebiet-Karten")
+                if (info.packageName != app.packageName) throw IllegalStateException("Die geladene App passt nicht zu RHS Einsatz")
                 if (PackageInfoCompat.getLongVersionCode(info) <= BuildConfig.VERSION_CODE.toLong()) {
                     throw IllegalStateException("Die geladene Version ist nicht neuer als die installierte")
                 }

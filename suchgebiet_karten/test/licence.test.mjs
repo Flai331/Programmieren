@@ -64,7 +64,7 @@ test('checkUrl/deviceModel/mailtoHref', () => {
   const u = checkUrl('https://x/exec', { id: 'abcdefghijkl', mode: 'hf', version: 'v113', platform: 'web', name: 'Max & Co', ua: 'Linux; Android 13; Pixel 7)' });
   assert.match(u, /^https:\/\/x\/exec\?lic=abcdefghijkl&m=hf&v=v113&p=web&n=Max%20%26%20Co&ua=Pixel%207$/);
   const m = mailtoHref('', 'abcdefghijkl');
-  assert.match(m, /^mailto:error\.404\.found@outlook\.de\?subject=Suchgebiet-Karten%20Freigabe&body=Ger%C3%A4te-ID%3A%20abcdefghijkl$/);
+  assert.match(m, /^mailto:error\.404\.found@outlook\.de\?subject=RHS%20Einsatz%20Freigabe&body=Ger%C3%A4te-ID%3A%20abcdefghijkl$/);
 });
 
 test('licenceState: im laufenden Einsatz nie gesperrt, sondern deferred', () => {

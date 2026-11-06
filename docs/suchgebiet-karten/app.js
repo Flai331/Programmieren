@@ -73,7 +73,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v127';
+const APP_VERSION = 'v128';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -6477,7 +6477,7 @@ async function sendInfos() {
   const link = shareLink('i', data, PUBLIC_URL);
   const title = `📍 Lage-Infos von ${db.deviceName || 'Einsatzleitung'}`;
   if (how.w === 'copy') return copyText(link);
-  if (how.w === 'share') return shareLinkText(link, 'Lage-Infos', `Lage-Infos (${P.title || 'Einsatz'}) von ${db.deviceName || 'Einsatzleitung'} – Link in der Suchgebiet-Karten-App öffnen:`);
+  if (how.w === 'share') return shareLinkText(link, 'Lage-Infos', `Lage-Infos (${P.title || 'Einsatz'}) von ${db.deviceName || 'Einsatzleitung'} – Link in der App „RHS Einsatz“ öffnen:`);
   const parts = link.length > QR_MAX ? splitParts(data, 800).map((x) => shareLink('m', x, PUBLIC_URL)) : null;
   showQr(link, title, `Auf dem anderen Gerät der Einsatzleitung mit „📷 Einsatz übernehmen“ oder „📷 Rückmeldung scannen“ einlesen${parts ? ' (mehrere Codes wechseln sich ab, Kamera ruhig halten)' : ''}.`, parts);
 }
@@ -6558,7 +6558,7 @@ async function sendProgress() {
     touch();
     saveNow();
     if (how === 'copy') return copyText(link);
-    if (how === 'share') return shareLinkText(link, 'Fortschritt', `Fortschritt (${proj.title || 'Einsatz'}) von ${from} – Link in der Suchgebiet-Karten-App öffnen:`);
+    if (how === 'share') return shareLinkText(link, 'Fortschritt', `Fortschritt (${proj.title || 'Einsatz'}) von ${from} – Link in der App „RHS Einsatz“ öffnen:`);
     const parts = link.length > QR_MAX ? splitParts(data, 800).map((x) => shareLink('m', x, PUBLIC_URL)) : null;
     return showQr(link, `🔄 Fortschritt von ${from} an ${to}`, `Auf dem anderen Gerät der Einsatzleitung mit „📷 Einsatz übernehmen“ einlesen${parts ? ` (${parts.length} Codes wechseln sich ab, Kamera ruhig halten)` : ''}. Mehrfach einlesen schadet nicht.`, parts);
   }
@@ -6684,7 +6684,7 @@ async function openInApp(h) {
   if (bridge || !/Android/i.test(navigator.userAgent) || /[?&]web=1/.test(location.search)) return false;
   try { if (localStorage.getItem(NO_APP_KEY)) return false; } catch { /* privater Modus */ }
   const go = await openDlg((box, close) => {
-    dlgHead(box, '📲 In der App öffnen?', 'Ist die Android-App „Suchgebiet-Karten“ installiert, dort öffnen – dann landet alles im laufenden Einsatz der App.');
+    dlgHead(box, '📲 In der App öffnen?', 'Ist die Android-App „RHS Einsatz“ installiert, dort öffnen – dann landet alles im laufenden Einsatz der App.');
     dlgButton(box, '📲 In der App öffnen', 'primary', () => close('app'));
     dlgButton(box, '🌐 Hier im Browser weiter', '', () => close('web'));
     dlgButton(box, 'Im Browser weiter und nicht mehr fragen', '', () => close('never'));
@@ -7111,7 +7111,7 @@ $('ct-file').addEventListener('change', async (e) => {
 const contactsFile = () => new Blob([toVcf(sortContacts(db.contacts))], { type: 'text/vcard' });
 $('ct-share').addEventListener('click', () => {
   if (!db.contacts.length) return toast('Noch keine Kontakte');
-  shareFile(contactsFile(), fileName('Kontakte', '', '.vcf'), 'Kontakte', 'Adressbuch (vCard) – in Suchgebiet-Karten unter Kontakte → Importieren öffnen.');
+  shareFile(contactsFile(), fileName('Kontakte', '', '.vcf'), 'Kontakte', 'Adressbuch (vCard) – in RHS Einsatz unter Kontakte → Importieren öffnen.');
 });
 $('ct-save').addEventListener('click', () => {
   if (!db.contacts.length) return toast('Noch keine Kontakte');
@@ -7829,7 +7829,7 @@ $('proj-share').addEventListener('click', async () => {
   saveNow();
   const text = exportProject(P);
   const title = P.title || 'Suchgebiet';
-  const msg = `Suchgebiet „${title}“ – in der App Suchgebiet-Karten unter „Einsätze → Datei öffnen“ laden.`;
+  const msg = `Suchgebiet „${title}“ – in der App RHS Einsatz unter „Einsätze → Datei öffnen“ laden.`;
   const json = new Blob([text], { type: 'application/json' });
   await shareFile(json, safeName('Einsatzdatei', '.suchgebiet.json'), title, msg, null, true);
 });
@@ -8350,7 +8350,7 @@ function updatePdfPlan() {
 function mailText(title) {
   return `Anbei die Karte zum Suchgebiet „${title}“.`
     + (grid ? `\nRaster: ${formatMeters(grid.cellM)}-Felder, A1 = Nordwest-Ecke, Felder A1 bis ${cellLabel(grid.cols - 1, grid.rows - 1)}.` : '')
-    + '\nDas PDF lässt sich in der App Suchgebiet-Karten öffnen, um weiterzuarbeiten.';
+    + '\nDas PDF lässt sich in der App RHS Einsatz öffnen, um weiterzuarbeiten.';
 }
 
 async function buildPdfFile(progress) {
@@ -10091,7 +10091,7 @@ if (updInstalled) {
 }
 
 // Startmeldung (der Emulator-Test der Android-App wartet darauf)
-console.info(`Suchgebiet-Karten bereit (${bridge ? 'Android-App' : 'Browser'})`);
+console.info(`RHS Einsatz bereit (${bridge ? 'Android-App' : 'Browser'})`);
 
 // Für Tests
 window.__app = {
