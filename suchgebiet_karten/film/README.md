@@ -35,3 +35,17 @@ node compose.js     # Schnitt (ca. 6 min)  -> RHS-Einsatz-Film.mp4
 - `SHOTS=1 node film.js` legt zusätzlich Kontrollbilder `chk_*.png` ab, `STOP=3` hält nach Kapitel 3 an.
 
 Einsatz, Teams und vermisste Person im Film sind erfunden (Ort: Waldgebiet bei Celle-Scheuen).
+
+## Zweiter Film: „Einsatz Scheuen“ (erfundener Einsatz)
+
+Ein kompletter, frei erfundener Einsatz von der Alarmierung (15:10) bis zum Bericht (17:40), mit
+fortlaufender Einsatzuhr: Einsatzleitung am Tablet, drei Hundeführer-Handys (zwei suchen unsichtbar im
+Hintergrund), Feuerwehr-Kette und Drohne per Funkmeldung, Mütze als Fund, Wärmequelle mit Prüfauftrag,
+Fund durch Rex, Nachricht an alle, „Wer ist noch draußen?“, alle Wege auf einer Karte, Bericht.
+
+```bash
+REC_DIR=rec-einsatz node einsatz.js
+REC_DIR=rec-einsatz BUILD_DIR=build-einsatz OUT_NAME=RHS-Einsatz-Scheuen.mp4 node compose.js
+```
+
+Die Uhrzeit der App wird dafür gestellt und zwischen den Szenen vorgespult (`advance`/`at` in `lib.js`).
