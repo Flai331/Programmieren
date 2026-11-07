@@ -1,0 +1,10 @@
+rec/
+build/
+pdfimg/
+chk_*.png
+*.pdf
+*.mp4
+links.json
+pdfs.html
+run.log
+compose.log
