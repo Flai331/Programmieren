@@ -280,6 +280,119 @@ const GEO = `(() => {
   await Promise.all([w1, w2, w3]);
   if (STOP === '5') return done();
 
+  // ================= 16:20 Absuche am See (Umriss) =================
+  await at('16:20');
+  card('t5b', { style: 'time', num: '16:20', title: 'Absuche am See', sub: 'Mia und Balu suchen den Umriss ab' });
+  const msnap = async (n) => { if (shots) await mia.shot(`chk_mia_${n}.png`); };
+  const pickBtn = (pg, re) => pg.evaluate((re) => { const b = [...document.querySelectorAll('#dlg-box button')].find((x) => new RegExp(re).test(x.textContent)); if (b && !document.getElementById('dlg').hidden) { b.click(); return true; } return false; }, re).catch(() => false);
+  // Mias Karte auf ihr Gebiet
+  await M.click('#hfi-area').catch(() => {}); await sleep(1500);
+  // Schilfgürtel am Westufer: Koordinaten -> Punkte auf Mias Handy
+  const reedLL = await toLL(ring.length ? [o(1035, 255), o(1045, 225), o(1060, 300)] : []);
+  const reedPx = await M.evaluate((lls) => { const m = window.__app.map; const r = m.getContainer().getBoundingClientRect(); return lls.map(([a, b]) => { const pt = m.latLngToContainerPoint([a, b]); return [pt.x + r.left, pt.y + r.top]; }); }, reedLL);
+  const cx = reedPx.reduce((s, q) => s + q[0], 0) / reedPx.length, cy = reedPx.reduce((s, q) => s + q[1], 0) / reedPx.length;
+  const lasso = []; for (let k = 0; k <= 28; k++) { const a = k / 28 * Math.PI * 2; lasso.push([cx + Math.cos(a) * 46 + Math.sin(k) * 3, cy + Math.sin(a) * 70]); }
+  await dual(el, mia, 'reed', { t: 'Mia umkreist einen Bereich', s: '„✏️ Bereich“: mit dem Finger umkreisen, Namen und Notiz eingeben – geht mit der Rückmeldung an die Einsatzleitung.' });
+  await mia.pause(1000);
+  await mia.tap('#hf-draw', { wait: 700 });
+  await mia.drag(lasso, { ms: 1600, wait: 700 });
+  await mia.type('#dlg-box input', 'Schilfgürtel', { delay: 60 });
+  await mia.type('#dlg-box textarea', 'nicht begehbar, sumpfig – nur vom Ufer abgesucht', { delay: 25 });
+  await mia.tap('#dlg-box button:has-text("Speichern")', { wait: 1400 });
+  await msnap('reed');
+  await el.endSeg(); await mia.endSeg();
+  await dual(el, mia, 'stand', { t: '„📊 Stand 60 %“ – live bei der Einsatzleitung', s: 'Wie viel vom Gebiet abgesucht ist, mit Grund. Der Status-Chip zeigt es sofort.' });
+  await mia.tap('#hf-status', { wait: 600 });
+  await mia.tap('button:visible:has-text("Stand")', { wait: 700 });
+  const rng = M.locator('#dlg-box .st-range');
+  const rb = await rng.boundingBox();
+  await mia.drag([[rb.x + rb.width * 0.5, rb.y + rb.height / 2], [rb.x + rb.width * 0.6, rb.y + rb.height / 2]], { ms: 500, wait: 300 });
+  await M.evaluate(() => { const r = document.querySelector('#dlg-box .st-range'); r.value = 60; r.dispatchEvent(new Event('input', { bubbles: true })); });
+  await mia.type('#dlg-box input[type=text]', 'Schilfgürtel nicht begehbar', { delay: 30 });
+  await mia.tap('#dlg-box button:has-text("Melden")', { wait: 900 });
+  await poll(p); await sleep(2600);
+  await snap('stand');
+  await el.pause(800);
+  await el.endSeg(); await mia.endSeg();
+  if (STOP === '5a') return done();
+
+  // ================= 16:33 Umriss fertig =================
+  await at('16:33');
+  await walker(M, walkMia.slice(34), 150);
+  await dual(el, mia, 'zu', { t: 'Gebiet fertig: „✅ Auftrag abschließen“', s: '100 % – die Einsatzleitung schließt den Auftrag automatisch ab (mit „Rückgängig“). Mia ist wieder frei.' });
+  await mia.tap('#hf-status', { wait: 600 });
+  await mia.tap('button:visible:has-text("Auftrag abschließen")', { wait: 700 });
+  await mia.tap('#dlg-box button:has-text("Abschließen")', { wait: 1500 });
+  await msnap('zu');
+  await poll(p); await sleep(2800);
+  await snap('zu');
+  await el.pause(1000);
+  await el.endSeg(); await mia.endSeg();
+  // Mias Rückmeldung (QR) übernehmen
+  let miaBack1 = '';
+  try {
+    if (!(await M.locator('#qr-copy').isVisible().catch(() => false))) { await pickBtn(M, 'Schließen|Später|OK'); await M.click('#hf-back'); await sleep(1500); }
+    await M.click('#qr-copy'); await sleep(300);
+    miaBack1 = (await M.evaluate(() => navigator.clipboard.readText())).replace(LIVE, LOCAL);
+    await M.click('#qr-close').catch(() => {});
+  } catch (e) { console.log('miaBack1', e.message.split('\n')[0]); }
+  console.log('MIA1', miaBack1.length);
+
+  await el.seg('next', { t: 'Rückmeldung übernehmen – neues Gebiet für Mia', s: 'Weg und Schilfgürtel landen auf der Karte. Dann ein neuer Umriss am Bahndamm Ost – Auftrag per QR-Code.', speed: 1.5 });
+  if (miaBack1) {
+    await el.tap('#btn-teams', { wait: 500 });
+    await el.tap('#recv-paste', { wait: 500 });
+    await p.fill('#dlg-box textarea', miaBack1);
+    await el.tap('#dlg-box button:has-text("Übernehmen")', { wait: 1500 });
+    await pickBtn(p, 'Noch offen|Später');
+    await closePanels();
+    await sleep(600);
+  }
+  await snap('miaback');
+  await el.tap('[data-tool=track]', { wait: 400 });
+  for (const pt of O([[880, 470], [1010, 430], [1060, 500], [940, 560]])) await el.tap(pt, { wait: 250, ms: 380 });
+  await el.tap('#track-done', { wait: 600 });
+  await el.type('#dlg-box input[type=text]', 'Bahndamm Ost', { delay: 50 });
+  await p.locator('#dlg-box select').selectOption({ label: '🐕 Mia (Balu)' }).catch(async () => {
+    const opts = await p.locator('#dlg-box select option').allTextContents();
+    await p.locator('#dlg-box select').selectOption({ index: opts.findIndex((x) => x.includes('Mia')) });
+  });
+  await el.tap('#dlg-box button:has-text("Speichern")', { wait: 800 });
+  await el.tap('[data-tool=pan]', { wait: 400 });
+  await el.tap('#btn-teams', { wait: 500 });
+  await el.tap('#send-open', { wait: 800 });
+  { const opts = await p.locator('#send-team option').allTextContents(); await p.selectOption('#send-team', { index: opts.findIndex((x) => x.includes('Mia')) }); }
+  await sleep(500);
+  await el.tap('#send-qr', { wait: 1500 });
+  await p.click('#qr-copy'); await sleep(200);
+  const linkMia2 = (await p.evaluate(() => navigator.clipboard.readText())).replace(LIVE, LOCAL);
+  await el.tap('#qr-close', { wait: 400 });
+  await closePanels();
+  await snap('next');
+  await el.endSeg();
+  // Mia übernimmt das neue Gebiet (im Hintergrund)
+  await M.goto(linkMia2); await sleep(2500);
+  await pickBtn(M, 'Ersetzen|Übernehmen|Ja|OK');
+  await sleep(800);
+  await M.click('#hf-status').catch(() => {}); await sleep(400); await M.click('button:visible:has-text("Suche begonnen")').catch(() => {}); await sleep(400);
+  await M.click('#hf-rec').catch(() => {}); await sleep(300);
+  const walkMia2 = await toLL(snake(900, 1030, [470, 500, 530], 6));
+  w3 = walker(M, walkMia2, 200);
+
+  // Jonas meldet seinen Stand, die Feuerwehr ist fertig
+  await J.click('#hf-status'); await sleep(400); await J.click('button:visible:has-text("Stand")'); await sleep(400);
+  await J.evaluate(() => { const r = document.querySelector('#dlg-box .st-range'); r.value = 80; r.dispatchEvent(new Event('input', { bubbles: true })); });
+  await J.click('#dlg-box button:has-text("Melden")'); await sleep(600);
+  await poll(p); await sleep(2500);
+  await el.seg('progress', { t: 'Überblick über den Fortschritt', s: 'Jonas meldet 80 %, die Feuerwehr per Funk „Abgeschlossen“ – jeder Chip zeigt den aktuellen Stand.', speed: 1.3 });
+  await el.tap('#btn-status', { wait: 700 });
+  await funk('FF Scheuen', 'Abgeschlossen', true);
+  await closePanels();
+  await el.pause(2200);
+  await snap('progress');
+  await el.endSeg();
+  await w3;
+
   // ================= 16:41 Dämmerung, Drohne meldet Wärmequelle =================
   await at('16:41');
   card('t6', { style: 'time', num: '16:41', title: 'Es wird dunkel', sub: 'Sonnenuntergang – die Drohne fliegt mit Wärmebild' });
