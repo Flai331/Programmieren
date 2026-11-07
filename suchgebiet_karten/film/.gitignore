@@ -19,3 +19,4 @@ tts/
 *.mp3
 hoerproben/
 xtts.log
+__pycache__/
