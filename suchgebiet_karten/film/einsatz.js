@@ -542,14 +542,13 @@ const GEO = `(() => {
   // ================= 17:40 Einsatzende =================
   await at('17:40');
   card('t10', { style: 'time', num: '17:40', title: 'Einsatzende', sub: 'Bericht schreiben, verschicken, fertig' });
-  await el.seg('report', { t: 'Bericht auf Knopfdruck', s: 'Zeiten, Kräfte aus den Teams, Einsatzzeiten und Personenstunden, alle Meldungen mit Ort – plus JUH-Formular.', speed: 1.5 });
+  await el.seg('report', { t: 'Bericht auf Knopfdruck', s: 'Zeiten, Kräfte aus den Teams, Einsatzzeiten und Personenstunden, alle Meldungen mit Ort.', speed: 1.5 });
   await el.tap('#btn-mission', { wait: 800 });
   await el.tap('[data-tab=ende]', { wait: 800 });
   await el.type('#ms-summary', '15:50 Suche mit 3 Hundeteams, Fußtrupp FF und Drohne.\n16:12 Mütze gefunden (FF).\n16:44 Wärmequelle (Drohne), Prüfauftrag an Anna.\n16:55 Fund durch Anna/Rex am Bahndamm, an RD übergeben.', { delay: 8 });
   await snap('report');
   const save = async (sel, file) => { const d = p.waitForEvent('download', { timeout: 90000 }).catch(() => null); await el.tap(sel, { wait: 1300 }); const x = await d; if (x) await x.saveAs(file); };
   await save('#ms-save', 'e-bericht.pdf');
-  await save('#ms-juh-save', 'e-juh.pdf');
   await el.endSeg();
   await closePanels();
   // Karten-PDF
@@ -564,10 +563,10 @@ const GEO = `(() => {
     const { execFileSync } = require('child_process');
     fs.rmSync('pdfimg-einsatz', { recursive: true, force: true });
     fs.mkdirSync('pdfimg-einsatz');
-    for (const [f, n] of [['e-karte.pdf', 1], ['e-bericht.pdf', 2], ['e-juh.pdf', 1]]) {
+    for (const [f, n] of [['e-karte.pdf', 1], ['e-bericht.pdf', 2]]) {
       if (fs.existsSync(f)) execFileSync('pdftoppm', ['-png', '-r', '110', '-f', '1', '-l', String(n), f, `pdfimg-einsatz/${f.replace('.pdf', '')}`]);
     }
-    const ord = ['e-karte', 'e-bericht', 'e-juh'];
+    const ord = ['e-karte', 'e-bericht'];
     const imgs = fs.readdirSync('pdfimg-einsatz').sort().sort((a, b) => ord.findIndex((x) => a.startsWith(x)) - ord.findIndex((x) => b.startsWith(x))).map((x) => `file://${__dirname}/pdfimg-einsatz/${x}`);
     const html = `<html><head><style>body{margin:0;width:1600px;height:900px;overflow:hidden;background:#e9ebef}
       .pg{position:absolute;top:50px;height:800px;box-shadow:0 12px 40px rgba(0,0,0,.28);background:#fff;opacity:0;transform:translateY(60px) scale(.96);transition:all .7s cubic-bezier(.2,.8,.2,1)} .pg.on{opacity:1;transform:none}</style></head>
@@ -576,14 +575,14 @@ const GEO = `(() => {
     const pdf = new Rec('pdf');
     const pp = await pdf.start(`file://${__dirname}/pdfs-einsatz.html`);
     await sleep(800);
-    await pdf.seg('pdfs', { t: 'Fertig zum Verschicken', s: 'Karte mit allen Wegen und Funden, Abschlussbericht, JUH-Formular – per Mail, WhatsApp oder Drucker.' });
+    await pdf.seg('pdfs', { t: 'Fertig zum Verschicken', s: 'Karte mit allen Wegen und Funden und der Abschlussbericht – per Mail, WhatsApp oder Drucker.' });
     for (let i = 0; i < imgs.length; i++) { await pp.evaluate((i) => document.getElementById('pg' + i).classList.add('on'), i); await sleep(800); }
     await sleep(2200);
     await pdf.finish();
   } catch (e) { console.log('PDF-Bilder', e.message); }
 
   card('story', { style: 'story', lines: ['Herr K. wurde um 16:55 gefunden.', 'Unterkühlt, aber ansprechbar – übergeben an den Rettungsdienst.', 'Suchzeit 65 Minuten · 5 Einheiten · 3 Hundeteams', 'Einsatz, Personen und Ablauf sind frei erfunden.'] });
-  card('outro', { style: 'outro', feats: [['📲', 'Aufträge per QR-Code'], ['📣', 'Live-Status & Fund-Alarm'], ['✍️', 'Funkmeldungen für Teams ohne App'], ['🔎', 'Funde mit Prüfauftrag'], ['🌙', 'Wetter, Dämmerung, Nachtmodus'], ['📄', 'Bericht & JUH-Formular']] });
+  card('outro', { style: 'outro', feats: [['📲', 'Aufträge per QR-Code'], ['📣', 'Live-Status & Fund-Alarm'], ['✍️', 'Funkmeldungen für Teams ohne App'], ['🔎', 'Funde mit Prüfauftrag'], ['🌙', 'Wetter, Dämmerung, Nachtmodus'], ['📄', 'Abschlussbericht auf Knopfdruck']] });
   await done();
 
   async function done() {
