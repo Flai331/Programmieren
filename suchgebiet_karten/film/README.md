@@ -49,3 +49,18 @@ REC_DIR=rec-einsatz BUILD_DIR=build-einsatz OUT_NAME=RHS-Einsatz-Scheuen.mp4 nod
 ```
 
 Die Uhrzeit der App wird dafür gestellt und zwischen den Szenen vorgespult (`advance`/`at` in `lib.js`).
+
+### Sprecher (Erklärungen)
+
+Die Erklärungen kommen aus `sprecher-einsatz.json` (ein Text je Szene bzw. Karte) und werden mit der freien
+deutschen Stimme „Thorsten“ von Piper erzeugt. Ist ein Satz länger als die Szene, bleibt das letzte Bild
+stehen; Titelkarten werden passend verlängert.
+
+```bash
+pip install piper-tts
+mkdir -p tts && cd tts   # Stimme von huggingface.co/rhasspy/piper-voices (de/de_DE/thorsten/high) laden
+curl -LO https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/thorsten/high/de_DE-thorsten-high.onnx
+curl -LO https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/thorsten/high/de_DE-thorsten-high.onnx.json
+cd ..
+REC_DIR=rec-einsatz BUILD_DIR=build-einsatz OUT_NAME=RHS-Einsatz-Scheuen.mp4 NARR=sprecher-einsatz.json node compose.js
+```
