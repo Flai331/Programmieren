@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const OUT = path.join(__dirname, 'rec');
+const OUT = path.join(__dirname, process.env.REC_DIR || 'rec');
 fs.mkdirSync(OUT, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -37,6 +37,27 @@ const FINGER_JS = `
   if (document.body) add(); else document.addEventListener('DOMContentLoaded', add);
 })();
 `;
+
+// Einsatzuhr: alle Geräte laufen auf einer gestellten Uhrzeit, die sich vorspulen lässt
+const STORY = { t0: null, real0: 0, skip: 0 };
+function storyStart(date) { STORY.t0 = date.getTime(); STORY.real0 = Date.now(); }
+const storyNow = () => STORY.t0 + (Date.now() - STORY.real0) + STORY.skip;
+const hm = (t) => new Date(t).toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+async function advance(min, recs) {
+  STORY.skip += min * 60000;
+  for (const r of recs) if (r && r.page) await r.page.clock.fastForward(min * 60000).catch((e) => console.log('clock', e.message));
+}
+// auf eine bestimmte Uhrzeit (HH:MM) vorspulen
+async function advanceTo(hhmm, recs) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const now = storyNow();
+  const d = new Date(now);
+  const tgt = new Date(d.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
+  const off = d.getTime() - tgt.getTime(); // Abstand UTC↔Berlin
+  tgt.setHours(h, m, 0, 0);
+  const diff = tgt.getTime() + off - now;
+  if (diff > 0) await advance(diff / 60000, recs);
+}
 
 // Gemeinsame Reihenfolge aller Abschnitte (über alle Geräte)
 const ORDER = [];
@@ -74,6 +95,7 @@ class Rec {
       geolocation: { latitude: 52.6705, longitude: 10.0985 }, permissions: ['geolocation'],
     });
     this.page = await this.ctx.newPage();
+    if (STORY.t0) { await this.page.clock.install({ time: new Date(storyNow()) }); await this.page.clock.resume(); }
     await this.page.route(/overpass/, (r) => r.abort());
     await this.page.route(/script\.google\.com/, fakeServer);
     await this.page.addInitScript(FINGER_JS);
@@ -95,6 +117,7 @@ class Rec {
   // Abschnitt mit eigenem Untertitel beginnen (beendet den vorigen)
   async seg(id, caption = null, { noOrder = false } = {}) {
     await this.endSeg();
+    if (caption && STORY.t0) caption = { ...caption, clock: hm(storyNow()) };
     this.cur = { id: `${this.name}-${id}`, kind: this.mobile ? 'phone' : 'tablet', caption, frames: [], t0: Date.now() / 1000 };
     if (!noOrder) ORDER.push({ id: this.cur.id, kind: this.cur.kind, caption });
     await this.cdp.send('Page.startScreencast', { format: 'jpeg', quality: 90,
@@ -189,6 +212,7 @@ class Rec {
 
 // Zwei Geräte gleichzeitig (Tablet links, Handy rechts)
 async function dual(tab, phone, id, caption) {
+  if (caption && STORY.t0) caption = { ...caption, clock: hm(storyNow()) };
   await tab.seg(id, caption, { noOrder: true });
   await phone.seg(id, caption, { noOrder: true });
   ORDER.push({ id: `dual-${id}`, kind: 'dual', a: `${tab.name}-${id}`, b: `${phone.name}-${id}`, caption });
@@ -196,4 +220,4 @@ async function dual(tab, phone, id, caption) {
 function card(id, data) { ORDER.push({ id, kind: 'card', ...data }); }
 function saveOrder() { fs.writeFileSync(path.join(OUT, 'order.json'), JSON.stringify(ORDER, null, 1)); }
 
-module.exports = { Rec, sleep, OUT, dual, card, saveOrder, ORDER };
+module.exports = { Rec, sleep, OUT, dual, card, saveOrder, ORDER, storyStart, storyNow, advance, advanceTo, hm };

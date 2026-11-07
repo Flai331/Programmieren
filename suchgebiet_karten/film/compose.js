@@ -5,8 +5,9 @@ const { execFileSync } = require('child_process');
 const { chromium } = require('playwright');
 
 const DIR = __dirname;
-const REC = path.join(DIR, 'rec');
-const BUILD = path.join(DIR, 'build');
+const REC = path.join(DIR, process.env.REC_DIR || 'rec');
+const BUILD = path.join(DIR, process.env.BUILD_DIR || 'build');
+const OUTNAME = process.env.OUT_NAME || 'RHS-Einsatz-Film.mp4';
 fs.mkdirSync(BUILD, { recursive: true });
 const FPS = 30;
 const W = 1920, H = 1080;
@@ -49,16 +50,18 @@ function layerHtml(kind) {
 
 function capHtml(kind, cap, chapter) {
   let box;
+  const clk = cap.clock ? `<span style="display:inline-flex;align-items:center;gap:10px;background:#fff;color:#15171c;font-weight:800;font-size:30px;padding:6px 16px;border-radius:10px;font-variant-numeric:tabular-nums">🕒 ${esc(cap.clock)}</span>` : '';
   if (kind === 'tablet') box = `<div style="position:absolute;left:160px;top:944px;width:1600px;display:flex;align-items:baseline;gap:22px">
       <span class="tag">${esc(chapter)}</span>
       <div><div style="color:#fff;font-weight:700;font-size:40px;line-height:1.15">${esc(cap.t)}</div>
-      <div style="color:#c8ccd4;font-size:28px;line-height:1.35;margin-top:6px">${esc(cap.s)}</div></div></div>`;
+      <div style="color:#c8ccd4;font-size:28px;line-height:1.35;margin-top:6px">${esc(cap.s)}</div></div></div>
+      <div style="position:absolute;right:160px;top:940px">${clk}</div>`;
   else if (kind === 'phone') box = `<div style="position:absolute;left:150px;top:0;width:1000px;height:${H}px;display:flex;flex-direction:column;justify-content:center;gap:26px">
-      <div><span class="tag">${esc(chapter)}</span></div>
+      <div style="display:flex;gap:16px;align-items:center">${clk}<span class="tag">${esc(chapter)}</span></div>
       <div style="color:#fff;font-weight:800;font-size:66px;line-height:1.1">${esc(cap.t)}</div>
       <div style="color:#c8ccd4;font-size:38px;line-height:1.4">${esc(cap.s)}</div></div>`;
   else box = `<div style="position:absolute;left:40px;top:826px;width:1352px">
-      <div style="display:flex;gap:18px;align-items:center"><span class="tag">${esc(chapter)}</span>
+      <div style="display:flex;gap:18px;align-items:center">${clk}<span class="tag">${esc(chapter)}</span>
       <div style="color:#fff;font-weight:700;font-size:40px">${esc(cap.t)}</div></div>
       <div style="color:#c8ccd4;font-size:29px;line-height:1.38;margin-top:12px">${esc(cap.s)}</div></div>`;
   return `<html><head><style>${BASE_CSS} body{background:transparent}</style></head><body>${box}</body></html>`;
@@ -70,6 +73,7 @@ function cardHtml(c) {
     @keyframes pop { 0% { opacity: 0; transform: scale(.6) rotate(-8deg) } 70% { transform: scale(1.06) } 100% { opacity: 1; transform: none } }
     @keyframes line { from { width: 0 } to { width: 260px } }
     @keyframes fadeout { to { opacity: 0 } }
+    @keyframes blink { 50% { opacity: .25 } }
     @keyframes drift { from { transform: translate(0,0) scale(1) } to { transform: translate(-60px,-30px) scale(1.08) } }
     .a { opacity: 0; animation: up .7s cubic-bezier(.2,.8,.2,1) forwards; }
     .grid { position: absolute; inset: -100px; background-image: linear-gradient(rgba(255,255,255,.05) 2px, transparent 2px), linear-gradient(90deg, rgba(255,255,255,.05) 2px, transparent 2px); background-size: 120px 120px; animation: drift ${c.dur}s linear forwards; }
@@ -82,8 +86,8 @@ function cardHtml(c) {
       <img src="${ICON}" style="width:230px;height:230px;border-radius:48px;box-shadow:0 20px 60px rgba(0,0,0,.5);opacity:0;animation:pop .9s .2s cubic-bezier(.2,.8,.2,1) forwards">
       <div class="a" style="animation-delay:.8s;color:#fff;font-size:120px;font-weight:800;letter-spacing:-.02em">RHS Einsatz</div>
       <div style="height:6px;background:#c62828;border-radius:3px;width:0;animation:line .8s 1.2s ease-out forwards"></div>
-      <div class="a" style="animation-delay:1.4s;color:#d6d9df;font-size:46px">Die Einsatz-App für Rettungshundestaffeln</div>
-      <div class="a" style="animation-delay:2.0s;color:#9aa0aa;font-size:32px">Einsatzleitung · Hundeführer · Bericht – in einer App</div></div>`;
+      <div class="a" style="animation-delay:1.4s;color:#d6d9df;font-size:46px">${esc(c.sub || 'Die Einsatz-App für Rettungshundestaffeln')}</div>
+      <div class="a" style="animation-delay:2.0s;color:#9aa0aa;font-size:32px">${esc(c.sub2 || 'Einsatzleitung · Hundeführer · Bericht – in einer App')}</div></div>`;
   } else if (c.style === 'outro') {
     const feats = c.feats.map((f, i) => `<div class="a" style="animation-delay:${0.6 + i * 0.12}s;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:22px 26px;color:#e8eaee;font-size:30px;display:flex;gap:16px;align-items:center"><span style="font-size:40px">${f[0]}</span>${esc(f[1])}</div>`).join('');
     body = `<div class="grid"></div><div class="wrap" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:40px;padding:0 140px">
@@ -91,9 +95,21 @@ function cardHtml(c) {
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;width:100%">${feats}</div>
       <div class="a" style="animation-delay:${0.8 + c.feats.length * 0.12}s;color:#fff;font-size:38px;font-weight:600;background:#c62828;padding:16px 34px;border-radius:14px">flai331.github.io/Programmieren/suchgebiet-karten</div>
       <div class="a" style="animation-delay:${1.0 + c.feats.length * 0.12}s;color:#9aa0aa;font-size:28px">Kostenlos · im Browser oder als Android-App · funktioniert auch offline</div></div>`;
+  } else if (c.style === 'alarm') {
+    const lines = c.lines.map((l, i) => `<div class="a" style="animation-delay:${1.1 + i * 0.35}s;color:#e8eaee;font-size:40px;line-height:1.35;margin-top:6px">${esc(l)}</div>`).join('');
+    body = `<div class="grid"></div><div class="wrap" style="display:flex;align-items:center;justify-content:center">
+      <div style="width:1300px;background:#1f232b;border:2px solid #c62828;border-radius:26px;padding:50px 64px;box-shadow:0 30px 90px rgba(0,0,0,.6);opacity:0;animation:pop .7s .15s cubic-bezier(.2,.8,.2,1) forwards">
+        <div style="display:flex;align-items:center;gap:22px"><span style="font-size:64px;animation:blink 1s steps(2) infinite">🚨</span>
+          <span style="color:#ff5252;font-size:34px;font-weight:800;letter-spacing:.12em">ALARMIERUNG</span>
+          <span style="margin-left:auto;color:#fff;font-size:56px;font-weight:800;font-variant-numeric:tabular-nums">${esc(c.time)}</span></div>
+        <div class="a" style="animation-delay:.6s;color:#fff;font-size:62px;font-weight:800;margin:26px 0 14px">${esc(c.head)}</div>${lines}
+        <div class="a" style="animation-delay:${1.4 + c.lines.length * 0.35}s;color:#8a909a;font-size:26px;margin-top:30px">${esc(c.note || '')}</div></div></div>`;
+  } else if (c.style === 'story') {
+    const lines = c.lines.map((l, i) => `<div class="a" style="animation-delay:${0.5 + i * 0.6}s;color:${i ? '#c8ccd4' : '#fff'};font-size:${i ? 40 : 58}px;font-weight:${i ? 400 : 800};line-height:1.35;margin-top:${i ? 18 : 0}px">${esc(l)}</div>`).join('');
+    body = `<div class="grid"></div><div class="wrap" style="display:flex;flex-direction:column;justify-content:center;padding:0 240px">${lines}</div>`;
   } else {
     body = `<div class="grid"></div><div class="wrap" style="display:flex;align-items:center;padding-left:240px;gap:60px">
-      <div style="font-size:300px;font-weight:800;color:#c62828;line-height:1;opacity:0;animation:pop .8s .1s cubic-bezier(.2,.8,.2,1) forwards">${esc(c.num)}</div>
+      <div style="font-size:${String(c.num).length > 2 ? 200 : 300}px;font-weight:800;color:#c62828;line-height:1;opacity:0;animation:pop .8s .1s cubic-bezier(.2,.8,.2,1) forwards">${esc(c.num)}</div>
       <div><div class="a" style="animation-delay:.35s;color:#fff;font-size:96px;font-weight:800;letter-spacing:-.01em">${esc(c.title)}</div>
       <div style="height:6px;background:#c62828;border-radius:3px;width:0;margin:26px 0;animation:line .7s .6s ease-out forwards"></div>
       <div class="a" style="animation-delay:.75s;color:#c8ccd4;font-size:44px">${esc(c.sub)}</div></div></div>`;
@@ -180,13 +196,13 @@ if (process.env.PREVIEW) {
     for (const s of JSON.parse(fs.readFileSync(path.join(REC, f), 'utf8'))) segs[s.id] = s;
   }
   const browser = await chromium.launch();
-  const cards = order.filter((o) => o.kind === 'card').map((c) => ({ ...c, dur: c.dur || (c.style === 'intro' ? 4.6 : c.style === 'outro' ? 7 : 2.8) }));
+  const cards = order.filter((o) => o.kind === 'card').map((c) => ({ ...c, dur: c.dur || (c.style === 'intro' ? 4.6 : c.style === 'outro' ? 7 : c.style === 'alarm' ? 7 : c.style === 'story' ? 7.5 : 2.8) }));
   await renderCards(browser, cards);
 
   let chapter = '';
   const parts = [];
   for (const o of order) {
-    if (o.kind === 'card') { parts.push(path.join(BUILD, `${o.id}.mp4`)); if (o.title) chapter = `${o.num} · ${o.title}`; continue; }
+    if (o.kind === 'card') { parts.push(path.join(BUILD, `${o.id}.mp4`)); if (o.title) chapter = o.style === 'time' ? o.title : `${o.num} · ${o.title}`; continue; }
     const out = path.join(BUILD, `${o.id}.mp4`);
     parts.push(out);
     if (ONLY && !ONLY.includes(o.id)) continue;
@@ -223,7 +239,7 @@ if (process.env.PREVIEW) {
   await browser.close();
   const list = path.join(BUILD, 'parts.txt');
   fs.writeFileSync(list, parts.filter((p) => fs.existsSync(p)).map((p) => `file '${p}'`).join('\n'));
-  ff(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', '-movflags', '+faststart', path.join(DIR, 'RHS-Einsatz-Film.mp4')]);
-  const d = execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path.join(DIR, 'RHS-Einsatz-Film.mp4')]).toString().trim();
+  ff(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', '-movflags', '+faststart', path.join(DIR, OUTNAME)]);
+  const d = execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path.join(DIR, OUTNAME)]).toString().trim();
   console.log('Fertig:', d, 's');
 })().catch((e) => { console.error(e); process.exit(1); });
