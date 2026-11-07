@@ -29,27 +29,67 @@ def wer(ref, hyp):
             d[j] = min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] != b[j - 1]))
             prev = cur
     return d[-1] / len(a)
-def hear(f):
+def pcm16k(f):
     raw = subprocess.run(['ffmpeg', '-loglevel', 'error', '-i', f, '-ac', '1', '-ar', '16000', '-f', 's16le', '-'], capture_output=True).stdout
-    segs, _ = asr.transcribe(np.frombuffer(raw, np.int16).astype(np.float32) / 32768, language='de', beam_size=5)
-    return ' '.join(s.text for s in segs).strip()
+    return np.frombuffer(raw, np.int16).astype(np.float32) / 32768
+def hear(f, words_out=False):
+    segs, _ = asr.transcribe(pcm16k(f), language='de', beam_size=5, word_timestamps=words_out)
+    segs = list(segs)
+    txt = ' '.join(s.text for s in segs).strip()
+    if not words_out: return txt
+    return txt, [w for s in segs for w in (s.words or [])]
+def norm1(w): return re.sub(r'[^a-zäöüß0-9]', '', w.lower())
+def similar(a, b):
+    a, b = norm1(a), norm1(b)
+    if not a or not b: return False
+    if a == b or a.startswith(b[:4]) or b.startswith(a[:4]): return True
+    return False
+
+SR = 24000
+def sentence(text, tmp):
+    """Einen Satz ohne Schlusspunkt sprechen und alles nach dem letzten echten Wort abschneiden."""
+    say = re.sub(r'[.…]+$', '', text.strip())
+    wav = tts.tts(text=say, speaker=speaker, language='de', split_sentences=False)
+    import soundfile as sf
+    sf.write(tmp, np.array(wav, dtype=np.float32), SR)
+    heard, ws = hear(tmp, True)
+    ref = [w for w in re.sub(r'[^\wäöüß ]', ' ', say).split() if w]
+    last = ref[-1] if ref else ''
+    cut = None
+    for w in ws:
+        if similar(w.word, last): cut = w.end
+    if cut is not None:
+        a = np.array(wav, dtype=np.float32)[: int((cut + 0.18) * SR)]
+        sf.write(tmp, a, SR)
+        heard = hear(tmp)
+    return heard
 
 for key, text in texts.items():
     if only and key not in only: continue
     wav = os.path.join(build, f'tts_{key}.wav')
-    best = None
-    for n in range(4):
-        tmp = wav + f'.try{n}.wav'
-        t = time.time()
-        tts.tts_to_file(text=text, speaker=speaker, language='de', file_path=tmp, split_sentences=True)
-        heard = hear(tmp)
-        e = wer(text, heard)
-        print(f'{key} Versuch {n + 1}: Fehler {e:.2f} ({time.time() - t:.0f} s) | {heard}', flush=True)
-        if best is None or e < best[0]: best = (e, tmp)
-        if e <= 0.08: break
-    shutil.copy(best[1], wav)
-    for n in range(4):
-        p = wav + f'.try{n}.wav'
-        if os.path.exists(p): os.remove(p)
+    parts = [p for p in re.split(r'(?<=[.!?…])\s+', text.strip()) if p]
+    files = []
+    for i, part in enumerate(parts):
+        best = None
+        for n in range(4):
+            tmp = wav + f'.s{i}.t{n}.wav'
+            t = time.time()
+            heard = sentence(part, tmp)
+            e = wer(part, heard)
+            print(f'{key}[{i}] Versuch {n + 1}: Fehler {e:.2f} ({time.time() - t:.0f} s) | {heard}', flush=True)
+            if best is None or e < best[0]: best = (e, tmp)
+            if e <= 0.05: break
+        files.append(best[1])
+    # Sätze mit kurzer Pause aneinanderhängen
+    import soundfile as sf
+    gap = np.zeros(int(0.32 * SR), dtype=np.float32)
+    out = []
+    for i, fpath in enumerate(files):
+        a, _ = sf.read(fpath, dtype='float32')
+        out.append(a)
+        if i < len(files) - 1: out.append(gap)
+    sf.write(wav, np.concatenate(out), SR)
+    for p in os.listdir(build):
+        if p.startswith(f'tts_{key}.wav.s'): os.remove(os.path.join(build, p))
     with open(wav + '.txt', 'w', encoding='utf-8') as f:
         f.write(text)
