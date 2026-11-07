@@ -13,6 +13,23 @@ const FPS = 30;
 const W = 1920, H = 1080;
 const ICON = 'data:image/png;base64,' + fs.readFileSync(path.join(__dirname, '..', 'web', 'icon-512.png')).toString('base64');
 const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
+// Sprecher (optional): NARR=datei.json mit { id: "Text" }, Stimme: Piper-Modell (VOICE)
+const NARR = process.env.NARR ? JSON.parse(fs.readFileSync(process.env.NARR, 'utf8')) : {};
+const VOICE = process.env.VOICE || path.join(DIR, 'tts', 'de_DE-thorsten-high.onnx');
+const probe = (f) => Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]).toString().trim());
+function speak(id) {
+  const text = NARR[id];
+  if (!text) return null;
+  const wav = path.join(BUILD, `tts_${id}.wav`), txt = wav + '.txt';
+  if (!(fs.existsSync(wav) && fs.existsSync(txt) && fs.readFileSync(txt, 'utf8') === text)) {
+    execFileSync('python3', ['-m', 'piper', '-m', VOICE, '-f', wav, '--length-scale', '1.04', '--sentence-silence', '0.3'], { input: text });
+    fs.writeFileSync(txt, text);
+  }
+  return { wav, dur: probe(wav) };
+}
+// Tonspur: Sprecher ab 'delay' s, sonst Stille
+const audioIn = (sp) => (sp ? ['-i', sp.wav] : ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo']);
+const audioFx = (n, sp, delay) => (sp ? `[${n}:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${Math.round(delay * 1000)}|${Math.round(delay * 1000)},apad[aud]` : `[${n}:a]anull[aud]`);
 
 const ff = (args) => execFileSync('ffmpeg', ['-y', '-loglevel', 'error', ...args], { stdio: 'inherit' });
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -122,7 +139,9 @@ async function renderCards(browser, cards) {
   for (const c of cards) {
     const out = path.join(BUILD, `${c.id}.mp4`);
     if (ONLY && !ONLY.includes(c.id)) continue;
-    if (fs.existsSync(out) && !process.env.CARDS) continue;
+    const sig = path.join(BUILD, `${c.id}.sig`);
+    const want = `${c.dur.toFixed(2)}|${NARR[c.id] || ''}`;
+    if (fs.existsSync(out) && !process.env.CARDS && fs.existsSync(sig) && fs.readFileSync(sig, 'utf8') === want) continue;
     const fdir = path.join(BUILD, `frames_${c.id}`);
     fs.rmSync(fdir, { recursive: true, force: true }); fs.mkdirSync(fdir);
     await page.setContent(cardHtml(c));
@@ -134,8 +153,10 @@ async function renderCards(browser, cards) {
       await page.evaluate((t) => document.getAnimations().forEach((a) => { a.pause(); a.currentTime = t; }), t);
       await page.screenshot({ path: path.join(fdir, `${String(i).padStart(4, '0')}.jpg`), type: 'jpeg', quality: 92 });
     }
-    ff(['-framerate', String(FPS), '-i', path.join(fdir, '%04d.jpg'), '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-shortest',
-      '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-c:a', 'aac', out]);
+    const sp = speak(c.id);
+    ff(['-framerate', String(FPS), '-i', path.join(fdir, '%04d.jpg'), ...audioIn(sp), '-filter_complex', audioFx(1, sp, 0.5), '-map', '0:v', '-map', '[aud]',
+      '-t', c.dur.toFixed(3), '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-c:a', 'aac', '-ar', '48000', '-ac', '2', out]);
+    fs.writeFileSync(sig, want);
     fs.rmSync(fdir, { recursive: true, force: true });
     console.log('Karte', c.id);
   }
@@ -197,6 +218,7 @@ if (process.env.PREVIEW) {
   }
   const browser = await chromium.launch();
   const cards = order.filter((o) => o.kind === 'card').map((c) => ({ ...c, dur: c.dur || (c.style === 'intro' ? 4.6 : c.style === 'outro' ? 7 : c.style === 'alarm' ? 7 : c.style === 'story' ? 7.5 : 2.8) }));
+  for (const c of cards) { const sp = speak(c.id); if (sp) c.dur = Math.max(c.dur, sp.dur + 1.3); }
   await renderCards(browser, cards);
 
   let chapter = '';
@@ -213,6 +235,7 @@ if (process.env.PREVIEW) {
     const capf = path.join(BUILD, `cap_${o.id}.png`);
     await png(browser, capHtml(o.kind, cap, chapter), capf, true);
     const fade = 'format=rgba,fade=in:st=0:d=0.45:alpha=1';
+    const sp = speak(o.id);
     let dur, inputs, fc;
     if (o.kind === 'dual') {
       const a = segs[o.a], b = segs[o.b];
@@ -220,21 +243,24 @@ if (process.env.PREVIEW) {
       const la = path.join(BUILD, `${o.id}_a.txt`), lb = path.join(BUILD, `${o.id}_b.txt`);
       dur = concatList(a, la, speed, t0, t1); concatList(b, lb, speed, t0, t1);
       const v = L.dual.v, v2 = L.dual.v2;
+      var total = Math.max(dur, sp ? sp.dur + 0.8 : 0), pad = total > dur + 0.05 ? `,tpad=stop_mode=clone:stop_duration=${(total - dur + 0.2).toFixed(2)}` : '';
       inputs = ['-f', 'concat', '-safe', '0', '-i', la, '-f', 'concat', '-safe', '0', '-i', lb, '-loop', '1', '-i', layer, '-loop', '1', '-i', capf];
-      fc = `color=c=#15171c:s=${W}x${H}:r=${FPS}[bg];[0:v]fps=${FPS},scale=${v.w}:${v.h}:flags=lanczos[va];[1:v]fps=${FPS},scale=${v2.w}:${v2.h}:flags=lanczos[vb];`
+      fc = `color=c=#15171c:s=${W}x${H}:r=${FPS}[bg];[0:v]fps=${FPS},scale=${v.w}:${v.h}:flags=lanczos${pad}[va];[1:v]fps=${FPS},scale=${v2.w}:${v2.h}:flags=lanczos${pad}[vb];`
         + `[bg][va]overlay=${v.x}:${v.y}:shortest=1[t1];[t1][vb]overlay=${v2.x}:${v2.y}[t2];[t2][2:v]overlay=0:0[t3];[3:v]${fade}[c];[t3][c]overlay=0:0,format=yuv420p[out]`;
     } else {
       const s = segs[o.id];
       const lf = path.join(BUILD, `${o.id}.txt`);
       dur = concatList(s, lf, speed);
       const v = L[o.kind].v;
+      var total = Math.max(dur, sp ? sp.dur + 0.8 : 0), pad = total > dur + 0.05 ? `,tpad=stop_mode=clone:stop_duration=${(total - dur + 0.2).toFixed(2)}` : '';
       inputs = ['-f', 'concat', '-safe', '0', '-i', lf, '-loop', '1', '-i', layer, '-loop', '1', '-i', capf];
-      fc = `color=c=#15171c:s=${W}x${H}:r=${FPS}[bg];[0:v]fps=${FPS},scale=${v.w}:${v.h}:flags=lanczos[va];`
+      fc = `color=c=#15171c:s=${W}x${H}:r=${FPS}[bg];[0:v]fps=${FPS},scale=${v.w}:${v.h}:flags=lanczos${pad}[va];`
         + `[bg][va]overlay=${v.x}:${v.y}:shortest=1[t1];[t1][1:v]overlay=0:0[t2];[2:v]${fade}[c];[t2][c]overlay=0:0,format=yuv420p[out]`;
     }
-    ff([...inputs, '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-filter_complex', fc, '-map', '[out]', '-map', `${o.kind === 'dual' ? 4 : 3}:a`,
-      '-t', dur.toFixed(3), '-r', String(FPS), '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-pix_fmt', 'yuv420p', '-c:a', 'aac', out]);
-    console.log('Abschnitt', o.id, dur.toFixed(1) + ' s');
+    const an = o.kind === 'dual' ? 4 : 3;
+    ff([...inputs, ...audioIn(sp), '-filter_complex', `${fc};${audioFx(an, sp, 0.3)}`, '-map', '[out]', '-map', '[aud]',
+      '-t', total.toFixed(3), '-r', String(FPS), '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ar', '48000', '-ac', '2', out]);
+    console.log('Abschnitt', o.id, total.toFixed(1) + ' s', sp ? `(Sprecher ${sp.dur.toFixed(1)} s)` : '');
   }
   await browser.close();
   const list = path.join(BUILD, 'parts.txt');

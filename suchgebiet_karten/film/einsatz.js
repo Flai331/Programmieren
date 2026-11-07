@@ -54,6 +54,7 @@ const GEO = `(() => {
   const snap = async (n) => { if (shots) await el.shot(`chk_${n}.png`); };
   const map = (fn, arg) => p.evaluate(fn, arg);
   const closePanels = () => p.evaluate(() => document.querySelectorAll('.panel:not([hidden]) .close').forEach((b) => b.click()));
+  const pickBtn = (pg, re) => pg.evaluate((re) => { const b = [...document.querySelectorAll('#dlg-box button')].find((x) => new RegExp(re).test(x.textContent)); if (b && !document.getElementById('dlg').hidden) { b.click(); return true; } return false; }, re).catch(() => false);
   const poll = (pg) => pg.evaluate(() => window.dispatchEvent(new Event('online'))).catch(() => {});
 
   card('intro', { style: 'intro', sub: 'Ein Einsatz von der Alarmierung bis zum Bericht', sub2: 'Nachgestellt – Personen und Ablauf frei erfunden' });
@@ -228,6 +229,11 @@ const GEO = `(() => {
   await at('15:50');
   // Feuerwehr und Drohne melden per Funk – die EL trägt es ein
   const funk = async (team, kind, visible) => {
+    if (await p.locator('#dlg').isVisible().catch(() => false)) {
+      console.log('EL-Fenster offen:', (await p.locator('#dlg-box').innerText().catch(() => '')).slice(0, 80).replace(/\n/g, ' | '));
+      await pickBtn(p, 'Noch offen|Später|Gesehen|Schließen|Abbrechen');
+      await sleep(300);
+    }
     if (!(await p.locator('#st-funk').isVisible())) { await p.click('#btn-status'); await sleep(600); }
     if (visible) await el.tap('#st-funk', { wait: 700 }); else { await p.click('#st-funk'); await sleep(400); }
     const sel = p.locator('#funk-team');
@@ -284,7 +290,7 @@ const GEO = `(() => {
   await at('16:20');
   card('t5b', { style: 'time', num: '16:20', title: 'Absuche am See', sub: 'Mia und Balu suchen den Umriss ab' });
   const msnap = async (n) => { if (shots) await mia.shot(`chk_mia_${n}.png`); };
-  const pickBtn = (pg, re) => pg.evaluate((re) => { const b = [...document.querySelectorAll('#dlg-box button')].find((x) => new RegExp(re).test(x.textContent)); if (b && !document.getElementById('dlg').hidden) { b.click(); return true; } return false; }, re).catch(() => false);
+  const pickBtn2 = (pg, re) => pg.evaluate((re) => { const b = [...document.querySelectorAll('#dlg-box button')].find((x) => new RegExp(re).test(x.textContent)); if (b && !document.getElementById('dlg').hidden) { b.click(); return true; } return false; }, re).catch(() => false);
   // Mias Karte auf ihr Gebiet
   await M.click('#hfi-area').catch(() => {}); await sleep(1500);
   // Schilfgürtel am Westufer: Koordinaten -> Punkte auf Mias Handy
@@ -322,6 +328,10 @@ const GEO = `(() => {
   await dual(el, mia, 'zu', { t: 'Gebiet fertig: „✅ Auftrag abschließen“', s: '100 % – die Einsatzleitung schließt den Auftrag automatisch ab (mit „Rückgängig“). Mia ist wieder frei.' });
   await mia.tap('#hf-status', { wait: 600 });
   await mia.tap('button:visible:has-text("Auftrag abschließen")', { wait: 700 });
+  { const rb2 = await M.locator('#dlg-box .st-range').boundingBox();
+    await mia.drag([[rb2.x + rb2.width * 0.6, rb2.y + rb2.height / 2], [rb2.x + rb2.width - 4, rb2.y + rb2.height / 2]], { ms: 500, wait: 200 });
+    await M.evaluate(() => { const r = document.querySelector('#dlg-box .st-range'); r.value = 100; r.dispatchEvent(new Event('input', { bubbles: true })); }); }
+  await sleep(400);
   await mia.tap('#dlg-box button:has-text("Abschließen")', { wait: 1500 });
   await msnap('zu');
   await poll(p); await sleep(2800);
@@ -363,6 +373,9 @@ const GEO = `(() => {
   await el.tap('#send-open', { wait: 800 });
   { const opts = await p.locator('#send-team option').allTextContents(); await p.selectOption('#send-team', { index: opts.findIndex((x) => x.includes('Mia')) }); }
   await sleep(500);
+  // nur das neue Gebiet mitgeben (der See ist fertig)
+  await p.evaluate(() => document.querySelectorAll('#send-items label').forEach((l) => { if (/See/.test(l.textContent) && !/Bahndamm/.test(l.textContent)) { const i = l.querySelector('input'); if (i && i.checked) i.click(); } }));
+  await sleep(300);
   await el.tap('#send-qr', { wait: 1500 });
   await p.click('#qr-copy'); await sleep(200);
   const linkMia2 = (await p.evaluate(() => navigator.clipboard.readText())).replace(LIVE, LOCAL);
@@ -374,7 +387,8 @@ const GEO = `(() => {
   await M.goto(linkMia2); await sleep(2500);
   await pickBtn(M, 'Ersetzen|Übernehmen|Ja|OK');
   await sleep(800);
-  await M.click('#hf-status').catch(() => {}); await sleep(400); await M.click('button:visible:has-text("Suche begonnen")').catch(() => {}); await sleep(400);
+  await M.click('#hf-status').catch(() => {}); await sleep(400); await M.click('button:visible:has-text("Suche begonnen")').catch(() => {}); await sleep(600);
+  await pickBtn(M, 'Melden'); await sleep(400);
   await M.click('#hf-rec').catch(() => {}); await sleep(300);
   const walkMia2 = await toLL(snake(900, 1030, [470, 500, 530], 6));
   w3 = walker(M, walkMia2, 200);

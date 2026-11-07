@@ -15,3 +15,5 @@ pdfs-einsatz.html
 links-einsatz.json
 run-e.log
 compose-e.log
+tts/
+*.mp3
