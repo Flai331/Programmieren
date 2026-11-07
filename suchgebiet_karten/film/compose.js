@@ -229,13 +229,18 @@ if (process.env.PREVIEW) {
     parts.push(out);
     if (ONLY && !ONLY.includes(o.id)) continue;
     const cap = o.caption || { t: '', s: '' };
-    const speed = cap.speed || 1;
+    let speed = cap.speed || 1;
     const layer = path.join(BUILD, `layer_${o.kind}.png`);
     if (!fs.existsSync(layer)) await png(browser, layerHtml(o.kind), layer, true);
     const capf = path.join(BUILD, `cap_${o.id}.png`);
     await png(browser, capHtml(o.kind, cap, chapter), capf, true);
     const fade = 'format=rgba,fade=in:st=0:d=0.45:alpha=1';
     const sp = speak(o.id);
+    if (sp && speed > 1) {
+      const real = o.kind === 'dual' ? Math.min(segs[o.a].t1, segs[o.b].t1) - Math.max(segs[o.a].t0, segs[o.b].t0) : segs[o.id].t1 - segs[o.id].t0;
+      const need = sp.dur + 0.8;
+      if (real / speed < need) speed = Math.max(1, real / need);
+    }
     let dur, inputs, fc;
     if (o.kind === 'dual') {
       const a = segs[o.a], b = segs[o.b];
