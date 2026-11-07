@@ -79,7 +79,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v129';
+const APP_VERSION = 'v129.1';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -5975,11 +5975,15 @@ function collapseSearch() {
   searchForm.classList.remove('open');
   $('search-input').blur();
 }
+// Suchfeld öffnen und Cursor hinein (auf dem Tablet ist es sonst eingeklappt und unsichtbar)
+function openSearch() {
+  if (isTablet() && db.mode === 'el') searchForm.classList.add('open');
+  $('search-input').focus();
+}
 $('search-form').querySelector('.searchbtn').addEventListener('click', (e) => {
   if (!isTablet() || db.mode !== 'el' || searchForm.classList.contains('open')) return;
   e.preventDefault();
-  searchForm.classList.add('open');
-  $('search-input').focus();
+  openSearch();
 });
 $('search-input').addEventListener('blur', () => {
   setTimeout(() => { if (!$('search-input').value.trim() && document.activeElement !== $('search-input')) collapseSearch(); }, 200);
@@ -7923,7 +7927,7 @@ const WIZ = {
       wizMeet = true;
       closePanels();
       setTool('meet');
-      $('search-input').focus();
+      openSearch();
       toast('Adresse oder Kreuzung oben eingeben, dann auf den genauen B-Ort tippen', 7000);
     });
     wizBtn(big, '🗺️ Auf der Karte antippen', () => {
@@ -10310,7 +10314,8 @@ async function updateSuggestions(immediate = false) {
   if (suggestAbort) suggestAbort.abort();
   const text = $('search-input').value.trim();
   const q = parseQuery(text);
-  if (!q) { closeSearch(); return; }
+  // Nur die Trefferliste schließen – das Suchfeld bleibt offen (Tablet: sonst klappt es beim ersten Buchstaben zu)
+  if (!q) { $('searchbar').hidden = true; return; }
   const local = localResult(q);
   if (local) {
     // v123: bei einem Feldnamen („C4“) zusätzlich „🧭 Navigieren zu C4“
@@ -10324,7 +10329,7 @@ async function updateSuggestions(immediate = false) {
     else showResults([cornerEntry(q)]);
     return;
   }
-  if (q.type !== 'address' || text.length < 3) { closeSearch(); return; }
+  if (q.type !== 'address' || text.length < 3) { $('searchbar').hidden = true; return; }
   const run = async () => {
     const ac = suggestAbort = new AbortController();
     const c = map.getCenter();

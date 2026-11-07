@@ -132,6 +132,7 @@ Legende: `[ ]` offen · `[~]` gebaut, wartet auf Klaas' Test (Testversion) · `[
 
 (Der Autopilot trägt hier behobene Meldungen aus der 🐞 Fehlerzentrale ein: Datum, Version, Kurzbeschreibung.)
 
+- 07.11.2026, v129.1: Suchfeld auf Tablet/PC: „🔎 Adresse oder Kreuzung suchen“ im Assistenten (B-Ort) klappt das Suchfeld jetzt auf (vorher passierte nichts), und das Feld klappt beim Tippen nicht mehr nach dem ersten Buchstaben zu.
 - 30.10.2026, v96: Status-Taste „🚗 Anfahrt“ ersetzt durch „🅿️ Parkplatz Auto“ (am Suchgebiet angekommen, mit Standort).
 - 30.10.2026, v94: Einsatzleitung holt Status-Meldungen alle 15 s (statt 30 s). Stand je Gebiet: wer mehrere Gebiete hat, meldet je Gebiet einen eigenen Regler („📊 Nord 40 % · Süd ✅“); „Alle Gebiete fertig“ erst bei 100 % überall.
 - 30.10.2026, v92: Auftrag/Weitergeben: Texte und Zeichnungen, die im Umriss oder in den Feldern des Teams liegen, sind vorausgewählt; ein angehaktes Raster nimmt alles darin mit (außer Umrissen anderer Teams).
