@@ -20,3 +20,7 @@ tts/
 hoerproben/
 xtts.log
 __pycache__/
+build-ut/
+compose-ut.log
+test-ut.*
+*.srt

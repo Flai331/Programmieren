@@ -27,6 +27,55 @@ function speak(id) {
   }
   return { wav, dur: probe(wav) };
 }
+// Untertitel (SUBS=1): die Sprechertexte erscheinen Satz für Satz im Bild – im Tempo der Sprecherfassung, ohne Stimme
+const SUBS = !!process.env.SUBS;
+function sentences(text) {
+  const out = [];
+  for (const p of text.split(/(?<=[.!?…])\s+/).filter(Boolean)) {
+    if (p.length <= 105) { out.push(p); continue; }
+    // lange Sätze an Gedankenstrich/Komma nahe der Mitte teilen
+    const mid = p.length / 2;
+    let cut = -1;
+    for (const m of p.matchAll(/ – |, /g)) if (cut < 0 || Math.abs(m.index - mid) < Math.abs(cut - mid)) cut = m.index;
+    if (cut > 20) { out.push(p.slice(0, cut + (p[cut] === ',' ? 1 : 0)).trim()); out.push(p.slice(cut).replace(/^[ ,–]+/, '').trim()); } else out.push(p);
+  }
+  return out;
+}
+// Zeitplan der Sätze: Anteil an der Sprechdauer nach Textlänge, jeder mind. 1,6 s
+function subTimes(text, start, dur) {
+  const ss = sentences(text);
+  const tot = ss.reduce((n, x) => n + x.length, 0);
+  let t = start;
+  return ss.map((x) => { const d = Math.max(1.6, dur * x.length / tot); const r = { a: t, b: t + d, text: x }; t += d; return r; });
+}
+const SUBPOS = {
+  tablet: { cx: 960, bottom: 900, w: 1450 },
+  dual: { cx: 716, bottom: 786, w: 1250 },
+  phone: { cx: 650, bottom: 1040, w: 1000 },
+  card: { cx: 960, bottom: 1020, w: 1500 },
+};
+function subHtml(kind, text) {
+  const p = SUBPOS[kind];
+  return `<html><head><style>${BASE_CSS} body{background:transparent}</style></head><body>
+    <div style="position:absolute;left:${p.cx - p.w / 2}px;width:${p.w}px;bottom:${H - p.bottom}px;display:flex;justify-content:center">
+    <div style="background:rgba(10,12,16,.82);color:#fff;font-size:38px;font-weight:600;line-height:1.3;padding:12px 26px;border-radius:12px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.35)">${esc(text)}</div></div></body></html>`;
+}
+// PNGs für alle Sätze eines Teils; liefert Eingaben und Filterkette ab Label 'base'
+async function subLayers(browser, id, kind, items, firstIndex, base) {
+  const inputs = [];
+  let fc = '', cur = base;
+  for (const [i, it] of items.entries()) {
+    const f = path.join(BUILD, `sub_${id}_${i}.png`);
+    await png(browser, subHtml(kind, it.text), f, true);
+    inputs.push('-loop', '1', '-i', f);
+    const nx = `s${i}`;
+    fc += `;[${cur}][${firstIndex + i}:v]overlay=0:0:enable='between(t,${it.a.toFixed(2)},${it.b.toFixed(2)})'[${nx}]`;
+    cur = nx;
+  }
+  return { inputs, fc, out: cur };
+}
+const SRT = [];
+
 // Tonspur: Sprecher ab 'delay' s, sonst Stille
 const audioIn = (sp) => (sp ? ['-i', sp.wav] : ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo']);
 const audioFx = (n, sp, delay) => (sp ? `[${n}:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${Math.round(delay * 1000)}|${Math.round(delay * 1000)},apad[aud]` : `[${n}:a]anull[aud]`);
@@ -135,12 +184,13 @@ function cardHtml(c) {
 }
 
 async function renderCards(browser, cards) {
+  // (browser wird auch für Untertitel-Bilder gebraucht)
   const page = await browser.newPage({ viewport: { width: W, height: H } });
   for (const c of cards) {
     const out = path.join(BUILD, `${c.id}.mp4`);
     if (ONLY && !ONLY.includes(c.id)) continue;
     const sig = path.join(BUILD, `${c.id}.sig`);
-    const want = `${c.dur.toFixed(2)}|${NARR[c.id] || ''}`;
+    const want = `${c.dur.toFixed(2)}|${NARR[c.id] || ''}|${SUBS ? 'ut' : 'ton'}`;
     if (fs.existsSync(out) && !process.env.CARDS && fs.existsSync(sig) && fs.readFileSync(sig, 'utf8') === want) continue;
     const fdir = path.join(BUILD, `frames_${c.id}`);
     fs.rmSync(fdir, { recursive: true, force: true }); fs.mkdirSync(fdir);
@@ -153,8 +203,15 @@ async function renderCards(browser, cards) {
       await page.evaluate((t) => document.getAnimations().forEach((a) => { a.pause(); a.currentTime = t; }), t);
       await page.screenshot({ path: path.join(fdir, `${String(i).padStart(4, '0')}.jpg`), type: 'jpeg', quality: 92 });
     }
-    const sp = speak(c.id);
-    ff(['-framerate', String(FPS), '-i', path.join(fdir, '%04d.jpg'), ...audioIn(sp), '-filter_complex', audioFx(1, sp, 0.5), '-map', '0:v', '-map', '[aud]',
+    let sp = speak(c.id);
+    let subIn = [], subFc = '', vOut = '0:v';
+    if (SUBS && sp) {
+      const L2 = await subLayers(browser, c.id, 'card', subTimes(NARR[c.id], 0.5, sp.dur), 1, '0:v');
+      subIn = L2.inputs; subFc = L2.fc; vOut = `[${L2.out}]`;
+      sp = null; // keine Stimme
+    }
+    const aIdx = 1 + subIn.length / 4;
+    ff(['-framerate', String(FPS), '-i', path.join(fdir, '%04d.jpg'), ...subIn, ...audioIn(sp), '-filter_complex', `${audioFx(aIdx, sp, 0.5)}${subFc}`, '-map', vOut, '-map', '[aud]',
       '-t', c.dur.toFixed(3), '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-c:a', 'aac', '-ar', '48000', '-ac', '2', out]);
     fs.writeFileSync(sig, want);
     fs.rmSync(fdir, { recursive: true, force: true });
@@ -241,7 +298,7 @@ if (process.env.PREVIEW) {
       const need = sp.dur + 0.8;
       if (real / speed < need) speed = Math.max(1, real / need);
     }
-    let dur, inputs, fc;
+    let dur, inputs, fc; // eslint-disable-line prefer-const
     if (o.kind === 'dual') {
       const a = segs[o.a], b = segs[o.b];
       const t0 = Math.max(a.t0, b.t0), t1 = Math.min(a.t1, b.t1);
@@ -262,12 +319,32 @@ if (process.env.PREVIEW) {
       fc = `color=c=#15171c:s=${W}x${H}:r=${FPS}[bg];[0:v]fps=${FPS},scale=${v.w}:${v.h}:flags=lanczos${pad}[va];`
         + `[bg][va]overlay=${v.x}:${v.y}:shortest=1[t1];[t1][1:v]overlay=0:0[t2];[2:v]${fade}[c];[t2][c]overlay=0:0,format=yuv420p[out]`;
     }
-    const an = o.kind === 'dual' ? 4 : 3;
-    ff([...inputs, ...audioIn(sp), '-filter_complex', `${fc};${audioFx(an, sp, 0.3)}`, '-map', '[out]', '-map', '[aud]',
+    let an = o.kind === 'dual' ? 4 : 3;
+    let vOut = '[out]';
+    if (SUBS && sp) {
+      const L2 = await subLayers(browser, o.id, o.kind, subTimes(NARR[o.id], 0.3, sp.dur), an, 'out');
+      inputs = [...inputs, ...L2.inputs]; fc += L2.fc; vOut = `[${L2.out}]`; an += L2.inputs.length / 4;
+    }
+    const spAudio = SUBS ? null : sp;
+    ff([...inputs, ...audioIn(spAudio), '-filter_complex', `${fc};${audioFx(an, spAudio, 0.3)}`, '-map', vOut, '-map', '[aud]',
       '-t', total.toFixed(3), '-r', String(FPS), '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ar', '48000', '-ac', '2', out]);
     console.log('Abschnitt', o.id, total.toFixed(1) + ' s', sp ? `(Sprecher ${sp.dur.toFixed(1)} s)` : '');
   }
   await browser.close();
+  // Untertitel-Datei (.srt) aus den fertigen Teilen
+  if (Object.keys(NARR).length) {
+    let off = 0, n = 0, srt = '';
+    const ts = (t) => { const ms = Math.round(t * 1000); const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, sec = Math.floor(ms / 1000) % 60; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`; };
+    for (const o of order) {
+      const f = path.join(BUILD, `${o.id}.mp4`);
+      if (!fs.existsSync(f)) continue;
+      const len = probe(f);
+      const sp = NARR[o.id] ? speak(o.id) : null;
+      if (sp) for (const it of subTimes(NARR[o.id], o.kind === 'card' ? 0.5 : 0.3, sp.dur)) srt += `${++n}\n${ts(off + it.a)} --> ${ts(off + Math.min(it.b, len))}\n${it.text}\n\n`;
+      off += len;
+    }
+    fs.writeFileSync(path.join(DIR, OUTNAME.replace(/\.mp4$/, '.srt')), srt);
+  }
   const list = path.join(BUILD, 'parts.txt');
   fs.writeFileSync(list, parts.filter((p) => fs.existsSync(p)).map((p) => `file '${p}'`).join('\n'));
   ff(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', '-movflags', '+faststart', path.join(DIR, OUTNAME)]);
