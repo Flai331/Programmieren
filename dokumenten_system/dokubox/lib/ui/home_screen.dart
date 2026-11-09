@@ -17,12 +17,14 @@ import '../lock/lock_gate.dart';
 import '../scan/pdf_import_service.dart';
 import '../scan/scan_service.dart';
 import '../scan/share_receiver.dart';
+import '../scan/wlan_receiver.dart';
 import 'cleanup_screen.dart';
 import 'confirm_screen.dart';
 import 'document_detail_screen.dart';
 import 'finance_actions.dart';
 import 'finance_screen.dart';
 import 'settings_screen.dart';
+import 'wlan_scan_screen.dart';
 
 final _dateFormat = DateFormat('dd.MM.yyyy');
 
@@ -116,6 +118,95 @@ class _HomeScreenState extends State<HomeScreen> {
     final paths = await ShareReceiver.takeSharedPdfs();
     if (paths.isEmpty) return;
     await _importPaths(paths, deleteSources: true);
+  }
+
+  Future<void> _importMenu() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.folder_open),
+              title: const Text('PDF-Dateien auswählen'),
+              subtitle: const Text('Vom Handy, aus Downloads oder Drive'),
+              onTap: () => Navigator.pop(ctx, 'files'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.wifi),
+              title: const Text('Vom PC (WLAN)'),
+              subtitle: const Text(
+                  'QR-Code im Scan-Trenner scannen – Dateien kommen direkt'),
+              onTap: () => Navigator.pop(ctx, 'wlan'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == 'files') await _pickPdfs();
+    if (choice == 'wlan') await _receiveWlan();
+  }
+
+  /// QR-Code vom Scan-Trenner scannen, PDFs übers WLAN laden, importieren.
+  Future<void> _receiveWlan() async {
+    if (_scanning) return;
+    final base = await Navigator.of(context).push<Uri>(
+      MaterialPageRoute(builder: (_) => const WlanScanScreen()),
+    );
+    if (base == null || !mounted) return;
+    final receiver = WlanReceiver(base);
+    try {
+      final files =
+          await _withProgress('Verbinde mit dem PC …', receiver.list);
+      if (files.isEmpty) {
+        _snack('Der PC bietet keine Dateien an.');
+        return;
+      }
+      if (!mounted) return;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('${files.length} PDF${files.length == 1 ? '' : 's'} '
+              'vom PC übernehmen?'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final f in files)
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.picture_as_pdf),
+                    title: Text(f.name),
+                    subtitle: Text('${(f.size / 1024).ceil()} KB'),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Übernehmen'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+      final paths = await _withProgress(
+        'Lade ${files.length} PDF${files.length == 1 ? '' : 's'} vom PC …',
+        () => receiver.download(files),
+      );
+      await _importPaths(paths, deleteSources: true);
+    } on WlanException catch (e) {
+      _snack(e.message);
+    } on FormatException {
+      _snack('Antwort vom PC nicht lesbar.');
+    }
   }
 
   /// PDFs aus dem Dateisystem auswählen (z. B. vom Scan-Trenner am PC).
@@ -372,7 +463,7 @@ class _HomeScreenState extends State<HomeScreen> {
           FloatingActionButton.small(
             heroTag: 'import',
             tooltip: 'PDF importieren',
-            onPressed: _scanning ? null : _pickPdfs,
+            onPressed: _scanning ? null : _importMenu,
             child: const Icon(Icons.upload_file),
           ),
           const SizedBox(height: 12),

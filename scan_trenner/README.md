@@ -53,6 +53,18 @@ Die Regeln sind dieselben wie in der DokuBox-App (`dokumenten_system/dokubox`).
 Im Fenster: Ordner wählen → **Überwachung starten**. Einzelne Dateien geht auch über
 **Dateien einmal verarbeiten…** – die Originale wandern danach in einen Ordner `erledigt` neben der jeweiligen Datei.
 
+## Per WLAN ans Handy (DokuBox)
+
+**„📶 Per WLAN ans Handy…“** → PDFs wählen (z. B. aus dem Ausgabeordner) → es erscheint ein
+QR-Code. In der DokuBox-App *PDF importieren → Vom PC (WLAN)* wählen und den Code scannen; die
+Dateien kommen direkt übers Heimnetz und werden wie ein Scan ausgelesen (Nummer, KI, Bestätigen).
+
+- Handy und PC müssen im **selben WLAN** sein. Beim ersten Mal fragt Windows, ob Python im
+  Netzwerk erlaubt ist → **„Private Netzwerke“** zulassen.
+- Der Link enthält einen Zufallsschlüssel, gilt höchstens **15 Minuten** und endet mit
+  „Beenden“. Es werden nur die ausgewählten Dateien ausgeliefert.
+- Ohne App: denselben Link im Handy-Browser öffnen → einfache Download-Liste.
+
 ## Einstellungen
 
 | Option | Bedeutung |

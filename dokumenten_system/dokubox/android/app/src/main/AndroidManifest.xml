@@ -5,10 +5,16 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Einmaliger Download des optionalen lokalen KI-Modells -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- QR-Code des Scan-Trenners scannen (WLAN-Übertragung vom PC) -->
+    <uses-permission android:name="android.permission.CAMERA"/>
     <application
         android:label="DokuBox"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
+        <!-- Klartext-HTTP nur für die WLAN-Übertragung vom PC im eigenen Netz;
+             die App lässt dafür ausschließlich private IP-Adressen zu
+             (siehe lib/scan/wlan_receiver.dart). -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

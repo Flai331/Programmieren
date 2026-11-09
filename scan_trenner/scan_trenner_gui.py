@@ -91,6 +91,7 @@ class App(tk.Tk):
         self.stop_btn = ttk.Button(knoepfe, text="■ Stoppen", command=self._stoppen, state="disabled")
         self.stop_btn.pack(side="left", padx=6)
         ttk.Button(knoepfe, text="Dateien einmal verarbeiten…", command=self._einmal).pack(side="left")
+        ttk.Button(knoepfe, text="📶 Per WLAN ans Handy…", command=self._wlan_senden).pack(side="left", padx=6)
         self.status = ttk.Label(knoepfe, text="Bereit")
         self.status.pack(side="right")
 
@@ -421,6 +422,67 @@ class App(tk.Tk):
                 self._verarbeite(Path(d), ausgabe, e, None)  # Original → <Ordner>/erledigt
             self.log("Fertig.")
         threading.Thread(target=lauf, daemon=True).start()
+
+    def _wlan_senden(self) -> None:
+        """Ausgewählte PDFs per QR-Code/WLAN an die DokuBox-App geben."""
+        start = self.ausgabe.get() if Path(self.ausgabe.get()).is_dir() else str(Path.home())
+        dateien = filedialog.askopenfilenames(title="PDFs fürs Handy wählen", initialdir=start,
+                                              filetypes=[("PDF", "*.pdf")])
+        if not dateien:
+            return
+        try:
+            import wlan_senden as ws
+            freigabe = ws.Freigabe([Path(d) for d in dateien], meldung=self.log).starten()
+            bild = ws.qr_bild(freigabe.link)
+        except ImportError:
+            messagebox.showerror("Paket fehlt", "Für den QR-Code fehlt das Paket „qrcode“.\n"
+                                 "Bitte starten.bat erneut ausführen (installiert es).")
+            return
+        except OSError as exc:
+            messagebox.showerror("WLAN-Freigabe", f"Konnte nicht starten: {exc}")
+            return
+        from PIL import ImageTk
+
+        self.log(f"WLAN-Freigabe: {len(dateien)} Datei(en) unter {freigabe.link}")
+        fenster = tk.Toplevel(self)
+        fenster.title("Per WLAN ans Handy")
+        fenster.resizable(False, False)
+        foto = ImageTk.PhotoImage(bild)
+        tk.Label(fenster, image=foto).pack(padx=16, pady=(16, 8))
+        fenster._foto = foto  # Referenz halten, sonst verschwindet das Bild
+        ttk.Label(fenster, text="In DokuBox: PDF importieren → „Vom PC (WLAN)“\n"
+                                "und diesen Code scannen. Handy und PC im selben WLAN.",
+                  justify="center").pack(padx=16)
+        link = ttk.Entry(fenster, width=52)
+        link.insert(0, freigabe.link)
+        link.configure(state="readonly")
+        link.pack(padx=16, pady=8)
+        rest = ttk.Label(fenster)
+        rest.pack()
+
+        def beenden() -> None:
+            try:
+                freigabe.stoppen()
+            finally:
+                abgeholt = sum(1 for d in freigabe.dateien.values() if d.abgeholt)
+                self.log(f"WLAN-Freigabe beendet ({abgeholt} von {len(freigabe.dateien)} abgeholt).")
+                fenster.destroy()
+
+        def ticken() -> None:
+            if not fenster.winfo_exists():
+                return
+            sek = int(freigabe.ablauf - time.time())
+            if sek <= 0:
+                beenden()
+                return
+            abgeholt = sum(1 for d in freigabe.dateien.values() if d.abgeholt)
+            rest.config(text=f"{abgeholt} von {len(freigabe.dateien)} abgeholt · "
+                             f"Link gültig noch {sek // 60}:{sek % 60:02d} min")
+            fenster.after(1000, ticken)
+
+        ttk.Button(fenster, text="Beenden", command=beenden).pack(pady=(4, 16))
+        fenster.protocol("WM_DELETE_WINDOW", beenden)
+        ticken()
 
     def _schliessen(self) -> None:
         self.stop_event.set()
