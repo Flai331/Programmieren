@@ -71,3 +71,12 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Schrift für ausgefüllte Formulare (App-Anzeige und PDF gleich).
+  # DejaVu Sans: freie Lizenz, siehe assets/fonts/DejaVu-LICENSE.txt.
+  assets:
+    - assets/fonts/DejaVuSans.ttf
+  fonts:
+    - family: DejaVuSans
+      fonts:
+        - asset: assets/fonts/DejaVuSans.ttf

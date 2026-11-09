@@ -616,6 +616,79 @@ class DocumentRepository {
         );
   }
 
+  // ------------------------------------------------------------ Ausfüllen
+
+  /// Speichert die ausgefüllte Kopie und die Eintragungen (JSON) eines
+  /// Dokuments. Das Original bleibt unverändert.
+  Future<void> saveFill(String documentId,
+          {required String fillData, required String filledPdfPath}) =>
+      (db.update(db.documents)..where((d) => d.id.equals(documentId))).write(
+        DocumentsCompanion(
+          fillData: Value(fillData),
+          filledPdfPath: Value(filledPdfPath),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  /// Entfernt die ausgefüllte Kopie (die Datei löscht der Aufrufer).
+  Future<void> clearFill(String documentId) =>
+      (db.update(db.documents)..where((d) => d.id.equals(documentId))).write(
+        DocumentsCompanion(
+          fillData: const Value(null),
+          filledPdfPath: const Value(null),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  Stream<Document?> watchDocument(String id) =>
+      (db.select(db.documents)..where((d) => d.id.equals(id)))
+          .watchSingleOrNull();
+
+  // ------------------------------------------------ Unterschriften/Vorlagen
+
+  Stream<List<SignatureTemplate>> watchTemplates() =>
+      (db.select(db.signatureTemplates)
+            ..where((t) => t.deletedAt.isNull())
+            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+          .watch();
+
+  Future<List<SignatureTemplate>> allTemplates() =>
+      (db.select(db.signatureTemplates)
+            ..where((t) => t.deletedAt.isNull())
+            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+          .get();
+
+  Future<SignatureTemplate> addTemplate(
+          {required String name,
+          required String imagePath,
+          required double aspect}) =>
+      db.into(db.signatureTemplates).insertReturning(
+            SignatureTemplatesCompanion.insert(
+              name: name.trim().isEmpty ? 'Vorlage' : name.trim(),
+              imagePath: imagePath,
+              aspect: Value(aspect),
+            ),
+          );
+
+  Future<void> renameTemplate(String id, String name) =>
+      (db.update(db.signatureTemplates)..where((t) => t.id.equals(id))).write(
+        SignatureTemplatesCompanion(
+          name: Value(name.trim()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  /// Soft-Delete: bereits ausgefüllte PDFs behalten die Unterschrift, nur
+  /// zum Einfügen steht die Vorlage nicht mehr zur Wahl.
+  Future<void> deleteTemplate(String id) =>
+      (db.update(db.signatureTemplates)..where((t) => t.id.equals(id))).write(
+        SignatureTemplatesCompanion(deletedAt: Value(DateTime.now())),
+      );
+
+  Future<SignatureTemplate?> getTemplate(String id) =>
+      (db.select(db.signatureTemplates)..where((t) => t.id.equals(id)))
+          .getSingleOrNull();
+
   // ------------------------------------------------- Kategorien & Firmen
 
   Stream<List<Category>> watchCategories() => (db.select(db.categories)

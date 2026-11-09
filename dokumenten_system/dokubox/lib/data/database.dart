@@ -54,6 +54,36 @@ class Documents extends Table {
   /// Zahlungserinnerung (eigene Benachrichtigung, unabhängig von
   /// [reminderAt]).
   DateTimeColumn get paymentReminderAt => dateTime().nullable()();
+
+  // ---- Ausfüllen (Schema v4) ----
+
+  /// Ausgefüllte Kopie (PDF, relativ zum App-Verzeichnis). Das Original in
+  /// [pdfPath] bleibt unverändert.
+  TextColumn get filledPdfPath => text().nullable()();
+
+  /// Eingetragene Texte/Haken/Unterschriften als JSON (siehe FillDocument),
+  /// damit man später weiter ausfüllen kann.
+  TextColumn get fillData => text().nullable()();
+  DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Unterschrift, Kürzel oder handschriftliche Vorlage (PNG mit
+/// transparentem Hintergrund), z. B. am PC im Scan-Trenner gezeichnet und per
+/// WLAN übertragen (Schema v4).
+class SignatureTemplates extends Table {
+  TextColumn get id => text().clientDefault(_uuid.v4)();
+  TextColumn get name => text()();
+
+  /// Pfad der PNG relativ zum App-Verzeichnis.
+  TextColumn get imagePath => text()();
+
+  /// Höhe / Breite des Bildes.
+  RealColumn get aspect => real().withDefault(const Constant(0.35))();
+  DateTimeColumn get createdAt => dateTime().clientDefault(DateTime.now)();
   DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
@@ -172,6 +202,7 @@ class Counters extends Table {
     Counters,
     Claims,
     Categories,
+    SignatureTemplates,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -181,7 +212,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.open() : super(driftDatabase(name: 'dokubox'));
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -208,6 +239,11 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(categories);
             await m.addColumn(correspondents, correspondents.categoryId);
             await _seedCategories();
+          }
+          if (from < 4) {
+            await m.addColumn(documents, documents.filledPdfPath);
+            await m.addColumn(documents, documents.fillData);
+            await m.createTable(signatureTemplates);
           }
         },
         beforeOpen: (details) async {

@@ -220,6 +220,28 @@ class $DocumentsTable extends Documents
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _filledPdfPathMeta = const VerificationMeta(
+    'filledPdfPath',
+  );
+  @override
+  late final GeneratedColumn<String> filledPdfPath = GeneratedColumn<String>(
+    'filled_pdf_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _fillDataMeta = const VerificationMeta(
+    'fillData',
+  );
+  @override
+  late final GeneratedColumn<String> fillData = GeneratedColumn<String>(
+    'fill_data',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -264,6 +286,8 @@ class $DocumentsTable extends Documents
     paymentStatus,
     paidAt,
     paymentReminderAt,
+    filledPdfPath,
+    fillData,
     updatedAt,
     deletedAt,
   ];
@@ -417,6 +441,21 @@ class $DocumentsTable extends Documents
         ),
       );
     }
+    if (data.containsKey('filled_pdf_path')) {
+      context.handle(
+        _filledPdfPathMeta,
+        filledPdfPath.isAcceptableOrUnknown(
+          data['filled_pdf_path']!,
+          _filledPdfPathMeta,
+        ),
+      );
+    }
+    if (data.containsKey('fill_data')) {
+      context.handle(
+        _fillDataMeta,
+        fillData.isAcceptableOrUnknown(data['fill_data']!, _fillDataMeta),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -514,6 +553,14 @@ class $DocumentsTable extends Documents
         DriftSqlType.dateTime,
         data['${effectivePrefix}payment_reminder_at'],
       ),
+      filledPdfPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}filled_pdf_path'],
+      ),
+      fillData: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}fill_data'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -571,6 +618,14 @@ class Document extends DataClass implements Insertable<Document> {
   /// Zahlungserinnerung (eigene Benachrichtigung, unabhängig von
   /// [reminderAt]).
   final DateTime? paymentReminderAt;
+
+  /// Ausgefüllte Kopie (PDF, relativ zum App-Verzeichnis). Das Original in
+  /// [pdfPath] bleibt unverändert.
+  final String? filledPdfPath;
+
+  /// Eingetragene Texte/Haken/Unterschriften als JSON (siehe FillDocument),
+  /// damit man später weiter ausfüllen kann.
+  final String? fillData;
   final DateTime updatedAt;
   final DateTime? deletedAt;
   const Document({
@@ -593,6 +648,8 @@ class Document extends DataClass implements Insertable<Document> {
     this.paymentStatus,
     this.paidAt,
     this.paymentReminderAt,
+    this.filledPdfPath,
+    this.fillData,
     required this.updatedAt,
     this.deletedAt,
   });
@@ -639,6 +696,12 @@ class Document extends DataClass implements Insertable<Document> {
     }
     if (!nullToAbsent || paymentReminderAt != null) {
       map['payment_reminder_at'] = Variable<DateTime>(paymentReminderAt);
+    }
+    if (!nullToAbsent || filledPdfPath != null) {
+      map['filled_pdf_path'] = Variable<String>(filledPdfPath);
+    }
+    if (!nullToAbsent || fillData != null) {
+      map['fill_data'] = Variable<String>(fillData);
     }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -690,6 +753,12 @@ class Document extends DataClass implements Insertable<Document> {
       paymentReminderAt: paymentReminderAt == null && nullToAbsent
           ? const Value.absent()
           : Value(paymentReminderAt),
+      filledPdfPath: filledPdfPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(filledPdfPath),
+      fillData: fillData == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fillData),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
@@ -724,6 +793,8 @@ class Document extends DataClass implements Insertable<Document> {
       paymentReminderAt: serializer.fromJson<DateTime?>(
         json['paymentReminderAt'],
       ),
+      filledPdfPath: serializer.fromJson<String?>(json['filledPdfPath']),
+      fillData: serializer.fromJson<String?>(json['fillData']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
@@ -751,6 +822,8 @@ class Document extends DataClass implements Insertable<Document> {
       'paymentStatus': serializer.toJson<String?>(paymentStatus),
       'paidAt': serializer.toJson<DateTime?>(paidAt),
       'paymentReminderAt': serializer.toJson<DateTime?>(paymentReminderAt),
+      'filledPdfPath': serializer.toJson<String?>(filledPdfPath),
+      'fillData': serializer.toJson<String?>(fillData),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
@@ -776,6 +849,8 @@ class Document extends DataClass implements Insertable<Document> {
     Value<String?> paymentStatus = const Value.absent(),
     Value<DateTime?> paidAt = const Value.absent(),
     Value<DateTime?> paymentReminderAt = const Value.absent(),
+    Value<String?> filledPdfPath = const Value.absent(),
+    Value<String?> fillData = const Value.absent(),
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => Document(
@@ -806,6 +881,10 @@ class Document extends DataClass implements Insertable<Document> {
     paymentReminderAt: paymentReminderAt.present
         ? paymentReminderAt.value
         : this.paymentReminderAt,
+    filledPdfPath: filledPdfPath.present
+        ? filledPdfPath.value
+        : this.filledPdfPath,
+    fillData: fillData.present ? fillData.value : this.fillData,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
@@ -846,6 +925,10 @@ class Document extends DataClass implements Insertable<Document> {
       paymentReminderAt: data.paymentReminderAt.present
           ? data.paymentReminderAt.value
           : this.paymentReminderAt,
+      filledPdfPath: data.filledPdfPath.present
+          ? data.filledPdfPath.value
+          : this.filledPdfPath,
+      fillData: data.fillData.present ? data.fillData.value : this.fillData,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
@@ -873,6 +956,8 @@ class Document extends DataClass implements Insertable<Document> {
           ..write('paymentStatus: $paymentStatus, ')
           ..write('paidAt: $paidAt, ')
           ..write('paymentReminderAt: $paymentReminderAt, ')
+          ..write('filledPdfPath: $filledPdfPath, ')
+          ..write('fillData: $fillData, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
           ..write(')'))
@@ -900,6 +985,8 @@ class Document extends DataClass implements Insertable<Document> {
     paymentStatus,
     paidAt,
     paymentReminderAt,
+    filledPdfPath,
+    fillData,
     updatedAt,
     deletedAt,
   ]);
@@ -926,6 +1013,8 @@ class Document extends DataClass implements Insertable<Document> {
           other.paymentStatus == this.paymentStatus &&
           other.paidAt == this.paidAt &&
           other.paymentReminderAt == this.paymentReminderAt &&
+          other.filledPdfPath == this.filledPdfPath &&
+          other.fillData == this.fillData &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
 }
@@ -950,6 +1039,8 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
   final Value<String?> paymentStatus;
   final Value<DateTime?> paidAt;
   final Value<DateTime?> paymentReminderAt;
+  final Value<String?> filledPdfPath;
+  final Value<String?> fillData;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
   final Value<int> rowid;
@@ -973,6 +1064,8 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     this.paymentStatus = const Value.absent(),
     this.paidAt = const Value.absent(),
     this.paymentReminderAt = const Value.absent(),
+    this.filledPdfPath = const Value.absent(),
+    this.fillData = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -997,6 +1090,8 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     this.paymentStatus = const Value.absent(),
     this.paidAt = const Value.absent(),
     this.paymentReminderAt = const Value.absent(),
+    this.filledPdfPath = const Value.absent(),
+    this.fillData = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1023,6 +1118,8 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     Expression<String>? paymentStatus,
     Expression<DateTime>? paidAt,
     Expression<DateTime>? paymentReminderAt,
+    Expression<String>? filledPdfPath,
+    Expression<String>? fillData,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
@@ -1047,6 +1144,8 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
       if (paymentStatus != null) 'payment_status': paymentStatus,
       if (paidAt != null) 'paid_at': paidAt,
       if (paymentReminderAt != null) 'payment_reminder_at': paymentReminderAt,
+      if (filledPdfPath != null) 'filled_pdf_path': filledPdfPath,
+      if (fillData != null) 'fill_data': fillData,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
@@ -1073,6 +1172,8 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     Value<String?>? paymentStatus,
     Value<DateTime?>? paidAt,
     Value<DateTime?>? paymentReminderAt,
+    Value<String?>? filledPdfPath,
+    Value<String?>? fillData,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
     Value<int>? rowid,
@@ -1097,6 +1198,8 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
       paymentStatus: paymentStatus ?? this.paymentStatus,
       paidAt: paidAt ?? this.paidAt,
       paymentReminderAt: paymentReminderAt ?? this.paymentReminderAt,
+      filledPdfPath: filledPdfPath ?? this.filledPdfPath,
+      fillData: fillData ?? this.fillData,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
@@ -1163,6 +1266,12 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     if (paymentReminderAt.present) {
       map['payment_reminder_at'] = Variable<DateTime>(paymentReminderAt.value);
     }
+    if (filledPdfPath.present) {
+      map['filled_pdf_path'] = Variable<String>(filledPdfPath.value);
+    }
+    if (fillData.present) {
+      map['fill_data'] = Variable<String>(fillData.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -1197,6 +1306,8 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
           ..write('paymentStatus: $paymentStatus, ')
           ..write('paidAt: $paidAt, ')
           ..write('paymentReminderAt: $paymentReminderAt, ')
+          ..write('filledPdfPath: $filledPdfPath, ')
+          ..write('fillData: $fillData, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
@@ -3693,6 +3804,457 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
   }
 }
 
+class $SignatureTemplatesTable extends SignatureTemplates
+    with TableInfo<$SignatureTemplatesTable, SignatureTemplate> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SignatureTemplatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: _uuid.v4,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _imagePathMeta = const VerificationMeta(
+    'imagePath',
+  );
+  @override
+  late final GeneratedColumn<String> imagePath = GeneratedColumn<String>(
+    'image_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _aspectMeta = const VerificationMeta('aspect');
+  @override
+  late final GeneratedColumn<double> aspect = GeneratedColumn<double>(
+    'aspect',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.35),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    imagePath,
+    aspect,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'signature_templates';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SignatureTemplate> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('image_path')) {
+      context.handle(
+        _imagePathMeta,
+        imagePath.isAcceptableOrUnknown(data['image_path']!, _imagePathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_imagePathMeta);
+    }
+    if (data.containsKey('aspect')) {
+      context.handle(
+        _aspectMeta,
+        aspect.isAcceptableOrUnknown(data['aspect']!, _aspectMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SignatureTemplate map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SignatureTemplate(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      imagePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_path'],
+      )!,
+      aspect: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}aspect'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $SignatureTemplatesTable createAlias(String alias) {
+    return $SignatureTemplatesTable(attachedDatabase, alias);
+  }
+}
+
+class SignatureTemplate extends DataClass
+    implements Insertable<SignatureTemplate> {
+  final String id;
+  final String name;
+
+  /// Pfad der PNG relativ zum App-Verzeichnis.
+  final String imagePath;
+
+  /// Höhe / Breite des Bildes.
+  final double aspect;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const SignatureTemplate({
+    required this.id,
+    required this.name,
+    required this.imagePath,
+    required this.aspect,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['image_path'] = Variable<String>(imagePath);
+    map['aspect'] = Variable<double>(aspect);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  SignatureTemplatesCompanion toCompanion(bool nullToAbsent) {
+    return SignatureTemplatesCompanion(
+      id: Value(id),
+      name: Value(name),
+      imagePath: Value(imagePath),
+      aspect: Value(aspect),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory SignatureTemplate.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SignatureTemplate(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      imagePath: serializer.fromJson<String>(json['imagePath']),
+      aspect: serializer.fromJson<double>(json['aspect']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'imagePath': serializer.toJson<String>(imagePath),
+      'aspect': serializer.toJson<double>(aspect),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  SignatureTemplate copyWith({
+    String? id,
+    String? name,
+    String? imagePath,
+    double? aspect,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => SignatureTemplate(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    imagePath: imagePath ?? this.imagePath,
+    aspect: aspect ?? this.aspect,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  SignatureTemplate copyWithCompanion(SignatureTemplatesCompanion data) {
+    return SignatureTemplate(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      imagePath: data.imagePath.present ? data.imagePath.value : this.imagePath,
+      aspect: data.aspect.present ? data.aspect.value : this.aspect,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SignatureTemplate(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('imagePath: $imagePath, ')
+          ..write('aspect: $aspect, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, name, imagePath, aspect, createdAt, updatedAt, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SignatureTemplate &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.imagePath == this.imagePath &&
+          other.aspect == this.aspect &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class SignatureTemplatesCompanion extends UpdateCompanion<SignatureTemplate> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> imagePath;
+  final Value<double> aspect;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const SignatureTemplatesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.imagePath = const Value.absent(),
+    this.aspect = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SignatureTemplatesCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    required String imagePath,
+    this.aspect = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : name = Value(name),
+       imagePath = Value(imagePath);
+  static Insertable<SignatureTemplate> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? imagePath,
+    Expression<double>? aspect,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (imagePath != null) 'image_path': imagePath,
+      if (aspect != null) 'aspect': aspect,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SignatureTemplatesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? imagePath,
+    Value<double>? aspect,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return SignatureTemplatesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      imagePath: imagePath ?? this.imagePath,
+      aspect: aspect ?? this.aspect,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (imagePath.present) {
+      map['image_path'] = Variable<String>(imagePath.value);
+    }
+    if (aspect.present) {
+      map['aspect'] = Variable<double>(aspect.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SignatureTemplatesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('imagePath: $imagePath, ')
+          ..write('aspect: $aspect, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3704,6 +4266,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CountersTable counters = $CountersTable(this);
   late final $ClaimsTable claims = $ClaimsTable(this);
   late final $CategoriesTable categories = $CategoriesTable(this);
+  late final $SignatureTemplatesTable signatureTemplates =
+      $SignatureTemplatesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3717,6 +4281,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     counters,
     claims,
     categories,
+    signatureTemplates,
   ];
 }
 
@@ -3741,6 +4306,8 @@ typedef $$DocumentsTableCreateCompanionBuilder =
       Value<String?> paymentStatus,
       Value<DateTime?> paidAt,
       Value<DateTime?> paymentReminderAt,
+      Value<String?> filledPdfPath,
+      Value<String?> fillData,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -3766,6 +4333,8 @@ typedef $$DocumentsTableUpdateCompanionBuilder =
       Value<String?> paymentStatus,
       Value<DateTime?> paidAt,
       Value<DateTime?> paymentReminderAt,
+      Value<String?> filledPdfPath,
+      Value<String?> fillData,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -3872,6 +4441,16 @@ class $$DocumentsTableFilterComposer
 
   ColumnFilters<DateTime> get paymentReminderAt => $composableBuilder(
     column: $table.paymentReminderAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get filledPdfPath => $composableBuilder(
+    column: $table.filledPdfPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fillData => $composableBuilder(
+    column: $table.fillData,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3990,6 +4569,16 @@ class $$DocumentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get filledPdfPath => $composableBuilder(
+    column: $table.filledPdfPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fillData => $composableBuilder(
+    column: $table.fillData,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -4083,6 +4672,14 @@ class $$DocumentsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get filledPdfPath => $composableBuilder(
+    column: $table.filledPdfPath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get fillData =>
+      $composableBuilder(column: $table.fillData, builder: (column) => column);
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
@@ -4137,6 +4734,8 @@ class $$DocumentsTableTableManager
                 Value<String?> paymentStatus = const Value.absent(),
                 Value<DateTime?> paidAt = const Value.absent(),
                 Value<DateTime?> paymentReminderAt = const Value.absent(),
+                Value<String?> filledPdfPath = const Value.absent(),
+                Value<String?> fillData = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4160,6 +4759,8 @@ class $$DocumentsTableTableManager
                 paymentStatus: paymentStatus,
                 paidAt: paidAt,
                 paymentReminderAt: paymentReminderAt,
+                filledPdfPath: filledPdfPath,
+                fillData: fillData,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,
@@ -4185,6 +4786,8 @@ class $$DocumentsTableTableManager
                 Value<String?> paymentStatus = const Value.absent(),
                 Value<DateTime?> paidAt = const Value.absent(),
                 Value<DateTime?> paymentReminderAt = const Value.absent(),
+                Value<String?> filledPdfPath = const Value.absent(),
+                Value<String?> fillData = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4208,6 +4811,8 @@ class $$DocumentsTableTableManager
                 paymentStatus: paymentStatus,
                 paidAt: paidAt,
                 paymentReminderAt: paymentReminderAt,
+                filledPdfPath: filledPdfPath,
+                fillData: fillData,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,
@@ -5594,6 +6199,257 @@ typedef $$CategoriesTableProcessedTableManager =
       Category,
       PrefetchHooks Function()
     >;
+typedef $$SignatureTemplatesTableCreateCompanionBuilder =
+    SignatureTemplatesCompanion Function({
+      Value<String> id,
+      required String name,
+      required String imagePath,
+      Value<double> aspect,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$SignatureTemplatesTableUpdateCompanionBuilder =
+    SignatureTemplatesCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String> imagePath,
+      Value<double> aspect,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$SignatureTemplatesTableFilterComposer
+    extends Composer<_$AppDatabase, $SignatureTemplatesTable> {
+  $$SignatureTemplatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get imagePath => $composableBuilder(
+    column: $table.imagePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get aspect => $composableBuilder(
+    column: $table.aspect,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SignatureTemplatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $SignatureTemplatesTable> {
+  $$SignatureTemplatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get imagePath => $composableBuilder(
+    column: $table.imagePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get aspect => $composableBuilder(
+    column: $table.aspect,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SignatureTemplatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SignatureTemplatesTable> {
+  $$SignatureTemplatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get imagePath =>
+      $composableBuilder(column: $table.imagePath, builder: (column) => column);
+
+  GeneratedColumn<double> get aspect =>
+      $composableBuilder(column: $table.aspect, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$SignatureTemplatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SignatureTemplatesTable,
+          SignatureTemplate,
+          $$SignatureTemplatesTableFilterComposer,
+          $$SignatureTemplatesTableOrderingComposer,
+          $$SignatureTemplatesTableAnnotationComposer,
+          $$SignatureTemplatesTableCreateCompanionBuilder,
+          $$SignatureTemplatesTableUpdateCompanionBuilder,
+          (
+            SignatureTemplate,
+            BaseReferences<
+              _$AppDatabase,
+              $SignatureTemplatesTable,
+              SignatureTemplate
+            >,
+          ),
+          SignatureTemplate,
+          PrefetchHooks Function()
+        > {
+  $$SignatureTemplatesTableTableManager(
+    _$AppDatabase db,
+    $SignatureTemplatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SignatureTemplatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SignatureTemplatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SignatureTemplatesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> imagePath = const Value.absent(),
+                Value<double> aspect = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SignatureTemplatesCompanion(
+                id: id,
+                name: name,
+                imagePath: imagePath,
+                aspect: aspect,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String name,
+                required String imagePath,
+                Value<double> aspect = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SignatureTemplatesCompanion.insert(
+                id: id,
+                name: name,
+                imagePath: imagePath,
+                aspect: aspect,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SignatureTemplatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SignatureTemplatesTable,
+      SignatureTemplate,
+      $$SignatureTemplatesTableFilterComposer,
+      $$SignatureTemplatesTableOrderingComposer,
+      $$SignatureTemplatesTableAnnotationComposer,
+      $$SignatureTemplatesTableCreateCompanionBuilder,
+      $$SignatureTemplatesTableUpdateCompanionBuilder,
+      (
+        SignatureTemplate,
+        BaseReferences<
+          _$AppDatabase,
+          $SignatureTemplatesTable,
+          SignatureTemplate
+        >,
+      ),
+      SignatureTemplate,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5613,4 +6469,6 @@ class $AppDatabaseManager {
       $$ClaimsTableTableManager(_db, _db.claims);
   $$CategoriesTableTableManager get categories =>
       $$CategoriesTableTableManager(_db, _db.categories);
+  $$SignatureTemplatesTableTableManager get signatureTemplates =>
+      $$SignatureTemplatesTableTableManager(_db, _db.signatureTemplates);
 }
