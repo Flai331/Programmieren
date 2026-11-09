@@ -4,7 +4,9 @@ import 'dart:typed_data';
 
 import 'package:dokubox/fill/fill_export.dart';
 import 'package:dokubox/fill/fill_model.dart';
+import 'package:dokubox/fill/page_encode.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 
 // 1×1-PNG (weiß) als Seiten-Hintergrund bzw. Vorlage.
 final _png = base64Decode(
@@ -74,6 +76,20 @@ void main() {
     doc = history.undo()!;
     expect(doc.items, isEmpty);
     expect(history.undo(), isNull);
+  });
+
+  test('Seiten-Pixel (BGRA) werden korrekt als JPEG kodiert', () {
+    // 2×1 Pixel: rot, blau – in BGRA-Reihenfolge.
+    final bgra = Uint8List.fromList([0, 0, 255, 255, 255, 0, 0, 255]);
+    final jpg = encodeBgraToJpg(2, 1, bgra, quality: 100);
+    final decoded = img.decodeJpg(jpg)!;
+    expect(decoded.width, 2);
+    final red = decoded.getPixel(0, 0);
+    final blue = decoded.getPixel(1, 0);
+    expect(red.r, greaterThan(180));
+    expect(red.b, lessThan(90));
+    expect(blue.b, greaterThan(180));
+    expect(blue.r, lessThan(90));
   });
 
   test('pngSize liest Breite/Höhe aus dem Kopf', () {

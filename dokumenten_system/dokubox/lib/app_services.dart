@@ -3,6 +3,8 @@ import 'backup/backup_service.dart';
 import 'data/database.dart';
 import 'data/document_repository.dart';
 import 'extract/suggestion_service.dart';
+import 'fill/fill_service.dart';
+import 'fill/template_service.dart';
 import 'reminders/notification_service.dart';
 import 'scan/pdf_import_service.dart';
 import 'scan/scan_service.dart';
@@ -18,6 +20,8 @@ class AppServices {
       NotificationService(repository);
   late final BackupService backup = BackupService(db);
   late final AiExtractionService ai = AiExtractionService();
+  late final TemplateService templates = TemplateService(repository);
+  late final FillService fill = FillService(repository, templates);
 
   AppServices(this.db);
 }

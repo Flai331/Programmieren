@@ -10,6 +10,7 @@ import '../data/finance.dart';
 import '../scan/scan_service.dart';
 import 'confirm_screen.dart';
 import 'finance_actions.dart';
+import 'fill_screen.dart';
 import 'pdf_preview.dart';
 
 final _dateFormat = DateFormat('dd.MM.yyyy');
@@ -73,12 +74,99 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     await OpenFilex.open(path);
   }
 
-  Future<void> _sharePdf() async {
-    final path = await ScanService.absolutePdfPath(_doc!.pdfPath);
+  Future<void> _sharePdf({bool filled = false}) async {
+    final doc = _doc!;
+    final relative = filled ? doc.filledPdfPath! : doc.pdfPath;
+    final path = await ScanService.absolutePdfPath(relative);
     await SharePlus.instance.share(ShareParams(
       files: [XFile(path)],
-      subject: '${_doc!.docNumber} ${_doc!.title}',
+      subject: '${doc.docNumber} ${doc.title}${filled ? ' (ausgefüllt)' : ''}',
     ));
+  }
+
+  /// Formular ausfüllen (Text, Haken, Kreuz, Datum, Unterschrift). Das
+  /// Original bleibt, gespeichert wird eine ausgefüllte Kopie.
+  Future<void> _fill() async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => FillScreen(document: _doc!)),
+    );
+    await _load();
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Ausgefüllte Kopie gespeichert – Original unverändert'),
+      ));
+    }
+  }
+
+  Future<void> _discardFill() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ausgefüllte Kopie löschen?'),
+        content: const Text(
+            'Die Eintragungen gehen verloren. Das Original bleibt erhalten.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Löschen'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await services.fill.discard(_doc!);
+    await _load();
+  }
+
+  Widget _filledSection(Document doc, ThemeData theme) {
+    return Card(
+      color: theme.colorScheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.edit_document),
+                const SizedBox(width: 8),
+                Text('Ausgefüllte Version', style: theme.textTheme.titleSmall),
+              ],
+            ),
+            const SizedBox(height: 8),
+            OriginalPreview(
+              relativePdfPath: doc.filledPdfPath!,
+              title: '${doc.docNumber} ausgefüllt',
+              height: 200,
+            ),
+            Wrap(
+              spacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: () => _sharePdf(filled: true),
+                  icon: const Icon(Icons.share),
+                  label: const Text('Teilen'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _fill,
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Weiter ausfüllen'),
+                ),
+                TextButton.icon(
+                  onPressed: _discardFill,
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Löschen'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _edit() async {
@@ -279,6 +367,11 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         title: Text(doc.docNumber),
         actions: [
           IconButton(
+            icon: const Icon(Icons.draw),
+            tooltip: 'Ausfüllen / unterschreiben',
+            onPressed: _fill,
+          ),
+          IconButton(
             icon: const Icon(Icons.edit),
             tooltip: 'Bearbeiten',
             onPressed: _edit,
@@ -324,6 +417,15 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
             title: doc.docNumber,
             height: 200,
           ),
+          const SizedBox(height: 8),
+          if (doc.filledPdfPath == null)
+            OutlinedButton.icon(
+              onPressed: _fill,
+              icon: const Icon(Icons.draw),
+              label: const Text('Ausfüllen / unterschreiben'),
+            )
+          else
+            _filledSection(doc, theme),
           const SizedBox(height: 16),
           Card(
             child: Padding(

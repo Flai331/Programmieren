@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../data/database.dart';
+import '../fill/template_service.dart';
 import '../scan/scan_service.dart';
 
 /// Verschlüsseltes Backup: eine ZIP (Datenbank + alle PDFs), verschlüsselt
@@ -50,13 +51,15 @@ class BackupService {
       await dbCopy.length(),
       await dbCopy.readAsBytes(),
     ));
-    final pdfDir = Directory(p.join(docsDir.path, ScanService.pdfDirName));
-    if (await pdfDir.exists()) {
-      await for (final entity in pdfDir.list()) {
+    // PDFs (Originale + ausgefüllte Kopien) und Unterschriften-Vorlagen.
+    for (final dirName in backupDirs) {
+      final dir = Directory(p.join(docsDir.path, dirName));
+      if (!await dir.exists()) continue;
+      await for (final entity in dir.list()) {
         if (entity is File) {
           final bytes = await entity.readAsBytes();
           archive.addFile(ArchiveFile(
-            p.join(ScanService.pdfDirName, p.basename(entity.path)),
+            p.join(dirName, p.basename(entity.path)),
             bytes.length,
             bytes,
           ));
@@ -130,6 +133,9 @@ class BackupService {
     return target;
   }
 }
+
+/// Verzeichnisse (relativ zum App-Verzeichnis), die ins Backup kommen.
+const backupDirs = [ScanService.pdfDirName, TemplateService.dirName];
 
 class BackupException implements Exception {
   final String message;

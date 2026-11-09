@@ -12,7 +12,6 @@ import '../backup/backup_service.dart';
 import '../data/finance.dart';
 import '../lock/lock_gate.dart';
 import '../scan/blank_pages.dart';
-import '../scan/scan_service.dart';
 import 'firms_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -207,14 +206,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Wiederhergestellte Daten an Ort und Stelle kopieren; die neue
       // Datenbank wird beim nächsten App-Start geladen.
       final docsDir = await getApplicationDocumentsDirectory();
-      final pdfSource =
-          Directory(p.join(restored.path, ScanService.pdfDirName));
-      if (await pdfSource.exists()) {
-        final pdfTarget = await ScanService.pdfDirectory();
-        await for (final entity in pdfSource.list()) {
+      for (final dirName in backupDirs) {
+        final source = Directory(p.join(restored.path, dirName));
+        if (!await source.exists()) continue;
+        final target = Directory(p.join(docsDir.path, dirName));
+        await target.create(recursive: true);
+        await for (final entity in source.list()) {
           if (entity is File) {
-            await entity
-                .copy(p.join(pdfTarget.path, p.basename(entity.path)));
+            await entity.copy(p.join(target.path, p.basename(entity.path)));
           }
         }
       }
