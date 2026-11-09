@@ -137,7 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
               leading: const Icon(Icons.wifi),
               title: const Text('Vom PC (WLAN)'),
               subtitle: const Text(
-                  'QR-Code im Scan-Trenner scannen – Dateien kommen direkt'),
+                  'PDFs und Unterschriften per QR-Code vom Scan-Trenner'),
               onTap: () => Navigator.pop(ctx, 'wlan'),
             ),
           ],
@@ -167,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('${files.length} PDF${files.length == 1 ? '' : 's'} '
+          title: Text('${files.length} Datei${files.length == 1 ? '' : 'en'} '
               'vom PC übernehmen?'),
           content: SizedBox(
             width: double.maxFinite,
@@ -177,9 +177,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 for (final f in files)
                   ListTile(
                     dense: true,
-                    leading: const Icon(Icons.picture_as_pdf),
+                    leading: Icon(f.isTemplate
+                        ? Icons.draw
+                        : Icons.picture_as_pdf),
                     title: Text(f.name),
-                    subtitle: Text('${(f.size / 1024).ceil()} KB'),
+                    subtitle: Text(f.isTemplate
+                        ? 'Unterschrift/Vorlage · ${(f.size / 1024).ceil()} KB'
+                        : '${(f.size / 1024).ceil()} KB'),
                   ),
               ],
             ),
@@ -198,10 +202,37 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       if (ok != true || !mounted) return;
       final paths = await _withProgress(
-        'Lade ${files.length} PDF${files.length == 1 ? '' : 's'} vom PC …',
+        'Lade ${files.length} Datei${files.length == 1 ? '' : 'en'} vom PC …',
         () => receiver.download(files),
       );
-      await _importPaths(paths, deleteSources: true);
+      // Unterschriften/Vorlagen in die Sammlung, PDFs in den Import.
+      final pdfs = <String>[];
+      var templates = 0;
+      for (var i = 0; i < files.length; i++) {
+        if (!files[i].isTemplate) {
+          pdfs.add(paths[i]);
+          continue;
+        }
+        final file = File(paths[i]);
+        try {
+          final name = files[i].name.replaceAll(
+              RegExp(r'\.png$', caseSensitive: false), '');
+          await services.templates.addPng(name, await file.readAsBytes());
+          templates++;
+        } on FormatException {
+          _snack('${files[i].name}: keine gültige PNG.');
+        } finally {
+          try {
+            await file.delete();
+          } catch (_) {}
+        }
+      }
+      if (templates > 0) {
+        _snack('$templates Unterschrift${templates == 1 ? '' : 'en'}/'
+            'Vorlage${templates == 1 ? '' : 'n'} gespeichert – beim '
+            'Ausfüllen unter „Unterschrift“');
+      }
+      if (pdfs.isNotEmpty) await _importPaths(pdfs, deleteSources: true);
     } on WlanException catch (e) {
       _snack(e.message);
     } on FormatException {

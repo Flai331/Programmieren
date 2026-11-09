@@ -52,6 +52,15 @@ class Datei:
     def name(self) -> str:
         return self.pfad.name
 
+    @property
+    def art(self) -> str:
+        """„vorlage“ für Unterschriften/Handschrift (PNG), sonst „pdf“."""
+        return "vorlage" if self.pfad.suffix.lower() == ".png" else "pdf"
+
+    @property
+    def mime(self) -> str:
+        return "image/png" if self.art == "vorlage" else "application/pdf"
+
 
 class Freigabe:
     """Stellt [dateien] unter einem geheimen Link im lokalen Netz bereit."""
@@ -129,7 +138,7 @@ class Freigabe:
 
     def _liste(self, h: BaseHTTPRequestHandler) -> None:
         eintraege = [
-            {"id": d.id, "name": d.name, "groesse": d.pfad.stat().st_size}
+            {"id": d.id, "name": d.name, "art": d.art, "groesse": d.pfad.stat().st_size}
             for d in self.dateien.values() if d.pfad.exists()
         ]
         daten = json.dumps({"app": "dokubox-wlan", "version": 1, "dateien": eintraege},
@@ -144,7 +153,7 @@ class Freigabe:
         daten = d.pfad.read_bytes()
         d.abgeholt += 1
         self.meldung(f"→ {d.name} übertragen ({len(daten) // 1024} KB)")
-        self._senden(h, 200, "application/pdf", daten, {
+        self._senden(h, 200, d.mime, daten, {
             "Content-Disposition": f"attachment; filename*=UTF-8''{quote(d.name)}",
         })
 

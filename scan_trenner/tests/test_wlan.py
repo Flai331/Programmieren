@@ -35,6 +35,7 @@ def test_liste_und_download(freigabe):
     liste = json.loads(daten)
     assert status == 200 and liste["app"] == "dokubox-wlan"
     assert [d["name"] for d in liste["dateien"]] == ["Rechnung enviaM.pdf", "Depot.pdf"]
+    assert {d["art"] for d in liste["dateien"]} == {"pdf"}
     assert liste["dateien"][1]["groesse"] == len(b"%PDF-1.4 bb")
 
     status, kopf, daten = holen(freigabe.link + "datei/1")
@@ -88,3 +89,18 @@ def test_link_format_und_schluessel_zufaellig(tmp_path):
 def test_qr_bild():
     bild = ws.qr_bild("http://192.168.1.20:5000/dokubox/abc/", groesse=200)
     assert bild.size == (200, 200)
+
+
+def test_vorlagen_werden_als_png_angeboten(tmp_path):
+    png = tmp_path / "Unterschrift.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\nxyz")
+    f = ws.Freigabe([png], ip="127.0.0.1").starten()
+    try:
+        _, _, daten = holen(f.link + "liste")
+        eintrag = json.loads(daten)["dateien"][0]
+        assert eintrag["art"] == "vorlage" and eintrag["name"] == "Unterschrift.png"
+        _, kopf, inhalt = holen(f.link + "datei/1")
+        assert kopf["Content-Type"] == "image/png"
+        assert inhalt.startswith(b"\x89PNG")
+    finally:
+        f.stoppen()

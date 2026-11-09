@@ -9,7 +9,13 @@ class WlanFile {
   final String id;
   final String name;
   final int size;
-  const WlanFile(this.id, this.name, this.size);
+
+  /// `pdf` (wird importiert) oder `vorlage` (Unterschrift/Handschrift als
+  /// PNG, kommt in die Vorlagen-Sammlung).
+  final String kind;
+  const WlanFile(this.id, this.name, this.size, {this.kind = 'pdf'});
+
+  bool get isTemplate => kind == 'vorlage';
 }
 
 /// Prüft einen gescannten/eingetippten Link. Erlaubt sind nur Links des
@@ -57,7 +63,8 @@ List<WlanFile> parseWlanList(String body) {
     for (final f in files)
       if (f is Map && f['id'] != null && f['name'] is String)
         WlanFile('${f['id']}', f['name'] as String,
-            (f['groesse'] as num?)?.toInt() ?? 0),
+            (f['groesse'] as num?)?.toInt() ?? 0,
+            kind: f['art'] == 'vorlage' ? 'vorlage' : 'pdf'),
   ];
 }
 

@@ -13,6 +13,7 @@ import '../data/finance.dart';
 import '../lock/lock_gate.dart';
 import '../scan/blank_pages.dart';
 import 'firms_screen.dart';
+import 'templates_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -337,6 +338,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const FirmsScreen()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.draw),
+            title: const Text('Unterschriften & Vorlagen'),
+            subtitle: const Text(
+                'Am PC gezeichnet, per WLAN übertragen – zum Ausfüllen'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const TemplatesScreen()),
             ),
           ),
           const Divider(),

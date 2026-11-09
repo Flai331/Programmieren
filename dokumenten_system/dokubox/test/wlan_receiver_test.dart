@@ -39,10 +39,13 @@ void main() {
     test('liest die Dateiliste', () {
       final files = parseWlanList('{"app": "dokubox-wlan", "version": 1, '
           '"dateien": [{"id": "1", "name": "Rechnung enviaM.pdf", '
-          '"groesse": 1234}, {"id": "2", "name": "Depot.pdf"}]}');
-      expect(files.map((f) => f.name), ['Rechnung enviaM.pdf', 'Depot.pdf']);
+          '"groesse": 1234}, {"id": "2", "name": "Depot.pdf"}, '
+          '{"id": "3", "name": "Unterschrift.png", "art": "vorlage"}]}');
+      expect(files.map((f) => f.name),
+          ['Rechnung enviaM.pdf', 'Depot.pdf', 'Unterschrift.png']);
+      expect(files.map((f) => f.isTemplate), [false, false, true]);
       expect(files.first.size, 1234);
-      expect(files.last.size, 0);
+      expect(files[1].size, 0);
     });
 
     test('fremde Antwort wird abgelehnt', () {
