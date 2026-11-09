@@ -23,6 +23,7 @@ import 'confirm_screen.dart';
 import 'document_detail_screen.dart';
 import 'finance_actions.dart';
 import 'finance_screen.dart';
+import 'network_scanner_screen.dart';
 import 'settings_screen.dart';
 import 'wlan_scan_screen.dart';
 
@@ -88,7 +89,68 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final result = await services.scanner.scan();
       if (result == null) return; // Nutzer hat abgebrochen.
+      await _handleScanResult(result);
+    } on DocScanException catch (e) {
+      _snack('Scan fehlgeschlagen: ${e.message}');
+    } finally {
+      LockController.suppressAutoLock = false;
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
 
+  /// Kamera oder Netzwerk-Scanner?
+  Future<void> _scanMenu() async {
+    if (_scanning) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera),
+              title: const Text('Mit der Kamera'),
+              subtitle: const Text('Randerkennung, mehrere Seiten'),
+              onTap: () => Navigator.pop(ctx, 'camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.print),
+              title: const Text('Mit dem Scanner (WLAN)'),
+              subtitle: const Text(
+                  'Epson, Canon, HP, Brother … – Einzug, doppelseitig'),
+              onTap: () => Navigator.pop(ctx, 'network'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == 'camera') await _startScan();
+    if (choice == 'network') await _scanNetwork();
+  }
+
+  Future<void> _scanNetwork() async {
+    if (_scanning) return;
+    final result = await Navigator.of(context).push<NetworkScanResult>(
+      MaterialPageRoute(builder: (_) => const NetworkScannerScreen()),
+    );
+    if (result == null || result.imagePaths.isEmpty || !mounted) return;
+    setState(() => _scanning = true);
+    try {
+      final scan = await _withProgress(
+        'Erkenne Leerseiten und lese ${result.imagePaths.length} '
+        'Seite${result.imagePaths.length == 1 ? '' : 'n'} …',
+        () => services.scanner
+            .processImages(result.imagePaths, duplex: result.duplex),
+      );
+      await _handleScanResult(scan);
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  /// Gemeinsamer Ablauf nach Kamera- oder Netzwerk-Scan.
+  Future<void> _handleScanResult(ScanResult result) async {
+    {
       if (result.documents.isEmpty) {
         _snack('Nur leere Seiten erkannt – nichts gespeichert.');
         return;
@@ -105,11 +167,6 @@ class _HomeScreenState extends State<HomeScreen> {
         if (await _confirmAndSave(outcome)) saved++;
       }
       if (saved > 1 && mounted) _snack('$saved Dokumente gespeichert');
-    } on DocScanException catch (e) {
-      _snack('Scan fehlgeschlagen: ${e.message}');
-    } finally {
-      LockController.suppressAutoLock = false;
-      if (mounted) setState(() => _scanning = false);
     }
   }
 
@@ -504,7 +561,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 12),
           FloatingActionButton.extended(
             heroTag: 'scan',
-            onPressed: _startScan,
+            onPressed: _scanMenu,
             icon: _scanning
                 ? const SizedBox(
                     width: 20,

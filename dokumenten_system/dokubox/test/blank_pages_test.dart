@@ -98,4 +98,48 @@ void main() {
           isTrue);
     });
   });
+
+  group('groupDuplexAtBlankSheets (doppelseitig)', () {
+    // Paare: [Vorderseite, Rückseite] je Blatt. T = Text, L = leer.
+    List<bool> sheets(String pattern) =>
+        [for (final c in pattern.split('')) c == 'L'];
+
+    test('leere Rückseite trennt NICHT, nur ein ganz leeres Blatt', () {
+      // Blatt 1: T/L (einseitig), Blatt 2: T/T, Blatt 3: L/L (Trenner),
+      // Blatt 4: T/L
+      final groups = groupDuplexAtBlankSheets(sheets('TLTTLLTL'));
+      expect(groups, [
+        [0, 2, 3],
+        [6],
+      ]);
+    });
+
+    test('Vorderseite leer, Rückseite bedruckt bleibt im Dokument', () {
+      expect(groupDuplexAtBlankSheets(sheets('TTLT')), [
+        [0, 1, 3],
+      ]);
+    });
+
+    test('mehrere Trenn-Blätter hintereinander und am Rand', () {
+      expect(groupDuplexAtBlankSheets(sheets('LLTLLLLLTT')), [
+        [2],
+        [8, 9],
+      ]);
+    });
+
+    test('ungerade Seitenzahl (letzte Rückseite fehlt)', () {
+      expect(groupDuplexAtBlankSheets(sheets('TTT')), [
+        [0, 1, 2],
+      ]);
+      expect(groupDuplexAtBlankSheets(sheets('TTL')), [
+        [0, 1],
+      ]);
+    });
+
+    test('ohne Trennen: alles ein Dokument, leere Seiten raus', () {
+      expect(groupDuplexAtBlankSheets(sheets('TLLLTT'), split: false), [
+        [0, 4, 5],
+      ]);
+    });
+  });
 }

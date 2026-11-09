@@ -76,7 +76,17 @@ class ScanService {
       for (final raw in result.images)
         raw.startsWith('file://') ? Uri.parse(raw).toFilePath() : raw,
     ];
+    return processImages(imagePaths, stamp: stamp);
+  }
 
+  /// Seitenbilder (Kamera oder Netzwerk-Scanner) → Leerseiten erkennen,
+  /// trennen, OCR, je Dokument eine PDF. Die Bilddateien werden danach
+  /// gelöscht. [duplex]: Seiten kommen als Vorder-/Rückseiten-Paare; dann
+  /// trennt nur ein beidseitig leeres Blatt (siehe
+  /// [groupDuplexAtBlankSheets]).
+  Future<ScanResult> processImages(List<String> imagePaths,
+      {int? stamp, bool duplex = false}) async {
+    stamp ??= DateTime.now().millisecondsSinceEpoch;
     try {
       final blank = List<bool>.filled(imagePaths.length, false);
       final detect = await BlankPageSettings.isEnabled();
@@ -88,7 +98,9 @@ class ScanService {
         }
       }
 
-      final groups = groupPagesAtBlanks(blank, split: detect);
+      final groups = duplex
+          ? groupDuplexAtBlankSheets(blank, split: detect)
+          : groupPagesAtBlanks(blank, split: detect);
       final documents = <ScanOutcome>[];
       for (var n = 0; n < groups.length; n++) {
         final paths = [for (final i in groups[n]) imagePaths[i]];

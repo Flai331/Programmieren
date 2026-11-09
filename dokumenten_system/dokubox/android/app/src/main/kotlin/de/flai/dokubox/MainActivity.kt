@@ -1,6 +1,8 @@
 package de.flai.dokubox
 
+import android.content.Context
 import android.content.Intent
+import android.net.wifi.WifiManager
 import android.net.Uri
 import android.os.Build
 import io.flutter.embedding.android.FlutterFragmentActivity
@@ -15,6 +17,7 @@ import java.io.File
 // an Flutter gegeben.
 class MainActivity : FlutterFragmentActivity() {
     private var channel: MethodChannel? = null
+    private var multicastLock: WifiManager.MulticastLock? = null
     private val pending = mutableListOf<String>()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -29,7 +32,33 @@ class MainActivity : FlutterFragmentActivity() {
                 }
             }
         }
+        // Netzwerk-Scanner suchen (mDNS): Android verwirft Multicast ohne Lock.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dokubox/multicast")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "acquire" -> {
+                        if (multicastLock == null) {
+                            val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                            multicastLock = wifi.createMulticastLock("dokubox-scanner").apply {
+                                setReferenceCounted(false)
+                            }
+                        }
+                        multicastLock?.acquire()
+                        result.success(null)
+                    }
+                    "release" -> {
+                        multicastLock?.takeIf { it.isHeld }?.release()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         collect(intent)
+    }
+
+    override fun onDestroy() {
+        multicastLock?.takeIf { it.isHeld }?.release()
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {

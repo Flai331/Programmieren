@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- QR-Code des Scan-Trenners scannen (WLAN-Übertragung vom PC) -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Netzwerk-Scanner im WLAN finden (mDNS/Bonjour) -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <application
         android:label="DokuBox"
         android:name="${applicationName}"

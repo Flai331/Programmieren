@@ -157,3 +157,30 @@ List<List<int>> groupPagesAtBlanks(List<bool> blank, {bool split = true}) {
   if (current.isNotEmpty) groups.add(current);
   return groups;
 }
+
+/// Wie [groupPagesAtBlanks], aber für doppelseitig gescannte Stapel: Die
+/// Seiten kommen als Paare (Vorder-/Rückseite je Blatt). Nur ein Blatt, das
+/// auf **beiden** Seiten leer ist, trennt Dokumente. Eine leere Rückseite
+/// (einseitig bedrucktes Blatt) wird nur entfernt, das Dokument läuft weiter.
+/// So lassen sich ein- und doppelseitige Blätter beliebig mischen.
+List<List<int>> groupDuplexAtBlankSheets(List<bool> blank, {bool split = true}) {
+  final groups = <List<int>>[];
+  var current = <int>[];
+  for (var sheet = 0; sheet * 2 < blank.length; sheet++) {
+    final front = sheet * 2;
+    final back = front + 1;
+    final frontBlank = blank[front];
+    final backBlank = back >= blank.length || blank[back];
+    if (frontBlank && backBlank) {
+      if (split && current.isNotEmpty) {
+        groups.add(current);
+        current = <int>[];
+      }
+      continue;
+    }
+    if (!frontBlank) current.add(front);
+    if (back < blank.length && !blank[back]) current.add(back);
+  }
+  if (current.isNotEmpty) groups.add(current);
+  return groups;
+}
