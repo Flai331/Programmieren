@@ -75,6 +75,19 @@ async function subLayers(browser, id, kind, items, firstIndex, base) {
   return { inputs, fc, out: cur };
 }
 const SRT = [];
+// Eigene Untertiteltexte (UT=datei.json): ergänzende Erklärungen, Anzeigedauer nach Lesezeit
+const UT = process.env.UT ? JSON.parse(fs.readFileSync(process.env.UT, 'utf8')) : {};
+function readTimes(text, start) {
+  let t = start;
+  return sentences(text).map((x) => { const d = Math.max(2.0, x.length / 13 + 0.6); const r = { a: t, b: t + d, text: x }; t += d; return r; });
+}
+// Untertitel eines Teils: eigene Texte vor Sprechertexten
+function subsFor(id, sp, start) {
+  if (!SUBS) return null;
+  if (UT[id]) return readTimes(UT[id], start);
+  if (sp && !process.env.UT) return subTimes(NARR[id], start, sp.dur);
+  return null;
+}
 
 // Tonspur: Sprecher ab 'delay' s, sonst Stille
 const audioIn = (sp) => (sp ? ['-i', sp.wav] : ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo']);
@@ -190,7 +203,7 @@ async function renderCards(browser, cards) {
     const out = path.join(BUILD, `${c.id}.mp4`);
     if (ONLY && !ONLY.includes(c.id)) continue;
     const sig = path.join(BUILD, `${c.id}.sig`);
-    const want = `${c.dur.toFixed(2)}|${NARR[c.id] || ''}|${SUBS ? 'ut' : 'ton'}`;
+    const want = `${c.dur.toFixed(2)}|${NARR[c.id] || ''}|${SUBS ? 'ut' : 'ton'}|${UT[c.id] || ''}`;
     if (fs.existsSync(out) && !process.env.CARDS && fs.existsSync(sig) && fs.readFileSync(sig, 'utf8') === want) continue;
     const fdir = path.join(BUILD, `frames_${c.id}`);
     fs.rmSync(fdir, { recursive: true, force: true }); fs.mkdirSync(fdir);
@@ -205,11 +218,12 @@ async function renderCards(browser, cards) {
     }
     let sp = speak(c.id);
     let subIn = [], subFc = '', vOut = '0:v';
-    if (SUBS && sp) {
-      const L2 = await subLayers(browser, c.id, 'card', subTimes(NARR[c.id], 0.5, sp.dur), 1, '0:v');
+    const cardSubs = subsFor(c.id, sp, 0.5);
+    if (cardSubs) {
+      const L2 = await subLayers(browser, c.id, 'card', cardSubs, 1, '0:v');
       subIn = L2.inputs; subFc = L2.fc; vOut = `[${L2.out}]`;
-      sp = null; // keine Stimme
     }
+    if (SUBS) sp = null; // keine Stimme
     const aIdx = 1 + subIn.length / 4;
     ff(['-framerate', String(FPS), '-i', path.join(fdir, '%04d.jpg'), ...subIn, ...audioIn(sp), '-filter_complex', `${audioFx(aIdx, sp, 0.5)}${subFc}`, '-map', vOut, '-map', '[aud]',
       '-t', c.dur.toFixed(3), '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-c:a', 'aac', '-ar', '48000', '-ac', '2', out]);
@@ -275,7 +289,10 @@ if (process.env.PREVIEW) {
   }
   const browser = await chromium.launch();
   const cards = order.filter((o) => o.kind === 'card').map((c) => ({ ...c, dur: c.dur || (c.style === 'intro' ? 4.6 : c.style === 'outro' ? 7 : c.style === 'alarm' ? 7 : c.style === 'story' ? 7.5 : 2.8) }));
-  for (const c of cards) { const sp = speak(c.id); if (sp) c.dur = Math.max(c.dur, sp.dur + 1.3); }
+  for (const c of cards) {
+    const sp = speak(c.id); if (sp && !process.env.UT) c.dur = Math.max(c.dur, sp.dur + 1.3);
+    const u = subsFor(c.id, sp, 0.5); if (u) c.dur = Math.max(c.dur, u[u.length - 1].b + 0.6);
+  }
   await renderCards(browser, cards);
 
   let chapter = '';
@@ -292,11 +309,12 @@ if (process.env.PREVIEW) {
     const capf = path.join(BUILD, `cap_${o.id}.png`);
     await png(browser, capHtml(o.kind, cap, chapter), capf, true);
     const fade = 'format=rgba,fade=in:st=0:d=0.45:alpha=1';
-    const sp = speak(o.id);
-    if (sp && speed > 1) {
+    const sp = process.env.UT ? null : speak(o.id);
+    const subs = subsFor(o.id, sp, 0.4);
+    const needLen = Math.max(sp ? sp.dur + 0.8 : 0, subs ? subs[subs.length - 1].b + 0.5 : 0);
+    if (needLen && speed > 1) {
       const real = o.kind === 'dual' ? Math.min(segs[o.a].t1, segs[o.b].t1) - Math.max(segs[o.a].t0, segs[o.b].t0) : segs[o.id].t1 - segs[o.id].t0;
-      const need = sp.dur + 0.8;
-      if (real / speed < need) speed = Math.max(1, real / need);
+      if (real / speed < needLen) speed = Math.max(1, real / needLen);
     }
     let dur, inputs, fc; // eslint-disable-line prefer-const
     if (o.kind === 'dual') {
@@ -305,7 +323,7 @@ if (process.env.PREVIEW) {
       const la = path.join(BUILD, `${o.id}_a.txt`), lb = path.join(BUILD, `${o.id}_b.txt`);
       dur = concatList(a, la, speed, t0, t1); concatList(b, lb, speed, t0, t1);
       const v = L.dual.v, v2 = L.dual.v2;
-      var total = Math.max(dur, sp ? sp.dur + 0.8 : 0), pad = total > dur + 0.05 ? `,tpad=stop_mode=clone:stop_duration=${(total - dur + 0.2).toFixed(2)}` : '';
+      var total = Math.max(dur, needLen), pad = total > dur + 0.05 ? `,tpad=stop_mode=clone:stop_duration=${(total - dur + 0.2).toFixed(2)}` : '';
       inputs = ['-f', 'concat', '-safe', '0', '-i', la, '-f', 'concat', '-safe', '0', '-i', lb, '-loop', '1', '-i', layer, '-loop', '1', '-i', capf];
       fc = `color=c=#15171c:s=${W}x${H}:r=${FPS}[bg];[0:v]fps=${FPS},scale=${v.w}:${v.h}:flags=lanczos${pad}[va];[1:v]fps=${FPS},scale=${v2.w}:${v2.h}:flags=lanczos${pad}[vb];`
         + `[bg][va]overlay=${v.x}:${v.y}:shortest=1[t1];[t1][vb]overlay=${v2.x}:${v2.y}[t2];[t2][2:v]overlay=0:0[t3];[3:v]${fade}[c];[t3][c]overlay=0:0,format=yuv420p[out]`;
@@ -314,15 +332,15 @@ if (process.env.PREVIEW) {
       const lf = path.join(BUILD, `${o.id}.txt`);
       dur = concatList(s, lf, speed);
       const v = L[o.kind].v;
-      var total = Math.max(dur, sp ? sp.dur + 0.8 : 0), pad = total > dur + 0.05 ? `,tpad=stop_mode=clone:stop_duration=${(total - dur + 0.2).toFixed(2)}` : '';
+      var total = Math.max(dur, needLen), pad = total > dur + 0.05 ? `,tpad=stop_mode=clone:stop_duration=${(total - dur + 0.2).toFixed(2)}` : '';
       inputs = ['-f', 'concat', '-safe', '0', '-i', lf, '-loop', '1', '-i', layer, '-loop', '1', '-i', capf];
       fc = `color=c=#15171c:s=${W}x${H}:r=${FPS}[bg];[0:v]fps=${FPS},scale=${v.w}:${v.h}:flags=lanczos${pad}[va];`
         + `[bg][va]overlay=${v.x}:${v.y}:shortest=1[t1];[t1][1:v]overlay=0:0[t2];[2:v]${fade}[c];[t2][c]overlay=0:0,format=yuv420p[out]`;
     }
     let an = o.kind === 'dual' ? 4 : 3;
     let vOut = '[out]';
-    if (SUBS && sp) {
-      const L2 = await subLayers(browser, o.id, o.kind, subTimes(NARR[o.id], 0.3, sp.dur), an, 'out');
+    if (subs) {
+      const L2 = await subLayers(browser, o.id, o.kind, subs, an, 'out');
       inputs = [...inputs, ...L2.inputs]; fc += L2.fc; vOut = `[${L2.out}]`; an += L2.inputs.length / 4;
     }
     const spAudio = SUBS ? null : sp;
@@ -332,15 +350,16 @@ if (process.env.PREVIEW) {
   }
   await browser.close();
   // Untertitel-Datei (.srt) aus den fertigen Teilen
-  if (Object.keys(NARR).length) {
+  if (Object.keys(NARR).length || Object.keys(UT).length) {
     let off = 0, n = 0, srt = '';
     const ts = (t) => { const ms = Math.round(t * 1000); const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, sec = Math.floor(ms / 1000) % 60; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`; };
     for (const o of order) {
       const f = path.join(BUILD, `${o.id}.mp4`);
       if (!fs.existsSync(f)) continue;
       const len = probe(f);
-      const sp = NARR[o.id] ? speak(o.id) : null;
-      if (sp) for (const it of subTimes(NARR[o.id], o.kind === 'card' ? 0.5 : 0.3, sp.dur)) srt += `${++n}\n${ts(off + it.a)} --> ${ts(off + Math.min(it.b, len))}\n${it.text}\n\n`;
+      const sp = !process.env.UT && NARR[o.id] ? speak(o.id) : null;
+      const items = UT[o.id] ? readTimes(UT[o.id], o.kind === 'card' ? 0.5 : 0.4) : sp ? subTimes(NARR[o.id], o.kind === 'card' ? 0.5 : 0.3, sp.dur) : [];
+      for (const it of items) srt += `${++n}\n${ts(off + it.a)} --> ${ts(off + Math.min(it.b, len))}\n${it.text}\n\n`;
       off += len;
     }
     fs.writeFileSync(path.join(DIR, OUTNAME.replace(/\.mp4$/, '.srt')), srt);

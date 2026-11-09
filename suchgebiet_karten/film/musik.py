@@ -1,13 +1,16 @@
 # Legt Musik (CC0, John Bartmann, Wikimedia Commons) unter die Untertitel-Fassung.
 # Aufruf: python3 musik.py <Musikordner>
-import json, subprocess, sys
+import json, os, subprocess, sys
 M = sys.argv[1].rstrip('/') + '/'
+BUILD = os.environ.get('BUILD_DIR', 'build-ut')
+IN = os.environ.get('IN', 'RHS-Einsatz-Scheuen-Untertitel-ohne-Ton.mp4')
+OUT = os.environ.get('OUT', 'RHS-Einsatz-Scheuen-Musik-Untertitel.mp4')
 probe = lambda f: float(subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f], capture_output=True, text=True).stdout)
 order = json.load(open('rec-einsatz/order.json'))
 off = 0; at = {}
 for o in order:
     at[o['id']] = off
-    off += probe(f"build-ut/{o['id']}.mp4")
+    off += probe(f"{BUILD}/{o['id']}.mp4")
 total = off
 X = 3.0  # Überblendung
 t1 = probe(M + 'above-the-clouds.mp3')
@@ -24,7 +27,7 @@ for i, (f, a, b) in enumerate(sec):
     labels.append(f'[m{i}]')
     print(f, 'von', round(a, 1), 'bis', round(b, 1))
 fc.append(f"{''.join(labels)}amix=inputs={len(sec)}:normalize=0:duration=longest,atrim=0:{total:.2f},loudnorm=I=-16:TP=-1.5:LRA=11[a]")
-subprocess.run(['ffmpeg', '-loglevel', 'error', '-y', '-i', 'RHS-Einsatz-Scheuen-Untertitel-ohne-Ton.mp4', *inp, '-filter_complex', ';'.join(fc),
+subprocess.run(['ffmpeg', '-loglevel', 'error', '-y', '-i', IN, *inp, '-filter_complex', ';'.join(fc),
                 '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-shortest', '-movflags', '+faststart',
-                'RHS-Einsatz-Scheuen-Musik-Untertitel.mp4'], check=True)
-print('fertig', round(probe('RHS-Einsatz-Scheuen-Musik-Untertitel.mp4'), 1), 's')
+                OUT], check=True)
+print('fertig', round(probe(OUT), 1), 's')
