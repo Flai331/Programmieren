@@ -27,5 +27,6 @@
   "el-out": "Der Einsatz ist erst zu Ende, wenn alle sicher zurück sind.",
   "el-recv": "Mit allen Wegen auf einer Karte lässt sich der Einsatz gut nachbesprechen.",
   "el-report": "Der Bericht ist sofort fertig – keine Nacharbeit am Abend.",
-  "pdf-pdfs": "Die PDFs gehen direkt an Polizei, Staffelleitung oder ins Archiv."
+  "pdf-pdfs": "Die PDFs gehen direkt an Polizei, Staffelleitung oder ins Archiv.",
+  "dual-zusatz": "Hinweise lassen sich jederzeit nachschicken – der laufende Auftrag bleibt, wie er ist."
 }

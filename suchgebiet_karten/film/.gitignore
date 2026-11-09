@@ -28,3 +28,5 @@ build-ut2/
 compose-ut2.log
 build-musik/
 compose-musik.log
+rec-test/
+run-t.log

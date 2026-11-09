@@ -6018,6 +6018,7 @@ async function zusatzDialog(pre = {}) {
     if (r.delPoint != null) { st.points.splice(r.delPoint, 1); continue; }
     if (r.pick) {
       const pos = await new Promise((res) => pickOnMap('Auf die Karte tippen: dort liegt der Punkt', (p) => res(p)));
+      $('toast').hidden = true; // „Auf die Karte tippen …“ nicht über dem Fenster stehen lassen
       if (pos) st.points.push({ lat: pos.lat, lon: pos.lon, name: '', task: '' });
       continue;
     }

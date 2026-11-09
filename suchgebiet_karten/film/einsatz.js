@@ -73,7 +73,11 @@ const GEO = `(() => {
   await el.seg('bort', { t: 'B-Ort am Ortsrand', s: 'Adresse suchen, Treffer wählen, den genauen Treffpunkt antippen.', speed: 1.3 });
   await el.tap('text=Adresse oder Kreuzung suchen', { wait: 400 });
   await p.keyboard.type('Scheuen, Celle', { delay: 80 });
-  await sleep(1700);
+  // Vorschläge (Photon) kommen nicht immer – dann Enter: die App sucht ersatzweise über Nominatim
+  for (let n = 0; n < 4 && !(await p.locator('#search-results button').first().isVisible().catch(() => false)); n++) {
+    await sleep(2000);
+    if (!(await p.locator('#search-results button').first().isVisible().catch(() => false))) { await p.keyboard.press('Enter'); await sleep(3500); }
+  }
   await el.tap('#search-results button >> nth=0', { wait: 1500 });
   await map(([a, b]) => window.__app.map.flyTo([a, b], 16, { duration: 1.1 }), BORT_VIEW);
   await sleep(2000);
@@ -406,6 +410,32 @@ const GEO = `(() => {
   await snap('progress');
   await el.endSeg();
   await w3;
+  if (STOP === '5b') return done();
+
+  // ================= 16:37 Zeugenhinweis: Punkt an Jonas, ohne QR-Code (v130) =================
+  await at('16:37');
+  card('t5c', { style: 'time', num: '16:37', title: 'Zeugenhinweis', sub: 'Eine Spaziergängerin hat Herrn K. an der Jagdhütte gesehen' });
+  await poll(J); await sleep(1500);
+  await J.evaluate(() => document.querySelectorAll('#dlg-box button').forEach((b) => { if (/Verstanden|OK|Schließen/.test(b.textContent)) b.click(); })).catch(() => {});
+  const HUT = o(650, 300); // im Gebiet von Jonas (E3)
+  await dual(el, jonas, 'zusatz', { t: '📍 Punkt an Jonas – ohne neuen QR-Code', s: 'Neuer Punkt mit Aufgabe, zusätzlich zum laufenden Auftrag. Geht über den Status-Server direkt auf Jonas’ Karte.' });
+  await el.tap('#btn-status', { wait: 700 });
+  await el.tap('#st-zusatz', { wait: 800 });
+  { const opts = await p.locator('#zus-to option').allTextContents(); await p.selectOption('#zus-to', { index: opts.findIndex((x) => x.includes('Jonas')) }); }
+  await sleep(300);
+  await el.type('#zus-task', 'Umfeld der Hütte mit Hund absuchen, Ergebnis melden', { delay: 22 });
+  await el.tap('#dlg-box button:has-text("Punkt auf der Karte setzen")', { wait: 700 });
+  await el.tap(HUT, { wait: 900 });
+  await el.type('.zus-pt-name', 'Jagdhütte', { delay: 40 });
+  await sleep(500);
+  await snap('zusatz');
+  await el.tap('#dlg-box button:has-text("Senden")', { wait: 1200 });
+  await poll(J); await sleep(3000);
+  await jonas.tap('#toast button', { wait: 1800 }).catch((e) => console.log('zeigen', e.message.split('\n')[0]));
+  if (shots) await jonas.shot('chk_jonas_zusatz.png');
+  await jonas.pause(1500);
+  await el.endSeg(); await jonas.endSeg();
+  if (STOP === '5c') return done();
 
   // ================= 16:41 Dämmerung, Drohne meldet Wärmequelle =================
   await at('16:41');
@@ -436,7 +466,7 @@ const GEO = `(() => {
   // Anna bekommt den Prüfauftrag
   await sleep(1000);
   await poll(A); await sleep(2500);
-  await dual(el, anna, 'check', { t: 'Prüfauftrag kommt beim Team an', s: 'Anna sieht die Nachricht der Einsatzleitung – und den Ort auf ihrer Karte.' });
+  await dual(el, anna, 'check', { t: 'Prüfauftrag kommt beim Team an', s: 'Anna sieht die Nachricht der Einsatzleitung – und die Wärmequelle als Punkt auf ihrer Karte.' });
   await poll(A); await sleep(2500);
   await hsnap('check');
   await anna.pause(1500);
