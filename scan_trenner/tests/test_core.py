@@ -107,3 +107,31 @@ def test_cli_ordner_einmal(tmp_path):
     assert len(list((tmp_path / "fertig").glob("*.pdf"))) == 2
     assert (tmp_path / "erledigt" / "a.pdf").exists()
     assert not (tmp_path / "a.pdf").exists()
+
+
+def test_nach_erledigt_neben_der_datei(tmp_path):
+    from scan_trenner_core import nach_erledigt
+    ordner = tmp_path / "Scans"
+    ordner.mkdir()
+    q = baue_pdf(ordner / "stapel.pdf", "TLT")
+    neu = nach_erledigt(q)
+    assert neu == ordner / "erledigt" / "stapel.pdf"
+    assert neu.exists() and not q.exists()
+
+    # Gleicher Name nochmal → nichts wird überschrieben.
+    q2 = baue_pdf(ordner / "stapel.pdf", "T")
+    neu2 = nach_erledigt(q2)
+    assert neu2 != neu and neu2.parent == ordner / "erledigt"
+    assert neu.exists() and neu2.exists()
+
+    # Liegt schon in „erledigt“ → bleibt, wo sie ist.
+    assert nach_erledigt(neu) is None
+    assert neu.exists()
+
+
+def test_cli_einzeldatei_verschiebt_original(tmp_path):
+    q = baue_pdf(tmp_path / "scan.pdf", "TLT")
+    assert scan_trenner_cli.main([str(q)]) == 0
+    assert not q.exists()
+    assert (tmp_path / "erledigt" / "scan.pdf").exists()
+    assert len(list((tmp_path / "fertig").glob("*.pdf"))) == 2

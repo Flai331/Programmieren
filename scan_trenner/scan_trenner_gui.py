@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import os
 import queue
-import shutil
 import subprocess
 import sys
 import threading
@@ -15,7 +14,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import rechnungen as rg
-from scan_trenner_core import Einstellungen, datei_ist_fertig, sammle_dateien, verarbeite_datei
+from scan_trenner_core import Einstellungen, datei_ist_fertig, nach_erledigt, sammle_dateien, verarbeite_datei
 
 KONFIG = Path.home() / ".scan_trenner.json"
 
@@ -345,11 +344,15 @@ class App(tk.Tk):
                  f"{len(erg.ausgabedateien)} Dokument(e)")
         if self.rechnungen_an.get():
             self._rechnungen_erfassen(erg.ausgabedateien, ausgabe)
-        if eingang is not None:  # Original nach „erledigt“ verschieben, damit nichts doppelt läuft
-            ziel = eingang / "erledigt"
-            ziel.mkdir(exist_ok=True)
-            name = datei.name if not (ziel / datei.name).exists() else f"{datei.stem}_{int(time.time())}{datei.suffix}"
-            shutil.move(str(datei), str(ziel / name))
+        # Original nach „erledigt“ verschieben, damit nichts doppelt läuft –
+        # bei der Überwachung im Eingangsordner, sonst neben der Datei.
+        try:
+            neu = nach_erledigt(datei, eingang)
+        except OSError as exc:
+            self.log(f"  Original konnte nicht verschoben werden: {exc}")
+        else:
+            if neu is not None and eingang is None:
+                self.log(f"  Original → {neu.parent}")
 
     def _rechnungen_erfassen(self, dateien: list[Path], ausgabe: Path) -> None:
         e = self._rechnungs_einstellungen()
@@ -415,7 +418,7 @@ class App(tk.Tk):
 
         def lauf() -> None:
             for d in dateien:
-                self._verarbeite(Path(d), ausgabe, e, None)
+                self._verarbeite(Path(d), ausgabe, e, None)  # Original → <Ordner>/erledigt
             self.log("Fertig.")
         threading.Thread(target=lauf, daemon=True).start()
 

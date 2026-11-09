@@ -51,7 +51,7 @@ Die Regeln sind dieselben wie in der DokuBox-App (`dokumenten_system/dokubox`).
   (unter Linux ggf. `python3-tk` installieren).
 
 Im Fenster: Ordner wählen → **Überwachung starten**. Einzelne Dateien geht auch über
-**Dateien einmal verarbeiten…**.
+**Dateien einmal verarbeiten…** – die Originale wandern danach in einen Ordner `erledigt` neben der jeweiligen Datei.
 
 ## Einstellungen
 

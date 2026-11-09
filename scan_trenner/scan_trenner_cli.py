@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 import argparse
-import shutil
 import sys
 import time
 from pathlib import Path
 
 import rechnungen as rg
 from scan_trenner_core import (
-    Einstellungen, datei_ist_fertig, sammle_dateien, verarbeite_datei,
+    Einstellungen, datei_ist_fertig, nach_erledigt, sammle_dateien, verarbeite_datei,
 )
 
 
@@ -43,13 +42,8 @@ def offene_posten(buch: rg.Rechnungsbuch) -> None:
         print(f"  {x.stelle} ({x.status}): {r.titel} {rg.euro(r.betrag_cent)}")
 
 
-def erledigt_verschieben(quelle: Path, eingang: Path) -> None:
-    ziel = eingang / "erledigt"
-    ziel.mkdir(exist_ok=True)
-    name = quelle.name
-    if (ziel / name).exists():
-        name = f"{quelle.stem}_{int(time.time())}{quelle.suffix}"
-    shutil.move(str(quelle), str(ziel / name))
+def erledigt_verschieben(quelle: Path, eingang: Path | None = None) -> None:
+    nach_erledigt(quelle, eingang)
 
 
 def main(argv=None) -> int:
@@ -83,6 +77,8 @@ def main(argv=None) -> int:
         print(bericht(erg))
         if a.rechnungen and not erg.fehler:
             rechnungen_erfassen(erg, aus, rg.Rechnungsbuch.im_ordner(aus), re_e)
+        if not erg.fehler:
+            erledigt_verschieben(a.eingang)
         return 1 if erg.fehler else 0
 
     aus = a.ausgabe or a.eingang / "fertig"

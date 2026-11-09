@@ -4,6 +4,8 @@ Ohne Oberfläche, damit sie von GUI, Kommandozeile und Tests gleich genutzt wird
 """
 from __future__ import annotations
 
+import shutil
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable
@@ -152,6 +154,23 @@ def verarbeite_datei(
         return erg
     finally:
         doc.close()
+
+
+def nach_erledigt(quelle: Path, ordner: Path | None = None) -> Path | None:
+    """Original nach `<ordner>/erledigt` verschieben (Standard: der Ordner der
+    Datei), damit nichts doppelt verarbeitet wird und nichts verloren geht.
+    Liegt die Datei schon in einem „erledigt“-Ordner, bleibt sie dort.
+    Liefert den neuen Pfad (oder None, wenn nicht verschoben wurde)."""
+    ordner = ordner or quelle.parent
+    if ordner.name.lower() == "erledigt":
+        return None
+    ziel = ordner / "erledigt"
+    ziel.mkdir(exist_ok=True)
+    neu = ziel / quelle.name
+    if neu.exists():
+        neu = ziel / f"{quelle.stem}_{int(time.time())}{quelle.suffix}"
+    shutil.move(str(quelle), str(neu))
+    return neu
 
 
 def sammle_dateien(ordner: Path) -> list[Path]:
