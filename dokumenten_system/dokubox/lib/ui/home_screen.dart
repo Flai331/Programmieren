@@ -60,6 +60,8 @@ class _HomeScreenState extends State<HomeScreen> {
     bool clearYear = false,
     String? financeStatus,
     bool clearFinance = false,
+    String? categoryId,
+    bool clearCategory = false,
   }) {
     setState(() {
       _filter = DocumentFilter(
@@ -68,6 +70,8 @@ class _HomeScreenState extends State<HomeScreen> {
         year: clearYear ? null : (year ?? _filter.year),
         financeStatus:
             clearFinance ? null : (financeStatus ?? _filter.financeStatus),
+        categoryId:
+            clearCategory ? null : (categoryId ?? _filter.categoryId),
       );
     });
   }
@@ -292,9 +296,24 @@ class _HomeScreenState extends State<HomeScreen> {
       final known =
           await services.suggestions.knownCorrespondentName(fullOcr);
       final knownTags = await services.repository.allTagNames();
-      final ai = await services.ai.extract(firstPageOcr, knownTags: knownTags);
+      final categories = await services.repository.allCategories();
+      final ai = await services.ai.extract(
+        firstPageOcr,
+        knownTags: knownTags,
+        categories: [for (final c in categories) c.name],
+      );
       if (ai != null) {
         applyAiToDraft(draft, ai, preserveCorrespondent: known != null);
+        // Kategorie nur für Firmen vorschlagen, die noch keine haben — eine
+        // selbst vergebene Kategorie hat immer Vorrang.
+        if (ai.kategorie != null &&
+            await services.repository
+                    .categoryIdForCorrespondentName(draft.correspondentName) ==
+                null) {
+          for (final c in categories) {
+            if (c.name == ai.kategorie) draft.categoryId = c.id;
+          }
+        }
       }
     } finally {
       if (mounted && dialogOpen) {
@@ -402,6 +421,22 @@ class _HomeScreenState extends State<HomeScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               children: [
+                StreamBuilder<List<Category>>(
+                  stream: services.repository.watchCategories(),
+                  builder: (context, snapshot) {
+                    final cats = snapshot.data ?? const <Category>[];
+                    final names = {for (final c in cats) c.id: c.name};
+                    return _FilterChip<String>(
+                      label: 'Kategorie',
+                      value: _filter.categoryId,
+                      options: [for (final c in cats) c.id],
+                      labelOf: (id) => names[id] ?? 'Kategorie',
+                      onSelected: (v) => _updateFilter(categoryId: v),
+                      onCleared: () => _updateFilter(clearCategory: true),
+                    );
+                  },
+                ),
+                const SizedBox(width: 8),
                 _FilterChip<String>(
                   label: 'Typ',
                   value: _filter.docType,
@@ -526,13 +561,19 @@ class _FilterChip<T> extends StatelessWidget {
   final ValueChanged<T> onSelected;
   final VoidCallback onCleared;
 
+  /// Anzeigetext einer Option (Standard: `toString()`).
+  final String Function(T option)? labelOf;
+
   const _FilterChip({
     required this.label,
     required this.value,
     required this.options,
     required this.onSelected,
     required this.onCleared,
+    this.labelOf,
   });
+
+  String _text(T option) => labelOf?.call(option) ?? '$option';
 
   @override
   Widget build(BuildContext context) {
@@ -540,10 +581,10 @@ class _FilterChip<T> extends StatelessWidget {
       onSelected: onSelected,
       itemBuilder: (context) => [
         for (final option in options)
-          PopupMenuItem(value: option, child: Text('$option')),
+          PopupMenuItem(value: option, child: Text(_text(option))),
       ],
       child: Chip(
-        label: Text(value == null ? label : '$value'),
+        label: Text(value == null ? label : _text(value as T)),
         deleteIcon: value == null
             ? const Icon(Icons.arrow_drop_down)
             : const Icon(Icons.clear, size: 18),

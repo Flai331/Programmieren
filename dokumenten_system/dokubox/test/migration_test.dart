@@ -24,6 +24,12 @@ void main() {
       pageCount: 1,
       ocrText: 'altbestand',
     );
+    // Auch die v3-Teile (Kategorien) entfernen, damit es echter v1-Stand ist.
+    await db.customStatement('PRAGMA foreign_keys = OFF');
+    await db.customStatement('UPDATE correspondents SET category_id = NULL');
+    await db.customStatement(
+        'ALTER TABLE correspondents DROP COLUMN category_id');
+    await db.customStatement('DROP TABLE categories');
     await db.customStatement('DROP TABLE claims');
     for (final column in [
       'amount_cents',

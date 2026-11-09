@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../app_services.dart';
+import '../data/database.dart';
 import '../data/doc_types.dart';
 import '../data/document_repository.dart';
 import '../data/finance.dart';
@@ -37,6 +39,11 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
   late final TextEditingController _amount;
   late DocumentDraft _draft;
   FinanceSettings _finance = const FinanceSettings();
+  List<Category> _categories = const [];
+
+  /// Hat der Nutzer die Kategorie selbst gewählt? Dann nicht mehr
+  /// automatisch nach dem Absender umstellen.
+  bool _categoryTouched = false;
 
   @override
   void initState() {
@@ -54,6 +61,23 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
         TextEditingController(text: _draft.correspondentName ?? '');
     _tagInput = TextEditingController();
     _reminderNote = TextEditingController(text: _draft.reminderNote ?? '');
+    services.repository.allCategories().then((value) {
+      if (mounted) setState(() => _categories = value);
+    });
+    _syncCategoryFromCorrespondent(keepSuggestion: true);
+  }
+
+  /// Übernimmt die Kategorie der bekannten Firma. [keepSuggestion]: Ist die
+  /// Firma unbekannt oder ohne Kategorie, bleibt ein KI-Vorschlag stehen.
+  Future<void> _syncCategoryFromCorrespondent(
+      {bool keepSuggestion = false}) async {
+    if (_categoryTouched) return;
+    final name = _correspondent.text;
+    final id = await services.repository.categoryIdForCorrespondentName(name);
+    if (!mounted || _categoryTouched || name != _correspondent.text) return;
+    if (id != null || !keepSuggestion) {
+      setState(() => _draft.categoryId = id);
+    }
   }
 
   @override
@@ -338,6 +362,32 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
               helperText: 'Wird beim nächsten Scan automatisch wiedererkannt',
               border: OutlineInputBorder(),
             ),
+            onChanged: (_) => _syncCategoryFromCorrespondent(keepSuggestion: true),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String?>(
+            // Key erzwingt Neuaufbau, wenn die Kategorie von außen wechselt.
+            key: ValueKey('cat-${_draft.categoryId}-${_categories.length}'),
+            initialValue: _categories.any((c) => c.id == _draft.categoryId)
+                ? _draft.categoryId
+                : null,
+            decoration: const InputDecoration(
+              labelText: 'Kategorie der Firma',
+              helperText: 'Gilt für alle Dokumente dieses Absenders',
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('– keine –'),
+              ),
+              for (final c in _categories)
+                DropdownMenuItem<String?>(value: c.id, child: Text(c.name)),
+            ],
+            onChanged: (value) => setState(() {
+              _categoryTouched = true;
+              _draft.categoryId = value;
+            }),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(

@@ -16,12 +16,17 @@ class AiDocumentData {
   /// Thematische Tags, z. B. "Rentenversicherung", "Auto", "Steuer".
   final List<String> tags;
 
+  /// Vorgeschlagene Kategorie der Firma — nur Namen aus der eigenen
+  /// Kategorienliste (siehe [parseAiJson] mit `categories`).
+  final String? kategorie;
+
   const AiDocumentData({
     this.absender,
     this.datum,
     this.typ,
     this.titel,
     this.tags = const [],
+    this.kategorie,
   });
 
   bool get isEmpty =>
@@ -29,13 +34,18 @@ class AiDocumentData {
       datum == null &&
       typ == null &&
       titel == null &&
-      tags.isEmpty;
+      tags.isEmpty &&
+      kategorie == null;
 }
 
 /// Zieht aus einer (möglicherweise geschwätzigen) Modellantwort das erste
 /// JSON-Objekt und parst es fehlertolerant. `null` wenn nichts Brauchbares
 /// drinsteht.
-AiDocumentData? parseAiJson(String response) {
+///
+/// [categories] sind die erlaubten Kategorienamen; eine Kategorie, die nicht
+/// darin vorkommt, wird verworfen.
+AiDocumentData? parseAiJson(String response,
+    {List<String> categories = const []}) {
   // Denk-Blöcke (Qwen3) und Markdown-Zäune entfernen.
   var text = response
       .replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '')
@@ -97,12 +107,21 @@ AiDocumentData? parseAiJson(String response) {
     titel = '${titel.substring(0, 79)}…';
   }
 
+  final rawKategorie = str('kategorie')?.toLowerCase();
+  String? kategorie;
+  if (rawKategorie != null) {
+    for (final c in categories) {
+      if (c.toLowerCase() == rawKategorie) kategorie = c;
+    }
+  }
+
   final result = AiDocumentData(
     absender: str('absender'),
     datum: datum,
     typ: typ,
     titel: titel,
     tags: _parseTags(map['tags']),
+    kategorie: kategorie,
   );
   return result.isEmpty ? null : result;
 }
@@ -232,7 +251,9 @@ class AiExtractionService {
   /// Einlesen des Prompts).
   static const maxOcrCharsForAi = 1200;
 
-  static String buildPrompt(String ocrText, {List<String> knownTags = const []}) {
+  static String buildPrompt(String ocrText,
+      {List<String> knownTags = const [],
+      List<String> categories = const []}) {
     final text = ocrText.length > maxOcrCharsForAi
         ? ocrText.substring(0, maxOcrCharsForAi)
         : ocrText;
@@ -242,17 +263,23 @@ class AiExtractionService {
         ? ''
         : '\n  Verwende bevorzugt vorhandene Tags, falls passend: '
             '${knownTags.take(30).join(', ')}.';
+    final hasCategories = categories.isNotEmpty;
+    final categoryField = hasCategories ? ', "kategorie": "..."' : '';
+    final categoryRule = hasCategories
+        ? '\n- "kategorie": in welchen Bereich gehört der ABSENDER? Genau einer '
+            'dieser Werte: ${categories.join(', ')}. Unklar: null'
+        : '';
     return '''
 Du extrahierst Metadaten aus dem OCR-Text eines eingescannten deutschen Dokuments.
 Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in genau dieser Form, ohne Erklärungen:
-{"absender": "...", "datum": "JJJJ-MM-TT", "typ": "...", "titel": "...", "tags": ["...", "..."]}
+{"absender": "...", "datum": "JJJJ-MM-TT", "typ": "...", "titel": "...", "tags": ["...", "..."]$categoryField}
 
 Regeln:
 - "absender": die Firma/Behörde, die das Dokument VERSCHICKT hat (nie der private Empfänger). Unbekannt: null
 - "datum": das Datum des Dokuments im Format JJJJ-MM-TT. Unbekannt: null
 - "typ": genau einer dieser Werte: ${kDocTypes.join(', ')}. Unbekannt: null
 - "titel": kurzer aussagekräftiger Titel (max. 60 Zeichen), am besten der Betreff. Unbekannt: null
-- "tags": 1 bis 3 kurze Themen/Bereiche, zu denen das Dokument gehört (z. B. "Rentenversicherung", "Krankenversicherung", "Auto", "Wohnung", "Steuer", "Bank"). Leere Liste, wenn unklar.$tagHint
+- "tags": 1 bis 3 kurze Themen/Bereiche, zu denen das Dokument gehört (z. B. "Rentenversicherung", "Krankenversicherung", "Auto", "Wohnung", "Steuer", "Bank"). Leere Liste, wenn unklar.$tagHint$categoryRule
 
 OCR-TEXT:
 """
@@ -265,6 +292,7 @@ $text
   /// bleiben stehen.
   Future<AiDocumentData?> extract(String ocrText,
       {List<String> knownTags = const [],
+      List<String> categories = const [],
       Duration timeout = const Duration(seconds: 60)}) async {
     if (ocrText.trim().isEmpty) return null;
     try {
@@ -273,18 +301,21 @@ $text
         temperature: 0.1,
         topK: 1,
         isThinking: false,
-        // Das JSON ist kurz — kurze Ausgabe spart Rechenzeit.
-        maxOutputTokens: 128,
+        // Das JSON ist kurz — kurze Ausgabe spart Rechenzeit (mit Kategorie
+        // etwas mehr Luft).
+        maxOutputTokens: 160,
       );
       await chat.addQueryChunk(Message.text(
-          text: buildPrompt(ocrText, knownTags: knownTags), isUser: true));
+          text: buildPrompt(ocrText,
+              knownTags: knownTags, categories: categories),
+          isUser: true));
       final response = await chat.generateChatResponse().timeout(timeout);
       final text = switch (response) {
         TextResponse(:final token) => token,
         ThinkingResponse(:final content) => content,
         _ => '',
       };
-      return parseAiJson(text);
+      return parseAiJson(text, categories: categories);
     } catch (_) {
       return null;
     }

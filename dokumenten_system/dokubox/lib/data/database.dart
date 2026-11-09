@@ -2,6 +2,8 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import 'categories.dart';
+
 part 'database.g.dart';
 
 const _uuid = Uuid();
@@ -92,9 +94,26 @@ class Correspondents extends Table {
   /// OCR-Text gefunden, wird dieser Absender vorgeschlagen.
   TextColumn get aliases => text().withDefault(const Constant(''))();
 
+  /// Kategorie der Firma (z. B. „Bank & Geldanlage“). Dokumente lassen sich
+  /// darüber filtern (Schema v3).
+  TextColumn get categoryId =>
+      text().nullable().references(Categories, #id)();
+
   /// Zuletzt bestätigte Werte — Grundlage der „lernenden Zuordnungen".
   TextColumn get defaultDocType => text().nullable()();
   TextColumn get defaultTagIds => text().withDefault(const Constant(''))();
+  DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Eigene Kategorien für Firmen/Absender, z. B. „Versicherung“ oder
+/// „Energie & Wohnen“ (Schema v3).
+class Categories extends Table {
+  TextColumn get id => text().clientDefault(_uuid.v4)();
+  TextColumn get name => text().unique()();
   DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
@@ -152,6 +171,7 @@ class Counters extends Table {
     ExtractedRefs,
     Counters,
     Claims,
+    Categories,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -161,7 +181,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.open() : super(driftDatabase(name: 'dokubox'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -173,6 +193,7 @@ class AppDatabase extends _$AppDatabase {
             'CREATE VIRTUAL TABLE document_fts USING fts5('
             'document_id UNINDEXED, content, tokenize="unicode61")',
           );
+          await _seedCategories();
         },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
@@ -183,9 +204,42 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(documents, documents.paymentReminderAt);
             await m.createTable(claims);
           }
+          if (from < 3) {
+            await m.createTable(categories);
+            await m.addColumn(correspondents, correspondents.categoryId);
+            await _seedCategories();
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );
+
+  /// Standard-Kategorien und Beispiel-Firmen anlegen. Bestehende Firmen
+  /// gleichen Namens bekommen nur die Kategorie, wenn sie noch keine haben.
+  Future<void> _seedCategories() async {
+    final ids = <String, String>{};
+    for (final name in kDefaultCategories) {
+      final row = await into(categories).insertReturning(
+        CategoriesCompanion.insert(name: name),
+      );
+      ids[name] = row.id;
+    }
+    for (final firm in kDefaultFirms) {
+      final categoryId = ids[firm.category];
+      final existing = await (select(correspondents)
+            ..where((c) => c.name.lower().equals(firm.name.toLowerCase())))
+          .getSingleOrNull();
+      if (existing == null) {
+        await into(correspondents).insert(CorrespondentsCompanion.insert(
+          name: firm.name,
+          aliases: Value(firm.aliases.join('\n')),
+          categoryId: Value(categoryId),
+        ));
+      } else if (existing.categoryId == null) {
+        await (update(correspondents)..where((c) => c.id.equals(existing.id)))
+            .write(CorrespondentsCompanion(categoryId: Value(categoryId)));
+      }
+    }
+  }
 }

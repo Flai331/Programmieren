@@ -10,6 +10,9 @@ class DocumentFilter {
   final int? year;
   final String? tagId;
   final String? correspondentId;
+
+  /// Kategorie der Firma (Absender) des Dokuments.
+  final String? categoryId;
   final String? storageLocation;
 
   /// Ein `PaymentStatus` oder ein `ClaimStatus` (offene Einreichungen).
@@ -21,6 +24,7 @@ class DocumentFilter {
     this.year,
     this.tagId,
     this.correspondentId,
+    this.categoryId,
     this.storageLocation,
     this.financeStatus,
   });
@@ -31,6 +35,7 @@ class DocumentFilter {
       year == null &&
       tagId == null &&
       correspondentId == null &&
+      categoryId == null &&
       storageLocation == null &&
       financeStatus == null;
 }
@@ -79,6 +84,10 @@ class DocumentDraft {
   String title;
   DateTime? docDate;
   String? correspondentName;
+
+  /// Kategorie, die der Firma beim Speichern zugeordnet wird. `null` = die
+  /// Kategorie der Firma bleibt, wie sie ist.
+  String? categoryId;
   String? docType;
   List<String> tagNames;
   String storageLocation;
@@ -96,6 +105,7 @@ class DocumentDraft {
     this.title = '',
     this.docDate,
     this.correspondentName,
+    this.categoryId,
     this.docType,
     List<String>? tagNames,
     this.storageLocation = '',
@@ -179,7 +189,9 @@ class DocumentRepository {
       final correspondentId = draft.correspondentName == null ||
               draft.correspondentName!.trim().isEmpty
           ? null
-          : (await _ensureCorrespondent(draft.correspondentName!.trim())).id;
+          : (await _ensureCorrespondent(draft.correspondentName!.trim(),
+                  categoryId: draft.categoryId))
+              .id;
       final tagIds = await _ensureTags(draft.tagNames);
 
       final companion = DocumentsCompanion.insert(
@@ -237,7 +249,9 @@ class DocumentRepository {
       final correspondentId = draft.correspondentName == null ||
               draft.correspondentName!.trim().isEmpty
           ? null
-          : (await _ensureCorrespondent(draft.correspondentName!.trim())).id;
+          : (await _ensureCorrespondent(draft.correspondentName!.trim(),
+                  categoryId: draft.categoryId))
+              .id;
       final tagIds = await _ensureTags(draft.tagNames);
 
       await (db.update(db.documents)..where((d) => d.id.equals(id))).write(
@@ -336,6 +350,11 @@ class DocumentRepository {
       where.write(' AND d.correspondent_id = ?');
       args.add(Variable.withString(filter.correspondentId!));
     }
+    if (filter.categoryId != null) {
+      where.write(' AND d.correspondent_id IN (SELECT c.id FROM correspondents c '
+          'WHERE c.category_id = ? AND c.deleted_at IS NULL)');
+      args.add(Variable.withString(filter.categoryId!));
+    }
     if (filter.storageLocation != null) {
       where.write(' AND d.storage_location = ?');
       args.add(Variable.withString(filter.storageLocation!));
@@ -364,7 +383,12 @@ class DocumentRepository {
         .customSelect(
           'SELECT d.* FROM $from WHERE $where ORDER BY d.doc_number DESC',
           variables: args,
-          readsFrom: {db.documents, db.documentTags, db.claims},
+          readsFrom: {
+            db.documents,
+            db.documentTags,
+            db.claims,
+            db.correspondents,
+          },
         )
         .watch()
         .map((rows) =>
@@ -561,15 +585,151 @@ class DocumentRepository {
       (db.select(db.correspondents)..where((c) => c.id.equals(id)))
           .getSingleOrNull();
 
-  Future<Correspondent> _ensureCorrespondent(String name) async {
+  Future<Correspondent> _ensureCorrespondent(String name,
+      {String? categoryId}) async {
     final existing = await (db.select(db.correspondents)
           ..where((c) => c.name.lower().equals(name.toLowerCase())))
         .getSingleOrNull();
-    if (existing != null) return existing;
+    if (existing != null) {
+      // Gelöschte Firma taucht wieder auf → wiederbeleben.
+      final revive = existing.deletedAt != null;
+      final recategorize =
+          categoryId != null && categoryId != existing.categoryId;
+      if (revive || recategorize) {
+        await (db.update(db.correspondents)
+              ..where((c) => c.id.equals(existing.id)))
+            .write(CorrespondentsCompanion(
+          deletedAt: revive ? const Value(null) : const Value.absent(),
+          categoryId:
+              recategorize ? Value(categoryId) : const Value.absent(),
+          updatedAt: Value(DateTime.now()),
+        ));
+      }
+      return existing;
+    }
     return db.into(db.correspondents).insertReturning(
-          CorrespondentsCompanion.insert(name: name, aliases: Value(name)),
+          CorrespondentsCompanion.insert(
+            name: name,
+            aliases: Value(name),
+            categoryId: Value(categoryId),
+          ),
         );
   }
+
+  // ------------------------------------------------- Kategorien & Firmen
+
+  Stream<List<Category>> watchCategories() => (db.select(db.categories)
+        ..where((c) => c.deletedAt.isNull())
+        ..orderBy([(c) => OrderingTerm.asc(c.name)]))
+      .watch();
+
+  Future<List<Category>> allCategories() => (db.select(db.categories)
+        ..where((c) => c.deletedAt.isNull())
+        ..orderBy([(c) => OrderingTerm.asc(c.name)]))
+      .get();
+
+  /// Legt eine Kategorie an (oder belebt eine gelöschte gleichen Namens).
+  Future<Category> createCategory(String name) async {
+    final trimmed = name.trim();
+    final existing = await (db.select(db.categories)
+          ..where((c) => c.name.lower().equals(trimmed.toLowerCase())))
+        .getSingleOrNull();
+    if (existing != null) {
+      if (existing.deletedAt != null) {
+        await (db.update(db.categories)..where((c) => c.id.equals(existing.id)))
+            .write(CategoriesCompanion(
+          deletedAt: const Value(null),
+          updatedAt: Value(DateTime.now()),
+        ));
+      }
+      return existing;
+    }
+    return db
+        .into(db.categories)
+        .insertReturning(CategoriesCompanion.insert(name: trimmed));
+  }
+
+  Future<void> renameCategory(String id, String name) =>
+      (db.update(db.categories)..where((c) => c.id.equals(id))).write(
+        CategoriesCompanion(
+          name: Value(name.trim()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  /// Löscht eine Kategorie; ihre Firmen werden „ohne Kategorie“.
+  Future<void> deleteCategory(String id) => db.transaction(() async {
+        await (db.update(db.correspondents)
+              ..where((c) => c.categoryId.equals(id)))
+            .write(CorrespondentsCompanion(
+          categoryId: const Value(null),
+          updatedAt: Value(DateTime.now()),
+        ));
+        await (db.update(db.categories)..where((c) => c.id.equals(id))).write(
+          CategoriesCompanion(deletedAt: Value(DateTime.now())),
+        );
+      });
+
+  /// Kategorie der Firma mit diesem Namen (falls bekannt und zugeordnet).
+  Future<String?> categoryIdForCorrespondentName(String? name) async {
+    if (name == null || name.trim().isEmpty) return null;
+    final c = await (db.select(db.correspondents)
+          ..where((c) =>
+              c.name.lower().equals(name.trim().toLowerCase()) &
+              c.deletedAt.isNull()))
+        .getSingleOrNull();
+    return c?.categoryId;
+  }
+
+  /// Anzahl der (nicht gelöschten) Dokumente je Firma.
+  Stream<Map<String, int>> watchDocumentCountsByCorrespondent() => db
+      .customSelect(
+        'SELECT correspondent_id, COUNT(*) AS n FROM documents '
+        'WHERE deleted_at IS NULL AND correspondent_id IS NOT NULL '
+        'GROUP BY correspondent_id',
+        readsFrom: {db.documents},
+      )
+      .watch()
+      .map((rows) => {
+            for (final r in rows)
+              r.read<String>('correspondent_id'): r.read<int>('n'),
+          });
+
+  /// Legt eine Firma an oder ändert sie. [aliases] sind Erkennungs-
+  /// Stichwörter (eins pro Zeile); der Name selbst zählt immer mit.
+  Future<void> saveCorrespondent({
+    String? id,
+    required String name,
+    String aliases = '',
+    String? categoryId,
+  }) async {
+    final trimmed = name.trim();
+    final aliasList = [
+      trimmed,
+      for (final a in aliases.split('\n'))
+        if (a.trim().isNotEmpty && a.trim().toLowerCase() != trimmed.toLowerCase())
+          a.trim(),
+    ].join('\n');
+    if (id == null) {
+      final existing = await _ensureCorrespondent(trimmed);
+      id = existing.id;
+    }
+    await (db.update(db.correspondents)..where((c) => c.id.equals(id!))).write(
+      CorrespondentsCompanion(
+        name: Value(trimmed),
+        aliases: Value(aliasList),
+        categoryId: Value(categoryId),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Entfernt eine Firma aus der Liste. Dokumente behalten ihren Absender-
+  /// Eintrag; wird die Firma wieder erkannt, lebt sie wieder auf.
+  Future<void> deleteCorrespondent(String id) =>
+      (db.update(db.correspondents)..where((c) => c.id.equals(id))).write(
+        CorrespondentsCompanion(deletedAt: Value(DateTime.now())),
+      );
 
   Future<List<String>> _ensureTags(List<String> names) async {
     final ids = <String>[];

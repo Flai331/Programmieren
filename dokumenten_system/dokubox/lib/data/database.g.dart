@@ -1243,6 +1243,17 @@ class $CorrespondentsTable extends Correspondents
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _categoryIdMeta = const VerificationMeta(
+    'categoryId',
+  );
+  @override
+  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
+    'category_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _defaultDocTypeMeta = const VerificationMeta(
     'defaultDocType',
   );
@@ -1294,6 +1305,7 @@ class $CorrespondentsTable extends Correspondents
     id,
     name,
     aliases,
+    categoryId,
     defaultDocType,
     defaultTagIds,
     updatedAt,
@@ -1326,6 +1338,12 @@ class $CorrespondentsTable extends Correspondents
       context.handle(
         _aliasesMeta,
         aliases.isAcceptableOrUnknown(data['aliases']!, _aliasesMeta),
+      );
+    }
+    if (data.containsKey('category_id')) {
+      context.handle(
+        _categoryIdMeta,
+        categoryId.isAcceptableOrUnknown(data['category_id']!, _categoryIdMeta),
       );
     }
     if (data.containsKey('default_doc_type')) {
@@ -1379,6 +1397,10 @@ class $CorrespondentsTable extends Correspondents
         DriftSqlType.string,
         data['${effectivePrefix}aliases'],
       )!,
+      categoryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category_id'],
+      ),
       defaultDocType: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}default_doc_type'],
@@ -1412,6 +1434,10 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
   /// OCR-Text gefunden, wird dieser Absender vorgeschlagen.
   final String aliases;
 
+  /// Kategorie der Firma (z. B. „Bank & Geldanlage“). Dokumente lassen sich
+  /// darüber filtern (Schema v3).
+  final String? categoryId;
+
   /// Zuletzt bestätigte Werte — Grundlage der „lernenden Zuordnungen".
   final String? defaultDocType;
   final String defaultTagIds;
@@ -1421,6 +1447,7 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
     required this.id,
     required this.name,
     required this.aliases,
+    this.categoryId,
     this.defaultDocType,
     required this.defaultTagIds,
     required this.updatedAt,
@@ -1432,6 +1459,9 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['aliases'] = Variable<String>(aliases);
+    if (!nullToAbsent || categoryId != null) {
+      map['category_id'] = Variable<String>(categoryId);
+    }
     if (!nullToAbsent || defaultDocType != null) {
       map['default_doc_type'] = Variable<String>(defaultDocType);
     }
@@ -1448,6 +1478,9 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
       id: Value(id),
       name: Value(name),
       aliases: Value(aliases),
+      categoryId: categoryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(categoryId),
       defaultDocType: defaultDocType == null && nullToAbsent
           ? const Value.absent()
           : Value(defaultDocType),
@@ -1468,6 +1501,7 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       aliases: serializer.fromJson<String>(json['aliases']),
+      categoryId: serializer.fromJson<String?>(json['categoryId']),
       defaultDocType: serializer.fromJson<String?>(json['defaultDocType']),
       defaultTagIds: serializer.fromJson<String>(json['defaultTagIds']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -1481,6 +1515,7 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'aliases': serializer.toJson<String>(aliases),
+      'categoryId': serializer.toJson<String?>(categoryId),
       'defaultDocType': serializer.toJson<String?>(defaultDocType),
       'defaultTagIds': serializer.toJson<String>(defaultTagIds),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -1492,6 +1527,7 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
     String? id,
     String? name,
     String? aliases,
+    Value<String?> categoryId = const Value.absent(),
     Value<String?> defaultDocType = const Value.absent(),
     String? defaultTagIds,
     DateTime? updatedAt,
@@ -1500,6 +1536,7 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
     id: id ?? this.id,
     name: name ?? this.name,
     aliases: aliases ?? this.aliases,
+    categoryId: categoryId.present ? categoryId.value : this.categoryId,
     defaultDocType: defaultDocType.present
         ? defaultDocType.value
         : this.defaultDocType,
@@ -1512,6 +1549,9 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       aliases: data.aliases.present ? data.aliases.value : this.aliases,
+      categoryId: data.categoryId.present
+          ? data.categoryId.value
+          : this.categoryId,
       defaultDocType: data.defaultDocType.present
           ? data.defaultDocType.value
           : this.defaultDocType,
@@ -1529,6 +1569,7 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('aliases: $aliases, ')
+          ..write('categoryId: $categoryId, ')
           ..write('defaultDocType: $defaultDocType, ')
           ..write('defaultTagIds: $defaultTagIds, ')
           ..write('updatedAt: $updatedAt, ')
@@ -1542,6 +1583,7 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
     id,
     name,
     aliases,
+    categoryId,
     defaultDocType,
     defaultTagIds,
     updatedAt,
@@ -1554,6 +1596,7 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
           other.id == this.id &&
           other.name == this.name &&
           other.aliases == this.aliases &&
+          other.categoryId == this.categoryId &&
           other.defaultDocType == this.defaultDocType &&
           other.defaultTagIds == this.defaultTagIds &&
           other.updatedAt == this.updatedAt &&
@@ -1564,6 +1607,7 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
   final Value<String> id;
   final Value<String> name;
   final Value<String> aliases;
+  final Value<String?> categoryId;
   final Value<String?> defaultDocType;
   final Value<String> defaultTagIds;
   final Value<DateTime> updatedAt;
@@ -1573,6 +1617,7 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.aliases = const Value.absent(),
+    this.categoryId = const Value.absent(),
     this.defaultDocType = const Value.absent(),
     this.defaultTagIds = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1583,6 +1628,7 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
     this.id = const Value.absent(),
     required String name,
     this.aliases = const Value.absent(),
+    this.categoryId = const Value.absent(),
     this.defaultDocType = const Value.absent(),
     this.defaultTagIds = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1593,6 +1639,7 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? aliases,
+    Expression<String>? categoryId,
     Expression<String>? defaultDocType,
     Expression<String>? defaultTagIds,
     Expression<DateTime>? updatedAt,
@@ -1603,6 +1650,7 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (aliases != null) 'aliases': aliases,
+      if (categoryId != null) 'category_id': categoryId,
       if (defaultDocType != null) 'default_doc_type': defaultDocType,
       if (defaultTagIds != null) 'default_tag_ids': defaultTagIds,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -1615,6 +1663,7 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
     Value<String>? id,
     Value<String>? name,
     Value<String>? aliases,
+    Value<String?>? categoryId,
     Value<String?>? defaultDocType,
     Value<String>? defaultTagIds,
     Value<DateTime>? updatedAt,
@@ -1625,6 +1674,7 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
       id: id ?? this.id,
       name: name ?? this.name,
       aliases: aliases ?? this.aliases,
+      categoryId: categoryId ?? this.categoryId,
       defaultDocType: defaultDocType ?? this.defaultDocType,
       defaultTagIds: defaultTagIds ?? this.defaultTagIds,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1644,6 +1694,9 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
     }
     if (aliases.present) {
       map['aliases'] = Variable<String>(aliases.value);
+    }
+    if (categoryId.present) {
+      map['category_id'] = Variable<String>(categoryId.value);
     }
     if (defaultDocType.present) {
       map['default_doc_type'] = Variable<String>(defaultDocType.value);
@@ -1669,6 +1722,7 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('aliases: $aliases, ')
+          ..write('categoryId: $categoryId, ')
           ..write('defaultDocType: $defaultDocType, ')
           ..write('defaultTagIds: $defaultTagIds, ')
           ..write('updatedAt: $updatedAt, ')
@@ -3333,6 +3387,312 @@ class ClaimsCompanion extends UpdateCompanion<Claim> {
   }
 }
 
+class $CategoriesTable extends Categories
+    with TableInfo<$CategoriesTable, Category> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CategoriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: _uuid.v4,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, updatedAt, deletedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'categories';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Category> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Category map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Category(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $CategoriesTable createAlias(String alias) {
+    return $CategoriesTable(attachedDatabase, alias);
+  }
+}
+
+class Category extends DataClass implements Insertable<Category> {
+  final String id;
+  final String name;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const Category({
+    required this.id,
+    required this.name,
+    required this.updatedAt,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  CategoriesCompanion toCompanion(bool nullToAbsent) {
+    return CategoriesCompanion(
+      id: Value(id),
+      name: Value(name),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory Category.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Category(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  Category copyWith({
+    String? id,
+    String? name,
+    DateTime? updatedAt,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => Category(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  Category copyWithCompanion(CategoriesCompanion data) {
+    return Category(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Category(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, updatedAt, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Category &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class CategoriesCompanion extends UpdateCompanion<Category> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const CategoriesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CategoriesCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : name = Value(name);
+  static Insertable<Category> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CategoriesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<DateTime>? updatedAt,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return CategoriesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CategoriesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3343,6 +3703,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ExtractedRefsTable extractedRefs = $ExtractedRefsTable(this);
   late final $CountersTable counters = $CountersTable(this);
   late final $ClaimsTable claims = $ClaimsTable(this);
+  late final $CategoriesTable categories = $CategoriesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3355,6 +3716,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     extractedRefs,
     counters,
     claims,
+    categories,
   ];
 }
 
@@ -3877,6 +4239,7 @@ typedef $$CorrespondentsTableCreateCompanionBuilder =
       Value<String> id,
       required String name,
       Value<String> aliases,
+      Value<String?> categoryId,
       Value<String?> defaultDocType,
       Value<String> defaultTagIds,
       Value<DateTime> updatedAt,
@@ -3888,6 +4251,7 @@ typedef $$CorrespondentsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<String> aliases,
+      Value<String?> categoryId,
       Value<String?> defaultDocType,
       Value<String> defaultTagIds,
       Value<DateTime> updatedAt,
@@ -3916,6 +4280,11 @@ class $$CorrespondentsTableFilterComposer
 
   ColumnFilters<String> get aliases => $composableBuilder(
     column: $table.aliases,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get categoryId => $composableBuilder(
+    column: $table.categoryId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3964,6 +4333,11 @@ class $$CorrespondentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get categoryId => $composableBuilder(
+    column: $table.categoryId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get defaultDocType => $composableBuilder(
     column: $table.defaultDocType,
     builder: (column) => ColumnOrderings(column),
@@ -4002,6 +4376,11 @@ class $$CorrespondentsTableAnnotationComposer
 
   GeneratedColumn<String> get aliases =>
       $composableBuilder(column: $table.aliases, builder: (column) => column);
+
+  GeneratedColumn<String> get categoryId => $composableBuilder(
+    column: $table.categoryId,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get defaultDocType => $composableBuilder(
     column: $table.defaultDocType,
@@ -4056,6 +4435,7 @@ class $$CorrespondentsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String> aliases = const Value.absent(),
+                Value<String?> categoryId = const Value.absent(),
                 Value<String?> defaultDocType = const Value.absent(),
                 Value<String> defaultTagIds = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -4065,6 +4445,7 @@ class $$CorrespondentsTableTableManager
                 id: id,
                 name: name,
                 aliases: aliases,
+                categoryId: categoryId,
                 defaultDocType: defaultDocType,
                 defaultTagIds: defaultTagIds,
                 updatedAt: updatedAt,
@@ -4076,6 +4457,7 @@ class $$CorrespondentsTableTableManager
                 Value<String> id = const Value.absent(),
                 required String name,
                 Value<String> aliases = const Value.absent(),
+                Value<String?> categoryId = const Value.absent(),
                 Value<String?> defaultDocType = const Value.absent(),
                 Value<String> defaultTagIds = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -4085,6 +4467,7 @@ class $$CorrespondentsTableTableManager
                 id: id,
                 name: name,
                 aliases: aliases,
+                categoryId: categoryId,
                 defaultDocType: defaultDocType,
                 defaultTagIds: defaultTagIds,
                 updatedAt: updatedAt,
@@ -5036,6 +5419,181 @@ typedef $$ClaimsTableProcessedTableManager =
       Claim,
       PrefetchHooks Function()
     >;
+typedef $$CategoriesTableCreateCompanionBuilder =
+    CategoriesCompanion Function({
+      Value<String> id,
+      required String name,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$CategoriesTableUpdateCompanionBuilder =
+    CategoriesCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$CategoriesTableFilterComposer
+    extends Composer<_$AppDatabase, $CategoriesTable> {
+  $$CategoriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CategoriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $CategoriesTable> {
+  $$CategoriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CategoriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CategoriesTable> {
+  $$CategoriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$CategoriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CategoriesTable,
+          Category,
+          $$CategoriesTableFilterComposer,
+          $$CategoriesTableOrderingComposer,
+          $$CategoriesTableAnnotationComposer,
+          $$CategoriesTableCreateCompanionBuilder,
+          $$CategoriesTableUpdateCompanionBuilder,
+          (Category, BaseReferences<_$AppDatabase, $CategoriesTable, Category>),
+          Category,
+          PrefetchHooks Function()
+        > {
+  $$CategoriesTableTableManager(_$AppDatabase db, $CategoriesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CategoriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CategoriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CategoriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CategoriesCompanion(
+                id: id,
+                name: name,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String name,
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CategoriesCompanion.insert(
+                id: id,
+                name: name,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CategoriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CategoriesTable,
+      Category,
+      $$CategoriesTableFilterComposer,
+      $$CategoriesTableOrderingComposer,
+      $$CategoriesTableAnnotationComposer,
+      $$CategoriesTableCreateCompanionBuilder,
+      $$CategoriesTableUpdateCompanionBuilder,
+      (Category, BaseReferences<_$AppDatabase, $CategoriesTable, Category>),
+      Category,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5053,4 +5611,6 @@ class $AppDatabaseManager {
       $$CountersTableTableManager(_db, _db.counters);
   $$ClaimsTableTableManager get claims =>
       $$ClaimsTableTableManager(_db, _db.claims);
+  $$CategoriesTableTableManager get categories =>
+      $$CategoriesTableTableManager(_db, _db.categories);
 }

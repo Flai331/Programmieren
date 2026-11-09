@@ -13,6 +13,7 @@ import '../data/finance.dart';
 import '../lock/lock_gate.dart';
 import '../scan/blank_pages.dart';
 import '../scan/scan_service.dart';
+import 'firms_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -328,6 +329,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(title: const Text('Einstellungen')),
       body: ListView(
         children: [
+          ListTile(
+            leading: const Icon(Icons.business),
+            title: const Text('Firmen & Kategorien'),
+            subtitle: const Text(
+                'Firmen anlegen, Kategorien vergeben – danach in der Liste '
+                'nach Kategorie filtern'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const FirmsScreen()),
+            ),
+          ),
+          const Divider(),
           SwitchListTile(
             title: const Text('App-Sperre'),
             subtitle: const Text(
