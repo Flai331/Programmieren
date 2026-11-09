@@ -92,7 +92,7 @@ class ScanService {
       final documents = <ScanOutcome>[];
       for (var n = 0; n < groups.length; n++) {
         final paths = [for (final i in groups[n]) imagePaths[i]];
-        final pages = await _runOcr(paths);
+        final pages = await runOcr(paths);
         final relativePdfPath = await _buildPdf(paths, 'scan_${stamp}_${n + 1}');
         documents.add(ScanOutcome(
           relativePdfPath: relativePdfPath,
@@ -133,7 +133,7 @@ class ScanService {
 
   /// OCR pro Seite; liefert eine Liste mit einem Eintrag je Seite (in
   /// Lesereihenfolge sortiert).
-  Future<List<String>> _runOcr(List<String> imagePaths) async {
+  Future<List<String>> runOcr(List<String> imagePaths) async {
     final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
     final pages = <String>[];
     try {

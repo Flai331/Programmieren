@@ -4,6 +4,7 @@ import 'data/database.dart';
 import 'data/document_repository.dart';
 import 'extract/suggestion_service.dart';
 import 'reminders/notification_service.dart';
+import 'scan/pdf_import_service.dart';
 import 'scan/scan_service.dart';
 
 /// Einfacher Service-Container, in main() initialisiert.
@@ -12,6 +13,7 @@ class AppServices {
   late final DocumentRepository repository = DocumentRepository(db);
   late final SuggestionService suggestions = SuggestionService(repository);
   late final ScanService scanner = ScanService();
+  late final PdfImportService pdfImport = PdfImportService(scanner);
   late final NotificationService notifications =
       NotificationService(repository);
   late final BackupService backup = BackupService(db);

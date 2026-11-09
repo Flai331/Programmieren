@@ -9,6 +9,7 @@ Konzept: siehe [`../KONZEPT.md`](../KONZEPT.md).
 
 - **Scannen** mit automatischer Randerkennung (ML Kit / VisionKit), mehrseitig → PDF
 - **Leerseiten trennen & löschen:** Ein leeres Blatt im Stapel trennt die Dokumente, leere Seiten werden nicht gespeichert. Jedes Dokument bekommt eine eigene Nummer und wird einzeln bestätigt. Ein/aus und Empfindlichkeit (Vorsichtig/Normal/Großzügig) in den Einstellungen. Das Desktop-Gegenstück für Scans vom Flachbett-/Einzugsscanner: [`../../scan_trenner`](../../scan_trenner).
+- **PDF-Import** (kleiner Knopf über „Scannen“, mehrere Dateien auf einmal) und **„Teilen“ → DokuBox** aus Dateimanager, Mail oder Drive. Gedacht für Stapel vom Einzugsscanner, die der [`Scan-Trenner`](../../scan_trenner) am PC schon in einzelne PDFs zerlegt hat. Jede PDF läuft durch denselben Ablauf wie ein Kamera-Scan: Nummer → Text (vorhandene Textebene, sonst On-Device-OCR je Seite) → Regeln **und lokale KI** schlagen Absender, Datum, Typ, Titel und Tags vor → bestätigen.
 - **Automatische Nummernvergabe** `JJJJ-NNNN` — Nummer aufs Original schreiben, vorne in die Box legen
 - **On-Device-OCR** (Google ML Kit) direkt nach dem Scan
 - **Auto-Auslesen (lokal, kostenlos):** Datum, Dokumenttyp (Keyword-Regeln), IBAN/Versicherungsschein-/Kundennummern, lernende Absender-Wiedererkennung — Bestätigen-Screen zeigt alles vorausgefüllt

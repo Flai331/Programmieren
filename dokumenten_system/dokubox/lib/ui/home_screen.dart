@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_doc_scanner/flutter_doc_scanner.dart';
 import 'package:intl/intl.dart';
@@ -11,7 +14,9 @@ import '../data/finance.dart';
 import '../extract/extractors.dart';
 import '../extract/suggestion_service.dart';
 import '../lock/lock_gate.dart';
+import '../scan/pdf_import_service.dart';
 import '../scan/scan_service.dart';
+import '../scan/share_receiver.dart';
 import 'cleanup_screen.dart';
 import 'confirm_screen.dart';
 import 'document_detail_screen.dart';
@@ -32,6 +37,14 @@ class _HomeScreenState extends State<HomeScreen> {
   final _searchController = TextEditingController();
   DocumentFilter _filter = const DocumentFilter();
   bool _scanning = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // PDFs aus dem „Teilen"-Menü: beim Start und während die App läuft.
+    ShareReceiver.listen(_importShared);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _importShared());
+  }
 
   @override
   void dispose() {
@@ -91,6 +104,111 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       LockController.suppressAutoLock = false;
       if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  Future<void> _importShared() async {
+    if (_scanning) return;
+    final paths = await ShareReceiver.takeSharedPdfs();
+    if (paths.isEmpty) return;
+    await _importPaths(paths, deleteSources: true);
+  }
+
+  /// PDFs aus dem Dateisystem auswählen (z. B. vom Scan-Trenner am PC).
+  Future<void> _pickPdfs() async {
+    if (_scanning) return;
+    LockController.suppressAutoLock = true;
+    FilePickerResult? picked;
+    try {
+      picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['pdf'],
+        allowMultiple: true,
+      );
+    } catch (e) {
+      _snack('Dateiauswahl fehlgeschlagen: $e');
+    } finally {
+      LockController.suppressAutoLock = false;
+    }
+    final paths = [
+      for (final f in picked?.files ?? const <PlatformFile>[])
+        if (f.path != null) f.path!,
+    ];
+    if (paths.isEmpty) return;
+    // file_picker legt Kopien im Cache an → danach aufräumen.
+    await _importPaths(paths, deleteSources: true);
+  }
+
+  /// Liest jede PDF (Textebene oder OCR) und schickt sie durch denselben
+  /// Ablauf wie einen Scan: Nummer → Regeln + KI → Bestätigen → Speichern.
+  Future<void> _importPaths(List<String> paths,
+      {bool deleteSources = false}) async {
+    if (_scanning) return;
+    setState(() => _scanning = true);
+    try {
+      if (!await services.ai.isReady()) {
+        _snack('Tipp: Mit der lokalen KI (Einstellungen) werden Absender, '
+            'Titel und Tags genauer erkannt.');
+      }
+      var saved = 0;
+      var failed = 0;
+      for (var i = 0; i < paths.length; i++) {
+        if (!mounted) break;
+        final ScanOutcome outcome;
+        try {
+          outcome = await _withProgress(
+            paths.length > 1
+                ? 'Lese PDF ${i + 1} von ${paths.length} …'
+                : 'Lese PDF …',
+            () => services.pdfImport.importPdf(paths[i], index: i),
+          );
+        } on PdfImportException catch (e) {
+          failed++;
+          _snack('${_fileName(paths[i])}: ${e.message}');
+          continue;
+        } finally {
+          if (deleteSources) {
+            try {
+              await File(paths[i]).delete();
+            } catch (_) {/* Cache-Kopie, räumt das System notfalls auf */}
+          }
+        }
+        if (await _confirmAndSave(outcome)) saved++;
+      }
+      if (paths.length > 1 && mounted) {
+        _snack('$saved von ${paths.length} PDFs gespeichert'
+            '${failed > 0 ? ', $failed nicht lesbar' : ''}');
+      }
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  static String _fileName(String path) =>
+      path.split(Platform.pathSeparator).last;
+
+  /// Zeigt einen nicht abbrechbaren Fortschritts-Dialog, solange [work] läuft.
+  Future<T> _withProgress<T>(String text, Future<T> Function() work) async {
+    var dialogOpen = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Expanded(child: Text(text)),
+          ],
+        ),
+      ),
+    ).whenComplete(() => dialogOpen = false);
+    try {
+      return await work();
+    } finally {
+      if (mounted && dialogOpen) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
     }
   }
 
@@ -228,16 +346,30 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _startScan,
-        icon: _scanning
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.document_scanner),
-        label: const Text('Scannen'),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.small(
+            heroTag: 'import',
+            tooltip: 'PDF importieren',
+            onPressed: _scanning ? null : _pickPdfs,
+            child: const Icon(Icons.upload_file),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.extended(
+            heroTag: 'scan',
+            onPressed: _startScan,
+            icon: _scanning
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.document_scanner),
+            label: const Text('Scannen'),
+          ),
+        ],
       ),
       body: Column(
         children: [
