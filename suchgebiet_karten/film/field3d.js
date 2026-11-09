@@ -197,10 +197,10 @@ window.field = (() => {
     const t = st.t, P = positions(t);
     const dusk = cl((t - EV.dusk) / 18);
     // Licht
-    const day = C(0xcfe3f1), night = C(0x0d1424), bg = day.clone().lerp(night, dusk);
+    const day = C(0xcfe3f1), night = C(0x1a2540), bg = day.clone().lerp(night, dusk);
     scene.background = bg; scene.fog.color = bg;
-    hemi.intensity = 0.95 - 0.6 * dusk; hemi.color.copy(C(0xffffff)).lerp(C(0x7f9cff), dusk);
-    sun.intensity = 0.75 - 0.6 * dusk; sun.color.copy(C(0xfff1d6)).lerp(C(0xff9a5a), Math.min(1, dusk * 2));
+    hemi.intensity = 0.95 - 0.42 * dusk; hemi.color.copy(C(0xffffff)).lerp(C(0x7f9cff), dusk);
+    sun.intensity = 0.75 - 0.5 * dusk; sun.color.copy(C(0xfff1d6)).lerp(C(0xff9a5a), Math.min(1, dusk * 2));
     colorTrees(t, dusk);
     lines.visible = t > EV.grid;
     lines.children.forEach((b, i) => { b.visible = t > EV.grid + i * 0.08; });
