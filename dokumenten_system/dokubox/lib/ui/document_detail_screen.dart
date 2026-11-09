@@ -10,6 +10,7 @@ import '../data/finance.dart';
 import '../scan/scan_service.dart';
 import 'confirm_screen.dart';
 import 'finance_actions.dart';
+import 'pdf_preview.dart';
 
 final _dateFormat = DateFormat('dd.MM.yyyy');
 
@@ -57,7 +58,17 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     }
   }
 
+  /// Original in der App zeigen (zoombar, alle Seiten) — klappt auch ohne
+  /// installierte PDF-App. Extern öffnen geht weiter über „PDF teilen“.
   Future<void> _openPdf() async {
+    final path = await ScanService.absolutePdfPath(_doc!.pdfPath);
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => PdfViewerScreen(path: path, title: _doc!.docNumber),
+    ));
+  }
+
+  Future<void> _openExternal() async {
     final path = await ScanService.absolutePdfPath(_doc!.pdfPath);
     await OpenFilex.open(path);
   }
@@ -90,7 +101,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       claims: [for (final c in _claims) ClaimDraft.fromClaim(c)],
     );
     final result = await Navigator.of(context).push<DocumentDraft>(
-      MaterialPageRoute(builder: (_) => ConfirmScreen(draft: draft)),
+      MaterialPageRoute(
+        builder: (_) => ConfirmScreen(draft: draft, pdfPath: doc.pdfPath),
+      ),
     );
     if (result == null) return;
     await services.repository.updateDocument(doc.id, result);
@@ -275,6 +288,8 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
               switch (value) {
                 case 'share':
                   _sharePdf();
+                case 'external':
+                  _openExternal();
                 case 'destroyed':
                   _markDestroyed();
                 case 'delete':
@@ -283,6 +298,8 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
             },
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'share', child: Text('PDF teilen')),
+              const PopupMenuItem(
+                  value: 'external', child: Text('In anderer App öffnen')),
               const PopupMenuItem(
                   value: 'destroyed',
                   child: Text('Original als vernichtet markieren')),
@@ -301,6 +318,12 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         children: [
           Text(doc.title.isEmpty ? '(ohne Titel)' : doc.title,
               style: theme.textTheme.headlineSmall),
+          const SizedBox(height: 16),
+          OriginalPreview(
+            relativePdfPath: doc.pdfPath,
+            title: doc.docNumber,
+            height: 200,
+          ),
           const SizedBox(height: 16),
           Card(
             child: Padding(

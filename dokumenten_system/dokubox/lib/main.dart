@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:pdfrx/pdfrx.dart';
 
 import 'app_services.dart';
 import 'data/database.dart';
@@ -18,6 +19,8 @@ Future<void> main() async {
   await initializeDateFormatting('de_DE');
   // Engine für das optionale lokale KI-Modell (Qwen3, .litertlm).
   await FlutterGemma.initialize(inferenceEngines: const [LiteRtLmEngine()]);
+  // PDF-Engine für Import und Vorschau des Originals.
+  await pdfrxFlutterInitialize();
   await _applyPendingRestore();
 
   services = AppServices(AppDatabase.open());

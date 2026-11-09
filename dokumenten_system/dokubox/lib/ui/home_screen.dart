@@ -334,7 +334,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     final confirmed = await Navigator.of(context).push<DocumentDraft>(
       MaterialPageRoute(
-        builder: (_) => ConfirmScreen(draft: draft, docNumber: docNumber),
+        builder: (_) => ConfirmScreen(
+          draft: draft,
+          docNumber: docNumber,
+          pdfPath: pdfPath,
+        ),
       ),
     );
 

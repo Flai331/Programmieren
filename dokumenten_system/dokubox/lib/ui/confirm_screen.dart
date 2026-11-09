@@ -6,6 +6,7 @@ import '../data/database.dart';
 import '../data/doc_types.dart';
 import '../data/document_repository.dart';
 import '../data/finance.dart';
+import 'pdf_preview.dart';
 
 final _dateFormat = DateFormat('dd.MM.yyyy');
 
@@ -20,11 +21,16 @@ class ConfirmScreen extends StatefulWidget {
   final String? docNumber;
   final String saveLabel;
 
+  /// PDF des Dokuments (relativ zum App-Verzeichnis) — wird als Vorschau
+  /// gezeigt, damit man die Vorschläge mit dem Original vergleichen kann.
+  final String? pdfPath;
+
   const ConfirmScreen({
     super.key,
     required this.draft,
     this.docNumber,
     this.saveLabel = 'Speichern',
+    this.pdfPath,
   });
 
   @override
@@ -334,6 +340,13 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
                   ],
                 ),
               ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (widget.pdfPath != null) ...[
+            OriginalPreview(
+              relativePdfPath: widget.pdfPath!,
+              title: widget.docNumber ?? 'Original',
             ),
             const SizedBox(height: 16),
           ],
