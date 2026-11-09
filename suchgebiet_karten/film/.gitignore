@@ -30,3 +30,7 @@ build-musik/
 compose-musik.log
 rec-test/
 run-t.log
+scene3d.html
+offsets-3d.json
+pv3d_*.jpg
+compose3d.log

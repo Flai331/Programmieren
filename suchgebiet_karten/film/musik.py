@@ -6,12 +6,15 @@ BUILD = os.environ.get('BUILD_DIR', 'build-ut')
 IN = os.environ.get('IN', 'RHS-Einsatz-Scheuen-Untertitel-ohne-Ton.mp4')
 OUT = os.environ.get('OUT', 'RHS-Einsatz-Scheuen-Musik-Untertitel.mp4')
 probe = lambda f: float(subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f], capture_output=True, text=True).stdout)
-order = json.load(open('rec-einsatz/order.json'))
-off = 0; at = {}
-for o in order:
-    at[o['id']] = off
-    off += probe(f"{BUILD}/{o['id']}.mp4")
-total = off
+if os.environ.get('OFFSETS'):  # Zeitplan aus compose3d.js
+    _o = json.load(open(os.environ['OFFSETS'])); at = _o['at']; total = _o['total']
+else:
+    order = json.load(open('rec-einsatz/order.json'))
+    off = 0; at = {}
+    for o in order:
+        at[o['id']] = off
+        off += probe(f"{BUILD}/{o['id']}.mp4")
+    total = off
 X = 3.0  # Überblendung
 t1 = probe(M + 'above-the-clouds.mp3')
 b1 = min(at['t6'], t1 - X / 2 - 0.5)      # Spannung ab 16:41 (oder etwas früher, falls das erste Stück endet)
