@@ -673,6 +673,12 @@ function drawItems(ctx, toPx, items, s, teamNames = {}, d = 3, grey = true) {
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       if (d > 0) halo(ctx, shortText(it.text, d), x + 9 * s, y, it.color, s);
+      // v130: Aufgabe zum Punkt (z. B. von der Einsatzleitung: „Bitte prüfen …“) klein darunter
+      if (it.note && (d >= 2 || (it.fromEl && d >= 1))) {
+        ctx.font = `${12 * s}px sans-serif`;
+        ctx.textBaseline = 'top';
+        halo(ctx, it.note.length > 60 ? `${it.note.slice(0, 59)}…` : it.note, x + 9 * s, y + 9 * s, it.color, s);
+      }
     }
   }
 }

@@ -881,3 +881,10 @@ html.night #dlg-box .close-open:not(.st-urgent) { background: transparent; color
 .mark .fields .pair select, .mark .fields .pair input { width: 100%; min-width: 0; box-sizing: border-box; }
 .mark .fields .pair select { font-size: 13px; padding: 6px 4px; }
 .mark .fields .pair.one { grid-template-columns: minmax(0, 1fr); }
+
+/* v130: Ort/Gebiet an Team senden */
+.zus-h { font-size: 15px; margin: 14px 0 4px; color: #444; }
+.zus-pt { display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 6px; align-items: center; margin: 4px 0; }
+.zus-pt input { min-width: 0; padding: 8px; font-size: 15px; border: 1px solid #bbb; border-radius: 6px; }
+html.night .zus-h { color: #ccc; }
+@media (max-width: 480px) { .zus-pt { grid-template-columns: 1fr auto; } .zus-pt .zus-pt-task { grid-column: 1 / -1; grid-row: 2; } }

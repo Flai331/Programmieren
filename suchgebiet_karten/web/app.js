@@ -24,6 +24,7 @@ import { nextTeamLabel, uaPrefix, sameTeamName, uaName, uaTitle, joinUaNames, re
 import { typeIcon, typeText, unitType, isDog, persons, unitLine, cleanUnit, UNIT_TYPES, ORGS, forcesFromTeams, forcesText, whoText } from './units.js'; // v128
 import { FUNK_KINDS, funkKind, funkLabel, timeOfDay, funkTargets, buildFunkMsg, addFunkMsg, buildFindMsg, msgSource } from './funk.js'; // v128
 import { FIND_KINDS, findKind, findLabel, FIND_A, forAllUa, checkText, isFind, findStatusText } from './finds.js'; // v128
+import { buildZusatz, applyZusatz, isZusatz, ZUSATZ_MAX } from './zusatz.js'; // v130
 import { listTracks, trackInfo, importItems, noteImport, importTag, TRACK_KINDS, guessKind, durText } from './tracks.js'; // v128
 import { teamTimes, timeRows, outsideTeams, stateText, totalPersonHours, timeLine } from './times.js'; // v128
 import { uaOverview, levelIcon, agoText, hasUas, BASE_UA } from './uaover.js'; // v128
@@ -79,7 +80,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v129.1';
+const APP_VERSION = 'v130';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1221,6 +1222,7 @@ function renameItem(i) {
       if (!r || !P.items.includes(it)) return;
       if (r.del) return deleteOutline(it);
       if (r.vtx) return startVertex(it);
+      if (r.zus) return zusatzDialog({ itemIdx: [P.items.indexOf(it)] });
       snapshot();
       applyOutline(it, { ...r, name: r.name || it.name });
       changed();
@@ -1264,6 +1266,7 @@ function outlineDialog(it, title, opts = {}) {
     if (opts.edit) {
       const ctr = boxCenter(it.pts);
       if (!it.open && (it.pts || []).length > 2 && ctr) dlgNavButton(box, close, null, it.name || 'Umriss', ctr[0], ctr[1]); // v123: nur gespeicherte, geschlossene Umrisse
+      if (db.mode === 'el' && P.live && elTargets(P.sent, P.marks).length) dlgButton(box, '📤 An Team senden', '', () => close({ zus: true })); // v130
       dlgButton(box, '✋ Punkte bearbeiten', '', () => close({ vtx: true }));
       dlgButton(box, '🗑 Löschen', 'urgent', () => close({ del: true }));
     }
@@ -4846,6 +4849,14 @@ async function flushStatus() {
   if (!$('dlg').hidden && $('dlg-box').querySelector('.st-line')) updateStatusLine();
   if (db.mode === 'el' && P && !$('panel-status').hidden) renderStatusPanel();
 }
+// v130: Karte auf eine Punktmenge (Zusatz der EL) zoomen
+function showPts(pts) {
+  const ok = (pts || []).filter((q) => q && Number.isFinite(q[0]) && Number.isFinite(q[1]));
+  if (!ok.length) return;
+  closePanels();
+  if (ok.length === 1) map.setView(ok[0], Math.max(map.getZoom(), 16));
+  else map.fitBounds(ok, { padding: [60, 60], maxZoom: 17 });
+}
 // ---- v117: Hundeführer holt Quittungen und Nachrichten der Einsatzleitung ab ----
 let hfPollBusy = false;
 let elPrioOpen = false;
@@ -4895,7 +4906,15 @@ async function pollHf() {
       const urgentIds = new Set(hfLog().filter((m) => isUrgent(m)).map((m) => m.id));
       if (fresh.some((m) => m.s === 'q' && urgentIds.has(m.ref))) toast('✓ von der Einsatzleitung gesehen', 6000);
       const els = fresh.filter((m) => m.s === 'el');
-      if (els.length) {
+      // v130: Zusätze (Punkte, Umrisse, Orte …) auf die Karte übernehmen
+      const zs = els.filter(isZusatz);
+      const zpts = [];
+      for (const m of zs) { const r = applyZusatz(proj, m); if (r) zpts.push(...r.pts); }
+      if (zs.length && proj === P) { redraw(); renderPois(); renderMeet(); }
+      if (zs.length && proj === P) {
+        const last = zs[zs.length - 1];
+        toastAction(`📍 Einsatzleitung: ${last.txt || ''}`.replace('📍 Einsatzleitung: 📍 ', '📍 Einsatzleitung: '), '🗺️ Zeigen', () => showPts(zpts), 15000);
+      } else if (els.length) {
         const last = els[els.length - 1];
         toast(`✉️ Einsatzleitung: ${last.txt || ''}`, 8000);
       }
@@ -4953,12 +4972,18 @@ async function hfElList() {
       rb.textContent = '✍️ Antworten';
       rb.addEventListener('click', () => close({ reply: m.id }));
       d.appendChild(rb);
+      if (isZusatz(m)) { // v130: Zusatz -> auf der Karte zeigen
+        const zb = Object.assign(document.createElement('button'), { type: 'button', className: 'mini', textContent: '🗺️ Zeigen' });
+        zb.addEventListener('click', () => close({ show: m.id }));
+        d.appendChild(zb);
+      }
       box.appendChild(d);
     }
     dlgButton(box, '✍️ Neue Nachricht an die EL', '', () => close({ reply: '' }));
     dlgButton(box, 'Schließen', 'primary', () => close(true));
   });
   if (go && go.reply !== undefined) return hfReply(go.reply || null);
+  if (go && go.show) { const m = hfElMsgs().find((x) => x.id === go.show); const r = m && applyZusatz(P, m); if (r) { redraw(); renderPois(); renderMeet(); showPts(r.pts); } return; }
   if (go) showElPrio();
 }
 // v125: Hundeführer schreibt der Einsatzleitung (Freitext oder Schnellwahl), optional als Antwort auf eine EL-Nachricht (ref)
@@ -5860,7 +5885,11 @@ async function findCommit(r, pos) {
     const tg = elTargets(P.sent, P.marks).find((q) => q.a === r.check);
     if (tg) {
       const where = formatMgrs(pos.lat, pos.lon);
-      elSend(buildElMsg({ to: tg.a, txt: checkText(m, where), prio: 1 })).catch(() => {});
+      // v130: der Ort kommt als Punkt auf die Karte des Teams (ältere Apps sehen weiter den Text mit Koordinate)
+      const z = buildZusatz(P, { to: tg.a, points: [{ lat: pos.lat, lon: pos.lon, name: `${findLabel(m.fa) || 'Fund'}${m.txt ? `: ${m.txt}` : ''}`.slice(0, 60), task: 'Bitte prüfen' }], prio: true });
+      const pm = buildElMsg({ to: tg.a, txt: checkText(m, where), prio: 1 });
+      if (z) pm.z = z.msg.z;
+      elSend(pm).catch(() => {});
       pa = ` · Prüfauftrag an ${tg.label}`;
     }
   }
@@ -5885,6 +5914,136 @@ function findToggle(m) {
 }
 $('st-funk').addEventListener('click', () => funkDialog());
 $('st-find').addEventListener('click', () => findDialog());
+$('st-zusatz').addEventListener('click', () => zusatzDialog());
+
+// ---- v130: Zusatz zum laufenden Auftrag – Punkte, Umrisse, Zeichnungen, Lage-Orte, Raster, B-Ort an ein Team ----
+// Geht über den Status-Server wie eine Nachricht (Warteschlange ohne Netz, Lesebestätigung, „wichtig“); kein neuer QR-Code.
+// pre: { itemIdx: [], poiIds: [], gridIds: [], meet, points: [{ lat, lon, name, task }], to, task }
+async function zusatzDialog(pre = {}) {
+  if (!canEnter()) return;
+  if (!P.live) ensureLive(P, liveUrlNow());
+  const tg = elTargets(P.sent, P.marks);
+  if (!P.live || !tg.length) return toast('Kein laufender Auftrag mit Status-Server – erst unter „Teams“ einen Auftrag per QR-Code vergeben', 7000);
+  const st = {
+    to: pre.to || (tg.length === 1 ? tg[0].a : ''), task: pre.task || '', prio: !!pre.prio,
+    items: new Set(pre.itemIdx || []), pois: new Set(pre.poiIds || []), grids: new Set(pre.gridIds || []), meet: !!pre.meet,
+    points: (pre.points || []).map((x) => ({ ...x })),
+  };
+  // Meldungen mit Ort (Funde, Hinweise …) lassen sich als Punkt mitschicken
+  const spots = (P.live.msgs || []).filter((m) => Number.isFinite(m.lat) && Number.isFinite(m.lon) && !m.gone).slice(-30).reverse();
+  for (;;) {
+    const r = await openDlg((box, close) => {
+      dlgHead(box, '📍 Ort/Gebiet an Team senden', 'Kommt zusätzlich zum laufenden Auftrag auf die Karte des Hundeführers – über den Status-Server, ohne neuen QR-Code.');
+      const sel = dlgField(box, 'An', document.createElement('select'));
+      sel.id = 'zus-to';
+      sel.add(new Option('– Team wählen –', ''));
+      for (const t of tg) sel.add(new Option(t.label, t.a));
+      sel.add(new Option('📢 Alle Teams', EL_ALL));
+      sel.value = st.to;
+      sel.addEventListener('change', () => { st.to = sel.value; });
+      const task = dlgField(box, 'Was soll dort geschehen?', Object.assign(document.createElement('textarea'), { id: 'zus-task', rows: 2, maxLength: 200, value: st.task, placeholder: 'z. B. Bitte Böschung mit Hund prüfen und Stand melden' }));
+      task.addEventListener('input', () => { st.task = task.value; });
+      const group = (title) => { const h = document.createElement('h3'); h.className = 'zus-h'; h.textContent = title; box.appendChild(h); };
+      const check = (label, on, fn) => {
+        const l = document.createElement('label');
+        l.className = 'check';
+        const c = Object.assign(document.createElement('input'), { type: 'checkbox', checked: on });
+        c.addEventListener('change', () => fn(c.checked));
+        const sp = document.createElement('span');
+        sp.textContent = label;
+        l.append(c, sp);
+        box.appendChild(l);
+        return c;
+      };
+      // neue Punkte (auf der Karte gesetzt) mit Name und eigener Aufgabe
+      group('📍 Neue Punkte');
+      st.points.forEach((pt, i) => {
+        const row = document.createElement('div');
+        row.className = 'zus-pt';
+        const n = Object.assign(document.createElement('input'), { type: 'text', value: pt.name || '', maxLength: 60, placeholder: 'Name, z. B. Wärmequelle' });
+        n.className = 'zus-pt-name';
+        n.addEventListener('input', () => { pt.name = n.value; });
+        const tk = Object.assign(document.createElement('input'), { type: 'text', value: pt.task || '', maxLength: 200, placeholder: 'Eigene Aufgabe (sonst die oben)' });
+        tk.className = 'zus-pt-task';
+        tk.addEventListener('input', () => { pt.task = tk.value; });
+        const del = Object.assign(document.createElement('button'), { type: 'button', className: 'mini', textContent: '✕' });
+        del.addEventListener('click', () => close({ delPoint: i }));
+        row.append(n, tk, del);
+        box.appendChild(row);
+      });
+      dlgButton(box, '👆 Punkt auf der Karte setzen', '', () => close({ pick: true }));
+      if (spots.length) {
+        group('🔎 Meldungen mit Ort');
+        for (const m of spots) {
+          const key = `m:${m.id}`;
+          const name = `${hhmm(m.t)} ${m.tm || ''}: ${msgLabel(m)}${m.txt ? ` – ${m.txt}` : ''}`.slice(0, 80);
+          check(name, st.points.some((x) => x.key === key), (on) => {
+            st.points = st.points.filter((x) => x.key !== key);
+            if (on) st.points.push({ key, lat: m.lat, lon: m.lon, name: `${msgLabel(m)}${m.txt ? `: ${m.txt}` : ''}`.slice(0, 60), fromMsg: true });
+          });
+        }
+      }
+      const its = P.items.map((it, i) => ({ it, i })).filter(({ it }) => (it.kind === 'track' || it.kind === 'stroke' || it.kind === 'text') && !it.rec);
+      const seenGroup = new Set();
+      const named = its.filter(({ it }) => { if (!it.group) return true; if (seenGroup.has(it.group)) return false; seenGroup.add(it.group); return true; });
+      if (named.length) {
+        group('📐 Umrisse, Zeichnungen, Texte');
+        for (const { it, i } of named) {
+          const word = it.kind === 'track' ? 'Umriss' : it.kind === 'text' ? 'Text' : 'Zeichnung';
+          const label = `${word}: ${(it.kind === 'text' ? it.text : it.name) || '(ohne Name)'}`;
+          const idx = it.group ? P.items.map((x, k) => (x.group === it.group ? k : -1)).filter((k) => k >= 0) : [i];
+          check(label, idx.every((k) => st.items.has(k)), (on) => idx.forEach((k) => (on ? st.items.add(k) : st.items.delete(k))));
+        }
+      }
+      if ((P.pois || []).length || P.meet) {
+        group('🚐 Lage-Orte');
+        if (P.meet) check(`B-Ort${P.meet.text ? `: ${P.meet.text}` : ''}`, st.meet, (on) => { st.meet = on; });
+        for (const x of P.pois || []) check(poiName(x), st.pois.has(x.id), (on) => (on ? st.pois.add(x.id) : st.pois.delete(x.id)));
+      }
+      const gs = allGrids(P).filter((g) => g.area);
+      if (gs.length) {
+        group('# Raster');
+        for (const g of gs) check(gridLabel(P, g), st.grids.has(g.id), (on) => (on ? st.grids.add(g.id) : st.grids.delete(g.id)));
+      }
+      const pr = document.createElement('label');
+      pr.className = 'check';
+      pr.innerHTML = '<input type="checkbox" id="zus-prio"><span>❗ Wichtig (Ton und Fenster beim Hundeführer, bis „Verstanden“)</span>';
+      pr.querySelector('input').checked = st.prio;
+      pr.querySelector('input').addEventListener('change', (e) => { st.prio = e.target.checked; });
+      box.appendChild(pr);
+      dlgButton(box, '📤 Senden', 'primary', () => close({ send: true }));
+      dlgButton(box, 'Abbrechen', '', () => close(null));
+    });
+    if (!r) return;
+    if (r.delPoint != null) { st.points.splice(r.delPoint, 1); continue; }
+    if (r.pick) {
+      const pos = await new Promise((res) => pickOnMap('Auf die Karte tippen: dort liegt der Punkt', (p) => res(p)));
+      if (pos) st.points.push({ lat: pos.lat, lon: pos.lon, name: '', task: '' });
+      continue;
+    }
+    if (!st.to) { toast('Bitte erst wählen, an welches Team'); continue; }
+    const t = tg.find((x) => x.a === st.to);
+    const out = buildZusatz(P, {
+      to: st.to, teamId: t ? t.teamId : '', itemIdx: [...st.items], poiIds: [...st.pois], gridIds: [...st.grids], meet: st.meet,
+      points: st.points.map((x) => ({ ...x, name: (x.name || '').trim() || 'Punkt' })), task: st.task, prio: st.prio,
+    });
+    if (!out) { toast('Bitte mindestens einen Punkt, ein Gebiet oder einen Ort auswählen'); continue; }
+    if (out.size > ZUSATZ_MAX) { toast('Zu viel auf einmal für den Status-Server – bitte weniger oder einfachere Zeichnungen auswählen', 7000); continue; }
+    // neue Punkte bleiben auch auf der Karte der Einsatzleitung (als Textpunkt mit Aufgabe)
+    const fresh = st.points.filter((x) => !x.fromMsg);
+    if (fresh.length) {
+      snapshot();
+      for (const x of fresh) P.items.push({ kind: 'text', color: '#c62828', text: (x.name || '').trim() || 'Punkt', lat: x.lat, lon: x.lon, ...((x.task || st.task).trim() ? { note: (x.task || st.task).trim().slice(0, 200) } : {}), t: Date.now() });
+      changed();
+      redraw();
+    }
+    const ok = await elSend(out.msg);
+    if ($('panel-status').hidden === false) renderStatusPanel();
+    const who = st.to === EL_ALL ? 'alle Teams' : t ? t.label : 'das Team';
+    toast(ok ? `📤 An ${who} gesendet: ${out.parts.join(', ')}` : `📤 Wartet auf Netz – geht automatisch an ${who}`, 6000);
+    return;
+  }
+}
 
 // Auto-Abschluss: Team meldet „abgeschlossen“ mit 100 % -> Auftrag ohne Rückfrage geschlossen, Toast mit Rückgängig
 function checkAutoClose() {
@@ -8109,6 +8268,7 @@ function poiTextDlg(p, isNew) {
     dlgButton(box, isNew ? 'Speichern' : 'Übernehmen', 'primary', () => close({ name: name.value.trim(), desc: desc.value.trim() }));
     if (!isNew) {
       dlgNavButton(box, close, null, poiName(p), p.lat, p.lon); // v123
+      if (db.mode === 'el' && P.live && elTargets(P.sent, P.marks).length) dlgButton(box, '📤 An Team senden', '', () => close('zus')); // v130
       dlgButton(box, '🔁 Art ändern', '', () => close('cat'));
       dlgButton(box, '📍 Verschieben', '', () => close('move'));
       dlgButton(box, '🗑️ Löschen', '', () => close('delete'));
@@ -8177,6 +8337,7 @@ async function editPoi(p) {
   if (blocked(p)) return;
   const r = await poiTextDlg(p, false);
   if (!r) return;
+  if (r === 'zus') return zusatzDialog({ poiIds: [p.id] }); // v130
   if (r === 'move') {
     poiDraft = { move: p };
     closePanels();
