@@ -26,3 +26,5 @@ test-ut.*
 *.srt
 build-ut2/
 compose-ut2.log
+build-musik/
+compose-musik.log
