@@ -50,15 +50,53 @@ const items = order.map((o) => {
   return it;
 });
 const TOTAL = T;
+const S = (id) => { const x = items.find((i) => i.id === id); if (!x) throw new Error('Szene fehlt: ' + id); return x; };
+const A = (id, k) => S(id).start + S(id).dur * k;
+const EV = {
+  grid: A('el-grid', 0.35), fills: A('el-fill', 0.1), see: A('el-fill', 0.8), depart: S('t3').start, search: A('anna-start', 0.6),
+  ff: A('el-funk', 0.6), ffDone: A('el-progress', 0.7), cap: A('el-find', 0.8), miaDone: A('dual-zu', 0.6), bahn: A('el-next', 0.6), mia2: S('el-progress').start,
+  hut: A('dual-zusatz', 0.62), dusk: S('t6').start, heat: A('el-heat', 0.85), annaGo: S('anna-go').start, fund: A('dual-fund', 0.5),
+  back: A('dual-msg2', 0.5), home: S('el-recv').start, end: TOTAL,
+};
+const GEL = JSON.parse(fs.readFileSync(path.join(DIR, 'gelaende.json'), 'utf8'));
+const MAPURL = 'data:image/jpeg;base64,' + fs.readFileSync(path.join(DIR, 'gelaende.jpg')).toString('base64');
 fs.writeFileSync(path.join(DIR, 'offsets-3d.json'), JSON.stringify({ total: TOTAL, at: Object.fromEntries(items.map((i) => [i.id, i.start])) }));
 
 // ---------- Kamera-/Gerätestellungen ----------
 const POSE = {
-  tablet: { tab: { x: 0, y: -40, z: 0, ry: -9, rx: 5, s: 0.8, op: 1 }, ph: { x: 1250, y: -20, z: -400, ry: -32, rx: 4, s: 0.7, op: 0 } },
-  phone: { tab: { x: -470, y: -40, z: -520, ry: 24, rx: 5, s: 0.8, op: 0.38 }, ph: { x: 300, y: -45, z: 120, ry: -13, rx: 4, s: 0.78, op: 1 } },
-  dual: { tab: { x: -255, y: -55, z: -80, ry: 10, rx: 5, s: 0.7, op: 1 }, ph: { x: 650, y: -55, z: 60, ry: -16, rx: 4, s: 0.7, op: 1 } },
-  card: { tab: { x: -330, y: -10, z: -950, ry: 20, rx: 7, s: 0.8, op: 0.09 }, ph: { x: 560, y: -10, z: -950, ry: -20, rx: 7, s: 0.7, op: 0.09 } },
+  tablet: { tab: { x: -360, y: 30, z: 0, ry: 13, rx: 4, s: 0.62, op: 1 }, ph: { x: 1300, y: 20, z: -300, ry: -30, rx: 4, s: 0.6, op: 0 } },
+  phone: { tab: { x: -1500, y: 60, z: -400, ry: 30, rx: 4, s: 0.5, op: 0 }, ph: { x: 560, y: 0, z: 0, ry: -13, rx: 4, s: 0.76, op: 1 } },
+  dual: { tab: { x: -470, y: 150, z: 0, ry: 13, rx: 4, s: 0.5, op: 1 }, ph: { x: 690, y: 50, z: 0, ry: -14, rx: 4, s: 0.56, op: 1 } },
+  card: { tab: { x: -1500, y: 150, z: -500, ry: 30, rx: 6, s: 0.5, op: 0 }, ph: { x: 1400, y: 60, z: -500, ry: -30, rx: 6, s: 0.5, op: 0 } },
 };
+// Blickpunkt in der Landschaft je Szene: wohin die Kamera schaut (focus), Abstand, Höhe (Grad), Richtung (Grad), Lage des Blickpunkts im Bild
+const VIEW = { tablet: [0.79, 0.44], phone: [0.36, 0.5], dual: [0.63, 0.34], card: [0.5, 0.62] };
+const CAMS = [
+  [/^(intro|alarm)$/, { focus: 'bort', dist: 1000, elev: 30, az: -25 }],
+  [/^(t1|el-start|el-bort|el-wx)$/, { focus: 'bort', dist: 640, elev: 36, az: 10 }],
+  [/^(t2|el-grid|el-teams|el-fill|t3|el-qr)$/, { focus: 'grid', dist: 1250, elev: 47, az: 14 }],
+  [/^anna-(open|start)$/, { focus: 'Anna', dist: 560, elev: 38, az: -18 }],
+  [/^(t4|el-chips|el-funk)$/, { focus: 'grid', dist: 1300, elev: 50, az: -12 }],
+  [/^anna-walk$/, { focus: 'Anna', dist: 430, elev: 36, az: 20 }],
+  [/^(t5|el-find)$/, { focus: 'cap', dist: 640, elev: 40, az: 6 }],
+  [/^(t5b|dual-reed|dual-stand|dual-zu)$/, { focus: 'Mia', dist: 500, elev: 40, az: -22 }],
+  [/^el-next$/, { focus: 'bahndamm', dist: 760, elev: 44, az: 8 }],
+  [/^el-progress$/, { focus: 'grid', dist: 1300, elev: 50, az: 18 }],
+  [/^(t5c|dual-zusatz)$/, { focus: 'hut', dist: 540, elev: 40, az: -10 }],
+  [/^(t6|el-dusk)$/, { focus: 'grid', dist: 1400, elev: 36, az: 22 }],
+  [/^el-heat$/, { focus: 'heat', dist: 620, elev: 40, az: -14 }],
+  [/^(dual-check|t7|anna-go)$/, { focus: 'Anna', dist: 430, elev: 36, az: 12 }],
+  [/^dual-fund$/, { focus: 'heat', dist: 340, elev: 32, az: -8 }],
+  [/^(t8|el-msg)$/, { focus: 'grid', dist: 1350, elev: 46, az: 16 }],
+  [/^dual-msg2$/, { focus: 'Jonas', dist: 470, elev: 38, az: -16 }],
+  [/^(t9|el-out|el-recv)$/, { focus: 'mid', dist: 2000, elev: 48, az: 8 }],
+  [/./, { focus: 'grid', dist: 1750, elev: 52, az: -10 }],
+];
+function camOf(it, lt) {
+  const c = CAMS.find(([re]) => re.test(it.id))[1];
+  const v = VIEW[it.kind === 'card' ? 'card' : it.kind];
+  return { ...c, az: c.az + lt * 1.3, fx: v[0], fy: v[1] };
+}
 const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
 const lerpObj = (a, b, k) => Object.fromEntries(Object.keys(a).map((n) => [n, a[n] + (b[n] - a[n]) * k]));
 const poseOf = (it) => POSE[it.kind === 'card' ? 'card' : it.kind];
@@ -75,6 +113,11 @@ function stateAt(t) {
   tab.ry += Math.sin(t * 0.33) * 1.6; tab.y += Math.sin(t * 0.5) * 4;
   ph.ry += Math.sin(t * 0.33 + 1) * 1.8; ph.y += Math.sin(t * 0.5 + 0.8) * 5;
   const st = { tab, ph, t, lt, id: it.id, kind: it.kind };
+  st.cam = { a: prev ? camOf(prev, prev.dur + lt) : camOf(it, lt), b: camOf(it, lt), k: prev ? ease(Math.min(1, lt / 1.8)) : 1 };
+  // wem gehört das Handy im Bild?
+  const pid = it.kind === 'dual' ? it.b : it.kind === 'phone' ? it.id : '';
+  st.owner = /^anna/.test(pid) ? 'Anna' : /^jonas/.test(pid) ? 'Jonas' : /^mia/.test(pid) ? 'Mia' : '';
+  st.veil = it.kind === 'card' ? Math.min(1, lt / 0.6) * Math.min(1, (it.dur - lt) / 0.5) : 0;
   // Bildquellen: laufender Abschnitt, sonst letzter Stand des Geräts
   for (const d of ['tab', 'ph']) {
     if (it.dev && it.dev[d]) st[d + 'Src'] = frameAt(it.dev[d], it.t0 + Math.min(lt, it.dur - 0.4) * it.speed);
@@ -95,8 +138,12 @@ function stateAt(t) {
 const PAGE = `<!doctype html><html><head><meta charset="utf-8"><style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:${W}px;height:${H}px;overflow:hidden;background:#0c0e12;font-family:Inter,sans-serif}
-#bg{position:absolute;inset:0;background:radial-gradient(1300px 800px at 50% 35%,#2b3140 0%,#161920 55%,#0b0c10 100%)}
-#scene{position:absolute;inset:0;perspective:2400px;perspective-origin:50% 42%;transform-style:preserve-3d}
+#gl{position:absolute;inset:0;width:${W}px;height:${H}px}
+#veil{position:absolute;inset:0;background:rgba(8,10,14,.72);opacity:0}
+.lab{position:absolute;transform:translate(-50%,-100%);white-space:nowrap;color:#fff;font-weight:700;font-size:22px;padding:5px 12px;border-radius:9px;box-shadow:0 3px 12px rgba(0,0,0,.35);border:2px solid rgba(255,255,255,.85)}
+#capbar{position:absolute;left:0;right:0;bottom:0;height:226px;background:linear-gradient(rgba(8,10,14,0),rgba(8,10,14,.86) 34%)}
+#bg{display:none}
+#scene{position:absolute;inset:0;perspective:2600px;perspective-origin:50% 42%;transform-style:preserve-3d}
 #floor{position:absolute;left:50%;top:50%;width:5200px;height:5200px;margin:-2600px 0 0 -2600px;transform:translateY(470px) rotateX(90deg);
   background-image:linear-gradient(rgba(255,255,255,.13) 2px,transparent 2px),linear-gradient(90deg,rgba(255,255,255,.13) 2px,transparent 2px);background-size:130px 130px;
   -webkit-mask-image:radial-gradient(closest-side,#000 0%,rgba(0,0,0,.5) 45%,transparent 75%);mask-image:radial-gradient(closest-side,#000 0%,rgba(0,0,0,.5) 45%,transparent 75%)}
@@ -104,7 +151,7 @@ html,body{width:${W}px;height:${H}px;overflow:hidden;background:#0c0e12;font-fam
 .dev{position:absolute;left:50%;top:44%;transform-style:preserve-3d}
 .dev .ly{position:absolute;inset:-14px;border-radius:38px;background:#07080a}
 .dev.ph .ly{inset:-11px;border-radius:52px}
-.dev .rim{position:absolute;inset:-14px;border-radius:38px;box-shadow:0 0 0 2px #454a55, 0 40px 120px rgba(0,0,0,.55)}
+.dev .rim{position:absolute;inset:-14px;border-radius:38px;box-shadow:0 0 0 2px #454a55, 0 30px 90px rgba(0,0,0,.6)}
 .dev.ph .rim{inset:-11px;border-radius:52px}
 .dev img{position:absolute;inset:0;width:100%;height:100%;border-radius:22px;background:#111}
 .dev.ph img{border-radius:40px}
@@ -122,8 +169,12 @@ html,body{width:${W}px;height:${H}px;overflow:hidden;background:#0c0e12;font-fam
 #linklbl{position:absolute;color:#9fe3b0;font-size:22px;font-weight:700;letter-spacing:.04em;text-align:center;width:400px}
 </style></head><body>
 <div id="bg"></div>
-<div id="scene"><div id="floor"></div>
-  <div class="shadow" id="shT"></div><div class="shadow" id="shP"></div>
+<canvas id="gl" width="${W}" height="${H}"></canvas>
+<div id="labs"></div>
+<svg id="teth" width="${W}" height="${H}" style="position:absolute;inset:0"><path id="tethp" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 12"/><circle id="tethd" r="9" fill="#fff"/></svg>
+<div id="veil"></div><div id="capbar"></div>
+<div id="scene">
+  <div class="shadow" id="shT" style="display:none"></div><div class="shadow" id="shP" style="display:none"></div>
   <div class="dev tab" id="tab" style="width:1600px;height:900px;margin:-450px 0 0 -800px"></div>
   <div class="dev ph" id="ph" style="width:454px;height:982px;margin:-491px 0 0 -227px"></div>
 </div>
@@ -133,6 +184,7 @@ html,body{width:${W}px;height:${H}px;overflow:hidden;background:#0c0e12;font-fam
   <div id="cap"></div>
   <div id="card"><div id="cardin"></div></div>
 </div>
+<script src="vendor/three.min.js"></script><script src="field3d.js"></script>
 <script>
 const $=(i)=>document.getElementById(i);
 for(const d of ['tab','ph']){const e=$(d);let h='';for(let i=12;i>=1;i--)h+='<div class="ly" style="transform:translateZ('+(-i*2.4)+'px)"></div>';
@@ -168,8 +220,20 @@ function cardHtml(c){
     +'<div class="a" data-d="0.75" style="color:#c8ccd4;font-size:42px">'+esc(c.sub)+'</div></div></div>';
 }
 let capKey='',cardKey='';
+const labEls={};
 window.render=async(st)=>{
   setDev('tab',st.tab);setDev('ph',st.ph);
+  // Landschaft + Beschriftungen
+  const labs=window.field.update(st);const seen={};
+  for(const l of labs){seen[l.id]=1;let e=labEls[l.id];if(!e){e=labEls[l.id]=document.createElement('div');e.className='lab';$('labs').appendChild(e);}
+    if(e.textContent!==l.text)e.textContent=l.text;e.style.background=l.color;e.style.left=l.x+'px';e.style.top=l.y+'px';e.style.display='';}
+  for(const id in labEls)if(!seen[id])labEls[id].style.display='none';
+  $('veil').style.opacity=st.veil;$('labs').style.opacity=1-st.veil*0.85;
+  // Verbindung Handy -> Hundeführer in der Landschaft
+  const own=st.owner&&labs.find((l)=>l.id===st.owner),tp=$('tethp'),td=$('tethd');
+  if(own&&st.ph.op>0.5){const r=$('ph').getBoundingClientRect();const x1=r.left+8,y1=r.top+r.height*0.3,x2=own.x,y2=own.y+14,cx=(x1+x2)/2,cy=Math.min(y1,y2)-70;
+    tp.setAttribute('d','M'+x1+' '+y1+' Q'+cx+' '+cy+' '+x2+' '+y2);tp.setAttribute('stroke',own.color);tp.setAttribute('stroke-dashoffset',String(st.t*40));tp.style.opacity=st.ph.op;
+    td.setAttribute('cx',x2);td.setAttribute('cy',y2);td.setAttribute('fill',own.color);td.style.opacity=st.ph.op;}else{tp.style.opacity=0;td.style.opacity=0;}
   await Promise.all([setImg('tab',st.tabSrc),setImg('ph',st.phSrc)]);
   // Bildunterschrift
   const cap=$('cap');
@@ -196,14 +260,16 @@ window.render=async(st)=>{
 
 (async () => {
   fs.writeFileSync(path.join(DIR, 'scene3d.html'), PAGE);
-  const browser = await chromium.launch({ args: ['--allow-file-access-from-files'] });
+  const browser = await chromium.launch({ args: ['--allow-file-access-from-files', '--ignore-gpu-blocklist'] });
   const page = await browser.newPage({ viewport: { width: W, height: H } });
   await page.goto('file://' + path.join(DIR, 'scene3d.html'));
   await page.evaluate(() => document.fonts.ready);
+  page.on('pageerror', (e) => console.log('SEITE', e.message));
+  console.log('Bäume:', await page.evaluate(([d, ev, u]) => window.field.init(d, ev, u), [GEL, EV, MAPURL]));
   if (process.env.PREVIEW) {
     const at = (id, d) => items.find((x) => x.id === id).start + d;
     const list = (process.env.PREVIEW_AT || '').split(',').filter(Boolean).map(Number);
-    const ts = list.length ? list : [2.5, at('alarm', 4), at('t1', 0.5), at('el-grid', 4), at('anna-open', 0.5), at('anna-open', 4), at('dual-reed', 6), at('t6', 1.5), at('dual-fund', 9)];
+    const ts = list.length ? list : [at('alarm', 4), at('el-bort', 5), at('el-fill', 12), at('anna-start', 5), at('el-funk', 6), at('dual-reed', 8), at('dual-zusatz', 16), at('el-heat', 9), at('dual-fund', 9)];
     for (const [i, t] of ts.entries()) { await page.evaluate((s) => window.render(s), stateAt(t)); await page.screenshot({ path: path.join(DIR, `pv3d_${i}.jpg`), type: 'jpeg', quality: 85 }); }
     console.log('Länge', TOTAL.toFixed(1));
     await browser.close();
