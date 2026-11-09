@@ -64,3 +64,17 @@ curl -LO https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/thors
 cd ..
 REC_DIR=rec-einsatz BUILD_DIR=build-einsatz OUT_NAME=RHS-Einsatz-Scheuen.mp4 NARR=sprecher-einsatz.json node compose.js
 ```
+
+### Fassung mit Untertiteln und Musik (ohne Stimme)
+
+```bash
+SUBS=1 REC_DIR=rec-einsatz BUILD_DIR=build-ut OUT_NAME=RHS-Einsatz-Scheuen-Untertitel-ohne-Ton.mp4 NARR=sprecher-einsatz.json node compose.js
+python3 musik.py <Ordner mit den Musikstücken>   # -> RHS-Einsatz-Scheuen-Musik-Untertitel.mp4
+```
+
+Die Sprechertexte erscheinen Satz für Satz als Untertitel (im Tempo der Sprecherfassung); dazu entsteht eine
+`.srt`-Datei. Musik: drei Stücke von **John Bartmann**, auf Wikimedia Commons als **CC0** (gemeinfrei)
+veröffentlicht – „above-the-clouds“ (Planung und Suche), „broken-suspense“ (Dämmerung bis zum Fund),
+„10 – Heart of Acceptance“ (ab dem Fund). Download über die umgewandelten MP3-Fassungen von Commons, z. B.
+`https://upload.wikimedia.org/wikipedia/commons/transcoded/<x>/<xy>/<Datei>.ogg/<Datei>.ogg.mp3`
+(die Originaldateien werden bei vielen Abrufen gedrosselt).
