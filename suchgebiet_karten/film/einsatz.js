@@ -68,7 +68,7 @@ const GEO = `(() => {
   await el.tap('text=Einsatzleitung', { wait: 700 });
   await el.type('#wz-body input', 'Vermisste Person Scheuen', { delay: 45 });
   await el.tap('#wz-next', { wait: 500 });
-  await el.type('#wz-body input >> nth=0', 'Klaas Otte', { delay: 45 });
+  await el.type('#wz-body input >> nth=0', 'Thomas Berger', { delay: 45 });
   await el.tap('#wz-next', { wait: 500 });
   await el.seg('bort', { t: 'B-Ort am Ortsrand', s: 'Adresse suchen, Treffer wählen, den genauen Treffpunkt antippen.', speed: 1.3 });
   await el.tap('text=Adresse oder Kreuzung suchen', { wait: 400 });

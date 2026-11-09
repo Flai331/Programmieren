@@ -32,7 +32,7 @@ const BORT_VIEW = [52.6745, 10.0835];
   await el.seg('wz1', { t: 'Assistent „Neuer Einsatz“', s: 'Name, Einsatzleitung, B-Ort, Wetter, vermisste Person, Zeiten, Kontakte.' , speed: 1.3 });
   await el.type('#wz-body input', 'Vermisste Person Scheuen', { delay: 55 });
   await el.tap('#wz-next', { wait: 600 });
-  await el.type('#wz-body input >> nth=0', 'Klaas Otte', { delay: 60 });
+  await el.type('#wz-body input >> nth=0', 'Thomas Berger', { delay: 60 });
   await el.type('#wz-body input >> nth=2', 'Rettungshund 1', { delay: 45 });
   await el.tap('#wz-next', { wait: 700 });
   await snap('wz');
