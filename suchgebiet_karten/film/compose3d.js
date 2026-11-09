@@ -275,18 +275,31 @@ window.render=async(st)=>{
     await browser.close();
     return;
   }
-  const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-shortest',
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-c:a', 'aac', '-movflags', '+faststart', OUT], { stdio: ['pipe', 'inherit', 'inherit'] });
-  const n = Math.round(TOTAL * FPS);
+  // In Abschnitten rendern (fortsetzbar nach Abbruch; mehrere Prozesse: PART=i/n)
+  const CH = 250, n = Math.round(TOTAL * FPS), chunks = Math.ceil(n / CH);
+  const cdir = path.join(DIR, 'build-3d'); fs.mkdirSync(cdir, { recursive: true });
+  const [pi, pn] = (process.env.PART || '0/1').split('/').map(Number);
+  const cfile = (c) => path.join(cdir, `c${String(c).padStart(3, '0')}.mp4`);
   const t0 = Date.now();
-  for (let i = 0; i < n; i++) {
-    await page.evaluate((s) => window.render(s), stateAt(i / FPS));
-    const buf = await page.screenshot({ type: 'jpeg', quality: 90 });
-    if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
-    if (i % 500 === 0) console.log(`${i}/${n} Bilder, ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+  for (let c = 0; c < chunks; c++) {
+    if (c % pn !== pi || fs.existsSync(cfile(c))) continue;
+    const tmp = cfile(c) + '.tmp.mp4';
+    const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
+      '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-pix_fmt', 'yuv420p', '-r', String(FPS), tmp], { stdio: ['pipe', 'inherit', 'inherit'] });
+    for (let i = c * CH; i < Math.min(n, (c + 1) * CH); i++) {
+      await page.evaluate((s) => window.render(s), stateAt(i / FPS));
+      const buf = await page.screenshot({ type: 'jpeg', quality: 90 });
+      if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
+    }
+    ff.stdin.end();
+    await new Promise((r) => ff.on('close', r));
+    fs.renameSync(tmp, cfile(c));
+    console.log(`Abschnitt ${c + 1}/${chunks} (Prozess ${pi}), ${((Date.now() - t0) / 1000).toFixed(0)} s`);
   }
-  ff.stdin.end();
-  await new Promise((r) => ff.on('close', r));
+  const missing = []; for (let c = 0; c < chunks; c++) if (!fs.existsSync(cfile(c))) missing.push(c);
+  if (missing.length) { console.log('Noch offen:', missing.length, 'Abschnitte'); await browser.close(); return; }
+  fs.writeFileSync(path.join(cdir, 'list.txt'), Array.from({ length: chunks }, (_, c) => `file '${cfile(c)}'`).join('\n'));
+  require('child_process').execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', path.join(cdir, 'list.txt'), '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-shortest', '-c:v', 'copy', '-c:a', 'aac', '-movflags', '+faststart', OUT]);
   await browser.close();
   console.log('Fertig:', TOTAL.toFixed(1), 's');
 })().catch((e) => { console.error(e); process.exit(1); });
