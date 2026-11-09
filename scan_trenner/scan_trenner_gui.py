@@ -92,6 +92,7 @@ class App(tk.Tk):
         self.stop_btn.pack(side="left", padx=6)
         ttk.Button(knoepfe, text="Dateien einmal verarbeiten…", command=self._einmal).pack(side="left")
         ttk.Button(knoepfe, text="📶 Per WLAN ans Handy…", command=self._wlan_senden).pack(side="left", padx=6)
+        ttk.Button(knoepfe, text="✍ Unterschrift zeichnen…", command=self._zeichnen).pack(side="left")
         self.status = ttk.Label(knoepfe, text="Bereit")
         self.status.pack(side="right")
 
@@ -424,15 +425,19 @@ class App(tk.Tk):
         threading.Thread(target=lauf, daemon=True).start()
 
     def _wlan_senden(self) -> None:
-        """Ausgewählte PDFs per QR-Code/WLAN an die DokuBox-App geben."""
+        """Ausgewählte PDFs/Vorlagen per QR-Code/WLAN an die DokuBox-App geben."""
         start = self.ausgabe.get() if Path(self.ausgabe.get()).is_dir() else str(Path.home())
-        dateien = filedialog.askopenfilenames(title="PDFs fürs Handy wählen", initialdir=start,
-                                              filetypes=[("PDF", "*.pdf")])
-        if not dateien:
-            return
+        dateien = filedialog.askopenfilenames(
+            title="Dateien fürs Handy wählen", initialdir=start,
+            filetypes=[("PDF und Vorlagen", "*.pdf *.png"), ("PDF", "*.pdf"),
+                       ("Unterschriften/Vorlagen (PNG)", "*.png")])
+        if dateien:
+            self._wlan_freigeben([Path(d) for d in dateien])
+
+    def _wlan_freigeben(self, dateien: list[Path]) -> None:
         try:
             import wlan_senden as ws
-            freigabe = ws.Freigabe([Path(d) for d in dateien], meldung=self.log).starten()
+            freigabe = ws.Freigabe(dateien, meldung=self.log).starten()
             bild = ws.qr_bild(freigabe.link)
         except ImportError:
             messagebox.showerror("Paket fehlt", "Für den QR-Code fehlt das Paket „qrcode“.\n"
@@ -483,6 +488,102 @@ class App(tk.Tk):
         ttk.Button(fenster, text="Beenden", command=beenden).pack(pady=(4, 16))
         fenster.protocol("WM_DELETE_WINDOW", beenden)
         ticken()
+
+    def _zeichnen(self) -> None:
+        """Fenster zum Unterschreiben/Schreiben mit Maus, Stift oder Tablett.
+        Gespeichert wird eine PNG mit durchsichtigem Hintergrund im Ordner
+        „Vorlagen“; von dort per WLAN an die DokuBox."""
+        import vorlagen as vl
+
+        ordner = vl.vorlagen_ordner(Path(self.ausgabe.get()))
+        fenster = tk.Toplevel(self)
+        fenster.title("Unterschrift / Handschrift zeichnen")
+        fenster.geometry("900x520")
+        fenster.minsize(600, 360)
+
+        striche: list[vl.Strich] = []
+        dicke = tk.DoubleVar(value=3.0)
+        farbe = tk.StringVar(value="Schwarz")
+        name = tk.StringVar(value="Unterschrift")
+
+        oben = ttk.Frame(fenster, padding=(10, 8))
+        oben.pack(fill="x")
+        ttk.Label(oben, text="Stift:").pack(side="left")
+        for f in vl.FARBEN:
+            ttk.Radiobutton(oben, text=f, value=f, variable=farbe).pack(side="left", padx=3)
+        ttk.Label(oben, text="   Stärke:").pack(side="left")
+        ttk.Scale(oben, from_=1, to=8, variable=dicke, length=140).pack(side="left")
+
+        flaeche = tk.Canvas(fenster, bg="white", cursor="pencil", highlightthickness=1,
+                            highlightbackground="#bbb")
+        flaeche.pack(fill="both", expand=True, padx=10)
+
+        def hilfslinie(_e=None) -> None:
+            flaeche.delete("hilfe")
+            h, b = flaeche.winfo_height(), flaeche.winfo_width()
+            flaeche.create_line(30, h * 0.7, b - 30, h * 0.7, fill="#ddd", dash=(6, 4), tags="hilfe")
+            flaeche.create_text(36, h * 0.7 + 14, text="✕  hier unterschreiben – Maus gedrückt halten",
+                                anchor="w", fill="#bbb", tags="hilfe")
+            flaeche.tag_lower("hilfe")
+
+        flaeche.bind("<Configure>", hilfslinie)
+
+        def start(e) -> None:
+            s = vl.Strich([(e.x, e.y)], dicke=dicke.get(), farbe=vl.FARBEN[farbe.get()])
+            striche.append(s)
+            r = s.dicke / 2
+            flaeche.create_oval(e.x - r, e.y - r, e.x + r, e.y + r, fill=s.farbe, outline=s.farbe,
+                                tags=("tinte", f"s{len(striche)}"))
+
+        def ziehen(e) -> None:
+            if not striche:
+                return
+            s = striche[-1]
+            x0, y0 = s.punkte[-1]
+            if abs(e.x - x0) + abs(e.y - y0) < 1:
+                return
+            s.punkte.append((e.x, e.y))
+            flaeche.create_line(x0, y0, e.x, e.y, fill=s.farbe, width=s.dicke, capstyle="round",
+                                joinstyle="round", smooth=True, tags=("tinte", f"s{len(striche)}"))
+
+        flaeche.bind("<ButtonPress-1>", start)
+        flaeche.bind("<B1-Motion>", ziehen)
+
+        def rueckgaengig() -> None:
+            if striche:
+                flaeche.delete(f"s{len(striche)}")
+                striche.pop()
+
+        def leeren() -> None:
+            striche.clear()
+            flaeche.delete("tinte")
+
+        def speichern(senden: bool) -> None:
+            if not striche:
+                messagebox.showinfo("Leer", "Bitte zuerst etwas zeichnen.", parent=fenster)
+                return
+            ziel = vl.speichere_vorlage(striche, ordner, name.get())
+            if ziel is None:
+                return
+            self.log(f"Vorlage gespeichert: {ziel}")
+            if senden:
+                self._wlan_freigeben([ziel])
+            else:
+                messagebox.showinfo("Gespeichert", f"Gespeichert als\n{ziel}\n\n"
+                                    "Später senden: „📶 Per WLAN ans Handy…“ und die PNG wählen.",
+                                    parent=fenster)
+            leeren()
+
+        unten = ttk.Frame(fenster, padding=10)
+        unten.pack(fill="x")
+        ttk.Button(unten, text="↶ Rückgängig", command=rueckgaengig).pack(side="left")
+        ttk.Button(unten, text="Leeren", command=leeren).pack(side="left", padx=6)
+        ttk.Label(unten, text="   Name:").pack(side="left")
+        ttk.Entry(unten, textvariable=name, width=22).pack(side="left", padx=4)
+        ttk.Button(unten, text="📶 Speichern & ans Handy",
+                   command=lambda: speichern(True)).pack(side="right")
+        ttk.Button(unten, text="Speichern", command=lambda: speichern(False)).pack(side="right", padx=6)
+        fenster.bind("<Control-z>", lambda _e: rueckgaengig())
 
     def _schliessen(self) -> None:
         self.stop_event.set()

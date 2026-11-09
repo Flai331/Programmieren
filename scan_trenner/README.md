@@ -65,6 +65,15 @@ Dateien kommen direkt übers Heimnetz und werden wie ein Scan ausgelesen (Nummer
   „Beenden“. Es werden nur die ausgewählten Dateien ausgeliefert.
 - Ohne App: denselben Link im Handy-Browser öffnen → einfache Download-Liste.
 
+## Unterschrift / Handschrift fürs Handy
+
+**„✍ Unterschrift zeichnen…“** öffnet eine Zeichenfläche (Maus, Stift oder Grafiktablett; Farbe
+Schwarz/Blau, Stärke, Rückgängig mit Strg+Z). **„Speichern & ans Handy“** legt eine PNG mit
+durchsichtigem Hintergrund in `…\Scans\Vorlagen` ab und zeigt sofort den QR-Code. In DokuBox
+landet sie unter *Unterschriften & Vorlagen* und lässt sich beim Ausfüllen eines Dokuments
+einsetzen, verschieben und in der Größe ändern. Gespeicherte Vorlagen kann man später auch über
+„📶 Per WLAN ans Handy…“ (PNG wählen) erneut schicken.
+
 ## Einstellungen
 
 | Option | Bedeutung |
