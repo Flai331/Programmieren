@@ -3,6 +3,7 @@
 import { allGrids, NO_TEAM } from './store.js';
 import { buildAssignment } from './share.js';
 import { hasArea } from './gpx.js';
+import { isDone } from './closeout.js';
 
 // Auswahl (wie sendSelection() in app.js) aus einem gespeicherten Auftrag (P.sent-Eintrag) rekonstruieren.
 // Hinweistext, Kontakte, Rettungspunkte und Lage-Orte sind dort nicht gespeichert – dafür gilt der gemerkte Link (P.sentLinks).
@@ -27,8 +28,10 @@ export function rebuildAssignment(p, x) {
 }
 
 // Teams, die Gebiete haben (Felder oder zugeteilte Umrisse), aber noch keinen Auftrag
+// v130.3: ein abgeschlossener (und damit „freier“) Auftrag zählt nicht mehr – sonst verschwindet das Team
+// nach Abschluss und Rückmeldung dauerhaft aus dieser Liste, obwohl es wieder einsetzbar ist.
 export function teamsWithoutOrder(p) {
-  const have = new Set((p.sent || []).map((x) => x.teamId));
+  const have = new Set((p.sent || []).filter((x) => !isDone(x)).map((x) => x.teamId));
   const out = [];
   for (const m of p.marks || []) {
     if (m.kind !== 'team' || m.id === NO_TEAM || have.has(m.id)) continue;

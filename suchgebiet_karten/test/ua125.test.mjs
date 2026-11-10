@@ -234,6 +234,16 @@ test('Teams mit Gebieten, aber ohne Auftrag', () => {
   assert.equal(teamsWithoutOrder(p).length, 0);
 });
 
+// v130.3 Bugfix: nach Abschluss + Rückmeldung soll das Team wieder bei „Teams ohne Auftrag“ auftauchen
+test('Teams ohne Auftrag: abgeschlossener Auftrag zählt nicht mehr, Team taucht wieder auf', () => {
+  const { p } = mitAuftrag();
+  p.fills['5,5'] = 'T2';
+  p.sent.push({ id: 'Z', teamId: 'T2' });
+  assert.equal(teamsWithoutOrder(p).length, 0); // läuft noch: nicht in der Liste
+  p.sent[p.sent.length - 1].done = 12345; // abgeschlossen + zurückgemeldet
+  assert.deepEqual(teamsWithoutOrder(p).map((x) => [x.team.id, x.cells, x.areas]), [['T2', 1, 0]]);
+});
+
 test('Auftrag: freie Umrisse/Felder werden dem Team zugeordnet, fremde bleiben', () => {
   const { p } = mitAuftrag();
   p.items.push({ id: 'i-frei', kind: 'track', color: '#000', name: 'Frei', pts: [[52.29, 8.0], [52.295, 8.0], [52.295, 8.01], [52.29, 8.0]] });
