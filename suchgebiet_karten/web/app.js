@@ -80,7 +80,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.8';
+const APP_VERSION = 'v130.9';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -6039,6 +6039,7 @@ function findToggle(m) {
 $('st-funk').addEventListener('click', () => funkDialog());
 $('st-find').addEventListener('click', () => findDialog());
 $('st-zusatz').addEventListener('click', () => zusatzDialog());
+$('teams-zusatz').addEventListener('click', () => zusatzDialog()); // v130.9: zweiter Einstieg direkt bei „Teams“ – leichter zu finden als nur unter „Status“
 
 // ---- v130: Zusatz zum laufenden Auftrag – Punkte, Umrisse, Zeichnungen, Lage-Orte, Raster, B-Ort an ein Team ----
 // Geht über den Status-Server wie eine Nachricht (Warteschlange ohne Netz, Lesebestätigung, „wichtig“); kein neuer QR-Code.
