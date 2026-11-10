@@ -9,26 +9,27 @@ import {
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { areaBounds, navTargets, navTargetsAll, navUrl, boxCenter, cellCenter as navCellCenter } from './hfnav.js';
+import { areaBounds, navTargets, navTargetsAll, navUrl, boxCenter, cellCenter as navCellCenter, navNeedleDeg, fmtDist } from './hfnav.js';
 import { buildGpx, mergeGpx, parseGpx, dedupeImport, parseKml, pointInPolygon, selectionGpx, gridWithLabels, gridPath, labelTracks, cellComponents, cellOutlines, hasArea, polygonArea, formatArea, trackDesc, trackLength, outlineName, msgWaypoints, msgRows } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import { buildReport, describeTarget, makeDedup, makeLog, validReportUrl } from './report.js';
 import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
 import { fileName } from './files.js';
 import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './infos.js';
-import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids, unionSel } from './scope.js';
+import { emptySel, selectAll, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids, unionSel } from './scope.js';
 import { MSG_VIEW, MSG_DELETE, ownTeamMsgs, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock, assignedOf, assignedCell, assignedGrid, markAccepted, isAccepted, unlockUntil } from './locks.js';
 import { isDone, openPoints, guardApplies, msgPct, closeMsg, sentPct, closeAsk, autoCloseDue, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
 import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts } from './elw.js'; // v124
 import { nextTeamLabel, uaPrefix, sameTeamName, uaName, uaTitle, joinUaNames, renameUa } from './uateam.js';
-import { typeIcon, typeText, unitType, isDog, persons, unitLine, cleanUnit, UNIT_TYPES, ORGS, forcesFromTeams, forcesText, whoText } from './units.js'; // v128
+import { typeIcon, typeText, unitType, isDog, unitLine, cleanUnit, nextFunkrufname, UNIT_TYPES, ORGS, forcesFromTeams, forcesText, whoText } from './units.js'; // v128
 import { FUNK_KINDS, funkKind, funkLabel, timeOfDay, funkTargets, buildFunkMsg, addFunkMsg, buildFindMsg, msgSource } from './funk.js'; // v128
 import { FIND_KINDS, findKind, findLabel, FIND_A, forAllUa, checkText, isFind, findStatusText } from './finds.js'; // v128
+import { buildZusatz, applyZusatz, isZusatz, ZUSATZ_MAX } from './zusatz.js'; // v130
 import { listTracks, trackInfo, importItems, noteImport, importTag, TRACK_KINDS, guessKind, durText } from './tracks.js'; // v128
 import { teamTimes, timeRows, outsideTeams, stateText, totalPersonHours, timeLine } from './times.js'; // v128
 import { uaOverview, levelIcon, agoText, hasUas, BASE_UA } from './uaover.js'; // v128
 import { CAM_KEY, backCameras, pickCamera, nextCamera, cameraConstraints, wantsContinuousFocus } from './camera.js';
-import { rebuildAssignment, teamsWithoutOrder, planAssign, applyAssign, planCount, assignText } from './sentops.js';
+import { rebuildAssignment, teamsWithoutOrder, planAssign, applyAssign, planCount, assignText, teamClock } from './sentops.js';
 import { buildProgress, mergeProgress, progressSummary, progressPreview, progressTarget, snapshotBase, stampChanges, setPeer, setPeerId, peerOf } from './progress.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -79,7 +80,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v129';
+const APP_VERSION = 'v130.9';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -172,7 +173,7 @@ function load() {
   try {
     const s = JSON.parse(raw || 'null');
     if (s && s.projects) db = { ...db, ...s };
-    if (!['team', 'ua', 'el', 'other'].includes(db.shareTo)) db.shareTo = null; // v99: zuletzt gewählter Empfänger beim Teilen (pro Gerät)
+    if (!['ua', 'el', 'other'].includes(db.shareTo)) db.shareTo = null; // v99: zuletzt gewählter Empfänger beim Teilen (pro Gerät)
     db.teamsOpen = !!db.teamsOpen; // v98: Team-Liste auf dem Handy offen (pro Gerät)
   } catch { if (raw) { saveCorrupt(raw); startNotice = '⚠️ Der Speicher war beschädigt und wurde gesichert (Mehr → Fehlerbericht senden)'; } } // defekter Speicher -> Neustart, Rohdaten bleiben erhalten
   const ld = loadProjects(db.projects);
@@ -296,7 +297,7 @@ function changed() {
 
 // ---------- Karte ----------
 load();
-const map = L.map('map', { zoomControl: false, maxZoom: 20 });
+const map = L.map('map', { zoomControl: false, maxZoom: 20, zoomSnap: 0, zoomDelta: 1, wheelPxPerZoomLevel: 300 });
 L.control.zoom({ position: 'bottomright' }).addTo(map);
 map.on('dragstart', () => { userMovedAt = Date.now(); });
 // Quellenangabe: kurz ausgeklappt, dann nur „ⓘ“ (verdeckt sonst Bedienelemente); antippen klappt sie auf
@@ -881,9 +882,9 @@ canvas.addEventListener('pointermove', (e) => {
   map.panBy([gesture.mid.x - m.x, gesture.mid.y - m.y], { animate: false });
   userMovedAt = Date.now();
   gesture.mid = m;
-  // Zoom in ganzen Stufen, sobald die Finger deutlich auseinander/zusammen gehen
-  const want = Math.round(gesture.zoom + Math.log2(m.d / gesture.dist));
-  if (want !== map.getZoom()) map.setZoomAround(L.point(m.x, m.y), want, { animate: false });
+  // v130.5: stufenlos zoomen, nicht mehr auf ganze Stufen springen
+  const want = gesture.zoom + Math.log2(m.d / gesture.dist);
+  if (Math.abs(want - map.getZoom()) > 0.001) map.setZoomAround(L.point(m.x, m.y), want, { animate: false });
 });
 const endTouch = (e) => {
   if (mousePan) { mousePan = null; e.stopImmediatePropagation(); return; }
@@ -901,10 +902,13 @@ let wheelAt = 0;
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   const now = Date.now();
-  if (now - wheelAt < 180) return;
+  if (now - wheelAt < 16) return;
   wheelAt = now;
   const r = canvas.getBoundingClientRect();
-  map.setZoomAround(L.point(e.clientX - r.left, e.clientY - r.top), map.getZoom() + (e.deltaY < 0 ? 1 : -1));
+  // v130.5: stufenlos statt fest ±1 pro Tick – Mausrad (Zeilen) und Trackpad (Pixel) unterschiedlich skaliert
+  const delta = -e.deltaY * (e.deltaMode === 1 ? 0.12 : 0.0033);
+  const z = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), map.getZoom() + delta));
+  map.setZoomAround(L.point(e.clientX - r.left, e.clientY - r.top), z, { animate: false });
 }, { passive: false });
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -1221,6 +1225,7 @@ function renameItem(i) {
       if (!r || !P.items.includes(it)) return;
       if (r.del) return deleteOutline(it);
       if (r.vtx) return startVertex(it);
+      if (r.zus) return zusatzDialog({ itemIdx: [P.items.indexOf(it)] });
       snapshot();
       applyOutline(it, { ...r, name: r.name || it.name });
       changed();
@@ -1228,14 +1233,45 @@ function renameItem(i) {
     });
     return;
   }
-  const what = 'der Zeichnung';
-  const t = prompt(`Name ${what} (steht so auf der Karte und im GPX für Garmin):`, it.name || '');
-  if (t === null || t.trim() === (it.name || '')) return;
-  snapshot();
-  // alle Striche einer Zeichnung heißen gleich
-  for (const x of it.group ? P.items.filter((y) => y.group === it.group) : [it]) x.name = t.trim();
-  changed();
-  toast(it.name ? `Name „${it.name}“ gespeichert` : 'Name entfernt');
+  strokeDialog(it, '✏️ Zeichnung').then((r) => {
+    if (!r || !P.items.includes(it)) return;
+    snapshot();
+    // alle Striche einer Zeichnung heißen gleich und tragen dieselbe Teamzuteilung
+    for (const x of it.group ? P.items.filter((y) => y.group === it.group) : [it]) {
+      x.name = r.name;
+      if (r.teams.length) x.teams = [...r.teams]; else delete x.teams;
+    }
+    changed();
+    toast(r.name ? `„${r.name}“ gespeichert` : 'Name entfernt');
+  });
+}
+// Zeichnung (Stift): Name und Zuteilung an ein oder mehrere Teams
+function strokeDialog(it, title) {
+  return openDlg((box, close) => {
+    dlgHead(box, title, 'Name steht so auf der Karte, im PDF und im GPX für Garmin.');
+    const name = dlgField(box, 'Name', Object.assign(document.createElement('input'), { type: 'text', value: it.name || '' }));
+    const teams = P.marks.filter((m) => m.kind === 'team');
+    const picked = new Set(it.teams || []);
+    if (teams.length) {
+      const h = document.createElement('p');
+      h.className = 'small';
+      h.textContent = 'Zugeteilt an (ein oder mehrere Teams):';
+      box.appendChild(h);
+      for (const t of teams) {
+        const l = document.createElement('label');
+        l.className = 'check';
+        const c = Object.assign(document.createElement('input'), { type: 'checkbox', checked: picked.has(t.id) });
+        c.addEventListener('change', () => { if (c.checked) picked.add(t.id); else picked.delete(t.id); });
+        const sp = document.createElement('span');
+        sp.textContent = `${typeIcon(t)} ${t.label}`;
+        l.append(c, sp);
+        box.appendChild(l);
+      }
+    }
+    dlgButton(box, 'Speichern', 'primary', () => close({ name: name.value.trim(), teams: [...picked] }));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+    setTimeout(() => { name.focus(); name.select(); }, 50);
+  });
 }
 
 // Umriss: Name, Zuteilung (Team oder Einheit aus „Einsatz → Kräfte“) und Notiz
@@ -1264,6 +1300,7 @@ function outlineDialog(it, title, opts = {}) {
     if (opts.edit) {
       const ctr = boxCenter(it.pts);
       if (!it.open && (it.pts || []).length > 2 && ctr) dlgNavButton(box, close, null, it.name || 'Umriss', ctr[0], ctr[1]); // v123: nur gespeicherte, geschlossene Umrisse
+      if (db.mode === 'el' && P.live && elTargets(P.sent, P.marks).length) dlgButton(box, '📤 An Team senden', '', () => close({ zus: true })); // v130
       dlgButton(box, '✋ Punkte bearbeiten', '', () => close({ vtx: true }));
       dlgButton(box, '🗑 Löschen', 'urgent', () => close({ del: true }));
     }
@@ -1390,23 +1427,24 @@ function updatePenbar() {
   $('pen-done').disabled = !n;
   $('pen-cancel').disabled = !n;
 }
-function finishPen() {
+async function finishPen() {
   const d = draftPen;
   if (!d || !d.strokes.length) return;
   // wie beim Umriss: Name mit Vorschlag „Zeichnung 3“
   const groups = new Set(P.items.filter((it) => it.kind === 'stroke').map((it) => it.group || it));
   const def = `Zeichnung ${groups.size + 1}`;
-  const t = prompt('Name der Zeichnung (erscheint so auf der Karte und auf dem Garmin):', def);
-  if (t === null) return;
-  const name = t.trim() || def;
+  const r = await strokeDialog({ name: def, teams: [] }, '✏️ Zeichnung speichern');
+  if (!r || draftPen !== d) return;
+  const name = r.name || def;
+  draftPen = null;
   snapshot();
   const group = uid();
   for (const st of d.strokes) {
     st.group = group;
     st.name = name;
+    if (r.teams.length) st.teams = [...r.teams];
     P.items.push(st);
   }
-  draftPen = null;
   changed();
   toast(`„${name}“ gespeichert`);
 }
@@ -1418,8 +1456,8 @@ $('pen-back').addEventListener('click', () => {
   redraw();
   save();
 });
-$('pen-done').addEventListener('click', () => {
-  finishPen();
+$('pen-done').addEventListener('click', async () => {
+  await finishPen();
   if (!draftPen) setTool('pan');
 });
 $('pen-cancel').addEventListener('click', () => {
@@ -1898,14 +1936,6 @@ function makeSortable(list, onDone) {
     });
   });
 }
-// v128: Typ-Felder gespeichert (Änderung für „Fortschritt“ merken), ohne die Liste neu aufzubauen
-function unitSaved() {
-  P.updated = Date.now();
-  stamp();
-  renderPalette();
-  redraw();
-  save();
-}
 function renderMarks() {
   const box = $('mark-list');
   box.innerHTML = '';
@@ -1922,27 +1952,33 @@ function renderMarks() {
       <span class="grip" title="Ziehen zum Verschieben">≡</span>
       <button class="swatch" title="Zum Einfärben auswählen"></button>
       <div class="fields">
-        <input type="text" class="name" placeholder="${m.kind === 'team' ? 'Teamname / Hundeführer' : 'Bedeutung'}">
+        ${m.kind === 'team' ? '<div class="uname" title="Automatisch: Organisation + laufende Nummer"></div>' : '<input type="text" class="name" placeholder="Bedeutung">'}
         ${m.kind === 'team' ? `<div class="pair one"><label><small>Typ</small><select class="uty" aria-label="Typ der Einheit">${UNIT_TYPES.map((t) => `<option value="${t.code}">${t.ico} ${t.label}</option>`).join('')}</select></label></div>
-        <div class="pair"><label><small>Organisation</small><input type="text" class="uorg" list="org-list" placeholder="FF, DRK, …" maxlength="30"></label><label class="upers-l"><small>Personen</small><input type="number" class="upers" min="0" inputmode="numeric" placeholder="Anzahl"></label></div>
-        <div class="pair one"><label><small>Funkrufname</small><input type="text" class="ufk" placeholder="z. B. Florian 1" maxlength="40"></label></div>
-        <div class="pair dogrow"><label><small>Hund</small><input type="text" class="dog" placeholder="Name"></label><label><small>Suchhelfer</small><input type="number" class="helpers" min="0" inputmode="numeric" placeholder="Anzahl"></label></div>` : ''}
+        <div class="pair one"><label><small>Organisation</small><input type="text" class="uorg" list="org-list" placeholder="FF, DRK, …" maxlength="30"></label></div>
+        <div class="pair dogrow"><label class="doghund"><small>Hund</small><input type="text" class="dog" placeholder="Name"></label><label><small>Suchhelfer</small><input type="number" class="helpers" min="0" inputmode="numeric" placeholder="Anzahl"></label></div>` : ''}
         <select class="color" aria-label="Farbe"></select>
         <div class="cells"></div>
       </div>
       <button class="del" title="Löschen">✕</button>`;
     el.querySelector('.swatch').style.background = m.color;
-    el.querySelector('.name').value = m.label;
     if (m.kind === 'team') {
+      el.querySelector('.uname').textContent = m.label || 'Team';
       el.querySelector('.dog').value = m.dog || ''; el.querySelector('.helpers').value = m.helpers || '';
-      el.querySelector('.uty').value = unitType(m); el.querySelector('.uorg').value = m.org || ''; el.querySelector('.ufk').value = m.fk || ''; el.querySelector('.upers').value = m.pers || '';
-      el.querySelector('.dogrow').hidden = !isDog(m); // Hund/Suchhelfer nur beim Hund-Team
-      el.querySelector('.upers-l small').textContent = isDog(m) ? 'Personen (gesamt)' : 'Personen';
-      el.querySelector('.upers').placeholder = isDog(m) ? `${persons({ ...m, pers: 0 })}` : 'Anzahl';
+      el.querySelector('.uty').value = unitType(m); el.querySelector('.uorg').value = m.org || '';
+      el.querySelector('.doghund').hidden = !isDog(m); // Hundename nur beim Hund-Team, Suchhelfer bei allen
+    } else {
+      el.querySelector('.name').value = m.label;
     }
     const outl = m.kind === 'team' ? P.items.filter((it) => it.kind === 'track' && it.to === m.id).map((it) => it.name || 'Umriss') : [];
+    // v130.7: Stift-Zeichnungen, die diesem Team zugeteilt sind (je Gruppe nur einmal)
+    const drGroups = new Set();
+    const assigned = (it) => it.kind === 'stroke' && (it.teams || []).includes(m.id) && (!it.group || !drGroups.has(it.group));
+    const draw = m.kind === 'team'
+      ? P.items.filter(assigned).map((it) => { if (it.group) drGroups.add(it.group); return it.name || 'Zeichnung'; })
+      : [];
     el.querySelector('.cells').textContent = (a && a.count ? `${a.count} Feld${a.count > 1 ? 'er' : ''}: ${a.text}` : 'keine Felder')
-      + (outl.length ? ` · Umriss${outl.length > 1 ? 'e' : ''}: ${outl.join(', ')}` : '');
+      + (outl.length ? ` · Umriss${outl.length > 1 ? 'e' : ''}: ${outl.join(', ')}` : '')
+      + (draw.length ? ` · Zeichnung${draw.length > 1 ? 'en' : ''}: ${draw.join(', ')}` : '');
     const sel = el.querySelector('.color');
     for (const c of MARK_COLORS) {
       const o = document.createElement('option');
@@ -1963,28 +1999,33 @@ function renderMarks() {
       setTool('fill');
       renderPalette();
     });
-    let prevLabel = m.label;
-    el.querySelector('.name').addEventListener('input', (e) => { m.label = e.target.value; renderPalette(); redraw(); save(); });
-    // v127: doppelter Teamname -> nachfragen (beim Verlassen des Feldes), sonst alter Name zurück
-    el.querySelector('.name').addEventListener('change', (e) => {
-      const dup = m.kind === 'team' && sameTeamName(P.marks, m.label, m.id);
-      if (dup && !confirm(`Gibt es schon: ${dup.label} – trotzdem?`)) {
-        m.label = prevLabel;
-        e.target.value = prevLabel;
-        renderPalette(); redraw(); save();
-        return;
-      }
-      prevLabel = m.label;
-    });
+    if (m.kind !== 'team') {
+      let prevLabel = m.label;
+      el.querySelector('.name').addEventListener('input', (e) => { m.label = e.target.value; renderPalette(); redraw(); save(); });
+      // v127: doppelter Teamname -> nachfragen (beim Verlassen des Feldes), sonst alter Name zurück
+      el.querySelector('.name').addEventListener('change', (e) => {
+        const dup = sameTeamName(P.marks, m.label, m.id);
+        if (dup && !confirm(`Gibt es schon: ${dup.label} – trotzdem?`)) {
+          m.label = prevLabel;
+          e.target.value = prevLabel;
+          renderPalette(); redraw(); save();
+          return;
+        }
+        prevLabel = m.label;
+      });
+    }
     if (m.kind === 'team') {
-      // v128: Typ, Organisation, Funkrufname, Personenzahl
+      // v130.6: Typ, Organisation (Funkrufname/Name entstehen daraus automatisch), Suchhelfer
       el.querySelector('.uty').addEventListener('change', (e) => { m.ty = e.target.value; cleanUnit(m); changed(); renderMarks(); renderPalette(); });
       el.querySelector('.uorg').addEventListener('input', (e) => { m.org = e.target.value; cleanUnit(m); save(); });
-      el.querySelector('.uorg').addEventListener('change', unitSaved); // ohne Neuaufbau der Liste (Fokus bleibt im nächsten Feld)
-      el.querySelector('.ufk').addEventListener('input', (e) => { m.fk = e.target.value; cleanUnit(m); save(); });
-      el.querySelector('.ufk').addEventListener('change', unitSaved); // ohne Neuaufbau der Liste (Fokus bleibt im nächsten Feld)
-      el.querySelector('.upers').addEventListener('input', (e) => { m.pers = e.target.value; cleanUnit(m); save(); });
-      el.querySelector('.upers').addEventListener('change', unitSaved); // ohne Neuaufbau der Liste (Fokus bleibt im nächsten Feld)
+      // Funkrufname (und damit der Teamname) erst beim Verlassen des Felds neu bilden – sonst würde er
+      // bei jedem Tastendruck wechseln (die laufende Nummer hängt vom vollständigen Organisationsnamen ab)
+      el.querySelector('.uorg').addEventListener('change', (e) => {
+        m.org = e.target.value; cleanUnit(m);
+        m.fk = nextFunkrufname(m.org, P.marks, m.id);
+        if (m.fk) m.label = m.fk;
+        changed(); renderMarks();
+      });
       el.querySelector('.dog').addEventListener('input', (e) => { m.dog = e.target.value; save(); });
       el.querySelector('.helpers').addEventListener('input', (e) => { const n = parseInt(e.target.value, 10); if (n > 0) m.helpers = n; else delete m.helpers; save(); });
     }
@@ -2238,8 +2279,10 @@ $('quick-marks').addEventListener('click', () => {
   const zoomAt = (e) => {
     const r = track.getBoundingClientRect();
     const f = 1 - Math.max(0, Math.min(1, (e.clientY - r.top - 6) / (r.height - 12)));
-    const z = Math.round(map.getMinZoom() + f * (map.getMaxZoom() - map.getMinZoom()));
-    if (z !== map.getZoom()) map.setZoom(z, { animate: !dragging });
+    // v130.5: stufenlos – nur beim Klicken/Loslassen (nicht beim Ziehen) auf ganze Stufe einrasten
+    const raw = map.getMinZoom() + f * (map.getMaxZoom() - map.getMinZoom());
+    const z = dragging ? raw : Math.round(raw);
+    if (Math.abs(z - map.getZoom()) > 0.001) map.setZoom(z, { animate: !dragging });
   };
   let dragging = false;
   track.addEventListener('pointerdown', (e) => { dragging = true; track.setPointerCapture(e.pointerId); zoomAt(e); });
@@ -3435,15 +3478,78 @@ function meetDialog() {
   });
 }
 // v123: Auswahl Auto / zu Fuß für ein Ziel; die Route öffnet sich in Google Maps bzw. der Karten-App (Start ist der aktuelle Standort)
+// v130.2: zusätzlich „🧭 Kompass (Luftlinie)“ – ohne Straßen/Internet, direkt zum Punkt
 function navChooser(label, lat, lon) {
   return openDlg((box, close) => {
     dlgHead(box, `🧭 Navigieren zu ${label}`, `${Number(lat).toFixed(5)}, ${Number(lon).toFixed(5)}`);
     box.querySelector('h2').style.overflowWrap = 'anywhere';
     dlgButton(box, '🚗 Auto', 'primary', () => { close(true); openLink(navUrl(lat, lon, 'driving')); });
     dlgButton(box, '🚶 Zu Fuß', '', () => { close(true); openLink(navUrl(lat, lon, 'walking')); });
+    dlgButton(box, '🧭 Kompass (Luftlinie)', '', () => { close(true); openCompassNav(label, lat, lon); });
     dlgButton(box, 'Abbrechen', '', () => close(false));
   });
 }
+// v130.2: Kompass-Navigation (Luftlinie) – Entfernung und Richtung zum Ziel, live aus GPS und (falls vorhanden)
+// dem Kompass des Handys; ohne Kompass zeigt der Pfeil die Gradzahl ab Norden (Handy mit der Oberkante nach Norden halten).
+let navWatchId = null;
+let navOriOn = false;
+let navFallbackTimer = null;
+function navOri(e) {
+  let h = null;
+  if (typeof e.webkitCompassHeading === 'number' && !Number.isNaN(e.webkitCompassHeading)) h = e.webkitCompassHeading;
+  else if ((e.absolute || e.type === 'deviceorientationabsolute') && e.alpha != null) h = 360 - e.alpha;
+  if (h == null) return;
+  const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+  navHeading = (((h + ang) % 360) + 360) % 360;
+  clearTimeout(navFallbackTimer);
+  navUpdateNav();
+}
+let navHeading = null;
+let navTarget = null; // { label, lat, lon }
+function navStop() {
+  if (navWatchId !== null) { navigator.geolocation.clearWatch(navWatchId); navWatchId = null; }
+  if (navOriOn) { window.removeEventListener('deviceorientationabsolute', navOri); window.removeEventListener('deviceorientation', navOri); navOriOn = false; }
+  clearTimeout(navFallbackTimer);
+  navTarget = null;
+  navHeading = null;
+}
+function navUpdateNav() {
+  if (!navTarget) return;
+  const from = lastPos || (map ? [map.getCenter().lat, map.getCenter().lng] : null);
+  if (!from) { $('nav-read').textContent = 'Standort wird gesucht …'; return; }
+  const m = distance(from[0], from[1], navTarget.lat, navTarget.lon);
+  const deg = bearingDeg(from[0], from[1], navTarget.lat, navTarget.lon);
+  $('nav-dist').textContent = fmtDist(m);
+  $('nav-needle').style.transform = `rotate(${navNeedleDeg(deg, navHeading)}deg)`;
+  $('nav-read').textContent = navHeading == null
+    ? `Richtung ${compass(deg)} (${Math.round(deg)}°) ab Norden – ohne Kompass: Handy-Oberkante nach Norden halten`
+    : `Richtung ${compass(deg)} (${Math.round(deg)}°)${!lastPos ? ' · Standort: Kartenmitte (kein GPS)' : ''}`;
+}
+async function openCompassNav(label, lat, lon) {
+  navStop();
+  navTarget = { label, lat, lon };
+  $('nav-title').textContent = `🧭 Kompass zu ${label}`;
+  $('navmeter').hidden = false;
+  $('nav-dist').textContent = '–';
+  $('nav-read').textContent = 'Standort wird gesucht …';
+  $('nav-needle').style.transform = 'rotate(0deg)';
+  navUpdateNav();
+  if (navigator.geolocation) {
+    navWatchId = navigator.geolocation.watchPosition((pos) => {
+      lastPos = [pos.coords.latitude, pos.coords.longitude];
+      navUpdateNav();
+    }, () => {}, { enableHighAccuracy: true, maximumAge: 2000 });
+  }
+  if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try { await DeviceOrientationEvent.requestPermission(); } catch { /* dann ohne Kompass */ }
+  }
+  if (!navTarget) return; // Fenster inzwischen geschlossen
+  window.addEventListener('deviceorientationabsolute', navOri);
+  window.addEventListener('deviceorientation', navOri);
+  navOriOn = true;
+  navFallbackTimer = setTimeout(() => { if (navHeading == null) navUpdateNav(); }, 1500);
+}
+$('nav-cancel').addEventListener('click', () => { navStop(); $('navmeter').hidden = true; });
 // v123: Knopf „🧭 Navigieren“ in Objekt-Fenstern (nur mit gültigem Ziel)
 // (schließt das Fenster wie „Abbrechen“ mit cancelVal und öffnet dann die Auswahl)
 function dlgNavButton(box, close, cancelVal, label, lat, lon) {
@@ -3641,7 +3747,7 @@ function hfMarkDialog(pos, where) {
       dlgButton(list, `${ico} ${label}`, '', () => {
         ensureHf();
         const text = `${ico} ${label} ${hhmm(Date.now())}${note.value.trim() ? `: ${note.value.trim()}` : ''}`;
-        P.items.push({ kind: 'text', color: hfColor(), lat: pos.lat, lon: pos.lon, text, t: Date.now() });
+        P.items.push({ kind: 'text', color: hfColor(), lat: pos.lat, lon: pos.lon, text, t: Date.now(), marker: true }); // v130.2: immer sichtbar, großes Symbol
         changed();
         close(true);
         // v116: „✅ Fund“ geht zusätzlich sofort live an die Einsatzleitung (wie „📍 Standort melden → 🟢 Person gefunden“).
@@ -4120,6 +4226,21 @@ $('send-copy').addEventListener('click', async () => {
 });
 // Übersicht der Einsatzleitung: welches Team hat welchen Auftrag, seit wann, kamen Rückmeldungen?
 const SENT_QUIET = 60 * 60e3; // so lange ohne Rückmeldung: orange markieren
+// v130.4: Pausenzeit bzw. „noch kein Auftrag“ + Anzahl/Gesamtzeit abgeschlossener Aufträge eines Teams
+// (für „Teams ohne Auftrag“ – läuft gerade kein Auftrag, zeigt, wie lange die Pause schon dauert)
+function teamClockText(teamId) {
+  const c = teamClock(P, teamId);
+  const now = Date.now();
+  const stats = c.count ? `${c.count} Auftrag${c.count === 1 ? '' : 'e'} bisher, insgesamt ${durText(c.totalMs)}` : '';
+  if (c.state === 'new') return 'Noch keinen Auftrag gehabt';
+  if (c.state === 'pause') return `😴 Pause seit ${hhmm(c.since)} (${sinceText(c.since, now)})${stats ? ` · ${stats}` : ''}`;
+  return stats; // 'waiting'/'active' kommen hier nicht vor (Team hat dann einen laufenden Auftrag, s.u.)
+}
+// v130.4: Anzahl/Gesamtzeit früherer Aufträge eines Teams, als Zusatzzeile unter einer laufenden Auftragskarte
+function teamStatsText(teamId) {
+  const c = teamClock(P, teamId);
+  return c.count ? `Bisher ${c.count} Auftrag${c.count === 1 ? '' : 'e'}, insgesamt ${durText(c.totalMs)}` : '';
+}
 function renderSentList() {
   renderTeamBar();
   const box = $('sent-list');
@@ -4135,10 +4256,11 @@ function renderSentList() {
     for (const w of wo) {
       const d = document.createElement('div');
       d.className = 'sent-card wait';
-      d.innerHTML = '<b><i></i><span></span></b><div class="what"></div>';
+      d.innerHTML = '<b><i></i><span></span></b><div class="what"></div><div class="tclock"></div>';
       d.querySelector('i').style.background = w.team.color;
       d.querySelector('b span').textContent = `${typeIcon(w.team)} ${w.team.label}${w.team.dog ? ` – ${w.team.dog}` : ''}`;
       d.querySelector('.what').textContent = [w.cells && `${w.cells} Feld${w.cells === 1 ? '' : 'er'}`, w.areas && `${w.areas} Umriss${w.areas === 1 ? '' : 'e'}`].filter(Boolean).join(' · ');
+      d.querySelector('.tclock').textContent = teamClockText(w.team.id); // v130.4: Pausenzeit bzw. „noch kein Auftrag“, Anzahl/Gesamtzeit
       const nb = document.createElement('button');
       nb.className = 'mini';
       nb.textContent = '📲 Auftrag erstellen';
@@ -4181,6 +4303,11 @@ function renderSentList() {
     const what = x.what || allGrids(P).filter((g) => (x.grids || []).includes(g.id)).map((g) => gridLabel(P, g)).join(', ');
     d.querySelector('.what').textContent = what || 'Auftrag';
     d.querySelector('.since').textContent = acc ? `📲 Auftrag seit ${hhmm(x.acc)} (${sinceText(x.acc, now)}) – übernommen` : `⏳ QR erstellt ${hhmm(x.at)} – noch nicht übernommen`;
+    // v130.4: bisherige Aufträge/Gesamtzeit dieses Teams – hilft abzuschätzen, ob der Hund noch kann
+    if (acc && !fini) {
+      const stats = teamStatsText(x.teamId);
+      if (stats) { const sn = document.createElement('div'); sn.className = 'since tstats'; sn.textContent = stats; d.querySelector('.since').insertAdjacentElement('afterend', sn); }
+    }
     const n = x.n || (x.last ? 1 : 0);
     d.querySelector('.back').textContent = !acc ? 'Gilt erst als vergeben, wenn das Team ihn übernommen hat.' : x.last
       ? `📥 ${n} Rückmeldung${n === 1 ? '' : 'en'}, zuletzt ${hhmm(x.last)} (vor ${sinceText(x.last, now)})${x.lastSum ? ` – ${x.lastSum}` : ''}`
@@ -4846,6 +4973,14 @@ async function flushStatus() {
   if (!$('dlg').hidden && $('dlg-box').querySelector('.st-line')) updateStatusLine();
   if (db.mode === 'el' && P && !$('panel-status').hidden) renderStatusPanel();
 }
+// v130: Karte auf eine Punktmenge (Zusatz der EL) zoomen
+function showPts(pts) {
+  const ok = (pts || []).filter((q) => q && Number.isFinite(q[0]) && Number.isFinite(q[1]));
+  if (!ok.length) return;
+  closePanels();
+  if (ok.length === 1) map.setView(ok[0], Math.max(map.getZoom(), 16));
+  else map.fitBounds(ok, { padding: [60, 60], maxZoom: 17 });
+}
 // ---- v117: Hundeführer holt Quittungen und Nachrichten der Einsatzleitung ab ----
 let hfPollBusy = false;
 let elPrioOpen = false;
@@ -4895,7 +5030,15 @@ async function pollHf() {
       const urgentIds = new Set(hfLog().filter((m) => isUrgent(m)).map((m) => m.id));
       if (fresh.some((m) => m.s === 'q' && urgentIds.has(m.ref))) toast('✓ von der Einsatzleitung gesehen', 6000);
       const els = fresh.filter((m) => m.s === 'el');
-      if (els.length) {
+      // v130: Zusätze (Punkte, Umrisse, Orte …) auf die Karte übernehmen
+      const zs = els.filter(isZusatz);
+      const zpts = [];
+      for (const m of zs) { const r = applyZusatz(proj, m); if (r) zpts.push(...r.pts); }
+      if (zs.length && proj === P) { redraw(); renderPois(); renderMeet(); }
+      if (zs.length && proj === P) {
+        const last = zs[zs.length - 1];
+        toastAction(`📍 Einsatzleitung: ${last.txt || ''}`.replace('📍 Einsatzleitung: 📍 ', '📍 Einsatzleitung: '), '🗺️ Zeigen', () => showPts(zpts), 15000);
+      } else if (els.length) {
         const last = els[els.length - 1];
         toast(`✉️ Einsatzleitung: ${last.txt || ''}`, 8000);
       }
@@ -4953,12 +5096,18 @@ async function hfElList() {
       rb.textContent = '✍️ Antworten';
       rb.addEventListener('click', () => close({ reply: m.id }));
       d.appendChild(rb);
+      if (isZusatz(m)) { // v130: Zusatz -> auf der Karte zeigen
+        const zb = Object.assign(document.createElement('button'), { type: 'button', className: 'mini', textContent: '🗺️ Zeigen' });
+        zb.addEventListener('click', () => close({ show: m.id }));
+        d.appendChild(zb);
+      }
       box.appendChild(d);
     }
     dlgButton(box, '✍️ Neue Nachricht an die EL', '', () => close({ reply: '' }));
     dlgButton(box, 'Schließen', 'primary', () => close(true));
   });
   if (go && go.reply !== undefined) return hfReply(go.reply || null);
+  if (go && go.show) { const m = hfElMsgs().find((x) => x.id === go.show); const r = m && applyZusatz(P, m); if (r) { redraw(); renderPois(); renderMeet(); showPts(r.pts); } return; }
   if (go) showElPrio();
 }
 // v125: Hundeführer schreibt der Einsatzleitung (Freitext oder Schnellwahl), optional als Antwort auf eine EL-Nachricht (ref)
@@ -5860,7 +6009,11 @@ async function findCommit(r, pos) {
     const tg = elTargets(P.sent, P.marks).find((q) => q.a === r.check);
     if (tg) {
       const where = formatMgrs(pos.lat, pos.lon);
-      elSend(buildElMsg({ to: tg.a, txt: checkText(m, where), prio: 1 })).catch(() => {});
+      // v130: der Ort kommt als Punkt auf die Karte des Teams (ältere Apps sehen weiter den Text mit Koordinate)
+      const z = buildZusatz(P, { to: tg.a, points: [{ lat: pos.lat, lon: pos.lon, name: `${findLabel(m.fa) || 'Fund'}${m.txt ? `: ${m.txt}` : ''}`.slice(0, 60), task: 'Bitte prüfen' }], prio: true });
+      const pm = buildElMsg({ to: tg.a, txt: checkText(m, where), prio: 1 });
+      if (z) pm.z = z.msg.z;
+      elSend(pm).catch(() => {});
       pa = ` · Prüfauftrag an ${tg.label}`;
     }
   }
@@ -5885,6 +6038,138 @@ function findToggle(m) {
 }
 $('st-funk').addEventListener('click', () => funkDialog());
 $('st-find').addEventListener('click', () => findDialog());
+$('st-zusatz').addEventListener('click', () => zusatzDialog());
+$('teams-zusatz').addEventListener('click', () => zusatzDialog()); // v130.9: zweiter Einstieg direkt bei „Teams“ – leichter zu finden als nur unter „Status“
+
+// ---- v130: Zusatz zum laufenden Auftrag – Punkte, Umrisse, Zeichnungen, Lage-Orte, Raster, B-Ort an ein Team ----
+// Geht über den Status-Server wie eine Nachricht (Warteschlange ohne Netz, Lesebestätigung, „wichtig“); kein neuer QR-Code.
+// pre: { itemIdx: [], poiIds: [], gridIds: [], meet, points: [{ lat, lon, name, task }], to, task }
+async function zusatzDialog(pre = {}) {
+  if (!canEnter()) return;
+  if (!P.live) ensureLive(P, liveUrlNow());
+  const tg = elTargets(P.sent, P.marks);
+  if (!P.live || !tg.length) return toast('Kein laufender Auftrag mit Status-Server – erst unter „Teams“ einen Auftrag per QR-Code vergeben', 7000);
+  const st = {
+    to: pre.to || (tg.length === 1 ? tg[0].a : ''), task: pre.task || '', prio: !!pre.prio,
+    items: new Set(pre.itemIdx || []), pois: new Set(pre.poiIds || []), grids: new Set(pre.gridIds || []), meet: !!pre.meet,
+    points: (pre.points || []).map((x) => ({ ...x })),
+  };
+  // Meldungen mit Ort (Funde, Hinweise …) lassen sich als Punkt mitschicken
+  const spots = (P.live.msgs || []).filter((m) => Number.isFinite(m.lat) && Number.isFinite(m.lon) && !m.gone).slice(-30).reverse();
+  for (;;) {
+    const r = await openDlg((box, close) => {
+      dlgHead(box, '📍 Ort/Gebiet an Team senden', 'Kommt zusätzlich zum laufenden Auftrag auf die Karte des Hundeführers – über den Status-Server, ohne neuen QR-Code.');
+      const sel = dlgField(box, 'An', document.createElement('select'));
+      sel.id = 'zus-to';
+      sel.add(new Option('– Team wählen –', ''));
+      for (const t of tg) sel.add(new Option(t.label, t.a));
+      sel.add(new Option('📢 Alle Teams', EL_ALL));
+      sel.value = st.to;
+      sel.addEventListener('change', () => { st.to = sel.value; });
+      const task = dlgField(box, 'Was soll dort geschehen?', Object.assign(document.createElement('textarea'), { id: 'zus-task', rows: 2, maxLength: 200, value: st.task, placeholder: 'z. B. Bitte Böschung mit Hund prüfen und Stand melden' }));
+      task.addEventListener('input', () => { st.task = task.value; });
+      const group = (title) => { const h = document.createElement('h3'); h.className = 'zus-h'; h.textContent = title; box.appendChild(h); };
+      const check = (label, on, fn) => {
+        const l = document.createElement('label');
+        l.className = 'check';
+        const c = Object.assign(document.createElement('input'), { type: 'checkbox', checked: on });
+        c.addEventListener('change', () => fn(c.checked));
+        const sp = document.createElement('span');
+        sp.textContent = label;
+        l.append(c, sp);
+        box.appendChild(l);
+        return c;
+      };
+      // neue Punkte (auf der Karte gesetzt) mit Name und eigener Aufgabe
+      group('📍 Neue Punkte');
+      st.points.forEach((pt, i) => {
+        const row = document.createElement('div');
+        row.className = 'zus-pt';
+        const n = Object.assign(document.createElement('input'), { type: 'text', value: pt.name || '', maxLength: 60, placeholder: 'Name, z. B. Wärmequelle' });
+        n.className = 'zus-pt-name';
+        n.addEventListener('input', () => { pt.name = n.value; });
+        const tk = Object.assign(document.createElement('input'), { type: 'text', value: pt.task || '', maxLength: 200, placeholder: 'Eigene Aufgabe (sonst die oben)' });
+        tk.className = 'zus-pt-task';
+        tk.addEventListener('input', () => { pt.task = tk.value; });
+        const del = Object.assign(document.createElement('button'), { type: 'button', className: 'mini', textContent: '✕' });
+        del.addEventListener('click', () => close({ delPoint: i }));
+        row.append(n, tk, del);
+        box.appendChild(row);
+      });
+      dlgButton(box, '👆 Punkt auf der Karte setzen', '', () => close({ pick: true }));
+      if (spots.length) {
+        group('🔎 Meldungen mit Ort');
+        for (const m of spots) {
+          const key = `m:${m.id}`;
+          const name = `${hhmm(m.t)} ${m.tm || ''}: ${msgLabel(m)}${m.txt ? ` – ${m.txt}` : ''}`.slice(0, 80);
+          check(name, st.points.some((x) => x.key === key), (on) => {
+            st.points = st.points.filter((x) => x.key !== key);
+            if (on) st.points.push({ key, lat: m.lat, lon: m.lon, name: `${msgLabel(m)}${m.txt ? `: ${m.txt}` : ''}`.slice(0, 60), fromMsg: true });
+          });
+        }
+      }
+      const its = P.items.map((it, i) => ({ it, i })).filter(({ it }) => (it.kind === 'track' || it.kind === 'stroke' || it.kind === 'text') && !it.rec);
+      const seenGroup = new Set();
+      const named = its.filter(({ it }) => { if (!it.group) return true; if (seenGroup.has(it.group)) return false; seenGroup.add(it.group); return true; });
+      if (named.length) {
+        group('📐 Umrisse, Zeichnungen, Texte');
+        for (const { it, i } of named) {
+          const word = it.kind === 'track' ? 'Umriss' : it.kind === 'text' ? 'Text' : 'Zeichnung';
+          const label = `${word}: ${(it.kind === 'text' ? it.text : it.name) || '(ohne Name)'}`;
+          const idx = it.group ? P.items.map((x, k) => (x.group === it.group ? k : -1)).filter((k) => k >= 0) : [i];
+          check(label, idx.every((k) => st.items.has(k)), (on) => idx.forEach((k) => (on ? st.items.add(k) : st.items.delete(k))));
+        }
+      }
+      if ((P.pois || []).length || P.meet) {
+        group('🚐 Lage-Orte');
+        if (P.meet) check(`B-Ort${P.meet.text ? `: ${P.meet.text}` : ''}`, st.meet, (on) => { st.meet = on; });
+        for (const x of P.pois || []) check(poiName(x), st.pois.has(x.id), (on) => (on ? st.pois.add(x.id) : st.pois.delete(x.id)));
+      }
+      const gs = allGrids(P).filter((g) => g.area);
+      if (gs.length) {
+        group('# Raster');
+        for (const g of gs) check(gridLabel(P, g), st.grids.has(g.id), (on) => (on ? st.grids.add(g.id) : st.grids.delete(g.id)));
+      }
+      const pr = document.createElement('label');
+      pr.className = 'check';
+      pr.innerHTML = '<input type="checkbox" id="zus-prio"><span>❗ Wichtig (Ton und Fenster beim Hundeführer, bis „Verstanden“)</span>';
+      pr.querySelector('input').checked = st.prio;
+      pr.querySelector('input').addEventListener('change', (e) => { st.prio = e.target.checked; });
+      box.appendChild(pr);
+      dlgButton(box, '📤 Senden', 'primary', () => close({ send: true }));
+      dlgButton(box, 'Abbrechen', '', () => close(null));
+    });
+    if (!r) return;
+    if (r.delPoint != null) { st.points.splice(r.delPoint, 1); continue; }
+    if (r.pick) {
+      const pos = await new Promise((res) => pickOnMap('Auf die Karte tippen: dort liegt der Punkt', (p) => res(p)));
+      $('toast').hidden = true; // „Auf die Karte tippen …“ nicht über dem Fenster stehen lassen
+      if (pos) st.points.push({ lat: pos.lat, lon: pos.lon, name: '', task: '' });
+      continue;
+    }
+    if (!st.to) { toast('Bitte erst wählen, an welches Team'); continue; }
+    const t = tg.find((x) => x.a === st.to);
+    const out = buildZusatz(P, {
+      to: st.to, teamId: t ? t.teamId : '', itemIdx: [...st.items], poiIds: [...st.pois], gridIds: [...st.grids], meet: st.meet,
+      points: st.points.map((x) => ({ ...x, name: (x.name || '').trim() || 'Punkt' })), task: st.task, prio: st.prio,
+    });
+    if (!out) { toast('Bitte mindestens einen Punkt, ein Gebiet oder einen Ort auswählen'); continue; }
+    if (out.size > ZUSATZ_MAX) { toast('Zu viel auf einmal für den Status-Server – bitte weniger oder einfachere Zeichnungen auswählen', 7000); continue; }
+    // neue Punkte bleiben auch auf der Karte der Einsatzleitung (als Textpunkt mit Aufgabe)
+    const fresh = st.points.filter((x) => !x.fromMsg);
+    if (fresh.length) {
+      snapshot();
+      for (const x of fresh) P.items.push({ kind: 'text', color: '#c62828', text: (x.name || '').trim() || 'Punkt', lat: x.lat, lon: x.lon, ...((x.task || st.task).trim() ? { note: (x.task || st.task).trim().slice(0, 200) } : {}), t: Date.now(), marker: true }); // v130.2: immer sichtbar
+      changed();
+      redraw();
+    }
+    const ok = await elSend(out.msg);
+    if ($('panel-status').hidden === false) renderStatusPanel();
+    const who = st.to === EL_ALL ? 'alle Teams' : t ? t.label : 'das Team';
+    toast(ok ? `📤 An ${who} gesendet: ${out.parts.join(', ')}` : `📤 Wartet auf Netz – geht automatisch an ${who}`, 6000);
+    return;
+  }
+}
 
 // Auto-Abschluss: Team meldet „abgeschlossen“ mit 100 % -> Auftrag ohne Rückfrage geschlossen, Toast mit Rückgängig
 function checkAutoClose() {
@@ -5975,11 +6260,15 @@ function collapseSearch() {
   searchForm.classList.remove('open');
   $('search-input').blur();
 }
+// Suchfeld öffnen und Cursor hinein (auf dem Tablet ist es sonst eingeklappt und unsichtbar)
+function openSearch() {
+  if (isTablet() && db.mode === 'el') searchForm.classList.add('open');
+  $('search-input').focus();
+}
 $('search-form').querySelector('.searchbtn').addEventListener('click', (e) => {
   if (!isTablet() || db.mode !== 'el' || searchForm.classList.contains('open')) return;
   e.preventDefault();
-  searchForm.classList.add('open');
-  $('search-input').focus();
+  openSearch();
 });
 $('search-input').addEventListener('blur', () => {
   setTimeout(() => { if (!$('search-input').value.trim() && document.activeElement !== $('search-input')) collapseSearch(); }, 200);
@@ -6411,6 +6700,8 @@ function startStatus() {
   renderTeamBar();
   checkUnread();
   setInterval(checkUnread, 15e3); // Erinnerung bei ungelesenen Meldungen
+  // v130.4: Auftrags-/Pausenzeit der Teams laufen mit – Anzeige auffrischen, solange das Fenster offen ist
+  setInterval(() => { if (db.mode === 'el' && !$('panel-teams').hidden) renderSentList(); }, 30e3);
   checkCloseAsk();
   setInterval(checkCloseAsk, 15e3);
   window.addEventListener('online', () => { flushStatus(); pollLive(); pollElw(); pollHf(); });
@@ -7923,7 +8214,7 @@ const WIZ = {
       wizMeet = true;
       closePanels();
       setTool('meet');
-      $('search-input').focus();
+      openSearch();
       toast('Adresse oder Kreuzung oben eingeben, dann auf den genauen B-Ort tippen', 7000);
     });
     wizBtn(big, '🗺️ Auf der Karte antippen', () => {
@@ -8105,6 +8396,7 @@ function poiTextDlg(p, isNew) {
     dlgButton(box, isNew ? 'Speichern' : 'Übernehmen', 'primary', () => close({ name: name.value.trim(), desc: desc.value.trim() }));
     if (!isNew) {
       dlgNavButton(box, close, null, poiName(p), p.lat, p.lon); // v123
+      if (db.mode === 'el' && P.live && elTargets(P.sent, P.marks).length) dlgButton(box, '📤 An Team senden', '', () => close('zus')); // v130
       dlgButton(box, '🔁 Art ändern', '', () => close('cat'));
       dlgButton(box, '📍 Verschieben', '', () => close('move'));
       dlgButton(box, '🗑️ Löschen', '', () => close('delete'));
@@ -8173,6 +8465,7 @@ async function editPoi(p) {
   if (blocked(p)) return;
   const r = await poiTextDlg(p, false);
   if (!r) return;
+  if (r === 'zus') return zusatzDialog({ poiIds: [p.id] }); // v130
   if (r === 'move') {
     poiDraft = { move: p };
     closePanels();
@@ -8510,9 +8803,8 @@ function openExport() {
 }
 
 // ---------- Teilen: „An wen?“ (Empfänger), „Was?“ (Umfang) und „Wie?“ (Weg) ----------
-const SHARE_TO = ['team', 'ua', 'el', 'other'];
+const SHARE_TO = ['ua', 'el', 'other'];
 const SHARE_HINT = {
-  team: 'Hundeführer-Handy: bekommt einen Auftrag (QR-Code), die Rückmeldung kommt zurück. Vorausgewählt sind die Felder und Umrisse des Teams.',
   ua: 'Unterabschnitt: bearbeitbar ist nur das ausgewählte Gebiet, der Rest ist nur zum Ansehen (QR-Code an ein Gerät mit dieser App).',
   el: 'Weiteres EL-Tablet / Einsatzleitwagen: bekommt den ganzen Einsatz, Rückmeldungen laufen dann dort ein (QR-Code).',
   other: 'Stellen ohne die App (Polizei, Feuerwehr, Druck, Garmin, Mail …): Datei oder PDF, kein QR-Code.',
@@ -8520,39 +8812,30 @@ const SHARE_HINT = {
 let shareScope = 'all';
 let shareSel = null;
 let shareName = '';
-let shareTo = null; // 'team' | 'ua' | 'el' | 'other' – zuletzt gewählter Empfänger (pro Gerät in db.shareTo)
+let shareTo = null; // 'ua' | 'el' | 'other' – zuletzt gewählter Empfänger (pro Gerät in db.shareTo)
 let shareInit = false;
 function shareLabel() {
   if (shareScope === 'all') return 'Einsatz';
-  if (shareScope === 'team') { const t = P.marks.find((m) => m.id === $('share-team').value); return t ? t.label : 'Team'; }
   return shareName || 'Auswahl';
 }
 function openShare() {
-  const teams = P.marks.filter((m) => m.kind === 'team');
-  const ts = $('share-team');
-  const prev = ts.value;
-  ts.innerHTML = '';
-  for (const t of teams) ts.add(new Option(`${typeIcon(t)} ${t.label}${t.dog ? ` – ${t.dog}` : ''}`, t.id));
-  if (teams.some((t) => t.id === prev)) ts.value = prev;
-  if (!shareInit) { // erstes Öffnen: zuletzt gewählter Empfänger dieses Geräts (Team wird nicht gemerkt)
+  if (!shareInit) { // erstes Öffnen: zuletzt gewählter Empfänger dieses Geräts
     shareInit = true;
     if (SHARE_TO.includes(db.shareTo)) applyShareTo(db.shareTo);
   }
   // Rückkehr von der Kartenauswahl ohne passenden Empfänger -> „Sonstige“ (alle Wege außer QR)
   if (!shareTo && (shareScope === 'pick' || shareScope === 'area' || shareScope === 'areas') && shareSel) shareTo = 'other';
   if (shareTo === 'el' || shareScope === 'all') { if (shareTo) shareSel = selectAll(P); }
-  if (shareScope === 'team') shareSel = selectTeam(P, ts.value);
   renderShare();
   openPanel('panel-share');
 }
 // Empfänger setzen und den Umfang dazu sinnvoll vorbelegen
 function applyShareTo(to) {
   shareTo = to;
-  if (to === 'team') { shareScope = 'team'; shareSel = $('share-team').value ? selectTeam(P, $('share-team').value) : emptySel(); }
-  else if (to === 'el') { shareScope = 'all'; shareSel = selectAll(P); }
+  if (to === 'el') { shareScope = 'all'; shareSel = selectAll(P); }
   else if (to === 'ua') {
-    if (shareScope === 'all' || shareScope === 'team' || !shareSel) { shareScope = 'pick'; shareName = 'Auswahl'; shareSel = emptySel(); }
-  } else if (shareScope === 'team' || !shareSel) { shareScope = 'all'; shareSel = selectAll(P); }
+    if (shareScope === 'all' || !shareSel) { shareScope = 'pick'; shareName = 'Auswahl'; shareSel = emptySel(); }
+  } else if (!shareSel) { shareScope = 'all'; shareSel = selectAll(P); }
 }
 function renderShare() {
   const to = shareTo;
@@ -8560,9 +8843,7 @@ function renderShare() {
   document.querySelectorAll('#share-to button').forEach((b) => b.classList.toggle('active', b.dataset.to === to));
   document.querySelectorAll('#share-scopes button').forEach((b) => b.classList.toggle('active', b.dataset.scope === shareScope));
   document.querySelector('#share-scopes [data-scope=all]').hidden = to === 'ua';
-  const hasTeams = P.marks.some((m) => m.kind === 'team');
-  $('share-team').hidden = to !== 'team' || !hasTeams;
-  $('share-tohint').textContent = to ? (to === 'team' && !hasTeams ? 'Noch keine Teams angelegt (Teams → „+ Team“).' : SHARE_HINT[to]) : 'Zuerst wählen, an wen es geht – dann kommen die passenden Wege.';
+  $('share-tohint').textContent = to ? SHARE_HINT[to] : 'Zuerst wählen, an wen es geht – dann kommen die passenden Wege.';
   $('share-what').hidden = !to || to === 'el';
   $('share-how').hidden = !to;
   const sum = shareSel ? selSummary(P, shareSel) : '';
@@ -8617,7 +8898,6 @@ function editShareSel(start) {
   updateGpxSelBar();
   redraw();
 }
-$('share-team').addEventListener('change', () => { shareScope = 'team'; shareSel = selectTeam(P, $('share-team').value); renderShare(); });
 $('share-edit').addEventListener('click', () => {
   // ändern: die bisherige Auswahl auf der Karte weiter bearbeiten (wird zur eigenen Auswahl)
   if (shareScope !== 'pick') shareName = shareLabel();
@@ -8643,7 +8923,6 @@ $('share-qr').addEventListener('click', () => shareRun(async () => {
   if (shareTo === 'el') return handoverQr(P, true);
   if (shareTo === 'ua') ensureLive(P, liveUrlNow()); // v127: der UA bekommt den Live-Kanal des Grund-Einsatzes mit
   if (shareTo === 'ua') return handoverQr(subsetProject(P, shareSel, uaTitle(P.title, shareLabel()), { base: true }), false); // v128: nie „UA UA …“
-  if (shareTo === 'team') prefillSend(shareSel, $('share-team').value, shareScope === 'team' ? 'team' : 'pick');
 }));
 $('share-pdf').addEventListener('click', () => shareRun(async () => {
   if (shareScope === 'all') return openExport();
@@ -8656,29 +8935,6 @@ $('share-pdf').addEventListener('click', () => shareRun(async () => {
   $('share-msg').textContent = '';
   await shareFile(res.blob, safeName(shareLabel(), '.pdf'), q.title, mailText(q.title));
 }));
-// Auftrags-Fenster für Hundeführer mit der Auswahl vorbelegen
-function prefillSend(sel, teamId, fields) {
-  for (const id of ['send-grids', 'send-items', 'send-pois', 'send-prev']) $(id).innerHTML = '';
-  renderSend();
-  $('send-team').value = teamId || '';
-  for (const id of ['send-grids', 'send-items', 'send-pois', 'send-prev']) $(id).innerHTML = '';
-  renderSend();
-  for (const inp of $('send-items').querySelectorAll('input')) inp.checked = sel.items.has(P.items[Number(inp.value)]);
-  for (const inp of $('send-grids').querySelectorAll('input')) inp.checked = sel.edges.has(inp.value) || ((sel.cells.get(inp.value) || new Set()).size > 0);
-  for (const inp of $('send-pois').querySelectorAll('input')) inp.checked = [...sel.pois].some((x) => x.id === inp.value);
-  $('send-meet').checked = !!sel.meet;
-  const mode = fields || (teamId ? 'team' : 'pick');
-  if (mode === 'pick') sendPicked = Object.fromEntries([...sel.cells].map(([id, s]) => [id, new Set(s)]));
-  document.querySelector(`input[name=send-fields][value=${mode}]`).checked = true;
-  syncSendFields();
-  renderPrev(); // Spuren des vorherigen Teams im gewählten Gebiet: Team-Auftrag über Teilen nimmt sie mit
-  const picked = Object.values(sendPicked).reduce((a, x) => a + x.size, 0);
-  $('send-pickinfo').textContent = mode === 'pick' ? `${picked} Felder angetippt.` : '';
-  sendCache = null;
-  updateSendSize();
-  openPanel('panel-send');
-}
-
 // ---------- Export (PDF, GPX, Garmin-Karte): Teilen oder Speichern ----------
 // Fertige Dateien werden kurz zwischengespeichert: Der Browser erlaubt das Teilen nur
 // direkt nach einem Tipp – dauert das Erstellen zu lange, reicht dann ein zweiter Tipp.
@@ -10310,7 +10566,8 @@ async function updateSuggestions(immediate = false) {
   if (suggestAbort) suggestAbort.abort();
   const text = $('search-input').value.trim();
   const q = parseQuery(text);
-  if (!q) { closeSearch(); return; }
+  // Nur die Trefferliste schließen – das Suchfeld bleibt offen (Tablet: sonst klappt es beim ersten Buchstaben zu)
+  if (!q) { $('searchbar').hidden = true; return; }
   const local = localResult(q);
   if (local) {
     // v123: bei einem Feldnamen („C4“) zusätzlich „🧭 Navigieren zu C4“
@@ -10324,7 +10581,7 @@ async function updateSuggestions(immediate = false) {
     else showResults([cornerEntry(q)]);
     return;
   }
-  if (q.type !== 'address' || text.length < 3) { closeSearch(); return; }
+  if (q.type !== 'address' || text.length < 3) { $('searchbar').hidden = true; return; }
   const run = async () => {
     const ac = suggestAbort = new AbortController();
     const c = map.getCenter();
@@ -10595,7 +10852,7 @@ console.info(`RHS Einsatz bereit (${bridge ? 'Android-App' : 'Browser'})`);
 
 // Für Tests
 window.__app = {
-  get P() { return P; }, reportExtras, funkDialog, findDialog, checkAutoClose, get grid() { return grid; }, get db() { return db; }, get fallback() { return !!fallbackFor; }, probeBkg, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread, sentBadges,
+  get P() { return P; }, reportExtras, funkDialog, findDialog, checkAutoClose, get grid() { return grid; }, get db() { return db; }, get fallback() { return !!fallbackFor; }, probeBkg, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread, sentBadges, renderSentList,
 };
 
 // ---------- Freigabe (v113): Sperrbildschirm, Prüfung beim Status-Server ----------

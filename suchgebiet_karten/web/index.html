@@ -126,6 +126,18 @@
     </div>
   </div>
 
+  <!-- v130.2: Kompass-Navigation (Luftlinie) – zusätzlich zur Google-Maps-Route -->
+  <div id="navmeter" class="windmeter" hidden>
+    <div class="wm-box">
+      <h2 id="nav-title">🧭 Kompass</h2>
+      <p class="small">Luftlinie – führt geradeaus zum Ziel, nicht auf Wegen. Handy flach halten.</p>
+      <div class="wm-rose nav-rose"><div id="nav-needle" class="wm-needle nav-needle"><span>▲</span></div></div>
+      <div id="nav-dist" class="nav-dist">–</div>
+      <div id="nav-read" class="wm-read">Standort wird gesucht …</div>
+      <button id="nav-cancel">Schließen</button>
+    </div>
+  </div>
+
   <nav class="toolbar" aria-label="Werkzeuge">
     <button data-tool="pan" class="active" title="Karte bewegen"><span>✋</span>Bewegen</button>
     <button data-tool="pen" title="Freihand zeichnen"><span>✏️</span>Stift</button>
@@ -302,13 +314,12 @@
     <h2>📤 Teilen</h2>
     <h2 class="sub first">1. An wen?</h2>
     <div class="share-grid" id="share-to">
-      <button data-to="team"><span>🐕</span><b>Hundeführer / Team</b><small>Auftrag fürs Handy</small></button>
       <button data-to="ua"><span>🧭</span><b>Unterabschnitt (UA)</b><small>ein Gebiet bearbeiten</small></button>
       <button data-to="el"><span>🚐</span><b>EL / ELW</b><small>ganzer Einsatz</small></button>
       <button data-to="other"><span>👥</span><b>Sonstige</b><small>ohne App: Polizei, Druck, Garmin …</small></button>
     </div>
-    <select id="share-team" hidden></select>
     <p id="share-tohint" class="small"></p>
+    <p class="small">Auftrag fürs Hundeführer-Handy: unter „Teams“ → „📲 Auftrag an Hundeführer“.</p>
     <div id="share-what" hidden>
       <h2 class="sub">2. Was?</h2>
       <div class="share-grid" id="share-scopes">
@@ -426,6 +437,11 @@
       <button id="recv-scan">📷 Rückmeldung scannen</button>
       <button id="recv-paste">📋 Rückmeldung einfügen</button>
     </div>
+    <h2 class="sub">📍 Zusätzlich zum laufenden Auftrag</h2>
+    <p class="small">Noch einen Punkt, ein Gebiet, eine Zeichnung oder einen Lage-Ort nachreichen – ohne neuen QR-Code, kommt sofort auf die Karte des Hundeführers.</p>
+    <div class="row">
+      <button id="teams-zusatz">📍 Ort/Gebiet an Team senden</button>
+    </div>
     <div id="sent-list" class="small"></div>
     <button class="close">Schließen</button>
   </section>
@@ -443,6 +459,7 @@
     <div id="st-tools" class="row st-tools" hidden>
       <button id="st-funk" class="keep">✍️ Meldung für Team eintragen</button>
       <button id="st-find" class="keep">🔎 Fund/Hinweis eintragen</button>
+      <button id="st-zusatz" class="keep">📍 Ort/Gebiet an Team senden</button>
     </div>
     <details id="st-ua" class="st-det" hidden><summary>🧭 Unterabschnitte (Übersicht)</summary><div id="st-ua-body"></div></details>
     <details id="st-out" class="st-det" hidden><summary id="st-out-sum">🚶 Wer ist noch draußen?</summary><div id="st-out-body"></div></details>

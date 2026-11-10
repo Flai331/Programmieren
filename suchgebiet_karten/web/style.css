@@ -226,6 +226,7 @@ body:has(#dlg:not([hidden])) .toast { bottom: auto; top: calc(8px + env(safe-are
 .mark .swatch { width: 36px; height: 36px; border-radius: 8px; border: 2px solid #fff; box-shadow: 0 0 0 1px #999; cursor: pointer; padding: 0; }
 .mark .fields { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .mark .fields input { width: 100%; padding: 6px 8px; }
+.mark .uname { padding: 6px 8px 2px; font-weight: 600; } /* v130.6: Teamname = Funkrufname, nicht mehr editierbar */
 .mark .fields .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .panel .mark .pair label { margin: 0; font-weight: 400; }
 .mark .pair small { display: block; font-size: 11px; color: var(--muted); }
@@ -512,6 +513,10 @@ html.night.red .wx { filter: invert(1) grayscale(1) sepia(1) saturate(6) hue-rot
 .wm-str button small { display: block; font-size: 12px; color: #555; font-weight: 400; }
 html.night .windmeter { filter: invert(1) hue-rotate(180deg); }
 html.night.red .windmeter { filter: invert(1) grayscale(1) sepia(1) saturate(6) hue-rotate(-50deg) brightness(0.75); }
+/* v130.2: Kompass-Navigation (Luftlinie) */
+.nav-rose { border-color: #c62828; }
+.nav-needle span { top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 64px; line-height: 1; color: #c62828; }
+.nav-dist { text-align: center; font-size: 34px; font-weight: 800; }
 
 /* ---------- Hundeführer-Modus: nur das Nötigste, große Knöpfe ---------- */
 .hfonly { display: none !important; }
@@ -541,8 +546,11 @@ body.hf #overlay { height: calc(100% - 136px); }
   position: fixed; top: 58px; left: 72px; right: 76px; z-index: 995; background: rgba(255,255,255,0.96); border-radius: 12px;
   box-shadow: 0 1px 6px rgba(0,0,0,0.3); padding: 6px 10px; font-size: 13px; cursor: pointer; border-left: 6px solid var(--team, #d50000);
 }
-.hfinfo { padding-right: 44px; }
-.hfinfo #hfi-area { position: absolute; top: 4px; right: 6px; width: 34px; height: 34px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 18px; line-height: 1; padding: 0; cursor: pointer; }
+/* v130.1: Text links, Knöpfe rechts daneben im Raster – nichts liegt mehr über dem Text (auch ohne :has() in älteren WebViews) */
+.hfinfo { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 6px; align-items: start; }
+.hfinfo[hidden] { display: none; }
+.hfinfo b, .hfinfo span { grid-column: 1; min-width: 0; overflow-wrap: anywhere; }
+.hfinfo #hfi-area { grid-column: 3; grid-row: 1 / span 2; width: 36px; height: 36px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 18px; line-height: 1; padding: 0; cursor: pointer; }
 .hfinfo b { display: block; font-size: 14px; }
 .hfinfo span { display: block; color: #333; overflow-wrap: anywhere; }
 .hfinfo.min span { display: none; }
@@ -655,6 +663,7 @@ body.closed :is(#pc-add, #pc-new) { pointer-events: none; opacity: 0.45; }
 .sent-card b i { width: 12px; height: 12px; border-radius: 50%; flex: none; }
 .sent-card .what { margin: 2px 0; overflow-wrap: anywhere; }
 .sent-card .since, .sent-card .back { color: var(--muted, #555); }
+.sent-card .tclock { margin-top: 2px; color: var(--muted, #555); } /* v130.4: Pausenzeit/Statistik */
 html.night .sent-card.quiet, html.night .sent-card.wait { background: transparent; }
 
 /* Feld lange drücken: Team und Markierung */
@@ -755,10 +764,9 @@ html.night .st-urgent { background: transparent; color: inherit; }
 .st-row.st-el { background: #e3f2fd; border-left-color: #1565c0; margin-left: 28px; }
 .st-row.st-el.prio { background: #fff3e0; border-left-color: #e65100; }
 .tm-pop .el-msg { margin-top: 4px; }
-.hfinfo #hfi-msg { position: absolute; top: 4px; right: 46px; width: 34px; height: 34px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 18px; line-height: 1; padding: 0; cursor: pointer; }
+.hfinfo #hfi-msg { position: relative; grid-column: 2; grid-row: 1 / span 2; width: 36px; height: 36px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 18px; line-height: 1; padding: 0; cursor: pointer; }
 .hfinfo #hfi-msg.dot::after, #hfm-msgs.dot::after { content: ' ●'; color: #d50000; font-size: 14px; }
 .hfinfo #hfi-msg.dot::after { position: absolute; top: -4px; right: 0; margin: 0; }
-.hfinfo:has(#hfi-msg:not([hidden])) { padding-right: 84px; }
 .hf-el { background: #e3f2fd; border-left: 6px solid #1565c0; border-radius: 8px; margin: 5px 0; padding: 6px 8px; font-size: 14px; text-align: left; }
 .hf-el.prio { background: #fff3e0; border-left-color: #e65100; }
 .hf-el b, .hf-el span { display: block; }
@@ -881,3 +889,10 @@ html.night #dlg-box .close-open:not(.st-urgent) { background: transparent; color
 .mark .fields .pair select, .mark .fields .pair input { width: 100%; min-width: 0; box-sizing: border-box; }
 .mark .fields .pair select { font-size: 13px; padding: 6px 4px; }
 .mark .fields .pair.one { grid-template-columns: minmax(0, 1fr); }
+
+/* v130: Ort/Gebiet an Team senden */
+.zus-h { font-size: 15px; margin: 14px 0 4px; color: #444; }
+.zus-pt { display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 6px; align-items: center; margin: 4px 0; }
+.zus-pt input { min-width: 0; padding: 8px; font-size: 15px; border: 1px solid #bbb; border-radius: 6px; }
+html.night .zus-h { color: #ccc; }
+@media (max-width: 480px) { .zus-pt { grid-template-columns: 1fr auto; } .zus-pt .zus-pt-task { grid-column: 1 / -1; grid-row: 2; } }

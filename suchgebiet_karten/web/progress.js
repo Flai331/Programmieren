@@ -33,7 +33,7 @@ const cellMap = (p) => {
 // v125: Kontakte haben keine Zeit – Änderung über einen Hash erkennen (p.contactsT)
 const ctHash = (p) => JSON.stringify((p.contacts || []).map(compactContact));
 // v125: Teams/Status-Marken: neues/umbenanntes Team allein ist schon „neu“ (p.marksT)
-const mkHash = (p) => JSON.stringify((p.marks || []).filter((m) => m.kind === 'team' || m.kind === 'status').map((m) => [m.id, m.label, m.ty, m.org, m.fk, m.pers])); // v128: auch Typ, Organisation, Funkruf, Personen
+const mkHash = (p) => JSON.stringify((p.marks || []).filter((m) => m.kind === 'team' || m.kind === 'status').map((m) => [m.id, m.label, m.ty, m.org, m.fk, m.helpers])); // v128: auch Typ, Organisation, Funkruf, Suchhelfer
 const gridSig = (p) => new Map(allGrids(p).map((g) => [g.id, JSON.stringify([g.area, g.cellM])]));
 
 // Ausgangsstand merken (vor einer Bearbeitung)

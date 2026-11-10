@@ -193,7 +193,7 @@ test('Beim EL: Team mit schon benutztem Namen bekommt „ (UA Nord)“, gleiche 
 });
 
 // ---------- Punkt 4 + 5: QR erneut, Teams ohne Auftrag, Zuordnung beim Auftrag ----------
-import { selFromSent, rebuildAssignment, teamsWithoutOrder, planAssign, applyAssign, planCount, assignText } from '../web/sentops.js';
+import { selFromSent, rebuildAssignment, teamsWithoutOrder, planAssign, applyAssign, planCount, assignText, teamClock } from '../web/sentops.js';
 import { buildAssignment } from '../web/share.js';
 
 function mitAuftrag() {
@@ -226,12 +226,90 @@ test('QR erneut: gleiche Auftrags-ID, gleicher Live-Kanal, gleiche Gebiete, nich
   assert.deepEqual(selFromSent(q, q.sent[0]).picked, { G1: ['1,1'] });
 });
 
-test('Teams mit Gebieten, aber ohne Auftrag', () => {
+test('Teams ohne Auftrag: jedes freie Team, auch ganz ohne zugeteilte Gebiete', () => {
   const { p } = mitAuftrag();
+  // v130.8: T2 hat noch gar keine Felder/Umrisse – steht trotzdem in der Liste (0 Felder, 0 Umrisse)
+  assert.deepEqual(teamsWithoutOrder(p).map((x) => [x.team.id, x.cells, x.areas]), [['T2', 0, 0]]);
   p.fills['5,5'] = 'T2';
   assert.deepEqual(teamsWithoutOrder(p).map((x) => [x.team.id, x.cells, x.areas]), [['T2', 1, 0]]);
   p.sent.push({ id: 'Z', teamId: 'T2' });
   assert.equal(teamsWithoutOrder(p).length, 0);
+});
+
+// v130.3 Bugfix: nach Abschluss + Rückmeldung soll das Team wieder bei „Teams ohne Auftrag“ auftauchen
+test('Teams ohne Auftrag: abgeschlossener Auftrag zählt nicht mehr, Team taucht wieder auf', () => {
+  const { p } = mitAuftrag();
+  p.fills['5,5'] = 'T2';
+  p.sent.push({ id: 'Z', teamId: 'T2' });
+  assert.equal(teamsWithoutOrder(p).length, 0); // läuft noch: nicht in der Liste
+  p.sent[p.sent.length - 1].done = 12345; // abgeschlossen + zurückgemeldet
+  assert.deepEqual(teamsWithoutOrder(p).map((x) => [x.team.id, x.cells, x.areas]), [['T2', 1, 0]]);
+});
+
+// v130.4: Team-Uhren (Auftragszeit seit Übernahme, Pausenzeit seit letztem Abschluss, Anzahl + Gesamtzeit)
+test('teamClock: noch nie ein Auftrag', () => {
+  const { p } = mitAuftrag();
+  assert.deepEqual(teamClock(p, 'T2'), { state: 'new', since: null, count: 0, totalMs: 0 });
+});
+
+test('teamClock: Auftrag raus, noch nicht übernommen ("waiting")', () => {
+  const { p } = mitAuftrag();
+  p.sent.push({ id: 'Z', teamId: 'T2', at: 10000, acc: 0 });
+  const c = teamClock(p, 'T2');
+  assert.equal(c.state, 'waiting');
+  assert.equal(c.since, 10000);
+  assert.equal(c.count, 0);
+});
+
+test('teamClock: aktiv seit Übernahme ("active") – Auftragszeit läuft', () => {
+  const { p } = mitAuftrag();
+  p.sent.push({ id: 'Z', teamId: 'T2', at: 10000, acc: 20000 });
+  const c = teamClock(p, 'T2');
+  assert.equal(c.state, 'active');
+  assert.equal(c.since, 20000); // seit acc, nicht seit at
+});
+
+test('teamClock: nach Abschluss läuft die Pause, Gesamtzeit/Anzahl zählen den fertigen Auftrag', () => {
+  const { p } = mitAuftrag();
+  p.sent.push({ id: 'Z', teamId: 'T2', at: 0, acc: 10000, done: 70000 }); // 60000 ms Auftragszeit
+  const c = teamClock(p, 'T2');
+  assert.equal(c.state, 'pause');
+  assert.equal(c.since, 70000); // seit done
+  assert.equal(c.count, 1);
+  assert.equal(c.totalMs, 60000);
+});
+
+test('teamClock: neuer Auftrag angenommen -> Pause endet, Auftragszeit läuft wieder (ohne dass Altes verloren geht)', () => {
+  const { p } = mitAuftrag();
+  p.sent.push({ id: 'Z1', teamId: 'T2', at: 0, acc: 10000, done: 70000 }); // 60000 ms
+  p.sent.push({ id: 'Z2', teamId: 'T2', at: 80000, acc: 90000 });
+  const c = teamClock(p, 'T2');
+  assert.equal(c.state, 'active');
+  assert.equal(c.since, 90000); // seit dem neuen acc
+  assert.equal(c.count, 1); // nur der abgeschlossene zählt
+  assert.equal(c.totalMs, 60000);
+});
+
+test('teamClock: Abschluss rückgängig gemacht ("↩ Wieder öffnen") -> Auftragszeit läuft automatisch weiter', () => {
+  const { p } = mitAuftrag();
+  p.sent.push({ id: 'Z', teamId: 'T2', at: 0, acc: 10000, done: 40000 });
+  assert.equal(teamClock(p, 'T2').state, 'pause');
+  delete p.sent[p.sent.length - 1].done; // reopenSent()
+  const c = teamClock(p, 'T2');
+  assert.equal(c.state, 'active');
+  assert.equal(c.since, 10000); // seit dem ursprünglichen acc, nicht neu gestartet
+  assert.equal(c.count, 0); // zählt nicht mehr als abgeschlossen
+});
+
+test('teamClock: zwei abgeschlossene Aufträge summieren sich', () => {
+  const { p } = mitAuftrag();
+  p.sent.push({ id: 'Z1', teamId: 'T2', at: 0, acc: 0, done: 60000 }); // ohne acc: Auftragszeit ab at
+  p.sent.push({ id: 'Z2', teamId: 'T2', at: 100000, acc: 110000, done: 170000 }); // 60000 ms
+  const c = teamClock(p, 'T2');
+  assert.equal(c.count, 2);
+  assert.equal(c.totalMs, 120000);
+  assert.equal(c.state, 'pause');
+  assert.equal(c.since, 170000);
 });
 
 test('Auftrag: freie Umrisse/Felder werden dem Team zugeordnet, fremde bleiben', () => {

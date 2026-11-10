@@ -15,7 +15,7 @@ import { newProject, normalizeProject } from '../web/store.js';
 const T = (h, m = 0) => new Date(2026, 10, 5, h, m).getTime();
 const NOW = T(22, 0);
 const marks = () => [
-  { id: 'K', kind: 'team', label: 'Kette FF', color: '#1565c0', ty: 'kette', org: 'FF', pers: 6 },
+  { id: 'K', kind: 'team', label: 'Kette FF', color: '#1565c0', ty: 'kette', org: 'FF', helpers: 5 },
   { id: 'H', kind: 'team', label: 'Team 1', color: '#2e7d32', dog: 'Rex' },
 ];
 const sent = () => [{ id: 'AK', teamId: 'K', team: 'Kette FF', at: T(17, 30), acc: 0 }, { id: 'AH', teamId: 'H', team: 'Team 1', at: T(17, 40), acc: T(17, 45) }];

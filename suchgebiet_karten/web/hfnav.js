@@ -60,6 +60,20 @@ export function boxCenter(pts) {
   return [(Math.min(...la) + Math.max(...la)) / 2, (Math.min(...lo) + Math.max(...lo)) / 2];
 }
 
+// v130.2: Kompass-Navigation (Luftlinie) – zusätzlich zur Google-Maps-Route, auch ohne Internet/Straße nutzbar.
+// Drehwinkel für die Pfeil-Anzeige: targetBearing (° zum Ziel, von Norden) minus die Blickrichtung des Handys
+// (device Kompass-Heading, ° von Norden). Ohne Kompass (heading = null) zeigt der Pfeil die Gradzahl von Norden
+// (Handy liegt dann gedanklich mit der Oberkante nach Norden) – damit bleibt die Anzeige auch ohne Sensor nützlich.
+export function navNeedleDeg(targetBearing, heading) {
+  const h = Number.isFinite(heading) ? heading : 0;
+  return ((targetBearing - h) % 360 + 360) % 360;
+}
+// Entfernung „342 m“ / „1,4 km“
+export function fmtDist(m) {
+  if (!Number.isFinite(m)) return '';
+  return m >= 1000 ? `${(m / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km` : `${Math.round(m)} m`;
+}
+
 // v123: Mitte eines Rasterfelds wie „C4“ (grid = makeGrid(...)) -> [lat, lon] oder null (kein Feldname / außerhalb)
 export function cellCenter(grid, label) {
   const q = parseCell(label);

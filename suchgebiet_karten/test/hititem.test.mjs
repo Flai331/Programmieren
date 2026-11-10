@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hitItem } from '../web/render.js';
+import { hitItem, markHidden } from '../web/render.js';
 
 const toPx = (lat, lon) => [lon, lat]; // Testkoordinaten = Pixel
 const items = [{ kind: 'text', lat: 100, lon: 100, text: 'Fundstelle', color: '#000' }];
@@ -39,4 +39,15 @@ test('weit herausgezoomt: Texte nicht antippbar, Umrisse schon', () => {
   const tr = { kind: 'track', w: 4, pts: [[200, 100], [200, 300]] };
   assert.equal(hitItem(items, toPx, 102, 101, 12, 0), -1);
   assert.equal(hitItem([...items, tr], toPx, 200, 202, 12, 0), 1);
+});
+
+// v130.2: wichtige Punkte (HF-Markierungen, von der EL zusätzlich geschickte Punkte) bleiben auch weit
+// herausgezoomt sichtbar und antippbar – nur gewöhnliche Texte/Zeichnungen werden ausgeblendet.
+test('weit herausgezoomt: markierte Punkte bleiben sichtbar und antippbar', () => {
+  const marked = [{ kind: 'text', lat: 100, lon: 100, text: 'Wärmequelle', color: '#000', marker: true }];
+  assert.equal(markHidden(marked[0], 0), false);
+  assert.equal(markHidden(items[0], 0), true); // normaler Text ohne marker-Flag: wie bisher ausgeblendet
+  assert.equal(hitItem(marked, toPx, 102, 101, 12, 0), 0);
+  const strokeMarked = { kind: 'stroke', w: 4, pts: [[200, 100], [200, 300]], marker: true };
+  assert.equal(markHidden(strokeMarked, 0), false);
 });

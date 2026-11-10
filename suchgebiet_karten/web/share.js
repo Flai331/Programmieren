@@ -108,14 +108,14 @@ const STATUS_CODES = { abgesucht: 'a', 'teilweise abgesucht': 't', 'nicht begehb
 const CODE_STATUS = Object.fromEntries(Object.entries(STATUS_CODES).map(([k, v]) => [v, k]));
 
 // Zeichnung/Umriss/Text -> kompakt (nur, was der Hundeführer braucht)
-function packItem(it, tol) {
-  if (it.kind === 'text') return { k: 'x', c: it.color, n: it.text, p: encodePts([[it.lat, it.lon]]) };
+export function packItem(it, tol) {
+  if (it.kind === 'text') return { k: 'x', c: it.color, n: it.text, p: encodePts([[it.lat, it.lon]]), ...(it.note ? { d: it.note } : {}) };
   if (!it.pts || it.pts.length < 1) return null;
   return { k: it.kind === 'track' ? 't' : 's', c: it.color, n: it.name || '', o: it.open ? 1 : 0, p: encodePts(simplify(it.pts, tol)), ...(it.note ? { d: it.note } : {}) };
 }
-function unpackItem(x, extra = {}) {
+export function unpackItem(x, extra = {}) {
   const pts = decodePts(x.p);
-  if (x.k === 'x') return { kind: 'text', color: x.c, lat: pts[0][0], lon: pts[0][1], text: x.n, ...extra };
+  if (x.k === 'x') return { kind: 'text', color: x.c, lat: pts[0][0], lon: pts[0][1], text: x.n, ...(x.d ? { note: x.d } : {}), ...extra };
   if (x.k === 't') return { kind: 'track', color: x.c, name: x.n, w: 4, open: !!x.o, pts, ...(x.d ? { note: x.d } : {}), ...extra };
   return { kind: 'stroke', color: x.c, name: x.n, w: 4, pts, ...extra };
 }
