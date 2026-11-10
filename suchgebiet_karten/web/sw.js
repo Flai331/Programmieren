@@ -1,6 +1,6 @@
 // Service Worker: App offline verfügbar machen und angesehene Kartenkacheln
 // zwischenspeichern (hilft bei schlechtem Empfang im Gelände).
-const VERSION = 'v130.5';
+const VERSION = 'v130.6';
 const APP_CACHE = `suchgebiet-app-${VERSION}`;
 const TILE_CACHE = 'suchgebiet-tiles';
 const MAX_TILES = 4000;

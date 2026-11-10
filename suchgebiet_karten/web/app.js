@@ -21,7 +21,7 @@ import { MSG_VIEW, MSG_DELETE, ownTeamMsgs, isUA, lockOf, canEdit, canDelete, ca
 import { isDone, openPoints, guardApplies, msgPct, closeMsg, sentPct, closeAsk, autoCloseDue, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
 import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts } from './elw.js'; // v124
 import { nextTeamLabel, uaPrefix, sameTeamName, uaName, uaTitle, joinUaNames, renameUa } from './uateam.js';
-import { typeIcon, typeText, unitType, isDog, persons, unitLine, cleanUnit, UNIT_TYPES, ORGS, forcesFromTeams, forcesText, whoText } from './units.js'; // v128
+import { typeIcon, typeText, unitType, isDog, unitLine, cleanUnit, nextFunkrufname, UNIT_TYPES, ORGS, forcesFromTeams, forcesText, whoText } from './units.js'; // v128
 import { FUNK_KINDS, funkKind, funkLabel, timeOfDay, funkTargets, buildFunkMsg, addFunkMsg, buildFindMsg, msgSource } from './funk.js'; // v128
 import { FIND_KINDS, findKind, findLabel, FIND_A, forAllUa, checkText, isFind, findStatusText } from './finds.js'; // v128
 import { buildZusatz, applyZusatz, isZusatz, ZUSATZ_MAX } from './zusatz.js'; // v130
@@ -80,7 +80,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.5';
+const APP_VERSION = 'v130.6';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1904,14 +1904,6 @@ function makeSortable(list, onDone) {
     });
   });
 }
-// v128: Typ-Felder gespeichert (Änderung für „Fortschritt“ merken), ohne die Liste neu aufzubauen
-function unitSaved() {
-  P.updated = Date.now();
-  stamp();
-  renderPalette();
-  redraw();
-  save();
-}
 function renderMarks() {
   const box = $('mark-list');
   box.innerHTML = '';
@@ -1928,23 +1920,22 @@ function renderMarks() {
       <span class="grip" title="Ziehen zum Verschieben">≡</span>
       <button class="swatch" title="Zum Einfärben auswählen"></button>
       <div class="fields">
-        <input type="text" class="name" placeholder="${m.kind === 'team' ? 'Teamname / Hundeführer' : 'Bedeutung'}">
+        ${m.kind === 'team' ? '<div class="uname" title="Automatisch: Organisation + laufende Nummer"></div>' : '<input type="text" class="name" placeholder="Bedeutung">'}
         ${m.kind === 'team' ? `<div class="pair one"><label><small>Typ</small><select class="uty" aria-label="Typ der Einheit">${UNIT_TYPES.map((t) => `<option value="${t.code}">${t.ico} ${t.label}</option>`).join('')}</select></label></div>
-        <div class="pair"><label><small>Organisation</small><input type="text" class="uorg" list="org-list" placeholder="FF, DRK, …" maxlength="30"></label><label class="upers-l"><small>Personen</small><input type="number" class="upers" min="0" inputmode="numeric" placeholder="Anzahl"></label></div>
-        <div class="pair one"><label><small>Funkrufname</small><input type="text" class="ufk" placeholder="z. B. Florian 1" maxlength="40"></label></div>
-        <div class="pair dogrow"><label><small>Hund</small><input type="text" class="dog" placeholder="Name"></label><label><small>Suchhelfer</small><input type="number" class="helpers" min="0" inputmode="numeric" placeholder="Anzahl"></label></div>` : ''}
+        <div class="pair one"><label><small>Organisation</small><input type="text" class="uorg" list="org-list" placeholder="FF, DRK, …" maxlength="30"></label></div>
+        <div class="pair dogrow"><label class="doghund"><small>Hund</small><input type="text" class="dog" placeholder="Name"></label><label><small>Suchhelfer</small><input type="number" class="helpers" min="0" inputmode="numeric" placeholder="Anzahl"></label></div>` : ''}
         <select class="color" aria-label="Farbe"></select>
         <div class="cells"></div>
       </div>
       <button class="del" title="Löschen">✕</button>`;
     el.querySelector('.swatch').style.background = m.color;
-    el.querySelector('.name').value = m.label;
     if (m.kind === 'team') {
+      el.querySelector('.uname').textContent = m.label || 'Team';
       el.querySelector('.dog').value = m.dog || ''; el.querySelector('.helpers').value = m.helpers || '';
-      el.querySelector('.uty').value = unitType(m); el.querySelector('.uorg').value = m.org || ''; el.querySelector('.ufk').value = m.fk || ''; el.querySelector('.upers').value = m.pers || '';
-      el.querySelector('.dogrow').hidden = !isDog(m); // Hund/Suchhelfer nur beim Hund-Team
-      el.querySelector('.upers-l small').textContent = isDog(m) ? 'Personen (gesamt)' : 'Personen';
-      el.querySelector('.upers').placeholder = isDog(m) ? `${persons({ ...m, pers: 0 })}` : 'Anzahl';
+      el.querySelector('.uty').value = unitType(m); el.querySelector('.uorg').value = m.org || '';
+      el.querySelector('.doghund').hidden = !isDog(m); // Hundename nur beim Hund-Team, Suchhelfer bei allen
+    } else {
+      el.querySelector('.name').value = m.label;
     }
     const outl = m.kind === 'team' ? P.items.filter((it) => it.kind === 'track' && it.to === m.id).map((it) => it.name || 'Umriss') : [];
     el.querySelector('.cells').textContent = (a && a.count ? `${a.count} Feld${a.count > 1 ? 'er' : ''}: ${a.text}` : 'keine Felder')
@@ -1969,28 +1960,33 @@ function renderMarks() {
       setTool('fill');
       renderPalette();
     });
-    let prevLabel = m.label;
-    el.querySelector('.name').addEventListener('input', (e) => { m.label = e.target.value; renderPalette(); redraw(); save(); });
-    // v127: doppelter Teamname -> nachfragen (beim Verlassen des Feldes), sonst alter Name zurück
-    el.querySelector('.name').addEventListener('change', (e) => {
-      const dup = m.kind === 'team' && sameTeamName(P.marks, m.label, m.id);
-      if (dup && !confirm(`Gibt es schon: ${dup.label} – trotzdem?`)) {
-        m.label = prevLabel;
-        e.target.value = prevLabel;
-        renderPalette(); redraw(); save();
-        return;
-      }
-      prevLabel = m.label;
-    });
+    if (m.kind !== 'team') {
+      let prevLabel = m.label;
+      el.querySelector('.name').addEventListener('input', (e) => { m.label = e.target.value; renderPalette(); redraw(); save(); });
+      // v127: doppelter Teamname -> nachfragen (beim Verlassen des Feldes), sonst alter Name zurück
+      el.querySelector('.name').addEventListener('change', (e) => {
+        const dup = sameTeamName(P.marks, m.label, m.id);
+        if (dup && !confirm(`Gibt es schon: ${dup.label} – trotzdem?`)) {
+          m.label = prevLabel;
+          e.target.value = prevLabel;
+          renderPalette(); redraw(); save();
+          return;
+        }
+        prevLabel = m.label;
+      });
+    }
     if (m.kind === 'team') {
-      // v128: Typ, Organisation, Funkrufname, Personenzahl
+      // v130.6: Typ, Organisation (Funkrufname/Name entstehen daraus automatisch), Suchhelfer
       el.querySelector('.uty').addEventListener('change', (e) => { m.ty = e.target.value; cleanUnit(m); changed(); renderMarks(); renderPalette(); });
       el.querySelector('.uorg').addEventListener('input', (e) => { m.org = e.target.value; cleanUnit(m); save(); });
-      el.querySelector('.uorg').addEventListener('change', unitSaved); // ohne Neuaufbau der Liste (Fokus bleibt im nächsten Feld)
-      el.querySelector('.ufk').addEventListener('input', (e) => { m.fk = e.target.value; cleanUnit(m); save(); });
-      el.querySelector('.ufk').addEventListener('change', unitSaved); // ohne Neuaufbau der Liste (Fokus bleibt im nächsten Feld)
-      el.querySelector('.upers').addEventListener('input', (e) => { m.pers = e.target.value; cleanUnit(m); save(); });
-      el.querySelector('.upers').addEventListener('change', unitSaved); // ohne Neuaufbau der Liste (Fokus bleibt im nächsten Feld)
+      // Funkrufname (und damit der Teamname) erst beim Verlassen des Felds neu bilden – sonst würde er
+      // bei jedem Tastendruck wechseln (die laufende Nummer hängt vom vollständigen Organisationsnamen ab)
+      el.querySelector('.uorg').addEventListener('change', (e) => {
+        m.org = e.target.value; cleanUnit(m);
+        m.fk = nextFunkrufname(m.org, P.marks, m.id);
+        if (m.fk) m.label = m.fk;
+        changed(); renderMarks();
+      });
       el.querySelector('.dog').addEventListener('input', (e) => { m.dog = e.target.value; save(); });
       el.querySelector('.helpers').addEventListener('input', (e) => { const n = parseInt(e.target.value, 10); if (n > 0) m.helpers = n; else delete m.helpers; save(); });
     }

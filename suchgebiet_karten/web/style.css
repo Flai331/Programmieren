@@ -226,6 +226,7 @@ body:has(#dlg:not([hidden])) .toast { bottom: auto; top: calc(8px + env(safe-are
 .mark .swatch { width: 36px; height: 36px; border-radius: 8px; border: 2px solid #fff; box-shadow: 0 0 0 1px #999; cursor: pointer; padding: 0; }
 .mark .fields { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .mark .fields input { width: 100%; padding: 6px 8px; }
+.mark .uname { padding: 6px 8px 2px; font-weight: 600; } /* v130.6: Teamname = Funkrufname, nicht mehr editierbar */
 .mark .fields .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .panel .mark .pair label { margin: 0; font-weight: 400; }
 .mark .pair small { display: block; font-size: 11px; color: var(--muted); }

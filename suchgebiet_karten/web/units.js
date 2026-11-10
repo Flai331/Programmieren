@@ -1,9 +1,13 @@
 // v128: Einheiten (Teams) mit Typ, Organisation, Funkrufname und Personenzahl. Reine Logik ohne DOM, testbar.
 // Team-Felder (alle optional, ältere Teams ohne Felder gelten als Hund):
-//   ty   – Typ: 'hund' (Standard, wird nicht gespeichert), 'kette', 'kfz', 'drohne'
-//   org  – Organisation (FF, BW, DRK, JUH, ASB, MHD, THW, Polizei oder frei)
-//   fk   – Funkrufname („Florian Celle 1/46“)
-//   pers – Personenzahl der Einheit (Hund: sonst 1 Hundeführer + helpers)
+//   ty      – Typ: 'hund' (Standard, wird nicht gespeichert), 'kette', 'kfz', 'drohne'
+//   org     – Organisation (FF, BW, DRK, JUH, ASB, MHD, THW, Polizei oder frei)
+//   fk      – Funkrufname, automatisch gebildet: Organisation + je Organisation eine laufende Nummer (z. B. „DRK 2“)
+//   helpers – Anzahl Suchhelfer (ohne Führer der Einheit)
+// v130.6: Personenzahl ist nie mehr frei eintragbar – immer 1 (Führer der Einheit, z. B. Hundeführer) + Suchhelfer.
+// Funkrufname und Teamname (label) entstehen automatisch aus der Organisation und werden einmal beim Setzen/Ändern
+// der Organisation gebildet und gespeichert (nicht bei jeder Anzeige neu berechnet) – so bleibt der Name stabil,
+// auch wenn auf einem anderen Gerät (z. B. im Unterabschnitt) nur ein Teil der Teams bekannt ist.
 // Im Auftrag (QR) heißen sie kurz: tm.ty, tm.o, tm.fk, tm.n – nur gesetzte Felder.
 
 export const UNIT_TYPES = [
@@ -27,13 +31,10 @@ export const whoText = (ty) => (TYPES[ty] || TYPES.hund).who;
 // „Hund zeigt an“ je Typ (für die Meldungsarten und Texte)
 export const anzeigeText = (ty) => (TYPES[ty] || TYPES.hund).anzeige;
 
-// Personenzahl: gesetzte Zahl, sonst beim Hund Führer + Suchhelfer, sonst 0 (unbekannt)
+// Personenzahl: immer 1 (Führer der Einheit) + Suchhelfer
 export function persons(m) {
   if (!m) return 0;
-  const n = Math.floor(Number(m.pers));
-  if (n > 0) return n;
-  if (isDog(m)) return 1 + Math.max(0, Math.floor(Number(m.helpers)) || 0);
-  return Math.max(0, Math.floor(Number(m.helpers)) || 0);
+  return 1 + Math.max(0, Math.floor(Number(m.helpers)) || 0);
 }
 
 // Kurzzeile unter dem Teamnamen: „🚶 Kette · FF · „Florian 1“ · 6 Pers.“
@@ -48,9 +49,22 @@ export function cleanUnit(m) {
   if (!m) return m;
   if (!TYPES[m.ty] || m.ty === 'hund') delete m.ty;
   for (const k of ['org', 'fk']) { const v = String(m[k] == null ? '' : m[k]).trim(); if (v) m[k] = v; else delete m[k]; }
-  const n = Math.floor(Number(m.pers));
-  if (n > 0) m.pers = n; else delete m.pers;
+  delete m.pers; // v130.6: Personenzahl nicht mehr frei eintragbar (immer 1 + Suchhelfer)
   return m;
+}
+
+// Nächster freier Funkrufname für eine Organisation: „<Org> <N>“ – N ist die nächste freie, je Organisation
+// laufende Nummer (wie bei nextTeamLabel: nie doppelt, auch wenn eine Nummer gelöscht/umbenannt wurde).
+// Ohne Organisation gibt es keinen Funkrufnamen ('').
+export function nextFunkrufname(org, marks, exceptId = '') {
+  const o = String(org || '').trim();
+  if (!o) return '';
+  const used = new Set((marks || [])
+    .filter((m) => m && m.kind === 'team' && m.id !== exceptId && String(m.org || '').trim() === o)
+    .map((m) => String(m.fk || '').trim().toLowerCase()));
+  let n = 1;
+  while (used.has(`${o} ${n}`.toLowerCase())) n++;
+  return `${o} ${n}`;
 }
 
 // ---------- im Auftrag (QR): kurze Schlüssel, nur gesetzte Felder ----------
@@ -60,11 +74,10 @@ export function packUnit(m) {
   if (m && TYPES[m.ty] && m.ty !== 'hund') out.ty = m.ty;
   if (m && String(m.org || '').trim()) out.o = String(m.org).trim().slice(0, 30);
   if (m && String(m.fk || '').trim()) out.fk = String(m.fk).trim().slice(0, 40);
-  const n = m ? persons(m) : 0;
-  if (n > 0 && (!isDog(m) || m.pers > 0 || m.helpers > 0)) out.n = n;
+  if (m && Math.max(0, Math.floor(Number(m.helpers)) || 0) > 0) out.n = persons(m);
   return out;
 }
-// tm -> Team-Felder { ty?, org?, fk?, pers? }
+// tm -> Team-Felder { ty?, org?, fk?, helpers? }
 export function unpackUnit(tm) {
   const out = {};
   if (!tm) return out;
@@ -72,13 +85,13 @@ export function unpackUnit(tm) {
   if (tm.o) out.org = String(tm.o).slice(0, 30);
   if (tm.fk) out.fk = String(tm.fk).slice(0, 40);
   const n = Math.floor(Number(tm.n));
-  if (n > 0) out.pers = n;
+  if (n > 0) out.helpers = Math.max(0, n - 1);
   return out;
 }
 // Fortschritt/Übergabe: fehlende Team-Felder des vorhandenen Teams old aus inc ergänzen (ändert old) -> true, wenn etwas dazukam
 export function fillUnit(old, inc) {
   let n = 0;
-  for (const k of ['ty', 'org', 'fk', 'pers', 'dog', 'helpers', 'ua']) {
+  for (const k of ['ty', 'org', 'fk', 'dog', 'helpers', 'ua']) {
     if (inc[k] != null && inc[k] !== '' && (old[k] == null || old[k] === '')) { old[k] = inc[k]; n++; }
   }
   return n > 0;
