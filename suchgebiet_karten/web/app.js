@@ -80,7 +80,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.9';
+const APP_VERSION = 'v130.10';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -4681,7 +4681,9 @@ function statusMarks() {
   else if (!db.msgOff) list = allMsgs().map((m) => ({ m, color: teamColorOf(m.a) }));
   else return [];
   list = list.filter((x) => x.m.lat != null);
-  if (labelDetail(map.getZoom()) === 0) list = list.filter((x) => isUrgent(x.m)); // weit weg: nur Fund/Hilfe
+  // v130.10: Fund/Hinweis der EL (auch „Spur“, Gegenstand, Wärmequelle …) bleibt immer sichtbar – sonst verschwindet
+  // ein frisch angetippter Punkt außerhalb des Rastergebiets, weil man dafür meist weiter herauszoomen muss.
+  if (labelDetail(map.getZoom()) === 0) list = list.filter((x) => isUrgent(x.m) || isFind(x.m));
   const newest = new Map();
   for (const x of list) newest.set(x.m.a, x.m.id); // Liste ist nach Zeit sortiert
   for (const x of list) x.big = newest.get(x.m.a) === x.m.id;
