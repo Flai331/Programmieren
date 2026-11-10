@@ -80,7 +80,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.4';
+const APP_VERSION = 'v130.5';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -297,7 +297,7 @@ function changed() {
 
 // ---------- Karte ----------
 load();
-const map = L.map('map', { zoomControl: false, maxZoom: 20 });
+const map = L.map('map', { zoomControl: false, maxZoom: 20, zoomSnap: 0, zoomDelta: 1, wheelPxPerZoomLevel: 300 });
 L.control.zoom({ position: 'bottomright' }).addTo(map);
 map.on('dragstart', () => { userMovedAt = Date.now(); });
 // Quellenangabe: kurz ausgeklappt, dann nur „ⓘ“ (verdeckt sonst Bedienelemente); antippen klappt sie auf
@@ -882,9 +882,9 @@ canvas.addEventListener('pointermove', (e) => {
   map.panBy([gesture.mid.x - m.x, gesture.mid.y - m.y], { animate: false });
   userMovedAt = Date.now();
   gesture.mid = m;
-  // Zoom in ganzen Stufen, sobald die Finger deutlich auseinander/zusammen gehen
-  const want = Math.round(gesture.zoom + Math.log2(m.d / gesture.dist));
-  if (want !== map.getZoom()) map.setZoomAround(L.point(m.x, m.y), want, { animate: false });
+  // v130.5: stufenlos zoomen, nicht mehr auf ganze Stufen springen
+  const want = gesture.zoom + Math.log2(m.d / gesture.dist);
+  if (Math.abs(want - map.getZoom()) > 0.001) map.setZoomAround(L.point(m.x, m.y), want, { animate: false });
 });
 const endTouch = (e) => {
   if (mousePan) { mousePan = null; e.stopImmediatePropagation(); return; }
@@ -902,10 +902,13 @@ let wheelAt = 0;
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   const now = Date.now();
-  if (now - wheelAt < 180) return;
+  if (now - wheelAt < 16) return;
   wheelAt = now;
   const r = canvas.getBoundingClientRect();
-  map.setZoomAround(L.point(e.clientX - r.left, e.clientY - r.top), map.getZoom() + (e.deltaY < 0 ? 1 : -1));
+  // v130.5: stufenlos statt fest ±1 pro Tick – Mausrad (Zeilen) und Trackpad (Pixel) unterschiedlich skaliert
+  const delta = -e.deltaY * (e.deltaMode === 1 ? 0.12 : 0.0033);
+  const z = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), map.getZoom() + delta));
+  map.setZoomAround(L.point(e.clientX - r.left, e.clientY - r.top), z, { animate: false });
 }, { passive: false });
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -2241,8 +2244,10 @@ $('quick-marks').addEventListener('click', () => {
   const zoomAt = (e) => {
     const r = track.getBoundingClientRect();
     const f = 1 - Math.max(0, Math.min(1, (e.clientY - r.top - 6) / (r.height - 12)));
-    const z = Math.round(map.getMinZoom() + f * (map.getMaxZoom() - map.getMinZoom()));
-    if (z !== map.getZoom()) map.setZoom(z, { animate: !dragging });
+    // v130.5: stufenlos – nur beim Klicken/Loslassen (nicht beim Ziehen) auf ganze Stufe einrasten
+    const raw = map.getMinZoom() + f * (map.getMaxZoom() - map.getMinZoom());
+    const z = dragging ? raw : Math.round(raw);
+    if (Math.abs(z - map.getZoom()) > 0.001) map.setZoom(z, { animate: !dragging });
   };
   let dragging = false;
   track.addEventListener('pointerdown', (e) => { dragging = true; track.setPointerCapture(e.pointerId); zoomAt(e); });
