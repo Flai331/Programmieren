@@ -28,9 +28,12 @@ export function rebuildAssignment(p, x) {
   return a;
 }
 
-// Teams, die Gebiete haben (Felder oder zugeteilte Umrisse), aber noch keinen Auftrag
+// Teams ohne laufenden Auftrag (für die Übersicht bei „Teams“) – mit eventuell noch zugeteilten Gebieten
+// (dann gleich sinnvoll „Auftrag erstellen“) und der Pausenzeit/Statistik (teamClock).
 // v130.3: ein abgeschlossener (und damit „freier“) Auftrag zählt nicht mehr – sonst verschwindet das Team
 // nach Abschluss und Rückmeldung dauerhaft aus dieser Liste, obwohl es wieder einsetzbar ist.
+// v130.8: zeigt jetzt jedes Team ohne laufenden Auftrag, nicht mehr nur solche mit noch zugeteilten
+// Feldern/Umrissen – sonst fehlte bei einem fertigen Team ohne (mehr) Gebiete die Pausenzeit komplett.
 export function teamsWithoutOrder(p) {
   const have = new Set((p.sent || []).filter((x) => !isDone(x)).map((x) => x.teamId));
   const out = [];
@@ -38,7 +41,7 @@ export function teamsWithoutOrder(p) {
     if (m.kind !== 'team' || m.id === NO_TEAM || have.has(m.id)) continue;
     const cells = allGrids(p).reduce((n, g) => n + Object.values(g.fills || {}).filter((id) => id === m.id).length, 0);
     const areas = (p.items || []).filter((it) => it.to === m.id && hasArea(it)).length;
-    if (cells || areas) out.push({ team: m, cells, areas });
+    out.push({ team: m, cells, areas });
   }
   return out;
 }

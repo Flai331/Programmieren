@@ -226,8 +226,10 @@ test('QR erneut: gleiche Auftrags-ID, gleicher Live-Kanal, gleiche Gebiete, nich
   assert.deepEqual(selFromSent(q, q.sent[0]).picked, { G1: ['1,1'] });
 });
 
-test('Teams mit Gebieten, aber ohne Auftrag', () => {
+test('Teams ohne Auftrag: jedes freie Team, auch ganz ohne zugeteilte Gebiete', () => {
   const { p } = mitAuftrag();
+  // v130.8: T2 hat noch gar keine Felder/Umrisse – steht trotzdem in der Liste (0 Felder, 0 Umrisse)
+  assert.deepEqual(teamsWithoutOrder(p).map((x) => [x.team.id, x.cells, x.areas]), [['T2', 0, 0]]);
   p.fills['5,5'] = 'T2';
   assert.deepEqual(teamsWithoutOrder(p).map((x) => [x.team.id, x.cells, x.areas]), [['T2', 1, 0]]);
   p.sent.push({ id: 'Z', teamId: 'T2' });
