@@ -235,7 +235,11 @@ window.field = (() => {
       if (!vis) return;
       v.copy(wx(p)); v.y = y; v.project(camera);
       if (v.z > 1 || v.z < -1) return;
-      out.push({ id, text, x: (v.x * 0.5 + 0.5) * W, y: (-v.y * 0.5 + 0.5) * H, color });
+      // am Bildrand nicht abschneiden: Platz für die Textbreite lassen (grob 11 px je Zeichen)
+      const half = Math.min(W / 2 - 20, 20 + text.length * 5.5);
+      const x = Math.max(half, Math.min(W - half, (v.x * 0.5 + 0.5) * W));
+      const y2 = Math.max(34, Math.min(H - 14, (-v.y * 0.5 + 0.5) * H));
+      out.push({ id, text, x, y: y2, color });
     };
     lab('bort', '🚐 B-Ort · Einsatzleitung', D.bort, 78, '#1565c0');
     lab('Anna', 'Anna & Rex', P.Anna, CANOPY + 34, D.teams.Anna.color, show);
@@ -244,7 +248,7 @@ window.field = (() => {
     lab('FF', '🚒 Feuerwehr-Kette', P.FF[0], CANOPY + 30, D.teams.FF.color, show && t > EV.depart);
     lab('Drohne', '🚁 Drohne', P.Drohne, 118, D.teams.Drohne.color, drone.visible);
     lab('cap', '🧢 Mütze gefunden', D.cap, 62, '#b58900', t > EV.cap);
-    lab('hut', '🏚️ Jagdhütte: Zeugenhinweis', D.hut, 62, '#ad1457', t > EV.hut);
+    lab('hut', '🏚️ Jagdhütte (Zeugenhinweis)', D.hut, 62, '#ad1457', t > EV.hut);
     lab('heat', t > EV.fund ? '✅ Herr K. gefunden' : '🔥 Wärmequelle', D.heat, 64, t > EV.fund ? '#2e7d32' : '#e65100', t > EV.heat);
     lab('see', t > EV.miaDone ? 'See ✅ abgesucht' : 'Gebiet See', centroid(D.see), CANOPY + 12, '#ef6c00', t > EV.see && t < EV.back);
     lab('bahn', 'Bahndamm Ost', centroid(D.bahndamm), CANOPY + 12, '#ef6c00', t > EV.bahn && t < EV.back);
