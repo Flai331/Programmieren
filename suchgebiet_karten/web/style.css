@@ -662,6 +662,7 @@ body.closed :is(#pc-add, #pc-new) { pointer-events: none; opacity: 0.45; }
 .sent-card b i { width: 12px; height: 12px; border-radius: 50%; flex: none; }
 .sent-card .what { margin: 2px 0; overflow-wrap: anywhere; }
 .sent-card .since, .sent-card .back { color: var(--muted, #555); }
+.sent-card .tclock { margin-top: 2px; color: var(--muted, #555); } /* v130.4: Pausenzeit/Statistik */
 html.night .sent-card.quiet, html.night .sent-card.wait { background: transparent; }
 
 /* Feld lange drücken: Team und Markierung */

@@ -29,7 +29,7 @@ import { listTracks, trackInfo, importItems, noteImport, importTag, TRACK_KINDS,
 import { teamTimes, timeRows, outsideTeams, stateText, totalPersonHours, timeLine } from './times.js'; // v128
 import { uaOverview, levelIcon, agoText, hasUas, BASE_UA } from './uaover.js'; // v128
 import { CAM_KEY, backCameras, pickCamera, nextCamera, cameraConstraints, wantsContinuousFocus } from './camera.js';
-import { rebuildAssignment, teamsWithoutOrder, planAssign, applyAssign, planCount, assignText } from './sentops.js';
+import { rebuildAssignment, teamsWithoutOrder, planAssign, applyAssign, planCount, assignText, teamClock } from './sentops.js';
 import { buildProgress, mergeProgress, progressSummary, progressPreview, progressTarget, snapshotBase, stampChanges, setPeer, setPeerId, peerOf } from './progress.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -80,7 +80,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.2';
+const APP_VERSION = 'v130.4';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -4186,6 +4186,21 @@ $('send-copy').addEventListener('click', async () => {
 });
 // Übersicht der Einsatzleitung: welches Team hat welchen Auftrag, seit wann, kamen Rückmeldungen?
 const SENT_QUIET = 60 * 60e3; // so lange ohne Rückmeldung: orange markieren
+// v130.4: Pausenzeit bzw. „noch kein Auftrag“ + Anzahl/Gesamtzeit abgeschlossener Aufträge eines Teams
+// (für „Teams ohne Auftrag“ – läuft gerade kein Auftrag, zeigt, wie lange die Pause schon dauert)
+function teamClockText(teamId) {
+  const c = teamClock(P, teamId);
+  const now = Date.now();
+  const stats = c.count ? `${c.count} Auftrag${c.count === 1 ? '' : 'e'} bisher, insgesamt ${durText(c.totalMs)}` : '';
+  if (c.state === 'new') return 'Noch keinen Auftrag gehabt';
+  if (c.state === 'pause') return `😴 Pause seit ${hhmm(c.since)} (${sinceText(c.since, now)})${stats ? ` · ${stats}` : ''}`;
+  return stats; // 'waiting'/'active' kommen hier nicht vor (Team hat dann einen laufenden Auftrag, s.u.)
+}
+// v130.4: Anzahl/Gesamtzeit früherer Aufträge eines Teams, als Zusatzzeile unter einer laufenden Auftragskarte
+function teamStatsText(teamId) {
+  const c = teamClock(P, teamId);
+  return c.count ? `Bisher ${c.count} Auftrag${c.count === 1 ? '' : 'e'}, insgesamt ${durText(c.totalMs)}` : '';
+}
 function renderSentList() {
   renderTeamBar();
   const box = $('sent-list');
@@ -4201,10 +4216,11 @@ function renderSentList() {
     for (const w of wo) {
       const d = document.createElement('div');
       d.className = 'sent-card wait';
-      d.innerHTML = '<b><i></i><span></span></b><div class="what"></div>';
+      d.innerHTML = '<b><i></i><span></span></b><div class="what"></div><div class="tclock"></div>';
       d.querySelector('i').style.background = w.team.color;
       d.querySelector('b span').textContent = `${typeIcon(w.team)} ${w.team.label}${w.team.dog ? ` – ${w.team.dog}` : ''}`;
       d.querySelector('.what').textContent = [w.cells && `${w.cells} Feld${w.cells === 1 ? '' : 'er'}`, w.areas && `${w.areas} Umriss${w.areas === 1 ? '' : 'e'}`].filter(Boolean).join(' · ');
+      d.querySelector('.tclock').textContent = teamClockText(w.team.id); // v130.4: Pausenzeit bzw. „noch kein Auftrag“, Anzahl/Gesamtzeit
       const nb = document.createElement('button');
       nb.className = 'mini';
       nb.textContent = '📲 Auftrag erstellen';
@@ -4247,6 +4263,11 @@ function renderSentList() {
     const what = x.what || allGrids(P).filter((g) => (x.grids || []).includes(g.id)).map((g) => gridLabel(P, g)).join(', ');
     d.querySelector('.what').textContent = what || 'Auftrag';
     d.querySelector('.since').textContent = acc ? `📲 Auftrag seit ${hhmm(x.acc)} (${sinceText(x.acc, now)}) – übernommen` : `⏳ QR erstellt ${hhmm(x.at)} – noch nicht übernommen`;
+    // v130.4: bisherige Aufträge/Gesamtzeit dieses Teams – hilft abzuschätzen, ob der Hund noch kann
+    if (acc && !fini) {
+      const stats = teamStatsText(x.teamId);
+      if (stats) { const sn = document.createElement('div'); sn.className = 'since tstats'; sn.textContent = stats; d.querySelector('.since').insertAdjacentElement('afterend', sn); }
+    }
     const n = x.n || (x.last ? 1 : 0);
     d.querySelector('.back').textContent = !acc ? 'Gilt erst als vergeben, wenn das Team ihn übernommen hat.' : x.last
       ? `📥 ${n} Rückmeldung${n === 1 ? '' : 'en'}, zuletzt ${hhmm(x.last)} (vor ${sinceText(x.last, now)})${x.lastSum ? ` – ${x.lastSum}` : ''}`
@@ -6638,6 +6659,8 @@ function startStatus() {
   renderTeamBar();
   checkUnread();
   setInterval(checkUnread, 15e3); // Erinnerung bei ungelesenen Meldungen
+  // v130.4: Auftrags-/Pausenzeit der Teams laufen mit – Anzeige auffrischen, solange das Fenster offen ist
+  setInterval(() => { if (db.mode === 'el' && !$('panel-teams').hidden) renderSentList(); }, 30e3);
   checkCloseAsk();
   setInterval(checkCloseAsk, 15e3);
   window.addEventListener('online', () => { flushStatus(); pollLive(); pollElw(); pollHf(); });
@@ -10825,7 +10848,7 @@ console.info(`RHS Einsatz bereit (${bridge ? 'Android-App' : 'Browser'})`);
 
 // Für Tests
 window.__app = {
-  get P() { return P; }, reportExtras, funkDialog, findDialog, checkAutoClose, get grid() { return grid; }, get db() { return db; }, get fallback() { return !!fallbackFor; }, probeBkg, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread, sentBadges,
+  get P() { return P; }, reportExtras, funkDialog, findDialog, checkAutoClose, get grid() { return grid; }, get db() { return db; }, get fallback() { return !!fallbackFor; }, probeBkg, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread, sentBadges, renderSentList,
 };
 
 // ---------- Freigabe (v113): Sperrbildschirm, Prüfung beim Status-Server ----------

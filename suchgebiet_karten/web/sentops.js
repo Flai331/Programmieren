@@ -4,6 +4,7 @@ import { allGrids, NO_TEAM } from './store.js';
 import { buildAssignment } from './share.js';
 import { hasArea } from './gpx.js';
 import { isDone } from './closeout.js';
+import { isAccepted } from './locks.js';
 
 // Auswahl (wie sendSelection() in app.js) aus einem gespeicherten Auftrag (P.sent-Eintrag) rekonstruieren.
 // Hinweistext, Kontakte, Rettungspunkte und Lage-Orte sind dort nicht gespeichert – dafür gilt der gemerkte Link (P.sentLinks).
@@ -40,6 +41,29 @@ export function teamsWithoutOrder(p) {
     if (cells || areas) out.push({ team: m, cells, areas });
   }
   return out;
+}
+
+// v130.4: Einsatzzeit eines Teams – Auftragszeit (seit „Auftrag angenommen“, x.acc) und Pausenzeit (seit dem letzten
+// Abschluss, x.done), dazu Anzahl und Gesamtzeit aller abgeschlossenen Aufträge dieses Teams. Rein aus P.sent
+// abgeleitet (nichts extra gespeichert): wird ein Abschluss rückgängig gemacht („↩ Wieder öffnen“ oder die
+// schließende Meldung gelöscht und der Auftrag dadurch wieder offen), läuft die Auftragszeit von selbst weiter,
+// ohne dass irgendwo ein Zwischenstand aufgeräumt werden müsste. Reset der Uhr passiert also nur, wenn die EL
+// einen Auftrag tatsächlich abschließt (x.done, egal ob per QR-Rückmeldung, Link oder automatisch bei 100 %) –
+// nicht schon dadurch, dass eine Rückmeldung nur eintrifft.
+// state: 'new' (noch nie ein Auftrag) | 'waiting' (Auftrag raus, noch nicht übernommen) | 'active' (unterwegs) | 'pause'
+// since: Zeitpunkt (ms), ab dem der jeweilige Zustand gilt – fürs Anzeigen mit hhmm()/sinceText() (wie beim „seit“-Text
+// im Auftrag), damit nicht zwei verschiedene Uhren-Formate im Spiel sind
+export function teamClock(p, teamId) {
+  const mine = (p.sent || []).filter((x) => x.teamId === teamId).sort((a, b) => (a.at || 0) - (b.at || 0));
+  const finished = mine.filter(isDone);
+  const active = mine.find((x) => !isDone(x) && isAccepted(x));
+  const waiting = mine.find((x) => !isDone(x) && !isAccepted(x));
+  const totalMs = finished.reduce((s, x) => s + Math.max(0, (x.done || 0) - (x.acc || x.at || 0)), 0);
+  const count = finished.length;
+  if (active) return { state: 'active', since: active.acc, count, totalMs };
+  if (waiting) return { state: 'waiting', since: waiting.at || null, count, totalMs };
+  if (finished.length) return { state: 'pause', since: finished[finished.length - 1].done, count, totalMs };
+  return { state: 'new', since: null, count: 0, totalMs: 0 };
 }
 
 // Was beim Erstellen eines Auftrags dem Team zugeordnet wird: noch nicht zugeteilte Umrisse und (bei „Felder antippen“)
