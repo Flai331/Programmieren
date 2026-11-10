@@ -80,7 +80,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.10';
+const APP_VERSION = 'v130.11';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -5764,6 +5764,15 @@ function renderStatusPanel() {
       ft.title = m.fs === 'g' ? 'Wieder offen' : 'Als geprüft markieren';
       ft.addEventListener('click', (e) => { e.stopPropagation(); findToggle(m); });
       d.appendChild(ft);
+      if (m.lat != null) { // v130.11: Prüfauftrag auch nachträglich an ein/mehrere Teams senden
+        const sb = document.createElement('button');
+        sb.type = 'button';
+        sb.className = 'del find-send';
+        sb.textContent = '📤';
+        sb.title = 'An Team(s) senden';
+        sb.addEventListener('click', (e) => { e.stopPropagation(); findSendDialog(m); });
+        d.appendChild(sb);
+      }
     }
     box.appendChild(d);
   }
@@ -5965,12 +5974,23 @@ async function findDialog() {
     dr.className = 'check';
     dr.innerHTML = '<input type="checkbox" id="find-urgent"><span>❗ Dringend melden (Fenster bei allen EL-Geräten)</span>';
     box.appendChild(dr);
-    let chk = null;
+    // v130.11: Prüfauftrag an ein oder mehrere Teams (nicht mehr nur eins)
+    const checkIds = new Set();
     if (targets.length) {
-      chk = dlgField(box, 'Prüfauftrag an Team (optional)', document.createElement('select'));
-      chk.id = 'find-check';
-      chk.add(new Option('– keiner –', ''));
-      for (const q of targets) chk.add(new Option(q.label, q.a));
+      const h = document.createElement('p');
+      h.className = 'small';
+      h.textContent = 'Prüfauftrag an Team(s) (optional):';
+      box.appendChild(h);
+      for (const q of targets) {
+        const l = document.createElement('label');
+        l.className = 'check';
+        const c = Object.assign(document.createElement('input'), { type: 'checkbox' });
+        c.addEventListener('change', () => { if (c.checked) checkIds.add(q.a); else checkIds.delete(q.a); });
+        const sp = document.createElement('span');
+        sp.textContent = q.label;
+        l.append(c, sp);
+        box.appendChild(l);
+      }
     }
     const btns = FIND_KINDS.map((k) => dlgButton(list, esc(`${k.ico} ${k.label}`), '', () => {
       art = k;
@@ -5980,7 +6000,7 @@ async function findDialog() {
       for (const h of k.hints) dlgButton(hints, esc(h), '', () => { txt.value = h; });
     }));
     const need = () => { if (!art) { toast('Bitte erst die Art wählen'); return null; } const t = timeOfDay(tm.value, Date.now()); if (t == null) { toast('Uhrzeit nicht lesbar (z. B. 20:05)'); return null; } return t; };
-    const out = (t) => ({ art: art.code, txt: txt.value.trim(), t, finder: finder.value.trim(), geprueft: st.value === 'g', dringend: dr.querySelector('input').checked, file: file.files[0] || null, check: chk ? chk.value : '' });
+    const out = (t) => ({ art: art.code, txt: txt.value.trim(), t, finder: finder.value.trim(), geprueft: st.value === 'g', dringend: dr.querySelector('input').checked, file: file.files[0] || null, check: [...checkIds] });
     dlgButton(box, '👆 Ort auf der Karte antippen', 'primary', () => { const t = need(); if (t != null) close({ ...out(t), where: 'map' }); });
     dlgButton(box, '📍 Ort = mein Standort', '', () => { const t = need(); if (t != null) close({ ...out(t), where: 'gps' }); });
     dlgButton(box, 'Abbrechen', '', () => close(null));
@@ -6007,23 +6027,58 @@ async function findCommit(r, pos) {
   P.updated = Date.now();
   if (P.live) elSend(m).catch(() => {});
   let pa = '';
-  if (r.check && P.live) {
-    const tg = elTargets(P.sent, P.marks).find((q) => q.a === r.check);
-    if (tg) {
-      const where = formatMgrs(pos.lat, pos.lon);
-      // v130: der Ort kommt als Punkt auf die Karte des Teams (ältere Apps sehen weiter den Text mit Koordinate)
-      const z = buildZusatz(P, { to: tg.a, points: [{ lat: pos.lat, lon: pos.lon, name: `${findLabel(m.fa) || 'Fund'}${m.txt ? `: ${m.txt}` : ''}`.slice(0, 60), task: 'Bitte prüfen' }], prio: true });
-      const pm = buildElMsg({ to: tg.a, txt: checkText(m, where), prio: 1 });
-      if (z) pm.z = z.msg.z;
-      elSend(pm).catch(() => {});
-      pa = ` · Prüfauftrag an ${tg.label}`;
-    }
+  if (r.check && r.check.length) {
+    const labels = sendFindCheck(m, r.check);
+    if (labels.length) pa = ` · Prüfauftrag an ${labels.join(', ')}`;
   }
   changed();
   redraw();
   renderSentList();
   if ($('panel-status').hidden === false) renderStatusPanel();
   toast(`🔎 ${msgLabel(m)} eingetragen (${hhmm(m.t)})${m.ph ? ' mit Foto' : ''}${pa}`, 6000);
+}
+// Prüfauftrag zu einem Fund an ein oder mehrere Teams senden (bei der Eingabe oder nachträglich aus der Meldungsliste)
+// -> Namen der Teams, an die es tatsächlich ging (ohne Live-Kanal geht nichts)
+function sendFindCheck(m, teamIds) {
+  if (!P.live || m.lat == null) return [];
+  const where = formatMgrs(m.lat, m.lon);
+  const labels = [];
+  for (const a of teamIds) {
+    const tg = elTargets(P.sent, P.marks).find((q) => q.a === a);
+    if (!tg) continue;
+    // v130: der Ort kommt als Punkt auf die Karte des Teams (ältere Apps sehen weiter den Text mit Koordinate)
+    const z = buildZusatz(P, { to: tg.a, points: [{ lat: m.lat, lon: m.lon, name: `${findLabel(m.fa) || 'Fund'}${m.txt ? `: ${m.txt}` : ''}`.slice(0, 60), task: 'Bitte prüfen' }], prio: true });
+    const pm = buildElMsg({ to: tg.a, txt: checkText(m, where), prio: 1 });
+    if (z) pm.z = z.msg.z;
+    elSend(pm).catch(() => {});
+    labels.push(tg.label);
+  }
+  return labels;
+}
+// v130.11: Prüfauftrag nachträglich aus der Meldungsliste senden (nicht nur bei der Eingabe)
+async function findSendDialog(m) {
+  if (!P.live) return toast('Kein laufender Auftrag mit Status-Server – erst unter „Teams“ einen Auftrag per QR-Code vergeben', 7000);
+  const targets = elTargets(P.sent, P.marks);
+  if (!targets.length) return toast('Kein Team mit laufendem Auftrag', 5000);
+  const picked = new Set();
+  const ids = await openDlg((box, close) => {
+    dlgHead(box, '📤 Prüfauftrag senden', `${msgLabel(m)}${m.txt ? `: ${m.txt}` : ''} – an ein oder mehrere Teams.`);
+    for (const q of targets) {
+      const l = document.createElement('label');
+      l.className = 'check';
+      const c = Object.assign(document.createElement('input'), { type: 'checkbox' });
+      c.addEventListener('change', () => { if (c.checked) picked.add(q.a); else picked.delete(q.a); });
+      const sp = document.createElement('span');
+      sp.textContent = q.label;
+      l.append(c, sp);
+      box.appendChild(l);
+    }
+    dlgButton(box, '📤 Senden', 'primary', () => close([...picked]));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!ids || !ids.length) return;
+  const labels = sendFindCheck(m, ids);
+  toast(labels.length ? `📤 Prüfauftrag an ${labels.join(', ')} gesendet` : 'Nicht gesendet – kein Team erreichbar', 6000);
 }
 // Fund als geprüft (oder wieder offen) markieren: Korrektur-Meldung, geht an alle EL-Geräte
 function findToggle(m) {
