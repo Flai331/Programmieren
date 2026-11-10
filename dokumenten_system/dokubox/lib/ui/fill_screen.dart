@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app_services.dart';
 import '../data/database.dart';
@@ -120,7 +121,10 @@ class _FillScreenState extends State<FillScreen> {
       case _Tool.signature:
         final template = _pendingTemplate ?? await _pickTemplate();
         if (template == null) return;
-        final probe = FillItem(kind: FillKind.image, page: _page, x: 0, y: 0);
+        // Zuletzt gewählte Größe dieser Unterschrift wiederverwenden.
+        final remembered = await _signatureSize(template.id);
+        final probe = FillItem(
+            kind: FillKind.image, page: _page, x: 0, y: 0, size: remembered);
         final w = probe.size;
         final h = w * template.aspect * size.width / size.height;
         item = FillItem(
@@ -128,6 +132,7 @@ class _FillScreenState extends State<FillScreen> {
           page: _page,
           x: (fx - w / 2).clamp(0, 1).toDouble(),
           y: (fy - h / 2).clamp(0, 1).toDouble(),
+          size: w,
           templateId: template.id,
           aspect: template.aspect,
         );
@@ -477,7 +482,10 @@ class _FillScreenState extends State<FillScreen> {
             _itemDrag = true;
           });
         },
-        onDragEnd: () => setState(() => _itemDrag = false),
+        onDragEnd: () {
+          setState(() => _itemDrag = false);
+          _storeSignatureSize(item);
+        },
         onMove: (delta) => setState(() {
           _dirty = true;
           item.x = (item.x + delta.dx / size.width).clamp(0, 0.98).toDouble();
@@ -497,6 +505,20 @@ class _FillScreenState extends State<FillScreen> {
     if (item == null) return;
     _remember();
     setState(() => item.size = clampSize(item.kind, item.size * factor));
+    _storeSignatureSize(item);
+  }
+
+  static String _sizeKey(String templateId) => 'signature_size_$templateId';
+
+  Future<double?> _signatureSize(String templateId) async =>
+      (await SharedPreferences.getInstance()).getDouble(_sizeKey(templateId));
+
+  /// Größe einer Unterschrift merken – beim nächsten Einfügen passt sie gleich.
+  Future<void> _storeSignatureSize(FillItem item) async {
+    final id = item.templateId;
+    if (item.kind != FillKind.image || id == null) return;
+    await (await SharedPreferences.getInstance())
+        .setDouble(_sizeKey(id), item.size);
   }
 
   Widget _colorBar() {
@@ -537,12 +559,16 @@ class _FillScreenState extends State<FillScreen> {
             if (selected != null) ...[
               IconButton(
                 tooltip: 'Kleiner',
-                icon: const Icon(Icons.text_decrease),
+                icon: Icon(selected.kind == FillKind.text
+                    ? Icons.text_decrease
+                    : Icons.zoom_out),
                 onPressed: () => _scaleSelected(1 / 1.2),
               ),
               IconButton(
                 tooltip: 'Größer',
-                icon: const Icon(Icons.text_increase),
+                icon: Icon(selected.kind == FillKind.text
+                    ? Icons.text_increase
+                    : Icons.zoom_in),
                 onPressed: () => _scaleSelected(1.2),
               ),
               if (selected.kind == FillKind.text)
