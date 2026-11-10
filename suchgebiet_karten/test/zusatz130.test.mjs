@@ -74,6 +74,7 @@ test('HF übernimmt den Zusatz einmal, schreibgeschützt, mit Aufgabe; Lage-Ort 
   applyZusatz(hf, m); // doppelt schadet nicht
   assert.equal(hf.items.length, 2);
   assert.ok(hf.items.every((it) => it.fromEl && it.zid === m.id));
+  assert.ok(hf.items.every((it) => it.marker)); // v130.2: bleibt bei jeder Zoomstufe sichtbar
   const pt = hf.items.find((it) => it.kind === 'text');
   assert.equal(pt.text, 'Punkt A');
   assert.equal(pt.note, 'Absuchen');

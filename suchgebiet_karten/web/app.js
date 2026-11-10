@@ -9,7 +9,7 @@ import {
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { areaBounds, navTargets, navTargetsAll, navUrl, boxCenter, cellCenter as navCellCenter } from './hfnav.js';
+import { areaBounds, navTargets, navTargetsAll, navUrl, boxCenter, cellCenter as navCellCenter, navNeedleDeg, fmtDist } from './hfnav.js';
 import { buildGpx, mergeGpx, parseGpx, dedupeImport, parseKml, pointInPolygon, selectionGpx, gridWithLabels, gridPath, labelTracks, cellComponents, cellOutlines, hasArea, polygonArea, formatArea, trackDesc, trackLength, outlineName, msgWaypoints, msgRows } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import { buildReport, describeTarget, makeDedup, makeLog, validReportUrl } from './report.js';
@@ -80,7 +80,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.1';
+const APP_VERSION = 'v130.2';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -3438,15 +3438,78 @@ function meetDialog() {
   });
 }
 // v123: Auswahl Auto / zu Fuß für ein Ziel; die Route öffnet sich in Google Maps bzw. der Karten-App (Start ist der aktuelle Standort)
+// v130.2: zusätzlich „🧭 Kompass (Luftlinie)“ – ohne Straßen/Internet, direkt zum Punkt
 function navChooser(label, lat, lon) {
   return openDlg((box, close) => {
     dlgHead(box, `🧭 Navigieren zu ${label}`, `${Number(lat).toFixed(5)}, ${Number(lon).toFixed(5)}`);
     box.querySelector('h2').style.overflowWrap = 'anywhere';
     dlgButton(box, '🚗 Auto', 'primary', () => { close(true); openLink(navUrl(lat, lon, 'driving')); });
     dlgButton(box, '🚶 Zu Fuß', '', () => { close(true); openLink(navUrl(lat, lon, 'walking')); });
+    dlgButton(box, '🧭 Kompass (Luftlinie)', '', () => { close(true); openCompassNav(label, lat, lon); });
     dlgButton(box, 'Abbrechen', '', () => close(false));
   });
 }
+// v130.2: Kompass-Navigation (Luftlinie) – Entfernung und Richtung zum Ziel, live aus GPS und (falls vorhanden)
+// dem Kompass des Handys; ohne Kompass zeigt der Pfeil die Gradzahl ab Norden (Handy mit der Oberkante nach Norden halten).
+let navWatchId = null;
+let navOriOn = false;
+let navFallbackTimer = null;
+function navOri(e) {
+  let h = null;
+  if (typeof e.webkitCompassHeading === 'number' && !Number.isNaN(e.webkitCompassHeading)) h = e.webkitCompassHeading;
+  else if ((e.absolute || e.type === 'deviceorientationabsolute') && e.alpha != null) h = 360 - e.alpha;
+  if (h == null) return;
+  const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+  navHeading = (((h + ang) % 360) + 360) % 360;
+  clearTimeout(navFallbackTimer);
+  navUpdateNav();
+}
+let navHeading = null;
+let navTarget = null; // { label, lat, lon }
+function navStop() {
+  if (navWatchId !== null) { navigator.geolocation.clearWatch(navWatchId); navWatchId = null; }
+  if (navOriOn) { window.removeEventListener('deviceorientationabsolute', navOri); window.removeEventListener('deviceorientation', navOri); navOriOn = false; }
+  clearTimeout(navFallbackTimer);
+  navTarget = null;
+  navHeading = null;
+}
+function navUpdateNav() {
+  if (!navTarget) return;
+  const from = lastPos || (map ? [map.getCenter().lat, map.getCenter().lng] : null);
+  if (!from) { $('nav-read').textContent = 'Standort wird gesucht …'; return; }
+  const m = distance(from[0], from[1], navTarget.lat, navTarget.lon);
+  const deg = bearingDeg(from[0], from[1], navTarget.lat, navTarget.lon);
+  $('nav-dist').textContent = fmtDist(m);
+  $('nav-needle').style.transform = `rotate(${navNeedleDeg(deg, navHeading)}deg)`;
+  $('nav-read').textContent = navHeading == null
+    ? `Richtung ${compass(deg)} (${Math.round(deg)}°) ab Norden – ohne Kompass: Handy-Oberkante nach Norden halten`
+    : `Richtung ${compass(deg)} (${Math.round(deg)}°)${!lastPos ? ' · Standort: Kartenmitte (kein GPS)' : ''}`;
+}
+async function openCompassNav(label, lat, lon) {
+  navStop();
+  navTarget = { label, lat, lon };
+  $('nav-title').textContent = `🧭 Kompass zu ${label}`;
+  $('navmeter').hidden = false;
+  $('nav-dist').textContent = '–';
+  $('nav-read').textContent = 'Standort wird gesucht …';
+  $('nav-needle').style.transform = 'rotate(0deg)';
+  navUpdateNav();
+  if (navigator.geolocation) {
+    navWatchId = navigator.geolocation.watchPosition((pos) => {
+      lastPos = [pos.coords.latitude, pos.coords.longitude];
+      navUpdateNav();
+    }, () => {}, { enableHighAccuracy: true, maximumAge: 2000 });
+  }
+  if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try { await DeviceOrientationEvent.requestPermission(); } catch { /* dann ohne Kompass */ }
+  }
+  if (!navTarget) return; // Fenster inzwischen geschlossen
+  window.addEventListener('deviceorientationabsolute', navOri);
+  window.addEventListener('deviceorientation', navOri);
+  navOriOn = true;
+  navFallbackTimer = setTimeout(() => { if (navHeading == null) navUpdateNav(); }, 1500);
+}
+$('nav-cancel').addEventListener('click', () => { navStop(); $('navmeter').hidden = true; });
 // v123: Knopf „🧭 Navigieren“ in Objekt-Fenstern (nur mit gültigem Ziel)
 // (schließt das Fenster wie „Abbrechen“ mit cancelVal und öffnet dann die Auswahl)
 function dlgNavButton(box, close, cancelVal, label, lat, lon) {
@@ -3644,7 +3707,7 @@ function hfMarkDialog(pos, where) {
       dlgButton(list, `${ico} ${label}`, '', () => {
         ensureHf();
         const text = `${ico} ${label} ${hhmm(Date.now())}${note.value.trim() ? `: ${note.value.trim()}` : ''}`;
-        P.items.push({ kind: 'text', color: hfColor(), lat: pos.lat, lon: pos.lon, text, t: Date.now() });
+        P.items.push({ kind: 'text', color: hfColor(), lat: pos.lat, lon: pos.lon, text, t: Date.now(), marker: true }); // v130.2: immer sichtbar, großes Symbol
         changed();
         close(true);
         // v116: „✅ Fund“ geht zusätzlich sofort live an die Einsatzleitung (wie „📍 Standort melden → 🟢 Person gefunden“).
@@ -6034,7 +6097,7 @@ async function zusatzDialog(pre = {}) {
     const fresh = st.points.filter((x) => !x.fromMsg);
     if (fresh.length) {
       snapshot();
-      for (const x of fresh) P.items.push({ kind: 'text', color: '#c62828', text: (x.name || '').trim() || 'Punkt', lat: x.lat, lon: x.lon, ...((x.task || st.task).trim() ? { note: (x.task || st.task).trim().slice(0, 200) } : {}), t: Date.now() });
+      for (const x of fresh) P.items.push({ kind: 'text', color: '#c62828', text: (x.name || '').trim() || 'Punkt', lat: x.lat, lon: x.lon, ...((x.task || st.task).trim() ? { note: (x.task || st.task).trim().slice(0, 200) } : {}), t: Date.now(), marker: true }); // v130.2: immer sichtbar
       changed();
       redraw();
     }

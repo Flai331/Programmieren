@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { areaBounds, areaPoints, navTargets, navUrl } from '../web/hfnav.js';
+import { areaBounds, areaPoints, navTargets, navUrl, navNeedleDeg, fmtDist } from '../web/hfnav.js';
 import { newProject } from '../web/store.js';
 
 const base = () => {
@@ -49,4 +49,25 @@ test('navTargets: nur Ziele, die es im Auftrag gibt', () => {
   assert.equal(t[0].label, 'Parkplatz');
   assert.equal(t[2].url, navUrl(52.65, 9.85));
   assert.ok(t.every((x) => x.url.startsWith('https://www.google.com/maps/dir/?api=1&destination=')));
+});
+
+// v130.2: Kompass-Navigation (Luftlinie)
+test('navNeedleDeg: Pfeil zeigt relativ zur Blickrichtung des Handys zum Ziel', () => {
+  assert.equal(navNeedleDeg(0, 0), 0); // Ziel Nord, Blick Nord -> geradeaus (oben)
+  assert.equal(navNeedleDeg(90, 0), 90); // Ziel Ost, Blick Nord -> rechts
+  assert.equal(navNeedleDeg(90, 90), 0); // Ziel Ost, Blick Ost -> geradeaus
+  assert.equal(navNeedleDeg(0, 90), 270); // Ziel Nord, Blick Ost -> links
+  assert.equal(navNeedleDeg(350, 10), 340);
+  assert.equal(navNeedleDeg(10, 350), 20);
+});
+test('navNeedleDeg ohne Kompass (heading null/undefined): Gradzahl ab Norden', () => {
+  assert.equal(navNeedleDeg(135, null), 135);
+  assert.equal(navNeedleDeg(135, undefined), 135);
+});
+test('fmtDist: Meter bzw. Kilometer, deutsches Komma', () => {
+  assert.equal(fmtDist(42), '42 m');
+  assert.equal(fmtDist(999), '999 m');
+  assert.equal(fmtDist(1000), '1 km');
+  assert.equal(fmtDist(1340), '1,3 km');
+  assert.equal(fmtDist(NaN), '');
 });

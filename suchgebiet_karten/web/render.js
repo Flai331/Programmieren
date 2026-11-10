@@ -662,22 +662,37 @@ function drawItems(ctx, toPx, items, s, teamNames = {}, d = 3, grey = true) {
       drawTrack(ctx, toPx, it, s, it.to ? (it.to.startsWith('u:') ? it.to.slice(2) : (teamNames || {})[it.to] || '') : '', d, grey);
     } else if (it.kind === 'text') {
       const [x, y] = toPx(it.lat, it.lon);
-      ctx.fillStyle = it.color;
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2 * s;
+      // v130.2: wichtige Punkte (HF-Markierungen, von der EL zusätzlich geschickte Punkte) deutlich größer
+      // und mit Symbol – bleiben bei jeder Zoomstufe als Punkt sichtbar (markHidden lässt sie durch)
+      const big = !!it.marker;
+      const rad = (big ? 10 : 6) * s;
+      ctx.fillStyle = big ? '#fff' : it.color;
+      ctx.strokeStyle = big ? it.color : '#fff';
+      ctx.lineWidth = (big ? 3 : 2) * s;
       ctx.beginPath();
-      ctx.arc(x, y, 5 * s, 0, Math.PI * 2);
+      ctx.arc(x, y, rad, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+      if (big) {
+        const ico = (it.text || '').match(/^\p{Extended_Pictographic}(️|‍\p{Extended_Pictographic})*/u);
+        if (ico) {
+          ctx.font = `${13 * s}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#000';
+          ctx.fillText(ico[0], x, y + 1 * s);
+        }
+      }
       ctx.font = `bold ${15 * s}px sans-serif`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      if (d > 0) halo(ctx, shortText(it.text, d), x + 9 * s, y, it.color, s);
+      // Beschriftung: normale Texte nur ab Zoomstufe 15 (d>0, Deckluttern), wichtige Punkte immer
+      if (d > 0 || big) halo(ctx, big && d === 0 ? shortText(it.text, 1) : shortText(it.text, d || 1), x + (rad + 4) * s, y, it.color, s);
       // v130: Aufgabe zum Punkt (z. B. von der Einsatzleitung: „Bitte prüfen …“) klein darunter
-      if (it.note && (d >= 2 || (it.fromEl && d >= 1))) {
+      if (it.note && (d >= 2 || big)) {
         ctx.font = `${12 * s}px sans-serif`;
         ctx.textBaseline = 'top';
-        halo(ctx, it.note.length > 60 ? `${it.note.slice(0, 59)}…` : it.note, x + 9 * s, y + 9 * s, it.color, s);
+        halo(ctx, it.note.length > 60 ? `${it.note.slice(0, 59)}…` : it.note, x + (rad + 4) * s, y + (rad - 1) * s, it.color, s);
       }
     }
   }
@@ -754,8 +769,10 @@ export function distToSegment(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-// Weit herausgezoomt (bis Stufe 14) sind Texte und Zeichnungen nicht zu sehen
-export const markHidden = (it, d) => d === 0 && (it.kind === 'text' || it.kind === 'stroke');
+// Weit herausgezoomt (bis Stufe 14) sind Texte und Zeichnungen nicht zu sehen – außer wichtigen Punkten
+// (it.marker: HF-Markierungen, von der Einsatzleitung zusätzlich geschickte Punkte), die bleiben immer sichtbar,
+// genau wie Fund/Hilfe-Meldungen, B-Ort und Lage-Orte.
+export const markHidden = (it, d) => d === 0 && (it.kind === 'text' || it.kind === 'stroke') && !it.marker;
 export function hitItem(items, toPx, x, y, tol, d = 3) {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];

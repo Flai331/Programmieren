@@ -512,6 +512,10 @@ html.night.red .wx { filter: invert(1) grayscale(1) sepia(1) saturate(6) hue-rot
 .wm-str button small { display: block; font-size: 12px; color: #555; font-weight: 400; }
 html.night .windmeter { filter: invert(1) hue-rotate(180deg); }
 html.night.red .windmeter { filter: invert(1) grayscale(1) sepia(1) saturate(6) hue-rotate(-50deg) brightness(0.75); }
+/* v130.2: Kompass-Navigation (Luftlinie) */
+.nav-rose { border-color: #c62828; }
+.nav-needle span { top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 64px; line-height: 1; color: #c62828; }
+.nav-dist { text-align: center; font-size: 34px; font-weight: 800; }
 
 /* ---------- Hundeführer-Modus: nur das Nötigste, große Knöpfe ---------- */
 .hfonly { display: none !important; }

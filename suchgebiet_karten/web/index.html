@@ -126,6 +126,18 @@
     </div>
   </div>
 
+  <!-- v130.2: Kompass-Navigation (Luftlinie) – zusätzlich zur Google-Maps-Route -->
+  <div id="navmeter" class="windmeter" hidden>
+    <div class="wm-box">
+      <h2 id="nav-title">🧭 Kompass</h2>
+      <p class="small">Luftlinie – führt geradeaus zum Ziel, nicht auf Wegen. Handy flach halten.</p>
+      <div class="wm-rose nav-rose"><div id="nav-needle" class="wm-needle nav-needle"><span>▲</span></div></div>
+      <div id="nav-dist" class="nav-dist">–</div>
+      <div id="nav-read" class="wm-read">Standort wird gesucht …</div>
+      <button id="nav-cancel">Schließen</button>
+    </div>
+  </div>
+
   <nav class="toolbar" aria-label="Werkzeuge">
     <button data-tool="pan" class="active" title="Karte bewegen"><span>✋</span>Bewegen</button>
     <button data-tool="pen" title="Freihand zeichnen"><span>✏️</span>Stift</button>

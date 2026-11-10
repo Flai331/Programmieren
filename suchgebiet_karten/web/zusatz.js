@@ -87,7 +87,7 @@ export function applyZusatz(p, m) {
   if (Array.isArray(z.i) && !(p.items || []).some((it) => it.zid === m.id)) {
     for (const x of z.i) {
       let it;
-      try { it = unpackItem(x, { fromEl: true, zid: m.id }); } catch { continue; }
+      try { it = unpackItem(x, { fromEl: true, zid: m.id, marker: true }); } catch { continue; } // v130.2: immer sichtbar, großes Symbol
       if (it.kind === 'text') pts.push([it.lat, it.lon]); else pts.push(...(it.pts || []));
       p.items.push(it);
       added++;
