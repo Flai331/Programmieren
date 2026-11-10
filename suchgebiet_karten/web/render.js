@@ -633,7 +633,6 @@ function gridLon(grid, c) {
 function drawItems(ctx, toPx, items, s, teamNames = {}, d = 3, grey = true) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  const named = new Set(); // Zeichnung aus mehreren Strichen: Name nur am ersten
   for (const it of items) {
     if (it.kind === 'stroke' && it.pts.length) {
       ctx.strokeStyle = it.color;
@@ -649,9 +648,10 @@ function drawItems(ctx, toPx, items, s, teamNames = {}, d = 3, grey = true) {
         ctx.lineTo(x + 0.1, y);
       }
       ctx.stroke();
-      if (d > 0 && it.name && !(it.group && named.has(it.group))) {
-        if (it.group) named.add(it.group);
-        // Name am Anfang der Zeichnung, wie bei Tracks
+      if (d > 0 && it.name) {
+        // v130.7: an jedem Strich der Zeichnung (nicht nur am ersten) – sonst bleibt der Name bei zwei
+        // in einem Zug gezeichneten, getrennten Strichen nur an einem davon sichtbar
+        // Name am Anfang des Strichs, wie bei Tracks
         const [x, y] = toPx(it.pts[0][0], it.pts[0][1]);
         ctx.font = `bold ${13 * s}px sans-serif`;
         ctx.textAlign = 'left';

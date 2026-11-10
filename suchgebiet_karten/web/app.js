@@ -16,7 +16,7 @@ import { buildReport, describeTarget, makeDedup, makeLog, validReportUrl } from 
 import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
 import { fileName } from './files.js';
 import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './infos.js';
-import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids, unionSel } from './scope.js';
+import { emptySel, selectAll, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids, unionSel } from './scope.js';
 import { MSG_VIEW, MSG_DELETE, ownTeamMsgs, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock, assignedOf, assignedCell, assignedGrid, markAccepted, isAccepted, unlockUntil } from './locks.js';
 import { isDone, openPoints, guardApplies, msgPct, closeMsg, sentPct, closeAsk, autoCloseDue, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
 import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts } from './elw.js'; // v124
@@ -80,7 +80,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.6';
+const APP_VERSION = 'v130.7';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -173,7 +173,7 @@ function load() {
   try {
     const s = JSON.parse(raw || 'null');
     if (s && s.projects) db = { ...db, ...s };
-    if (!['team', 'ua', 'el', 'other'].includes(db.shareTo)) db.shareTo = null; // v99: zuletzt gewählter Empfänger beim Teilen (pro Gerät)
+    if (!['ua', 'el', 'other'].includes(db.shareTo)) db.shareTo = null; // v99: zuletzt gewählter Empfänger beim Teilen (pro Gerät)
     db.teamsOpen = !!db.teamsOpen; // v98: Team-Liste auf dem Handy offen (pro Gerät)
   } catch { if (raw) { saveCorrupt(raw); startNotice = '⚠️ Der Speicher war beschädigt und wurde gesichert (Mehr → Fehlerbericht senden)'; } } // defekter Speicher -> Neustart, Rohdaten bleiben erhalten
   const ld = loadProjects(db.projects);
@@ -1233,14 +1233,45 @@ function renameItem(i) {
     });
     return;
   }
-  const what = 'der Zeichnung';
-  const t = prompt(`Name ${what} (steht so auf der Karte und im GPX für Garmin):`, it.name || '');
-  if (t === null || t.trim() === (it.name || '')) return;
-  snapshot();
-  // alle Striche einer Zeichnung heißen gleich
-  for (const x of it.group ? P.items.filter((y) => y.group === it.group) : [it]) x.name = t.trim();
-  changed();
-  toast(it.name ? `Name „${it.name}“ gespeichert` : 'Name entfernt');
+  strokeDialog(it, '✏️ Zeichnung').then((r) => {
+    if (!r || !P.items.includes(it)) return;
+    snapshot();
+    // alle Striche einer Zeichnung heißen gleich und tragen dieselbe Teamzuteilung
+    for (const x of it.group ? P.items.filter((y) => y.group === it.group) : [it]) {
+      x.name = r.name;
+      if (r.teams.length) x.teams = [...r.teams]; else delete x.teams;
+    }
+    changed();
+    toast(r.name ? `„${r.name}“ gespeichert` : 'Name entfernt');
+  });
+}
+// Zeichnung (Stift): Name und Zuteilung an ein oder mehrere Teams
+function strokeDialog(it, title) {
+  return openDlg((box, close) => {
+    dlgHead(box, title, 'Name steht so auf der Karte, im PDF und im GPX für Garmin.');
+    const name = dlgField(box, 'Name', Object.assign(document.createElement('input'), { type: 'text', value: it.name || '' }));
+    const teams = P.marks.filter((m) => m.kind === 'team');
+    const picked = new Set(it.teams || []);
+    if (teams.length) {
+      const h = document.createElement('p');
+      h.className = 'small';
+      h.textContent = 'Zugeteilt an (ein oder mehrere Teams):';
+      box.appendChild(h);
+      for (const t of teams) {
+        const l = document.createElement('label');
+        l.className = 'check';
+        const c = Object.assign(document.createElement('input'), { type: 'checkbox', checked: picked.has(t.id) });
+        c.addEventListener('change', () => { if (c.checked) picked.add(t.id); else picked.delete(t.id); });
+        const sp = document.createElement('span');
+        sp.textContent = `${typeIcon(t)} ${t.label}`;
+        l.append(c, sp);
+        box.appendChild(l);
+      }
+    }
+    dlgButton(box, 'Speichern', 'primary', () => close({ name: name.value.trim(), teams: [...picked] }));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+    setTimeout(() => { name.focus(); name.select(); }, 50);
+  });
 }
 
 // Umriss: Name, Zuteilung (Team oder Einheit aus „Einsatz → Kräfte“) und Notiz
@@ -1396,23 +1427,24 @@ function updatePenbar() {
   $('pen-done').disabled = !n;
   $('pen-cancel').disabled = !n;
 }
-function finishPen() {
+async function finishPen() {
   const d = draftPen;
   if (!d || !d.strokes.length) return;
   // wie beim Umriss: Name mit Vorschlag „Zeichnung 3“
   const groups = new Set(P.items.filter((it) => it.kind === 'stroke').map((it) => it.group || it));
   const def = `Zeichnung ${groups.size + 1}`;
-  const t = prompt('Name der Zeichnung (erscheint so auf der Karte und auf dem Garmin):', def);
-  if (t === null) return;
-  const name = t.trim() || def;
+  const r = await strokeDialog({ name: def, teams: [] }, '✏️ Zeichnung speichern');
+  if (!r || draftPen !== d) return;
+  const name = r.name || def;
+  draftPen = null;
   snapshot();
   const group = uid();
   for (const st of d.strokes) {
     st.group = group;
     st.name = name;
+    if (r.teams.length) st.teams = [...r.teams];
     P.items.push(st);
   }
-  draftPen = null;
   changed();
   toast(`„${name}“ gespeichert`);
 }
@@ -1424,8 +1456,8 @@ $('pen-back').addEventListener('click', () => {
   redraw();
   save();
 });
-$('pen-done').addEventListener('click', () => {
-  finishPen();
+$('pen-done').addEventListener('click', async () => {
+  await finishPen();
   if (!draftPen) setTool('pan');
 });
 $('pen-cancel').addEventListener('click', () => {
@@ -1938,8 +1970,15 @@ function renderMarks() {
       el.querySelector('.name').value = m.label;
     }
     const outl = m.kind === 'team' ? P.items.filter((it) => it.kind === 'track' && it.to === m.id).map((it) => it.name || 'Umriss') : [];
+    // v130.7: Stift-Zeichnungen, die diesem Team zugeteilt sind (je Gruppe nur einmal)
+    const drGroups = new Set();
+    const assigned = (it) => it.kind === 'stroke' && (it.teams || []).includes(m.id) && (!it.group || !drGroups.has(it.group));
+    const draw = m.kind === 'team'
+      ? P.items.filter(assigned).map((it) => { if (it.group) drGroups.add(it.group); return it.name || 'Zeichnung'; })
+      : [];
     el.querySelector('.cells').textContent = (a && a.count ? `${a.count} Feld${a.count > 1 ? 'er' : ''}: ${a.text}` : 'keine Felder')
-      + (outl.length ? ` · Umriss${outl.length > 1 ? 'e' : ''}: ${outl.join(', ')}` : '');
+      + (outl.length ? ` · Umriss${outl.length > 1 ? 'e' : ''}: ${outl.join(', ')}` : '')
+      + (draw.length ? ` · Zeichnung${draw.length > 1 ? 'en' : ''}: ${draw.join(', ')}` : '');
     const sel = el.querySelector('.color');
     for (const c of MARK_COLORS) {
       const o = document.createElement('option');
@@ -8763,9 +8802,8 @@ function openExport() {
 }
 
 // ---------- Teilen: „An wen?“ (Empfänger), „Was?“ (Umfang) und „Wie?“ (Weg) ----------
-const SHARE_TO = ['team', 'ua', 'el', 'other'];
+const SHARE_TO = ['ua', 'el', 'other'];
 const SHARE_HINT = {
-  team: 'Hundeführer-Handy: bekommt einen Auftrag (QR-Code), die Rückmeldung kommt zurück. Vorausgewählt sind die Felder und Umrisse des Teams.',
   ua: 'Unterabschnitt: bearbeitbar ist nur das ausgewählte Gebiet, der Rest ist nur zum Ansehen (QR-Code an ein Gerät mit dieser App).',
   el: 'Weiteres EL-Tablet / Einsatzleitwagen: bekommt den ganzen Einsatz, Rückmeldungen laufen dann dort ein (QR-Code).',
   other: 'Stellen ohne die App (Polizei, Feuerwehr, Druck, Garmin, Mail …): Datei oder PDF, kein QR-Code.',
@@ -8773,39 +8811,30 @@ const SHARE_HINT = {
 let shareScope = 'all';
 let shareSel = null;
 let shareName = '';
-let shareTo = null; // 'team' | 'ua' | 'el' | 'other' – zuletzt gewählter Empfänger (pro Gerät in db.shareTo)
+let shareTo = null; // 'ua' | 'el' | 'other' – zuletzt gewählter Empfänger (pro Gerät in db.shareTo)
 let shareInit = false;
 function shareLabel() {
   if (shareScope === 'all') return 'Einsatz';
-  if (shareScope === 'team') { const t = P.marks.find((m) => m.id === $('share-team').value); return t ? t.label : 'Team'; }
   return shareName || 'Auswahl';
 }
 function openShare() {
-  const teams = P.marks.filter((m) => m.kind === 'team');
-  const ts = $('share-team');
-  const prev = ts.value;
-  ts.innerHTML = '';
-  for (const t of teams) ts.add(new Option(`${typeIcon(t)} ${t.label}${t.dog ? ` – ${t.dog}` : ''}`, t.id));
-  if (teams.some((t) => t.id === prev)) ts.value = prev;
-  if (!shareInit) { // erstes Öffnen: zuletzt gewählter Empfänger dieses Geräts (Team wird nicht gemerkt)
+  if (!shareInit) { // erstes Öffnen: zuletzt gewählter Empfänger dieses Geräts
     shareInit = true;
     if (SHARE_TO.includes(db.shareTo)) applyShareTo(db.shareTo);
   }
   // Rückkehr von der Kartenauswahl ohne passenden Empfänger -> „Sonstige“ (alle Wege außer QR)
   if (!shareTo && (shareScope === 'pick' || shareScope === 'area' || shareScope === 'areas') && shareSel) shareTo = 'other';
   if (shareTo === 'el' || shareScope === 'all') { if (shareTo) shareSel = selectAll(P); }
-  if (shareScope === 'team') shareSel = selectTeam(P, ts.value);
   renderShare();
   openPanel('panel-share');
 }
 // Empfänger setzen und den Umfang dazu sinnvoll vorbelegen
 function applyShareTo(to) {
   shareTo = to;
-  if (to === 'team') { shareScope = 'team'; shareSel = $('share-team').value ? selectTeam(P, $('share-team').value) : emptySel(); }
-  else if (to === 'el') { shareScope = 'all'; shareSel = selectAll(P); }
+  if (to === 'el') { shareScope = 'all'; shareSel = selectAll(P); }
   else if (to === 'ua') {
-    if (shareScope === 'all' || shareScope === 'team' || !shareSel) { shareScope = 'pick'; shareName = 'Auswahl'; shareSel = emptySel(); }
-  } else if (shareScope === 'team' || !shareSel) { shareScope = 'all'; shareSel = selectAll(P); }
+    if (shareScope === 'all' || !shareSel) { shareScope = 'pick'; shareName = 'Auswahl'; shareSel = emptySel(); }
+  } else if (!shareSel) { shareScope = 'all'; shareSel = selectAll(P); }
 }
 function renderShare() {
   const to = shareTo;
@@ -8813,9 +8842,7 @@ function renderShare() {
   document.querySelectorAll('#share-to button').forEach((b) => b.classList.toggle('active', b.dataset.to === to));
   document.querySelectorAll('#share-scopes button').forEach((b) => b.classList.toggle('active', b.dataset.scope === shareScope));
   document.querySelector('#share-scopes [data-scope=all]').hidden = to === 'ua';
-  const hasTeams = P.marks.some((m) => m.kind === 'team');
-  $('share-team').hidden = to !== 'team' || !hasTeams;
-  $('share-tohint').textContent = to ? (to === 'team' && !hasTeams ? 'Noch keine Teams angelegt (Teams → „+ Team“).' : SHARE_HINT[to]) : 'Zuerst wählen, an wen es geht – dann kommen die passenden Wege.';
+  $('share-tohint').textContent = to ? SHARE_HINT[to] : 'Zuerst wählen, an wen es geht – dann kommen die passenden Wege.';
   $('share-what').hidden = !to || to === 'el';
   $('share-how').hidden = !to;
   const sum = shareSel ? selSummary(P, shareSel) : '';
@@ -8870,7 +8897,6 @@ function editShareSel(start) {
   updateGpxSelBar();
   redraw();
 }
-$('share-team').addEventListener('change', () => { shareScope = 'team'; shareSel = selectTeam(P, $('share-team').value); renderShare(); });
 $('share-edit').addEventListener('click', () => {
   // ändern: die bisherige Auswahl auf der Karte weiter bearbeiten (wird zur eigenen Auswahl)
   if (shareScope !== 'pick') shareName = shareLabel();
@@ -8896,7 +8922,6 @@ $('share-qr').addEventListener('click', () => shareRun(async () => {
   if (shareTo === 'el') return handoverQr(P, true);
   if (shareTo === 'ua') ensureLive(P, liveUrlNow()); // v127: der UA bekommt den Live-Kanal des Grund-Einsatzes mit
   if (shareTo === 'ua') return handoverQr(subsetProject(P, shareSel, uaTitle(P.title, shareLabel()), { base: true }), false); // v128: nie „UA UA …“
-  if (shareTo === 'team') prefillSend(shareSel, $('share-team').value, shareScope === 'team' ? 'team' : 'pick');
 }));
 $('share-pdf').addEventListener('click', () => shareRun(async () => {
   if (shareScope === 'all') return openExport();
@@ -8909,29 +8934,6 @@ $('share-pdf').addEventListener('click', () => shareRun(async () => {
   $('share-msg').textContent = '';
   await shareFile(res.blob, safeName(shareLabel(), '.pdf'), q.title, mailText(q.title));
 }));
-// Auftrags-Fenster für Hundeführer mit der Auswahl vorbelegen
-function prefillSend(sel, teamId, fields) {
-  for (const id of ['send-grids', 'send-items', 'send-pois', 'send-prev']) $(id).innerHTML = '';
-  renderSend();
-  $('send-team').value = teamId || '';
-  for (const id of ['send-grids', 'send-items', 'send-pois', 'send-prev']) $(id).innerHTML = '';
-  renderSend();
-  for (const inp of $('send-items').querySelectorAll('input')) inp.checked = sel.items.has(P.items[Number(inp.value)]);
-  for (const inp of $('send-grids').querySelectorAll('input')) inp.checked = sel.edges.has(inp.value) || ((sel.cells.get(inp.value) || new Set()).size > 0);
-  for (const inp of $('send-pois').querySelectorAll('input')) inp.checked = [...sel.pois].some((x) => x.id === inp.value);
-  $('send-meet').checked = !!sel.meet;
-  const mode = fields || (teamId ? 'team' : 'pick');
-  if (mode === 'pick') sendPicked = Object.fromEntries([...sel.cells].map(([id, s]) => [id, new Set(s)]));
-  document.querySelector(`input[name=send-fields][value=${mode}]`).checked = true;
-  syncSendFields();
-  renderPrev(); // Spuren des vorherigen Teams im gewählten Gebiet: Team-Auftrag über Teilen nimmt sie mit
-  const picked = Object.values(sendPicked).reduce((a, x) => a + x.size, 0);
-  $('send-pickinfo').textContent = mode === 'pick' ? `${picked} Felder angetippt.` : '';
-  sendCache = null;
-  updateSendSize();
-  openPanel('panel-send');
-}
-
 // ---------- Export (PDF, GPX, Garmin-Karte): Teilen oder Speichern ----------
 // Fertige Dateien werden kurz zwischengespeichert: Der Browser erlaubt das Teilen nur
 // direkt nach einem Tipp – dauert das Erstellen zu lange, reicht dann ein zweiter Tipp.
