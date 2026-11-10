@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
@@ -12,6 +14,7 @@ import 'confirm_screen.dart';
 import 'finance_actions.dart';
 import 'fill_screen.dart';
 import 'pdf_preview.dart';
+import 'share_name.dart';
 
 final _dateFormat = DateFormat('dd.MM.yyyy');
 
@@ -74,13 +77,23 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     await OpenFilex.open(path);
   }
 
+  /// Teilen mit frei wählbarem Dateinamen (wird pro Dokument gemerkt).
+  /// Die Datei in der App behält ihren Namen.
   Future<void> _sharePdf({bool filled = false}) async {
     final doc = _doc!;
     final relative = filled ? doc.filledPdfPath! : doc.pdfPath;
     final path = await ScanService.absolutePdfPath(relative);
+    if (!mounted) return;
+    final copy = await askShareCopy(
+      context,
+      sourcePath: path,
+      rememberKey: '${doc.id}_${filled ? 'filled' : 'original'}',
+      suggestion: suggestedShareName(doc.docNumber, doc.title, filled: filled),
+    );
+    if (copy == null) return;
     await SharePlus.instance.share(ShareParams(
-      files: [XFile(path)],
-      subject: '${doc.docNumber} ${doc.title}${filled ? ' (ausgefüllt)' : ''}',
+      files: [XFile(copy, mimeType: 'application/pdf')],
+      subject: copy.split(Platform.pathSeparator).last.replaceAll('.pdf', ''),
     ));
   }
 
