@@ -6,9 +6,9 @@ import 'package:pdfrx/pdfrx.dart';
 
 import '../app_services.dart';
 import '../data/database.dart';
-import '../fill/fill_export.dart';
 import '../fill/fill_model.dart';
 import '../scan/scan_service.dart';
+import 'fill_item_view.dart';
 
 enum _Tool { text, check, cross, date, signature }
 
@@ -35,6 +35,9 @@ class _FillScreenState extends State<FillScreen> {
   List<SignatureTemplate> _templates = const [];
   final _templateBytes = <String, Uint8List>{};
   bool _dirty = false;
+
+  /// Solange ein Element gezogen wird, ist der Zoom pausiert.
+  bool _itemDrag = false;
   bool _saving = false;
 
   @override
@@ -70,6 +73,10 @@ class _FillScreenState extends State<FillScreen> {
     _history.remember(_fill);
     _dirty = true;
   }
+
+  /// Zustand vor einem Ziehen merken – ohne gleich „geändert“ zu melden
+  /// (ein bloßes Antippen ändert nichts).
+  void _rememberQuietly() => _history.remember(_fill);
 
   void _undo() {
     final previous = _history.undo();
@@ -419,6 +426,8 @@ class _FillScreenState extends State<FillScreen> {
         return Center(
           child: InteractiveViewer(
             maxScale: 6,
+            panEnabled: !_itemDrag,
+            scaleEnabled: !_itemDrag,
             child: SizedBox(
               width: w,
               height: h,
@@ -451,109 +460,43 @@ class _FillScreenState extends State<FillScreen> {
   }
 
   Widget _itemWidget(FillItem item, Size size) {
-    final theme = Theme.of(context);
-    final selected = item.id == _selectedId;
-    final w = size.width;
-    const handle = 26.0;
-
-    Widget content;
-    switch (item.kind) {
-      case FillKind.text:
-        content = Text(
-          item.text,
-          style: TextStyle(
-            fontFamily: kFillFontFamily,
-            fontSize: item.size * w,
-            color: Color(item.color),
-            height: 1.3,
-          ),
-          textHeightBehavior:
-              const TextHeightBehavior(applyHeightToFirstAscent: false),
-        );
-      case FillKind.check:
-      case FillKind.cross:
-        final side = item.size * w;
-        content = CustomPaint(
-          size: Size.square(side),
-          painter: _MarkPainter(item.kind, Color(item.color)),
-        );
-      case FillKind.image:
-        final bytes = _templateBytes[item.templateId];
-        final width = item.size * w;
-        content = SizedBox(
-          width: width,
-          height: width * item.aspect,
-          child: bytes == null
-              ? const Icon(Icons.broken_image)
-              : Image.memory(bytes, fit: BoxFit.fill, gaplessPlayback: true),
-        );
-    }
-
     return Positioned(
-      left: item.x * w,
+      left: item.x * size.width,
       top: item.y * size.height,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      child: FillItemView(
+        key: ValueKey(item.id),
+        item: item,
+        pageSize: size,
+        selected: item.id == _selectedId,
+        imageBytes: _templateBytes[item.templateId],
         onTap: () => _tapItem(item),
-        onPanStart: (_) {
-          _remember();
-          setState(() => _selectedId = item.id);
+        onDragStart: () {
+          _rememberQuietly();
+          setState(() {
+            _selectedId = item.id;
+            _itemDrag = true;
+          });
         },
-        onPanUpdate: (d) => setState(() {
-          item.x = (item.x + d.delta.dx / w).clamp(0, 0.98).toDouble();
-          item.y = (item.y + d.delta.dy / size.height).clamp(0, 0.98).toDouble();
+        onDragEnd: () => setState(() => _itemDrag = false),
+        onMove: (delta) => setState(() {
+          _dirty = true;
+          item.x = (item.x + delta.dx / size.width).clamp(0, 0.98).toDouble();
+          item.y = (item.y + delta.dy / size.height).clamp(0, 0.98).toDouble();
         }),
-        child: Padding(
-          // Platz für den Größen-Griff unten rechts (muss innerhalb liegen,
-          // sonst ist er nicht antippbar).
-          padding: EdgeInsets.only(
-            right: selected ? handle * 0.6 : 0,
-            bottom: selected ? handle * 0.6 : 0,
-          ),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                alignment: Alignment.topLeft,
-                foregroundDecoration: selected
-                    ? BoxDecoration(
-                        border: Border.all(
-                            color: theme.colorScheme.primary, width: 1.5),
-                      )
-                    : null,
-                child: content,
-              ),
-              if (selected)
-                Positioned(
-                  right: -handle * 0.6,
-                  bottom: -handle * 0.6,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onPanStart: (_) => _remember(),
-                    onPanUpdate: (d) => setState(() {
-                      final delta = (d.delta.dx + d.delta.dy) / 2 / w;
-                      final factor = item.kind == FillKind.text ? 0.35 : 1.0;
-                      item.size = clampSize(item.kind, item.size + delta * factor);
-                    }),
-                    child: Container(
-                      width: handle,
-                      height: handle,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                      child: const Icon(Icons.open_in_full,
-                          size: 14, color: Colors.white),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
+        onResize: (value) => setState(() {
+          _dirty = true;
+          item.size = value;
+        }),
       ),
     );
+  }
+
+  /// A−/A+: Größe in Stufen ändern (Alternative zum Ziehen am Griff).
+  void _scaleSelected(double factor) {
+    final item = _selected;
+    if (item == null) return;
+    _remember();
+    setState(() => item.size = clampSize(item.kind, item.size * factor));
   }
 
   Widget _colorBar() {
@@ -592,6 +535,16 @@ class _FillScreenState extends State<FillScreen> {
               ),
             const Spacer(),
             if (selected != null) ...[
+              IconButton(
+                tooltip: 'Kleiner',
+                icon: const Icon(Icons.text_decrease),
+                onPressed: () => _scaleSelected(1 / 1.2),
+              ),
+              IconButton(
+                tooltip: 'Größer',
+                icon: const Icon(Icons.text_increase),
+                onPressed: () => _scaleSelected(1.2),
+              ),
               if (selected.kind == FillKind.text)
                 IconButton(
                   tooltip: 'Text ändern',
@@ -686,34 +639,4 @@ class _FillScreenState extends State<FillScreen> {
       ),
     );
   }
-}
-
-/// Zeichnet Haken/Kreuz genauso wie in der PDF (fill_export.dart).
-class _MarkPainter extends CustomPainter {
-  final FillKind kind;
-  final Color color;
-  _MarkPainter(this.kind, this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final side = size.width;
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = side * kMarkStroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
-    final paths = kind == FillKind.check ? [kCheckPath] : kCrossPaths;
-    for (final pts in paths) {
-      final path = Path()..moveTo(pts.first[0] * side, pts.first[1] * side);
-      for (final pt in pts.skip(1)) {
-        path.lineTo(pt[0] * side, pt[1] * side);
-      }
-      canvas.drawPath(path, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_MarkPainter old) =>
-      old.kind != kind || old.color != color;
 }
