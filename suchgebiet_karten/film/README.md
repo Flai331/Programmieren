@@ -78,3 +78,26 @@ veröffentlicht – „above-the-clouds“ (Planung und Suche), „broken-suspen
 „10 – Heart of Acceptance“ (ab dem Fund). Download über die umgewandelten MP3-Fassungen von Commons, z. B.
 `https://upload.wikimedia.org/wikipedia/commons/transcoded/<x>/<xy>/<Datei>.ogg/<Datei>.ogg.mp3`
 (die Originaldateien werden bei vielen Abrufen gedrosselt).
+
+### 3D-Fassung (Geräte in einem nachgebauten Gelände)
+
+```bash
+node gelaende.js                                             # einmalig: Kartenbild + Koordinaten -> gelaende.jpg/.json
+REC_DIR=rec-einsatz OUT_NAME=RHS-Einsatz-Scheuen-3D-ohne-Ton.mp4 ./render3d.sh
+# oder einzeln (fortsetzbar nach Abbruch, zwei Prozesse parallel):
+#   PART=0/2 node compose3d.js &  PART=1/2 node compose3d.js &  wait
+#   node compose3d.js   # baut die fertigen Abschnitte aus build-3d/ zusammen
+python3 musik.py /pfad/zu/musik   # IN=RHS-Einsatz-Scheuen-3D-ohne-Ton.mp4 OUT=RHS-Einsatz-Scheuen-3D.mp4
+```
+
+Tablet und Handy schweben als 3D-Objekte (CSS-3D-Geräte wie bei `compose3d.js`'s einfacher Fassung, hier
+zusätzlich eine echte Three.js-Szene als Hintergrund: `field3d.js`) über dem Kartenausschnitt der Einsatzstelle
+– Bäume dort, wo die Karte Wald zeigt (`gelaende.js` liest das Kartenbild+Raster+Routen aus der echten App
+aus), Figuren für jedes Team laufen ihre Wege ab, Drohne mit Rotoren, Funde/Hinweise als Pins, Gebiete färben
+sich beim Zuteilen ein, Dämmerung ab 16:41. Die Kamera fährt zwischen EL-Blick und Gelände-Blick je nach Szene.
+Rendern dauert (CPU-Software-WebGL, SwiftShader) deutlich länger als die anderen Fassungen – mit zwei
+Prozessen parallel (`render3d.sh`) für ~5:50 Min. Film ca. 1–1,5 Std. Für den Versand ggf. nachkomprimieren:
+
+```bash
+ffmpeg -i RHS-Einsatz-Scheuen-3D.mp4 -c:v libx264 -preset slow -crf 24 -pix_fmt yuv420p -c:a aac -b:a 160k -movflags +faststart klein.mp4
+```
