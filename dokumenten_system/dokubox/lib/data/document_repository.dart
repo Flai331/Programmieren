@@ -104,6 +104,17 @@ class DocumentDraft {
   DateTime? paymentReminderAt;
   List<ClaimDraft> claims;
 
+  // Schema v6
+  DateTime? objectionDeadline;
+  DateTime? warrantyUntil;
+  String? warrantyKind;
+
+  /// SHA-256 der PDF (nur beim Anlegen).
+  String? contentHash;
+
+  /// Tage vor der Widerspruchsfrist erinnern (aus den Einstellungen).
+  int objectionLeadDays;
+
   DocumentDraft({
     this.title = '',
     this.docDate,
@@ -121,6 +132,11 @@ class DocumentDraft {
     this.paidAt,
     this.paymentReminderAt,
     List<ClaimDraft>? claims,
+    this.objectionDeadline,
+    this.warrantyUntil,
+    this.warrantyKind,
+    this.contentHash,
+    this.objectionLeadDays = 7,
   })  : tagNames = tagNames ?? [],
         claims = claims ?? [];
 }
@@ -303,6 +319,10 @@ class DocumentRepository {
         paymentStatus: Value(draft.paymentStatus),
         paidAt: Value(draft.paidAt),
         paymentReminderAt: Value(draft.paymentReminderAt),
+        objectionDeadline: Value(draft.objectionDeadline),
+        warrantyUntil: Value(draft.warrantyUntil),
+        warrantyKind: Value(draft.warrantyKind),
+        contentHash: Value(draft.contentHash),
       );
       final doc =
           await db.into(db.documents).insertReturning(companion);
@@ -327,6 +347,7 @@ class DocumentRepository {
       }
       await _writeFtsEntry(doc.id, docNumber, draft, ocrText, refs);
       await _writeClaims(doc.id, draft.claims);
+      await _syncAutoTasks(doc.id, draft);
       if (correspondentId != null) {
         await _learnDefaults(correspondentId, draft.docType, tagIds);
       }
@@ -360,10 +381,14 @@ class DocumentRepository {
           paymentStatus: Value(draft.paymentStatus),
           paidAt: Value(draft.paidAt),
           paymentReminderAt: Value(draft.paymentReminderAt),
+          objectionDeadline: Value(draft.objectionDeadline),
+          warrantyUntil: Value(draft.warrantyUntil),
+          warrantyKind: Value(draft.warrantyKind),
           updatedAt: Value(DateTime.now()),
         ),
       );
       await _writeClaims(id, draft.claims);
+      await _syncAutoTasks(id, draft);
       await (db.delete(db.documentTags)
             ..where((t) => t.documentId.equals(id)))
           .go();
@@ -494,7 +519,9 @@ class DocumentRepository {
               d.deletedAt.isNull() &
               d.retentionUntil.isNotNull() &
               d.retentionUntil.isSmallerOrEqualValue(now) &
-              d.storageLocation.equals('vernichtet').not())
+              d.storageLocation.equals('vernichtet').not() &
+              // Solange Garantie läuft, nicht ausmisten.
+              (d.warrantyUntil.isNull() | d.warrantyUntil.isSmallerOrEqualValue(now)))
           ..orderBy([(d) => OrderingTerm.asc(d.retentionUntil)]))
         .watch();
   }
@@ -767,6 +794,36 @@ class DocumentRepository {
           .add(r.read<String>('value'));
     }
     return byDoc.values.toList();
+  }
+
+  /// Erinnerungen an Widerspruchsfrist und Garantieende passend zum
+  /// Dokument anlegen/verschieben/entfernen.
+  Future<void> _syncAutoTasks(String documentId, DocumentDraft draft) async {
+    String date(DateTime d) =>
+        '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+    final o = draft.objectionDeadline;
+    await ensureAutoTask(
+      documentId: documentId,
+      origin: 'widerspruch',
+      action: 'pruefen',
+      dueAt: o == null
+          ? null
+          : DateTime(o.year, o.month, o.day - draft.objectionLeadDays, 9),
+      note: o == null
+          ? ''
+          : 'Widerspruchsfrist endet am ${date(o)} – Widerspruch nötig?',
+    );
+    final w = draft.warrantyUntil;
+    await ensureAutoTask(
+      documentId: documentId,
+      origin: 'garantie',
+      action: 'pruefen',
+      dueAt: w == null ? null : DateTime(w.year, w.month, w.day - 28, 9),
+      note: w == null
+          ? ''
+          : '${draft.warrantyKind == 'garantie' ? 'Garantie' : 'Gewährleistung'} '
+              'endet am ${date(w)} – Mängel jetzt melden',
+    );
   }
 
   /// Automatisch erzeugte Aufgabe (Widerspruchsfrist, Garantie,

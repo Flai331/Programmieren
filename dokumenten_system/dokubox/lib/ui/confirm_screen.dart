@@ -277,6 +277,76 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
     ];
   }
 
+  /// Widerspruchsfrist + Garantie/Gewährleistung (mit Erinnerung).
+  List<Widget> _deadlineFields(ThemeData theme) {
+    final showObjection =
+        _draft.objectionDeadline != null || _draft.docType == 'Bescheid';
+    void setWarranty(int? months, String kind) => setState(() {
+          if (months == null) {
+            _draft.warrantyUntil = null;
+            _draft.warrantyKind = null;
+          } else {
+            final base = _draft.docDate ?? DateTime.now();
+            _draft.warrantyUntil =
+                DateTime(base.year, base.month + months, base.day);
+            _draft.warrantyKind = kind;
+          }
+        });
+    return [
+      if (showObjection) ...[
+        const SizedBox(height: 12),
+        _DateRow(
+          label: 'Widerspruchsfrist bis',
+          value: _draft.objectionDeadline,
+          emptyLabel: 'keine erkannt',
+          onTap: () async {
+            final picked = await _pickDate(_draft.objectionDeadline);
+            if (picked != null) {
+              setState(() => _draft.objectionDeadline = picked);
+            }
+          },
+          onClear: () => setState(() => _draft.objectionDeadline = null),
+        ),
+        if (_draft.objectionDeadline != null)
+          Text(
+            'Berechnet aus Briefdatum + 4 Tage Bekanntgabe – bitte prüfen. '
+            'Erinnerung ${_draft.objectionLeadDays} Tage vorher.',
+            style: theme.textTheme.bodySmall,
+          ),
+      ],
+      const SizedBox(height: 12),
+      _DateRow(
+        label: _draft.warrantyKind == 'garantie'
+            ? 'Garantie bis'
+            : 'Gewährleistung/Garantie bis',
+        value: _draft.warrantyUntil,
+        emptyLabel: 'keine',
+        onTap: () async {
+          final picked = await _pickDate(_draft.warrantyUntil);
+          if (picked != null) {
+            setState(() {
+              _draft.warrantyUntil = picked;
+              _draft.warrantyKind ??= 'garantie';
+            });
+          }
+        },
+        onClear: () => setWarranty(null, ''),
+      ),
+      Wrap(
+        spacing: 6,
+        children: [
+          ActionChip(
+              label: const Text('2 J. Gewährleistung'),
+              onPressed: () => setWarranty(24, 'gewaehrleistung')),
+          for (final y in const [1, 3, 5])
+            ActionChip(
+                label: Text('$y J. Garantie'),
+                onPressed: () => setWarranty(12 * y, 'garantie')),
+        ],
+      ),
+    ];
+  }
+
   Future<DateTime?> _pickDate(DateTime? initial) => showDatePicker(
         context: context,
         initialDate: initial ?? DateTime.now(),
@@ -406,6 +476,7 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
             },
             onClear: () => setState(() => _draft.docDate = null),
           ),
+          ..._deadlineFields(theme),
           const SizedBox(height: 12),
           TextField(
             controller: _correspondent,

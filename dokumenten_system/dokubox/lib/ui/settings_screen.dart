@@ -10,7 +10,9 @@ import '../backup/backup_service.dart';
 import '../data/finance.dart';
 import '../lock/lock_gate.dart';
 import '../scan/blank_pages.dart';
+import '../data/deadline_settings.dart';
 import '../data/setup_mode.dart';
+import '../extract/deadlines.dart';
 import 'firms_screen.dart';
 import 'templates_screen.dart';
 
@@ -398,6 +400,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
+          const Divider(),
+          FutureBuilder<DeadlineSettings>(
+            future: DeadlineSettings.load(),
+            builder: (context, snap) {
+              final d = snap.data ?? const DeadlineSettings();
+              return Column(children: [
+                ListTile(
+                  leading: const Icon(Icons.gavel),
+                  title: const Text('Bundesland (Feiertage für Fristen)'),
+                  trailing: DropdownButton<String?>(
+                    value: d.state,
+                    hint: const Text('nur bundesweit'),
+                    onChanged: (v) async {
+                      await DeadlineSettings.setState(v);
+                      setState(() {});
+                    },
+                    items: [
+                      const DropdownMenuItem(
+                          value: null, child: Text('nur bundesweit')),
+                      for (final e in kBundeslaender.entries)
+                        DropdownMenuItem(value: e.key, child: Text(e.value)),
+                    ],
+                  ),
+                ),
+                ListTile(
+                  leading: const SizedBox(width: 24),
+                  title: const Text('Widerspruchsfrist: erinnern'),
+                  trailing: DropdownButton<int>(
+                    value: d.objectionLeadDays,
+                    onChanged: (v) async {
+                      if (v == null) return;
+                      await DeadlineSettings.setObjectionLeadDays(v);
+                      setState(() {});
+                    },
+                    items: [
+                      for (final days in const [3, 7, 14])
+                        DropdownMenuItem(
+                            value: days, child: Text('$days Tage vorher')),
+                    ],
+                  ),
+                ),
+              ]);
+            },
+          ),
           const Divider(),
           ..._financeSettings(),
           const Divider(),

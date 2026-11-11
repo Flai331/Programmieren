@@ -9,6 +9,8 @@ import '../ai/ai_extraction_service.dart';
 import '../app_services.dart';
 import '../data/batch_numbering.dart';
 import '../data/database.dart';
+import '../data/deadline_settings.dart';
+import '../extract/deadlines.dart';
 import '../data/setup_mode.dart';
 import '../data/doc_types.dart';
 import '../data/document_repository.dart';
@@ -551,6 +553,17 @@ class _HomeScreenState extends State<HomeScreen> {
     await _refineWithAi(draft, outcome.ocrText, outcome.firstPageOcr);
     // Die KI kann Datum/Typ korrigiert haben → Fälligkeit neu berechnen.
     applyPaymentSuggestions(draft, outcome.ocrText, finance: finance);
+    // Fristen: Widerspruch (Bescheide) und Garantie.
+    final deadlines = await DeadlineSettings.load();
+    draft.objectionLeadDays = deadlines.objectionLeadDays;
+    draft.objectionDeadline ??= extractObjectionDeadline(
+        outcome.ocrText, draft.docDate,
+        state: deadlines.state);
+    final warranty = extractWarranty(outcome.ocrText, draft.docDate);
+    if (warranty != null && draft.warrantyUntil == null) {
+      draft.warrantyUntil = warranty.until;
+      draft.warrantyKind = warranty.kind;
+    }
     return draft;
   }
 

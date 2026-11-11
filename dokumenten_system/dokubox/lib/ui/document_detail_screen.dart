@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../app_services.dart';
 import '../data/database.dart';
+import '../data/deadline_settings.dart';
 import '../data/document_repository.dart';
 import '../data/finance.dart';
 import '../scan/scan_service.dart';
@@ -284,6 +285,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
 
   Future<void> _edit() async {
     final doc = _doc!;
+    final leadDays = (await DeadlineSettings.load()).objectionLeadDays;
     final draft = DocumentDraft(
       title: doc.title,
       docDate: doc.docDate,
@@ -300,7 +302,12 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       paidAt: doc.paidAt,
       paymentReminderAt: doc.paymentReminderAt,
       claims: [for (final c in _claims) ClaimDraft.fromClaim(c)],
+      objectionDeadline: doc.objectionDeadline,
+      warrantyUntil: doc.warrantyUntil,
+      warrantyKind: doc.warrantyKind,
+      objectionLeadDays: leadDays,
     );
+    if (!mounted) return;
     final result = await Navigator.of(context).push<DocumentDraft>(
       MaterialPageRoute(
         builder: (_) => ConfirmScreen(draft: draft, pdfPath: doc.pdfPath),
