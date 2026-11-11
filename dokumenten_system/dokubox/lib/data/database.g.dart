@@ -242,6 +242,118 @@ class $DocumentsTable extends Documents
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _contentHashMeta = const VerificationMeta(
+    'contentHash',
+  );
+  @override
+  late final GeneratedColumn<String> contentHash = GeneratedColumn<String>(
+    'content_hash',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _warrantyUntilMeta = const VerificationMeta(
+    'warrantyUntil',
+  );
+  @override
+  late final GeneratedColumn<DateTime> warrantyUntil =
+      GeneratedColumn<DateTime>(
+        'warranty_until',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _warrantyKindMeta = const VerificationMeta(
+    'warrantyKind',
+  );
+  @override
+  late final GeneratedColumn<String> warrantyKind = GeneratedColumn<String>(
+    'warranty_kind',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _objectionDeadlineMeta = const VerificationMeta(
+    'objectionDeadline',
+  );
+  @override
+  late final GeneratedColumn<DateTime> objectionDeadline =
+      GeneratedColumn<DateTime>(
+        'objection_deadline',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _taxCategoryMeta = const VerificationMeta(
+    'taxCategory',
+  );
+  @override
+  late final GeneratedColumn<String> taxCategory = GeneratedColumn<String>(
+    'tax_category',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _taxYearMeta = const VerificationMeta(
+    'taxYear',
+  );
+  @override
+  late final GeneratedColumn<int> taxYear = GeneratedColumn<int>(
+    'tax_year',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _taxAmountCentsMeta = const VerificationMeta(
+    'taxAmountCents',
+  );
+  @override
+  late final GeneratedColumn<int> taxAmountCents = GeneratedColumn<int>(
+    'tax_amount_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _destroyedAtMeta = const VerificationMeta(
+    'destroyedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> destroyedAt = GeneratedColumn<DateTime>(
+    'destroyed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _destroyedFromMeta = const VerificationMeta(
+    'destroyedFrom',
+  );
+  @override
+  late final GeneratedColumn<String> destroyedFrom = GeneratedColumn<String>(
+    'destroyed_from',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _paymentReferenceMeta = const VerificationMeta(
+    'paymentReference',
+  );
+  @override
+  late final GeneratedColumn<String> paymentReference = GeneratedColumn<String>(
+    'payment_reference',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -288,6 +400,16 @@ class $DocumentsTable extends Documents
     paymentReminderAt,
     filledPdfPath,
     fillData,
+    contentHash,
+    warrantyUntil,
+    warrantyKind,
+    objectionDeadline,
+    taxCategory,
+    taxYear,
+    taxAmountCents,
+    destroyedAt,
+    destroyedFrom,
+    paymentReference,
     updatedAt,
     deletedAt,
   ];
@@ -456,6 +578,93 @@ class $DocumentsTable extends Documents
         fillData.isAcceptableOrUnknown(data['fill_data']!, _fillDataMeta),
       );
     }
+    if (data.containsKey('content_hash')) {
+      context.handle(
+        _contentHashMeta,
+        contentHash.isAcceptableOrUnknown(
+          data['content_hash']!,
+          _contentHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('warranty_until')) {
+      context.handle(
+        _warrantyUntilMeta,
+        warrantyUntil.isAcceptableOrUnknown(
+          data['warranty_until']!,
+          _warrantyUntilMeta,
+        ),
+      );
+    }
+    if (data.containsKey('warranty_kind')) {
+      context.handle(
+        _warrantyKindMeta,
+        warrantyKind.isAcceptableOrUnknown(
+          data['warranty_kind']!,
+          _warrantyKindMeta,
+        ),
+      );
+    }
+    if (data.containsKey('objection_deadline')) {
+      context.handle(
+        _objectionDeadlineMeta,
+        objectionDeadline.isAcceptableOrUnknown(
+          data['objection_deadline']!,
+          _objectionDeadlineMeta,
+        ),
+      );
+    }
+    if (data.containsKey('tax_category')) {
+      context.handle(
+        _taxCategoryMeta,
+        taxCategory.isAcceptableOrUnknown(
+          data['tax_category']!,
+          _taxCategoryMeta,
+        ),
+      );
+    }
+    if (data.containsKey('tax_year')) {
+      context.handle(
+        _taxYearMeta,
+        taxYear.isAcceptableOrUnknown(data['tax_year']!, _taxYearMeta),
+      );
+    }
+    if (data.containsKey('tax_amount_cents')) {
+      context.handle(
+        _taxAmountCentsMeta,
+        taxAmountCents.isAcceptableOrUnknown(
+          data['tax_amount_cents']!,
+          _taxAmountCentsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('destroyed_at')) {
+      context.handle(
+        _destroyedAtMeta,
+        destroyedAt.isAcceptableOrUnknown(
+          data['destroyed_at']!,
+          _destroyedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('destroyed_from')) {
+      context.handle(
+        _destroyedFromMeta,
+        destroyedFrom.isAcceptableOrUnknown(
+          data['destroyed_from']!,
+          _destroyedFromMeta,
+        ),
+      );
+    }
+    if (data.containsKey('payment_reference')) {
+      context.handle(
+        _paymentReferenceMeta,
+        paymentReference.isAcceptableOrUnknown(
+          data['payment_reference']!,
+          _paymentReferenceMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -561,6 +770,46 @@ class $DocumentsTable extends Documents
         DriftSqlType.string,
         data['${effectivePrefix}fill_data'],
       ),
+      contentHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content_hash'],
+      ),
+      warrantyUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}warranty_until'],
+      ),
+      warrantyKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}warranty_kind'],
+      ),
+      objectionDeadline: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}objection_deadline'],
+      ),
+      taxCategory: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tax_category'],
+      ),
+      taxYear: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tax_year'],
+      ),
+      taxAmountCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tax_amount_cents'],
+      ),
+      destroyedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}destroyed_at'],
+      ),
+      destroyedFrom: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}destroyed_from'],
+      ),
+      paymentReference: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payment_reference'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -626,6 +875,26 @@ class Document extends DataClass implements Insertable<Document> {
   /// Eingetragene Texte/Haken/Unterschriften als JSON (siehe FillDocument),
   /// damit man später weiter ausfüllen kann.
   final String? fillData;
+
+  /// SHA-256 der PDF (Dubletten-Erkennung).
+  final String? contentHash;
+  final DateTime? warrantyUntil;
+
+  /// `garantie` oder `gewaehrleistung`.
+  final String? warrantyKind;
+  final DateTime? objectionDeadline;
+
+  /// Steuer-Mappe: Kategorie, Jahr, anrechenbarer Betrag (Cent).
+  final String? taxCategory;
+  final int? taxYear;
+  final int? taxAmountCents;
+
+  /// Vernichtungs-Protokoll.
+  final DateTime? destroyedAt;
+  final String? destroyedFrom;
+
+  /// Verwendungszweck für Überweisung (GiroCode).
+  final String? paymentReference;
   final DateTime updatedAt;
   final DateTime? deletedAt;
   const Document({
@@ -650,6 +919,16 @@ class Document extends DataClass implements Insertable<Document> {
     this.paymentReminderAt,
     this.filledPdfPath,
     this.fillData,
+    this.contentHash,
+    this.warrantyUntil,
+    this.warrantyKind,
+    this.objectionDeadline,
+    this.taxCategory,
+    this.taxYear,
+    this.taxAmountCents,
+    this.destroyedAt,
+    this.destroyedFrom,
+    this.paymentReference,
     required this.updatedAt,
     this.deletedAt,
   });
@@ -702,6 +981,36 @@ class Document extends DataClass implements Insertable<Document> {
     }
     if (!nullToAbsent || fillData != null) {
       map['fill_data'] = Variable<String>(fillData);
+    }
+    if (!nullToAbsent || contentHash != null) {
+      map['content_hash'] = Variable<String>(contentHash);
+    }
+    if (!nullToAbsent || warrantyUntil != null) {
+      map['warranty_until'] = Variable<DateTime>(warrantyUntil);
+    }
+    if (!nullToAbsent || warrantyKind != null) {
+      map['warranty_kind'] = Variable<String>(warrantyKind);
+    }
+    if (!nullToAbsent || objectionDeadline != null) {
+      map['objection_deadline'] = Variable<DateTime>(objectionDeadline);
+    }
+    if (!nullToAbsent || taxCategory != null) {
+      map['tax_category'] = Variable<String>(taxCategory);
+    }
+    if (!nullToAbsent || taxYear != null) {
+      map['tax_year'] = Variable<int>(taxYear);
+    }
+    if (!nullToAbsent || taxAmountCents != null) {
+      map['tax_amount_cents'] = Variable<int>(taxAmountCents);
+    }
+    if (!nullToAbsent || destroyedAt != null) {
+      map['destroyed_at'] = Variable<DateTime>(destroyedAt);
+    }
+    if (!nullToAbsent || destroyedFrom != null) {
+      map['destroyed_from'] = Variable<String>(destroyedFrom);
+    }
+    if (!nullToAbsent || paymentReference != null) {
+      map['payment_reference'] = Variable<String>(paymentReference);
     }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -759,6 +1068,36 @@ class Document extends DataClass implements Insertable<Document> {
       fillData: fillData == null && nullToAbsent
           ? const Value.absent()
           : Value(fillData),
+      contentHash: contentHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(contentHash),
+      warrantyUntil: warrantyUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(warrantyUntil),
+      warrantyKind: warrantyKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(warrantyKind),
+      objectionDeadline: objectionDeadline == null && nullToAbsent
+          ? const Value.absent()
+          : Value(objectionDeadline),
+      taxCategory: taxCategory == null && nullToAbsent
+          ? const Value.absent()
+          : Value(taxCategory),
+      taxYear: taxYear == null && nullToAbsent
+          ? const Value.absent()
+          : Value(taxYear),
+      taxAmountCents: taxAmountCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(taxAmountCents),
+      destroyedAt: destroyedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(destroyedAt),
+      destroyedFrom: destroyedFrom == null && nullToAbsent
+          ? const Value.absent()
+          : Value(destroyedFrom),
+      paymentReference: paymentReference == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paymentReference),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
@@ -795,6 +1134,18 @@ class Document extends DataClass implements Insertable<Document> {
       ),
       filledPdfPath: serializer.fromJson<String?>(json['filledPdfPath']),
       fillData: serializer.fromJson<String?>(json['fillData']),
+      contentHash: serializer.fromJson<String?>(json['contentHash']),
+      warrantyUntil: serializer.fromJson<DateTime?>(json['warrantyUntil']),
+      warrantyKind: serializer.fromJson<String?>(json['warrantyKind']),
+      objectionDeadline: serializer.fromJson<DateTime?>(
+        json['objectionDeadline'],
+      ),
+      taxCategory: serializer.fromJson<String?>(json['taxCategory']),
+      taxYear: serializer.fromJson<int?>(json['taxYear']),
+      taxAmountCents: serializer.fromJson<int?>(json['taxAmountCents']),
+      destroyedAt: serializer.fromJson<DateTime?>(json['destroyedAt']),
+      destroyedFrom: serializer.fromJson<String?>(json['destroyedFrom']),
+      paymentReference: serializer.fromJson<String?>(json['paymentReference']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
@@ -824,6 +1175,16 @@ class Document extends DataClass implements Insertable<Document> {
       'paymentReminderAt': serializer.toJson<DateTime?>(paymentReminderAt),
       'filledPdfPath': serializer.toJson<String?>(filledPdfPath),
       'fillData': serializer.toJson<String?>(fillData),
+      'contentHash': serializer.toJson<String?>(contentHash),
+      'warrantyUntil': serializer.toJson<DateTime?>(warrantyUntil),
+      'warrantyKind': serializer.toJson<String?>(warrantyKind),
+      'objectionDeadline': serializer.toJson<DateTime?>(objectionDeadline),
+      'taxCategory': serializer.toJson<String?>(taxCategory),
+      'taxYear': serializer.toJson<int?>(taxYear),
+      'taxAmountCents': serializer.toJson<int?>(taxAmountCents),
+      'destroyedAt': serializer.toJson<DateTime?>(destroyedAt),
+      'destroyedFrom': serializer.toJson<String?>(destroyedFrom),
+      'paymentReference': serializer.toJson<String?>(paymentReference),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
@@ -851,6 +1212,16 @@ class Document extends DataClass implements Insertable<Document> {
     Value<DateTime?> paymentReminderAt = const Value.absent(),
     Value<String?> filledPdfPath = const Value.absent(),
     Value<String?> fillData = const Value.absent(),
+    Value<String?> contentHash = const Value.absent(),
+    Value<DateTime?> warrantyUntil = const Value.absent(),
+    Value<String?> warrantyKind = const Value.absent(),
+    Value<DateTime?> objectionDeadline = const Value.absent(),
+    Value<String?> taxCategory = const Value.absent(),
+    Value<int?> taxYear = const Value.absent(),
+    Value<int?> taxAmountCents = const Value.absent(),
+    Value<DateTime?> destroyedAt = const Value.absent(),
+    Value<String?> destroyedFrom = const Value.absent(),
+    Value<String?> paymentReference = const Value.absent(),
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => Document(
@@ -885,6 +1256,26 @@ class Document extends DataClass implements Insertable<Document> {
         ? filledPdfPath.value
         : this.filledPdfPath,
     fillData: fillData.present ? fillData.value : this.fillData,
+    contentHash: contentHash.present ? contentHash.value : this.contentHash,
+    warrantyUntil: warrantyUntil.present
+        ? warrantyUntil.value
+        : this.warrantyUntil,
+    warrantyKind: warrantyKind.present ? warrantyKind.value : this.warrantyKind,
+    objectionDeadline: objectionDeadline.present
+        ? objectionDeadline.value
+        : this.objectionDeadline,
+    taxCategory: taxCategory.present ? taxCategory.value : this.taxCategory,
+    taxYear: taxYear.present ? taxYear.value : this.taxYear,
+    taxAmountCents: taxAmountCents.present
+        ? taxAmountCents.value
+        : this.taxAmountCents,
+    destroyedAt: destroyedAt.present ? destroyedAt.value : this.destroyedAt,
+    destroyedFrom: destroyedFrom.present
+        ? destroyedFrom.value
+        : this.destroyedFrom,
+    paymentReference: paymentReference.present
+        ? paymentReference.value
+        : this.paymentReference,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
@@ -929,6 +1320,34 @@ class Document extends DataClass implements Insertable<Document> {
           ? data.filledPdfPath.value
           : this.filledPdfPath,
       fillData: data.fillData.present ? data.fillData.value : this.fillData,
+      contentHash: data.contentHash.present
+          ? data.contentHash.value
+          : this.contentHash,
+      warrantyUntil: data.warrantyUntil.present
+          ? data.warrantyUntil.value
+          : this.warrantyUntil,
+      warrantyKind: data.warrantyKind.present
+          ? data.warrantyKind.value
+          : this.warrantyKind,
+      objectionDeadline: data.objectionDeadline.present
+          ? data.objectionDeadline.value
+          : this.objectionDeadline,
+      taxCategory: data.taxCategory.present
+          ? data.taxCategory.value
+          : this.taxCategory,
+      taxYear: data.taxYear.present ? data.taxYear.value : this.taxYear,
+      taxAmountCents: data.taxAmountCents.present
+          ? data.taxAmountCents.value
+          : this.taxAmountCents,
+      destroyedAt: data.destroyedAt.present
+          ? data.destroyedAt.value
+          : this.destroyedAt,
+      destroyedFrom: data.destroyedFrom.present
+          ? data.destroyedFrom.value
+          : this.destroyedFrom,
+      paymentReference: data.paymentReference.present
+          ? data.paymentReference.value
+          : this.paymentReference,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
@@ -958,6 +1377,16 @@ class Document extends DataClass implements Insertable<Document> {
           ..write('paymentReminderAt: $paymentReminderAt, ')
           ..write('filledPdfPath: $filledPdfPath, ')
           ..write('fillData: $fillData, ')
+          ..write('contentHash: $contentHash, ')
+          ..write('warrantyUntil: $warrantyUntil, ')
+          ..write('warrantyKind: $warrantyKind, ')
+          ..write('objectionDeadline: $objectionDeadline, ')
+          ..write('taxCategory: $taxCategory, ')
+          ..write('taxYear: $taxYear, ')
+          ..write('taxAmountCents: $taxAmountCents, ')
+          ..write('destroyedAt: $destroyedAt, ')
+          ..write('destroyedFrom: $destroyedFrom, ')
+          ..write('paymentReference: $paymentReference, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
           ..write(')'))
@@ -987,6 +1416,16 @@ class Document extends DataClass implements Insertable<Document> {
     paymentReminderAt,
     filledPdfPath,
     fillData,
+    contentHash,
+    warrantyUntil,
+    warrantyKind,
+    objectionDeadline,
+    taxCategory,
+    taxYear,
+    taxAmountCents,
+    destroyedAt,
+    destroyedFrom,
+    paymentReference,
     updatedAt,
     deletedAt,
   ]);
@@ -1015,6 +1454,16 @@ class Document extends DataClass implements Insertable<Document> {
           other.paymentReminderAt == this.paymentReminderAt &&
           other.filledPdfPath == this.filledPdfPath &&
           other.fillData == this.fillData &&
+          other.contentHash == this.contentHash &&
+          other.warrantyUntil == this.warrantyUntil &&
+          other.warrantyKind == this.warrantyKind &&
+          other.objectionDeadline == this.objectionDeadline &&
+          other.taxCategory == this.taxCategory &&
+          other.taxYear == this.taxYear &&
+          other.taxAmountCents == this.taxAmountCents &&
+          other.destroyedAt == this.destroyedAt &&
+          other.destroyedFrom == this.destroyedFrom &&
+          other.paymentReference == this.paymentReference &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
 }
@@ -1041,6 +1490,16 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
   final Value<DateTime?> paymentReminderAt;
   final Value<String?> filledPdfPath;
   final Value<String?> fillData;
+  final Value<String?> contentHash;
+  final Value<DateTime?> warrantyUntil;
+  final Value<String?> warrantyKind;
+  final Value<DateTime?> objectionDeadline;
+  final Value<String?> taxCategory;
+  final Value<int?> taxYear;
+  final Value<int?> taxAmountCents;
+  final Value<DateTime?> destroyedAt;
+  final Value<String?> destroyedFrom;
+  final Value<String?> paymentReference;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
   final Value<int> rowid;
@@ -1066,6 +1525,16 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     this.paymentReminderAt = const Value.absent(),
     this.filledPdfPath = const Value.absent(),
     this.fillData = const Value.absent(),
+    this.contentHash = const Value.absent(),
+    this.warrantyUntil = const Value.absent(),
+    this.warrantyKind = const Value.absent(),
+    this.objectionDeadline = const Value.absent(),
+    this.taxCategory = const Value.absent(),
+    this.taxYear = const Value.absent(),
+    this.taxAmountCents = const Value.absent(),
+    this.destroyedAt = const Value.absent(),
+    this.destroyedFrom = const Value.absent(),
+    this.paymentReference = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1092,6 +1561,16 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     this.paymentReminderAt = const Value.absent(),
     this.filledPdfPath = const Value.absent(),
     this.fillData = const Value.absent(),
+    this.contentHash = const Value.absent(),
+    this.warrantyUntil = const Value.absent(),
+    this.warrantyKind = const Value.absent(),
+    this.objectionDeadline = const Value.absent(),
+    this.taxCategory = const Value.absent(),
+    this.taxYear = const Value.absent(),
+    this.taxAmountCents = const Value.absent(),
+    this.destroyedAt = const Value.absent(),
+    this.destroyedFrom = const Value.absent(),
+    this.paymentReference = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1120,6 +1599,16 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     Expression<DateTime>? paymentReminderAt,
     Expression<String>? filledPdfPath,
     Expression<String>? fillData,
+    Expression<String>? contentHash,
+    Expression<DateTime>? warrantyUntil,
+    Expression<String>? warrantyKind,
+    Expression<DateTime>? objectionDeadline,
+    Expression<String>? taxCategory,
+    Expression<int>? taxYear,
+    Expression<int>? taxAmountCents,
+    Expression<DateTime>? destroyedAt,
+    Expression<String>? destroyedFrom,
+    Expression<String>? paymentReference,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
@@ -1146,6 +1635,16 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
       if (paymentReminderAt != null) 'payment_reminder_at': paymentReminderAt,
       if (filledPdfPath != null) 'filled_pdf_path': filledPdfPath,
       if (fillData != null) 'fill_data': fillData,
+      if (contentHash != null) 'content_hash': contentHash,
+      if (warrantyUntil != null) 'warranty_until': warrantyUntil,
+      if (warrantyKind != null) 'warranty_kind': warrantyKind,
+      if (objectionDeadline != null) 'objection_deadline': objectionDeadline,
+      if (taxCategory != null) 'tax_category': taxCategory,
+      if (taxYear != null) 'tax_year': taxYear,
+      if (taxAmountCents != null) 'tax_amount_cents': taxAmountCents,
+      if (destroyedAt != null) 'destroyed_at': destroyedAt,
+      if (destroyedFrom != null) 'destroyed_from': destroyedFrom,
+      if (paymentReference != null) 'payment_reference': paymentReference,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
@@ -1174,6 +1673,16 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     Value<DateTime?>? paymentReminderAt,
     Value<String?>? filledPdfPath,
     Value<String?>? fillData,
+    Value<String?>? contentHash,
+    Value<DateTime?>? warrantyUntil,
+    Value<String?>? warrantyKind,
+    Value<DateTime?>? objectionDeadline,
+    Value<String?>? taxCategory,
+    Value<int?>? taxYear,
+    Value<int?>? taxAmountCents,
+    Value<DateTime?>? destroyedAt,
+    Value<String?>? destroyedFrom,
+    Value<String?>? paymentReference,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
     Value<int>? rowid,
@@ -1200,6 +1709,16 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
       paymentReminderAt: paymentReminderAt ?? this.paymentReminderAt,
       filledPdfPath: filledPdfPath ?? this.filledPdfPath,
       fillData: fillData ?? this.fillData,
+      contentHash: contentHash ?? this.contentHash,
+      warrantyUntil: warrantyUntil ?? this.warrantyUntil,
+      warrantyKind: warrantyKind ?? this.warrantyKind,
+      objectionDeadline: objectionDeadline ?? this.objectionDeadline,
+      taxCategory: taxCategory ?? this.taxCategory,
+      taxYear: taxYear ?? this.taxYear,
+      taxAmountCents: taxAmountCents ?? this.taxAmountCents,
+      destroyedAt: destroyedAt ?? this.destroyedAt,
+      destroyedFrom: destroyedFrom ?? this.destroyedFrom,
+      paymentReference: paymentReference ?? this.paymentReference,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
@@ -1272,6 +1791,36 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     if (fillData.present) {
       map['fill_data'] = Variable<String>(fillData.value);
     }
+    if (contentHash.present) {
+      map['content_hash'] = Variable<String>(contentHash.value);
+    }
+    if (warrantyUntil.present) {
+      map['warranty_until'] = Variable<DateTime>(warrantyUntil.value);
+    }
+    if (warrantyKind.present) {
+      map['warranty_kind'] = Variable<String>(warrantyKind.value);
+    }
+    if (objectionDeadline.present) {
+      map['objection_deadline'] = Variable<DateTime>(objectionDeadline.value);
+    }
+    if (taxCategory.present) {
+      map['tax_category'] = Variable<String>(taxCategory.value);
+    }
+    if (taxYear.present) {
+      map['tax_year'] = Variable<int>(taxYear.value);
+    }
+    if (taxAmountCents.present) {
+      map['tax_amount_cents'] = Variable<int>(taxAmountCents.value);
+    }
+    if (destroyedAt.present) {
+      map['destroyed_at'] = Variable<DateTime>(destroyedAt.value);
+    }
+    if (destroyedFrom.present) {
+      map['destroyed_from'] = Variable<String>(destroyedFrom.value);
+    }
+    if (paymentReference.present) {
+      map['payment_reference'] = Variable<String>(paymentReference.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -1308,6 +1857,16 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
           ..write('paymentReminderAt: $paymentReminderAt, ')
           ..write('filledPdfPath: $filledPdfPath, ')
           ..write('fillData: $fillData, ')
+          ..write('contentHash: $contentHash, ')
+          ..write('warrantyUntil: $warrantyUntil, ')
+          ..write('warrantyKind: $warrantyKind, ')
+          ..write('objectionDeadline: $objectionDeadline, ')
+          ..write('taxCategory: $taxCategory, ')
+          ..write('taxYear: $taxYear, ')
+          ..write('taxAmountCents: $taxAmountCents, ')
+          ..write('destroyedAt: $destroyedAt, ')
+          ..write('destroyedFrom: $destroyedFrom, ')
+          ..write('paymentReference: $paymentReference, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
@@ -1365,6 +1924,75 @@ class $CorrespondentsTable extends Correspondents
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _emailMeta = const VerificationMeta('email');
+  @override
+  late final GeneratedColumn<String> email = GeneratedColumn<String>(
+    'email',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _faxMeta = const VerificationMeta('fax');
+  @override
+  late final GeneratedColumn<String> fax = GeneratedColumn<String>(
+    'fax',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _postalAddressMeta = const VerificationMeta(
+    'postalAddress',
+  );
+  @override
+  late final GeneratedColumn<String> postalAddress = GeneratedColumn<String>(
+    'postal_address',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _mailSubjectTemplateMeta =
+      const VerificationMeta('mailSubjectTemplate');
+  @override
+  late final GeneratedColumn<String> mailSubjectTemplate =
+      GeneratedColumn<String>(
+        'mail_subject_template',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _mailBodyTemplateMeta = const VerificationMeta(
+    'mailBodyTemplate',
+  );
+  @override
+  late final GeneratedColumn<String> mailBodyTemplate = GeneratedColumn<String>(
+    'mail_body_template',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _ibanMeta = const VerificationMeta('iban');
+  @override
+  late final GeneratedColumn<String> iban = GeneratedColumn<String>(
+    'iban',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _bicMeta = const VerificationMeta('bic');
+  @override
+  late final GeneratedColumn<String> bic = GeneratedColumn<String>(
+    'bic',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _defaultDocTypeMeta = const VerificationMeta(
     'defaultDocType',
   );
@@ -1417,6 +2045,13 @@ class $CorrespondentsTable extends Correspondents
     name,
     aliases,
     categoryId,
+    email,
+    fax,
+    postalAddress,
+    mailSubjectTemplate,
+    mailBodyTemplate,
+    iban,
+    bic,
     defaultDocType,
     defaultTagIds,
     updatedAt,
@@ -1455,6 +2090,57 @@ class $CorrespondentsTable extends Correspondents
       context.handle(
         _categoryIdMeta,
         categoryId.isAcceptableOrUnknown(data['category_id']!, _categoryIdMeta),
+      );
+    }
+    if (data.containsKey('email')) {
+      context.handle(
+        _emailMeta,
+        email.isAcceptableOrUnknown(data['email']!, _emailMeta),
+      );
+    }
+    if (data.containsKey('fax')) {
+      context.handle(
+        _faxMeta,
+        fax.isAcceptableOrUnknown(data['fax']!, _faxMeta),
+      );
+    }
+    if (data.containsKey('postal_address')) {
+      context.handle(
+        _postalAddressMeta,
+        postalAddress.isAcceptableOrUnknown(
+          data['postal_address']!,
+          _postalAddressMeta,
+        ),
+      );
+    }
+    if (data.containsKey('mail_subject_template')) {
+      context.handle(
+        _mailSubjectTemplateMeta,
+        mailSubjectTemplate.isAcceptableOrUnknown(
+          data['mail_subject_template']!,
+          _mailSubjectTemplateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('mail_body_template')) {
+      context.handle(
+        _mailBodyTemplateMeta,
+        mailBodyTemplate.isAcceptableOrUnknown(
+          data['mail_body_template']!,
+          _mailBodyTemplateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('iban')) {
+      context.handle(
+        _ibanMeta,
+        iban.isAcceptableOrUnknown(data['iban']!, _ibanMeta),
+      );
+    }
+    if (data.containsKey('bic')) {
+      context.handle(
+        _bicMeta,
+        bic.isAcceptableOrUnknown(data['bic']!, _bicMeta),
       );
     }
     if (data.containsKey('default_doc_type')) {
@@ -1512,6 +2198,34 @@ class $CorrespondentsTable extends Correspondents
         DriftSqlType.string,
         data['${effectivePrefix}category_id'],
       ),
+      email: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}email'],
+      ),
+      fax: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}fax'],
+      ),
+      postalAddress: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}postal_address'],
+      ),
+      mailSubjectTemplate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mail_subject_template'],
+      ),
+      mailBodyTemplate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mail_body_template'],
+      ),
+      iban: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}iban'],
+      ),
+      bic: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bic'],
+      ),
       defaultDocType: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}default_doc_type'],
@@ -1548,6 +2262,13 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
   /// Kategorie der Firma (z. B. „Bank & Geldanlage“). Dokumente lassen sich
   /// darüber filtern (Schema v3).
   final String? categoryId;
+  final String? email;
+  final String? fax;
+  final String? postalAddress;
+  final String? mailSubjectTemplate;
+  final String? mailBodyTemplate;
+  final String? iban;
+  final String? bic;
 
   /// Zuletzt bestätigte Werte — Grundlage der „lernenden Zuordnungen".
   final String? defaultDocType;
@@ -1559,6 +2280,13 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
     required this.name,
     required this.aliases,
     this.categoryId,
+    this.email,
+    this.fax,
+    this.postalAddress,
+    this.mailSubjectTemplate,
+    this.mailBodyTemplate,
+    this.iban,
+    this.bic,
     this.defaultDocType,
     required this.defaultTagIds,
     required this.updatedAt,
@@ -1572,6 +2300,27 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
     map['aliases'] = Variable<String>(aliases);
     if (!nullToAbsent || categoryId != null) {
       map['category_id'] = Variable<String>(categoryId);
+    }
+    if (!nullToAbsent || email != null) {
+      map['email'] = Variable<String>(email);
+    }
+    if (!nullToAbsent || fax != null) {
+      map['fax'] = Variable<String>(fax);
+    }
+    if (!nullToAbsent || postalAddress != null) {
+      map['postal_address'] = Variable<String>(postalAddress);
+    }
+    if (!nullToAbsent || mailSubjectTemplate != null) {
+      map['mail_subject_template'] = Variable<String>(mailSubjectTemplate);
+    }
+    if (!nullToAbsent || mailBodyTemplate != null) {
+      map['mail_body_template'] = Variable<String>(mailBodyTemplate);
+    }
+    if (!nullToAbsent || iban != null) {
+      map['iban'] = Variable<String>(iban);
+    }
+    if (!nullToAbsent || bic != null) {
+      map['bic'] = Variable<String>(bic);
     }
     if (!nullToAbsent || defaultDocType != null) {
       map['default_doc_type'] = Variable<String>(defaultDocType);
@@ -1592,6 +2341,21 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
       categoryId: categoryId == null && nullToAbsent
           ? const Value.absent()
           : Value(categoryId),
+      email: email == null && nullToAbsent
+          ? const Value.absent()
+          : Value(email),
+      fax: fax == null && nullToAbsent ? const Value.absent() : Value(fax),
+      postalAddress: postalAddress == null && nullToAbsent
+          ? const Value.absent()
+          : Value(postalAddress),
+      mailSubjectTemplate: mailSubjectTemplate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mailSubjectTemplate),
+      mailBodyTemplate: mailBodyTemplate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mailBodyTemplate),
+      iban: iban == null && nullToAbsent ? const Value.absent() : Value(iban),
+      bic: bic == null && nullToAbsent ? const Value.absent() : Value(bic),
       defaultDocType: defaultDocType == null && nullToAbsent
           ? const Value.absent()
           : Value(defaultDocType),
@@ -1613,6 +2377,15 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
       name: serializer.fromJson<String>(json['name']),
       aliases: serializer.fromJson<String>(json['aliases']),
       categoryId: serializer.fromJson<String?>(json['categoryId']),
+      email: serializer.fromJson<String?>(json['email']),
+      fax: serializer.fromJson<String?>(json['fax']),
+      postalAddress: serializer.fromJson<String?>(json['postalAddress']),
+      mailSubjectTemplate: serializer.fromJson<String?>(
+        json['mailSubjectTemplate'],
+      ),
+      mailBodyTemplate: serializer.fromJson<String?>(json['mailBodyTemplate']),
+      iban: serializer.fromJson<String?>(json['iban']),
+      bic: serializer.fromJson<String?>(json['bic']),
       defaultDocType: serializer.fromJson<String?>(json['defaultDocType']),
       defaultTagIds: serializer.fromJson<String>(json['defaultTagIds']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -1627,6 +2400,13 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
       'name': serializer.toJson<String>(name),
       'aliases': serializer.toJson<String>(aliases),
       'categoryId': serializer.toJson<String?>(categoryId),
+      'email': serializer.toJson<String?>(email),
+      'fax': serializer.toJson<String?>(fax),
+      'postalAddress': serializer.toJson<String?>(postalAddress),
+      'mailSubjectTemplate': serializer.toJson<String?>(mailSubjectTemplate),
+      'mailBodyTemplate': serializer.toJson<String?>(mailBodyTemplate),
+      'iban': serializer.toJson<String?>(iban),
+      'bic': serializer.toJson<String?>(bic),
       'defaultDocType': serializer.toJson<String?>(defaultDocType),
       'defaultTagIds': serializer.toJson<String>(defaultTagIds),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -1639,6 +2419,13 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
     String? name,
     String? aliases,
     Value<String?> categoryId = const Value.absent(),
+    Value<String?> email = const Value.absent(),
+    Value<String?> fax = const Value.absent(),
+    Value<String?> postalAddress = const Value.absent(),
+    Value<String?> mailSubjectTemplate = const Value.absent(),
+    Value<String?> mailBodyTemplate = const Value.absent(),
+    Value<String?> iban = const Value.absent(),
+    Value<String?> bic = const Value.absent(),
     Value<String?> defaultDocType = const Value.absent(),
     String? defaultTagIds,
     DateTime? updatedAt,
@@ -1648,6 +2435,19 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
     name: name ?? this.name,
     aliases: aliases ?? this.aliases,
     categoryId: categoryId.present ? categoryId.value : this.categoryId,
+    email: email.present ? email.value : this.email,
+    fax: fax.present ? fax.value : this.fax,
+    postalAddress: postalAddress.present
+        ? postalAddress.value
+        : this.postalAddress,
+    mailSubjectTemplate: mailSubjectTemplate.present
+        ? mailSubjectTemplate.value
+        : this.mailSubjectTemplate,
+    mailBodyTemplate: mailBodyTemplate.present
+        ? mailBodyTemplate.value
+        : this.mailBodyTemplate,
+    iban: iban.present ? iban.value : this.iban,
+    bic: bic.present ? bic.value : this.bic,
     defaultDocType: defaultDocType.present
         ? defaultDocType.value
         : this.defaultDocType,
@@ -1663,6 +2463,19 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
       categoryId: data.categoryId.present
           ? data.categoryId.value
           : this.categoryId,
+      email: data.email.present ? data.email.value : this.email,
+      fax: data.fax.present ? data.fax.value : this.fax,
+      postalAddress: data.postalAddress.present
+          ? data.postalAddress.value
+          : this.postalAddress,
+      mailSubjectTemplate: data.mailSubjectTemplate.present
+          ? data.mailSubjectTemplate.value
+          : this.mailSubjectTemplate,
+      mailBodyTemplate: data.mailBodyTemplate.present
+          ? data.mailBodyTemplate.value
+          : this.mailBodyTemplate,
+      iban: data.iban.present ? data.iban.value : this.iban,
+      bic: data.bic.present ? data.bic.value : this.bic,
       defaultDocType: data.defaultDocType.present
           ? data.defaultDocType.value
           : this.defaultDocType,
@@ -1681,6 +2494,13 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
           ..write('name: $name, ')
           ..write('aliases: $aliases, ')
           ..write('categoryId: $categoryId, ')
+          ..write('email: $email, ')
+          ..write('fax: $fax, ')
+          ..write('postalAddress: $postalAddress, ')
+          ..write('mailSubjectTemplate: $mailSubjectTemplate, ')
+          ..write('mailBodyTemplate: $mailBodyTemplate, ')
+          ..write('iban: $iban, ')
+          ..write('bic: $bic, ')
           ..write('defaultDocType: $defaultDocType, ')
           ..write('defaultTagIds: $defaultTagIds, ')
           ..write('updatedAt: $updatedAt, ')
@@ -1695,6 +2515,13 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
     name,
     aliases,
     categoryId,
+    email,
+    fax,
+    postalAddress,
+    mailSubjectTemplate,
+    mailBodyTemplate,
+    iban,
+    bic,
     defaultDocType,
     defaultTagIds,
     updatedAt,
@@ -1708,6 +2535,13 @@ class Correspondent extends DataClass implements Insertable<Correspondent> {
           other.name == this.name &&
           other.aliases == this.aliases &&
           other.categoryId == this.categoryId &&
+          other.email == this.email &&
+          other.fax == this.fax &&
+          other.postalAddress == this.postalAddress &&
+          other.mailSubjectTemplate == this.mailSubjectTemplate &&
+          other.mailBodyTemplate == this.mailBodyTemplate &&
+          other.iban == this.iban &&
+          other.bic == this.bic &&
           other.defaultDocType == this.defaultDocType &&
           other.defaultTagIds == this.defaultTagIds &&
           other.updatedAt == this.updatedAt &&
@@ -1719,6 +2553,13 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
   final Value<String> name;
   final Value<String> aliases;
   final Value<String?> categoryId;
+  final Value<String?> email;
+  final Value<String?> fax;
+  final Value<String?> postalAddress;
+  final Value<String?> mailSubjectTemplate;
+  final Value<String?> mailBodyTemplate;
+  final Value<String?> iban;
+  final Value<String?> bic;
   final Value<String?> defaultDocType;
   final Value<String> defaultTagIds;
   final Value<DateTime> updatedAt;
@@ -1729,6 +2570,13 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
     this.name = const Value.absent(),
     this.aliases = const Value.absent(),
     this.categoryId = const Value.absent(),
+    this.email = const Value.absent(),
+    this.fax = const Value.absent(),
+    this.postalAddress = const Value.absent(),
+    this.mailSubjectTemplate = const Value.absent(),
+    this.mailBodyTemplate = const Value.absent(),
+    this.iban = const Value.absent(),
+    this.bic = const Value.absent(),
     this.defaultDocType = const Value.absent(),
     this.defaultTagIds = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1740,6 +2588,13 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
     required String name,
     this.aliases = const Value.absent(),
     this.categoryId = const Value.absent(),
+    this.email = const Value.absent(),
+    this.fax = const Value.absent(),
+    this.postalAddress = const Value.absent(),
+    this.mailSubjectTemplate = const Value.absent(),
+    this.mailBodyTemplate = const Value.absent(),
+    this.iban = const Value.absent(),
+    this.bic = const Value.absent(),
     this.defaultDocType = const Value.absent(),
     this.defaultTagIds = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1751,6 +2606,13 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
     Expression<String>? name,
     Expression<String>? aliases,
     Expression<String>? categoryId,
+    Expression<String>? email,
+    Expression<String>? fax,
+    Expression<String>? postalAddress,
+    Expression<String>? mailSubjectTemplate,
+    Expression<String>? mailBodyTemplate,
+    Expression<String>? iban,
+    Expression<String>? bic,
     Expression<String>? defaultDocType,
     Expression<String>? defaultTagIds,
     Expression<DateTime>? updatedAt,
@@ -1762,6 +2624,14 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
       if (name != null) 'name': name,
       if (aliases != null) 'aliases': aliases,
       if (categoryId != null) 'category_id': categoryId,
+      if (email != null) 'email': email,
+      if (fax != null) 'fax': fax,
+      if (postalAddress != null) 'postal_address': postalAddress,
+      if (mailSubjectTemplate != null)
+        'mail_subject_template': mailSubjectTemplate,
+      if (mailBodyTemplate != null) 'mail_body_template': mailBodyTemplate,
+      if (iban != null) 'iban': iban,
+      if (bic != null) 'bic': bic,
       if (defaultDocType != null) 'default_doc_type': defaultDocType,
       if (defaultTagIds != null) 'default_tag_ids': defaultTagIds,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -1775,6 +2645,13 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
     Value<String>? name,
     Value<String>? aliases,
     Value<String?>? categoryId,
+    Value<String?>? email,
+    Value<String?>? fax,
+    Value<String?>? postalAddress,
+    Value<String?>? mailSubjectTemplate,
+    Value<String?>? mailBodyTemplate,
+    Value<String?>? iban,
+    Value<String?>? bic,
     Value<String?>? defaultDocType,
     Value<String>? defaultTagIds,
     Value<DateTime>? updatedAt,
@@ -1786,6 +2663,13 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
       name: name ?? this.name,
       aliases: aliases ?? this.aliases,
       categoryId: categoryId ?? this.categoryId,
+      email: email ?? this.email,
+      fax: fax ?? this.fax,
+      postalAddress: postalAddress ?? this.postalAddress,
+      mailSubjectTemplate: mailSubjectTemplate ?? this.mailSubjectTemplate,
+      mailBodyTemplate: mailBodyTemplate ?? this.mailBodyTemplate,
+      iban: iban ?? this.iban,
+      bic: bic ?? this.bic,
       defaultDocType: defaultDocType ?? this.defaultDocType,
       defaultTagIds: defaultTagIds ?? this.defaultTagIds,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1808,6 +2692,29 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
     }
     if (categoryId.present) {
       map['category_id'] = Variable<String>(categoryId.value);
+    }
+    if (email.present) {
+      map['email'] = Variable<String>(email.value);
+    }
+    if (fax.present) {
+      map['fax'] = Variable<String>(fax.value);
+    }
+    if (postalAddress.present) {
+      map['postal_address'] = Variable<String>(postalAddress.value);
+    }
+    if (mailSubjectTemplate.present) {
+      map['mail_subject_template'] = Variable<String>(
+        mailSubjectTemplate.value,
+      );
+    }
+    if (mailBodyTemplate.present) {
+      map['mail_body_template'] = Variable<String>(mailBodyTemplate.value);
+    }
+    if (iban.present) {
+      map['iban'] = Variable<String>(iban.value);
+    }
+    if (bic.present) {
+      map['bic'] = Variable<String>(bic.value);
     }
     if (defaultDocType.present) {
       map['default_doc_type'] = Variable<String>(defaultDocType.value);
@@ -1834,6 +2741,13 @@ class CorrespondentsCompanion extends UpdateCompanion<Correspondent> {
           ..write('name: $name, ')
           ..write('aliases: $aliases, ')
           ..write('categoryId: $categoryId, ')
+          ..write('email: $email, ')
+          ..write('fax: $fax, ')
+          ..write('postalAddress: $postalAddress, ')
+          ..write('mailSubjectTemplate: $mailSubjectTemplate, ')
+          ..write('mailBodyTemplate: $mailBodyTemplate, ')
+          ..write('iban: $iban, ')
+          ..write('bic: $bic, ')
           ..write('defaultDocType: $defaultDocType, ')
           ..write('defaultTagIds: $defaultTagIds, ')
           ..write('updatedAt: $updatedAt, ')
@@ -4319,6 +5233,15 @@ class $DocTasksTable extends DocTasks with TableInfo<$DocTasksTable, DocTask> {
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _originMeta = const VerificationMeta('origin');
+  @override
+  late final GeneratedColumn<String> origin = GeneratedColumn<String>(
+    'origin',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _doneAtMeta = const VerificationMeta('doneAt');
   @override
   late final GeneratedColumn<DateTime> doneAt = GeneratedColumn<DateTime>(
@@ -4371,6 +5294,7 @@ class $DocTasksTable extends DocTasks with TableInfo<$DocTasksTable, DocTask> {
     note,
     dueAt,
     repeat,
+    origin,
     doneAt,
     createdAt,
     updatedAt,
@@ -4425,6 +5349,12 @@ class $DocTasksTable extends DocTasks with TableInfo<$DocTasksTable, DocTask> {
       context.handle(
         _repeatMeta,
         repeat.isAcceptableOrUnknown(data['repeat']!, _repeatMeta),
+      );
+    }
+    if (data.containsKey('origin')) {
+      context.handle(
+        _originMeta,
+        origin.isAcceptableOrUnknown(data['origin']!, _originMeta),
       );
     }
     if (data.containsKey('done_at')) {
@@ -4484,6 +5414,10 @@ class $DocTasksTable extends DocTasks with TableInfo<$DocTasksTable, DocTask> {
         DriftSqlType.string,
         data['${effectivePrefix}repeat'],
       )!,
+      origin: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}origin'],
+      ),
       doneAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}done_at'],
@@ -4522,6 +5456,10 @@ class DocTask extends DataClass implements Insertable<DocTask> {
 
   /// '' (einmalig), `monatlich`, `vierteljaehrlich`, `jaehrlich`.
   final String repeat;
+
+  /// Automatisch erzeugt? z. B. `widerspruch`, `garantie`,
+  /// `kuendigung:<contractId>` (Schema v6).
+  final String? origin;
   final DateTime? doneAt;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -4533,6 +5471,7 @@ class DocTask extends DataClass implements Insertable<DocTask> {
     required this.note,
     required this.dueAt,
     required this.repeat,
+    this.origin,
     this.doneAt,
     required this.createdAt,
     required this.updatedAt,
@@ -4547,6 +5486,9 @@ class DocTask extends DataClass implements Insertable<DocTask> {
     map['note'] = Variable<String>(note);
     map['due_at'] = Variable<DateTime>(dueAt);
     map['repeat'] = Variable<String>(repeat);
+    if (!nullToAbsent || origin != null) {
+      map['origin'] = Variable<String>(origin);
+    }
     if (!nullToAbsent || doneAt != null) {
       map['done_at'] = Variable<DateTime>(doneAt);
     }
@@ -4566,6 +5508,9 @@ class DocTask extends DataClass implements Insertable<DocTask> {
       note: Value(note),
       dueAt: Value(dueAt),
       repeat: Value(repeat),
+      origin: origin == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origin),
       doneAt: doneAt == null && nullToAbsent
           ? const Value.absent()
           : Value(doneAt),
@@ -4589,6 +5534,7 @@ class DocTask extends DataClass implements Insertable<DocTask> {
       note: serializer.fromJson<String>(json['note']),
       dueAt: serializer.fromJson<DateTime>(json['dueAt']),
       repeat: serializer.fromJson<String>(json['repeat']),
+      origin: serializer.fromJson<String?>(json['origin']),
       doneAt: serializer.fromJson<DateTime?>(json['doneAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -4605,6 +5551,7 @@ class DocTask extends DataClass implements Insertable<DocTask> {
       'note': serializer.toJson<String>(note),
       'dueAt': serializer.toJson<DateTime>(dueAt),
       'repeat': serializer.toJson<String>(repeat),
+      'origin': serializer.toJson<String?>(origin),
       'doneAt': serializer.toJson<DateTime?>(doneAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -4619,6 +5566,7 @@ class DocTask extends DataClass implements Insertable<DocTask> {
     String? note,
     DateTime? dueAt,
     String? repeat,
+    Value<String?> origin = const Value.absent(),
     Value<DateTime?> doneAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -4630,6 +5578,7 @@ class DocTask extends DataClass implements Insertable<DocTask> {
     note: note ?? this.note,
     dueAt: dueAt ?? this.dueAt,
     repeat: repeat ?? this.repeat,
+    origin: origin.present ? origin.value : this.origin,
     doneAt: doneAt.present ? doneAt.value : this.doneAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -4645,6 +5594,7 @@ class DocTask extends DataClass implements Insertable<DocTask> {
       note: data.note.present ? data.note.value : this.note,
       dueAt: data.dueAt.present ? data.dueAt.value : this.dueAt,
       repeat: data.repeat.present ? data.repeat.value : this.repeat,
+      origin: data.origin.present ? data.origin.value : this.origin,
       doneAt: data.doneAt.present ? data.doneAt.value : this.doneAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -4661,6 +5611,7 @@ class DocTask extends DataClass implements Insertable<DocTask> {
           ..write('note: $note, ')
           ..write('dueAt: $dueAt, ')
           ..write('repeat: $repeat, ')
+          ..write('origin: $origin, ')
           ..write('doneAt: $doneAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -4677,6 +5628,7 @@ class DocTask extends DataClass implements Insertable<DocTask> {
     note,
     dueAt,
     repeat,
+    origin,
     doneAt,
     createdAt,
     updatedAt,
@@ -4692,6 +5644,7 @@ class DocTask extends DataClass implements Insertable<DocTask> {
           other.note == this.note &&
           other.dueAt == this.dueAt &&
           other.repeat == this.repeat &&
+          other.origin == this.origin &&
           other.doneAt == this.doneAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -4705,6 +5658,7 @@ class DocTasksCompanion extends UpdateCompanion<DocTask> {
   final Value<String> note;
   final Value<DateTime> dueAt;
   final Value<String> repeat;
+  final Value<String?> origin;
   final Value<DateTime?> doneAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -4717,6 +5671,7 @@ class DocTasksCompanion extends UpdateCompanion<DocTask> {
     this.note = const Value.absent(),
     this.dueAt = const Value.absent(),
     this.repeat = const Value.absent(),
+    this.origin = const Value.absent(),
     this.doneAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -4730,6 +5685,7 @@ class DocTasksCompanion extends UpdateCompanion<DocTask> {
     this.note = const Value.absent(),
     required DateTime dueAt,
     this.repeat = const Value.absent(),
+    this.origin = const Value.absent(),
     this.doneAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -4745,6 +5701,7 @@ class DocTasksCompanion extends UpdateCompanion<DocTask> {
     Expression<String>? note,
     Expression<DateTime>? dueAt,
     Expression<String>? repeat,
+    Expression<String>? origin,
     Expression<DateTime>? doneAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -4758,6 +5715,7 @@ class DocTasksCompanion extends UpdateCompanion<DocTask> {
       if (note != null) 'note': note,
       if (dueAt != null) 'due_at': dueAt,
       if (repeat != null) 'repeat': repeat,
+      if (origin != null) 'origin': origin,
       if (doneAt != null) 'done_at': doneAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -4773,6 +5731,7 @@ class DocTasksCompanion extends UpdateCompanion<DocTask> {
     Value<String>? note,
     Value<DateTime>? dueAt,
     Value<String>? repeat,
+    Value<String?>? origin,
     Value<DateTime?>? doneAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -4786,6 +5745,7 @@ class DocTasksCompanion extends UpdateCompanion<DocTask> {
       note: note ?? this.note,
       dueAt: dueAt ?? this.dueAt,
       repeat: repeat ?? this.repeat,
+      origin: origin ?? this.origin,
       doneAt: doneAt ?? this.doneAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -4815,6 +5775,9 @@ class DocTasksCompanion extends UpdateCompanion<DocTask> {
     if (repeat.present) {
       map['repeat'] = Variable<String>(repeat.value);
     }
+    if (origin.present) {
+      map['origin'] = Variable<String>(origin.value);
+    }
     if (doneAt.present) {
       map['done_at'] = Variable<DateTime>(doneAt.value);
     }
@@ -4842,7 +5805,3303 @@ class DocTasksCompanion extends UpdateCompanion<DocTask> {
           ..write('note: $note, ')
           ..write('dueAt: $dueAt, ')
           ..write('repeat: $repeat, ')
+          ..write('origin: $origin, ')
           ..write('doneAt: $doneAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CasesTable extends Cases with TableInfo<$CasesTable, Case> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CasesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: _uuid.v4,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('offen'),
+  );
+  static const VerificationMeta _correspondentIdMeta = const VerificationMeta(
+    'correspondentId',
+  );
+  @override
+  late final GeneratedColumn<String> correspondentId = GeneratedColumn<String>(
+    'correspondent_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _refKindMeta = const VerificationMeta(
+    'refKind',
+  );
+  @override
+  late final GeneratedColumn<String> refKind = GeneratedColumn<String>(
+    'ref_kind',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _refValueMeta = const VerificationMeta(
+    'refValue',
+  );
+  @override
+  late final GeneratedColumn<String> refValue = GeneratedColumn<String>(
+    'ref_value',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _closedAtMeta = const VerificationMeta(
+    'closedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> closedAt = GeneratedColumn<DateTime>(
+    'closed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    title,
+    status,
+    correspondentId,
+    refKind,
+    refValue,
+    note,
+    closedAt,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cases';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Case> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('correspondent_id')) {
+      context.handle(
+        _correspondentIdMeta,
+        correspondentId.isAcceptableOrUnknown(
+          data['correspondent_id']!,
+          _correspondentIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('ref_kind')) {
+      context.handle(
+        _refKindMeta,
+        refKind.isAcceptableOrUnknown(data['ref_kind']!, _refKindMeta),
+      );
+    }
+    if (data.containsKey('ref_value')) {
+      context.handle(
+        _refValueMeta,
+        refValue.isAcceptableOrUnknown(data['ref_value']!, _refValueMeta),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('closed_at')) {
+      context.handle(
+        _closedAtMeta,
+        closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Case map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Case(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      correspondentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}correspondent_id'],
+      ),
+      refKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ref_kind'],
+      ),
+      refValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ref_value'],
+      ),
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      )!,
+      closedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}closed_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $CasesTable createAlias(String alias) {
+    return $CasesTable(attachedDatabase, alias);
+  }
+}
+
+class Case extends DataClass implements Insertable<Case> {
+  final String id;
+  final String title;
+
+  /// `offen`, `wartet`, `erledigt`.
+  final String status;
+  final String? correspondentId;
+  final String? refKind;
+  final String? refValue;
+  final String note;
+  final DateTime? closedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const Case({
+    required this.id,
+    required this.title,
+    required this.status,
+    this.correspondentId,
+    this.refKind,
+    this.refValue,
+    required this.note,
+    this.closedAt,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['title'] = Variable<String>(title);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || correspondentId != null) {
+      map['correspondent_id'] = Variable<String>(correspondentId);
+    }
+    if (!nullToAbsent || refKind != null) {
+      map['ref_kind'] = Variable<String>(refKind);
+    }
+    if (!nullToAbsent || refValue != null) {
+      map['ref_value'] = Variable<String>(refValue);
+    }
+    map['note'] = Variable<String>(note);
+    if (!nullToAbsent || closedAt != null) {
+      map['closed_at'] = Variable<DateTime>(closedAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  CasesCompanion toCompanion(bool nullToAbsent) {
+    return CasesCompanion(
+      id: Value(id),
+      title: Value(title),
+      status: Value(status),
+      correspondentId: correspondentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(correspondentId),
+      refKind: refKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(refKind),
+      refValue: refValue == null && nullToAbsent
+          ? const Value.absent()
+          : Value(refValue),
+      note: Value(note),
+      closedAt: closedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory Case.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Case(
+      id: serializer.fromJson<String>(json['id']),
+      title: serializer.fromJson<String>(json['title']),
+      status: serializer.fromJson<String>(json['status']),
+      correspondentId: serializer.fromJson<String?>(json['correspondentId']),
+      refKind: serializer.fromJson<String?>(json['refKind']),
+      refValue: serializer.fromJson<String?>(json['refValue']),
+      note: serializer.fromJson<String>(json['note']),
+      closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'title': serializer.toJson<String>(title),
+      'status': serializer.toJson<String>(status),
+      'correspondentId': serializer.toJson<String?>(correspondentId),
+      'refKind': serializer.toJson<String?>(refKind),
+      'refValue': serializer.toJson<String?>(refValue),
+      'note': serializer.toJson<String>(note),
+      'closedAt': serializer.toJson<DateTime?>(closedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  Case copyWith({
+    String? id,
+    String? title,
+    String? status,
+    Value<String?> correspondentId = const Value.absent(),
+    Value<String?> refKind = const Value.absent(),
+    Value<String?> refValue = const Value.absent(),
+    String? note,
+    Value<DateTime?> closedAt = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => Case(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    status: status ?? this.status,
+    correspondentId: correspondentId.present
+        ? correspondentId.value
+        : this.correspondentId,
+    refKind: refKind.present ? refKind.value : this.refKind,
+    refValue: refValue.present ? refValue.value : this.refValue,
+    note: note ?? this.note,
+    closedAt: closedAt.present ? closedAt.value : this.closedAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  Case copyWithCompanion(CasesCompanion data) {
+    return Case(
+      id: data.id.present ? data.id.value : this.id,
+      title: data.title.present ? data.title.value : this.title,
+      status: data.status.present ? data.status.value : this.status,
+      correspondentId: data.correspondentId.present
+          ? data.correspondentId.value
+          : this.correspondentId,
+      refKind: data.refKind.present ? data.refKind.value : this.refKind,
+      refValue: data.refValue.present ? data.refValue.value : this.refValue,
+      note: data.note.present ? data.note.value : this.note,
+      closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Case(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('status: $status, ')
+          ..write('correspondentId: $correspondentId, ')
+          ..write('refKind: $refKind, ')
+          ..write('refValue: $refValue, ')
+          ..write('note: $note, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    title,
+    status,
+    correspondentId,
+    refKind,
+    refValue,
+    note,
+    closedAt,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Case &&
+          other.id == this.id &&
+          other.title == this.title &&
+          other.status == this.status &&
+          other.correspondentId == this.correspondentId &&
+          other.refKind == this.refKind &&
+          other.refValue == this.refValue &&
+          other.note == this.note &&
+          other.closedAt == this.closedAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class CasesCompanion extends UpdateCompanion<Case> {
+  final Value<String> id;
+  final Value<String> title;
+  final Value<String> status;
+  final Value<String?> correspondentId;
+  final Value<String?> refKind;
+  final Value<String?> refValue;
+  final Value<String> note;
+  final Value<DateTime?> closedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const CasesCompanion({
+    this.id = const Value.absent(),
+    this.title = const Value.absent(),
+    this.status = const Value.absent(),
+    this.correspondentId = const Value.absent(),
+    this.refKind = const Value.absent(),
+    this.refValue = const Value.absent(),
+    this.note = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CasesCompanion.insert({
+    this.id = const Value.absent(),
+    required String title,
+    this.status = const Value.absent(),
+    this.correspondentId = const Value.absent(),
+    this.refKind = const Value.absent(),
+    this.refValue = const Value.absent(),
+    this.note = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : title = Value(title);
+  static Insertable<Case> custom({
+    Expression<String>? id,
+    Expression<String>? title,
+    Expression<String>? status,
+    Expression<String>? correspondentId,
+    Expression<String>? refKind,
+    Expression<String>? refValue,
+    Expression<String>? note,
+    Expression<DateTime>? closedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (title != null) 'title': title,
+      if (status != null) 'status': status,
+      if (correspondentId != null) 'correspondent_id': correspondentId,
+      if (refKind != null) 'ref_kind': refKind,
+      if (refValue != null) 'ref_value': refValue,
+      if (note != null) 'note': note,
+      if (closedAt != null) 'closed_at': closedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CasesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? title,
+    Value<String>? status,
+    Value<String?>? correspondentId,
+    Value<String?>? refKind,
+    Value<String?>? refValue,
+    Value<String>? note,
+    Value<DateTime?>? closedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return CasesCompanion(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      status: status ?? this.status,
+      correspondentId: correspondentId ?? this.correspondentId,
+      refKind: refKind ?? this.refKind,
+      refValue: refValue ?? this.refValue,
+      note: note ?? this.note,
+      closedAt: closedAt ?? this.closedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (correspondentId.present) {
+      map['correspondent_id'] = Variable<String>(correspondentId.value);
+    }
+    if (refKind.present) {
+      map['ref_kind'] = Variable<String>(refKind.value);
+    }
+    if (refValue.present) {
+      map['ref_value'] = Variable<String>(refValue.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (closedAt.present) {
+      map['closed_at'] = Variable<DateTime>(closedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CasesCompanion(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('status: $status, ')
+          ..write('correspondentId: $correspondentId, ')
+          ..write('refKind: $refKind, ')
+          ..write('refValue: $refValue, ')
+          ..write('note: $note, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CaseDocumentsTable extends CaseDocuments
+    with TableInfo<$CaseDocumentsTable, CaseDocument> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CaseDocumentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: _uuid.v4,
+  );
+  static const VerificationMeta _caseIdMeta = const VerificationMeta('caseId');
+  @override
+  late final GeneratedColumn<String> caseId = GeneratedColumn<String>(
+    'case_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _documentIdMeta = const VerificationMeta(
+    'documentId',
+  );
+  @override
+  late final GeneratedColumn<String> documentId = GeneratedColumn<String>(
+    'document_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _roleMeta = const VerificationMeta('role');
+  @override
+  late final GeneratedColumn<String> role = GeneratedColumn<String>(
+    'role',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('sonstiges'),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    caseId,
+    documentId,
+    role,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'case_documents';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CaseDocument> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('case_id')) {
+      context.handle(
+        _caseIdMeta,
+        caseId.isAcceptableOrUnknown(data['case_id']!, _caseIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_caseIdMeta);
+    }
+    if (data.containsKey('document_id')) {
+      context.handle(
+        _documentIdMeta,
+        documentId.isAcceptableOrUnknown(data['document_id']!, _documentIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_documentIdMeta);
+    }
+    if (data.containsKey('role')) {
+      context.handle(
+        _roleMeta,
+        role.isAcceptableOrUnknown(data['role']!, _roleMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CaseDocument map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CaseDocument(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      caseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}case_id'],
+      )!,
+      documentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}document_id'],
+      )!,
+      role: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}role'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $CaseDocumentsTable createAlias(String alias) {
+    return $CaseDocumentsTable(attachedDatabase, alias);
+  }
+}
+
+class CaseDocument extends DataClass implements Insertable<CaseDocument> {
+  final String id;
+  final String caseId;
+  final String documentId;
+
+  /// `antrag`, `rueckfrage`, `bescheid`, `widerspruch`, `sonstiges`.
+  final String role;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const CaseDocument({
+    required this.id,
+    required this.caseId,
+    required this.documentId,
+    required this.role,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['case_id'] = Variable<String>(caseId);
+    map['document_id'] = Variable<String>(documentId);
+    map['role'] = Variable<String>(role);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  CaseDocumentsCompanion toCompanion(bool nullToAbsent) {
+    return CaseDocumentsCompanion(
+      id: Value(id),
+      caseId: Value(caseId),
+      documentId: Value(documentId),
+      role: Value(role),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory CaseDocument.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CaseDocument(
+      id: serializer.fromJson<String>(json['id']),
+      caseId: serializer.fromJson<String>(json['caseId']),
+      documentId: serializer.fromJson<String>(json['documentId']),
+      role: serializer.fromJson<String>(json['role']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'caseId': serializer.toJson<String>(caseId),
+      'documentId': serializer.toJson<String>(documentId),
+      'role': serializer.toJson<String>(role),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  CaseDocument copyWith({
+    String? id,
+    String? caseId,
+    String? documentId,
+    String? role,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => CaseDocument(
+    id: id ?? this.id,
+    caseId: caseId ?? this.caseId,
+    documentId: documentId ?? this.documentId,
+    role: role ?? this.role,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  CaseDocument copyWithCompanion(CaseDocumentsCompanion data) {
+    return CaseDocument(
+      id: data.id.present ? data.id.value : this.id,
+      caseId: data.caseId.present ? data.caseId.value : this.caseId,
+      documentId: data.documentId.present
+          ? data.documentId.value
+          : this.documentId,
+      role: data.role.present ? data.role.value : this.role,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CaseDocument(')
+          ..write('id: $id, ')
+          ..write('caseId: $caseId, ')
+          ..write('documentId: $documentId, ')
+          ..write('role: $role, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    caseId,
+    documentId,
+    role,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CaseDocument &&
+          other.id == this.id &&
+          other.caseId == this.caseId &&
+          other.documentId == this.documentId &&
+          other.role == this.role &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class CaseDocumentsCompanion extends UpdateCompanion<CaseDocument> {
+  final Value<String> id;
+  final Value<String> caseId;
+  final Value<String> documentId;
+  final Value<String> role;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const CaseDocumentsCompanion({
+    this.id = const Value.absent(),
+    this.caseId = const Value.absent(),
+    this.documentId = const Value.absent(),
+    this.role = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CaseDocumentsCompanion.insert({
+    this.id = const Value.absent(),
+    required String caseId,
+    required String documentId,
+    this.role = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : caseId = Value(caseId),
+       documentId = Value(documentId);
+  static Insertable<CaseDocument> custom({
+    Expression<String>? id,
+    Expression<String>? caseId,
+    Expression<String>? documentId,
+    Expression<String>? role,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (caseId != null) 'case_id': caseId,
+      if (documentId != null) 'document_id': documentId,
+      if (role != null) 'role': role,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CaseDocumentsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? caseId,
+    Value<String>? documentId,
+    Value<String>? role,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return CaseDocumentsCompanion(
+      id: id ?? this.id,
+      caseId: caseId ?? this.caseId,
+      documentId: documentId ?? this.documentId,
+      role: role ?? this.role,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (caseId.present) {
+      map['case_id'] = Variable<String>(caseId.value);
+    }
+    if (documentId.present) {
+      map['document_id'] = Variable<String>(documentId.value);
+    }
+    if (role.present) {
+      map['role'] = Variable<String>(role.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CaseDocumentsCompanion(')
+          ..write('id: $id, ')
+          ..write('caseId: $caseId, ')
+          ..write('documentId: $documentId, ')
+          ..write('role: $role, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ContractsTable extends Contracts
+    with TableInfo<$ContractsTable, Contract> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ContractsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: _uuid.v4,
+  );
+  static const VerificationMeta _documentIdMeta = const VerificationMeta(
+    'documentId',
+  );
+  @override
+  late final GeneratedColumn<String> documentId = GeneratedColumn<String>(
+    'document_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _correspondentIdMeta = const VerificationMeta(
+    'correspondentId',
+  );
+  @override
+  late final GeneratedColumn<String> correspondentId = GeneratedColumn<String>(
+    'correspondent_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountCentsMeta = const VerificationMeta(
+    'amountCents',
+  );
+  @override
+  late final GeneratedColumn<int> amountCents = GeneratedColumn<int>(
+    'amount_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _intervalMeta = const VerificationMeta(
+    'interval',
+  );
+  @override
+  late final GeneratedColumn<String> interval = GeneratedColumn<String>(
+    'interval',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('monatlich'),
+  );
+  static const VerificationMeta _startDateMeta = const VerificationMeta(
+    'startDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startDate = GeneratedColumn<DateTime>(
+    'start_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _minTermUntilMeta = const VerificationMeta(
+    'minTermUntil',
+  );
+  @override
+  late final GeneratedColumn<DateTime> minTermUntil = GeneratedColumn<DateTime>(
+    'min_term_until',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _noticeValueMeta = const VerificationMeta(
+    'noticeValue',
+  );
+  @override
+  late final GeneratedColumn<int> noticeValue = GeneratedColumn<int>(
+    'notice_value',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _noticeUnitMeta = const VerificationMeta(
+    'noticeUnit',
+  );
+  @override
+  late final GeneratedColumn<String> noticeUnit = GeneratedColumn<String>(
+    'notice_unit',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _noticeToEndOfMeta = const VerificationMeta(
+    'noticeToEndOf',
+  );
+  @override
+  late final GeneratedColumn<String> noticeToEndOf = GeneratedColumn<String>(
+    'notice_to_end_of',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _autoRenewMonthsMeta = const VerificationMeta(
+    'autoRenewMonths',
+  );
+  @override
+  late final GeneratedColumn<int> autoRenewMonths = GeneratedColumn<int>(
+    'auto_renew_months',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _cancelledAtMeta = const VerificationMeta(
+    'cancelledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> cancelledAt = GeneratedColumn<DateTime>(
+    'cancelled_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _endsAtMeta = const VerificationMeta('endsAt');
+  @override
+  late final GeneratedColumn<DateTime> endsAt = GeneratedColumn<DateTime>(
+    'ends_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    documentId,
+    correspondentId,
+    title,
+    amountCents,
+    interval,
+    startDate,
+    minTermUntil,
+    noticeValue,
+    noticeUnit,
+    noticeToEndOf,
+    autoRenewMonths,
+    cancelledAt,
+    endsAt,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'contracts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Contract> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('document_id')) {
+      context.handle(
+        _documentIdMeta,
+        documentId.isAcceptableOrUnknown(data['document_id']!, _documentIdMeta),
+      );
+    }
+    if (data.containsKey('correspondent_id')) {
+      context.handle(
+        _correspondentIdMeta,
+        correspondentId.isAcceptableOrUnknown(
+          data['correspondent_id']!,
+          _correspondentIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('amount_cents')) {
+      context.handle(
+        _amountCentsMeta,
+        amountCents.isAcceptableOrUnknown(
+          data['amount_cents']!,
+          _amountCentsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('interval')) {
+      context.handle(
+        _intervalMeta,
+        interval.isAcceptableOrUnknown(data['interval']!, _intervalMeta),
+      );
+    }
+    if (data.containsKey('start_date')) {
+      context.handle(
+        _startDateMeta,
+        startDate.isAcceptableOrUnknown(data['start_date']!, _startDateMeta),
+      );
+    }
+    if (data.containsKey('min_term_until')) {
+      context.handle(
+        _minTermUntilMeta,
+        minTermUntil.isAcceptableOrUnknown(
+          data['min_term_until']!,
+          _minTermUntilMeta,
+        ),
+      );
+    }
+    if (data.containsKey('notice_value')) {
+      context.handle(
+        _noticeValueMeta,
+        noticeValue.isAcceptableOrUnknown(
+          data['notice_value']!,
+          _noticeValueMeta,
+        ),
+      );
+    }
+    if (data.containsKey('notice_unit')) {
+      context.handle(
+        _noticeUnitMeta,
+        noticeUnit.isAcceptableOrUnknown(data['notice_unit']!, _noticeUnitMeta),
+      );
+    }
+    if (data.containsKey('notice_to_end_of')) {
+      context.handle(
+        _noticeToEndOfMeta,
+        noticeToEndOf.isAcceptableOrUnknown(
+          data['notice_to_end_of']!,
+          _noticeToEndOfMeta,
+        ),
+      );
+    }
+    if (data.containsKey('auto_renew_months')) {
+      context.handle(
+        _autoRenewMonthsMeta,
+        autoRenewMonths.isAcceptableOrUnknown(
+          data['auto_renew_months']!,
+          _autoRenewMonthsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cancelled_at')) {
+      context.handle(
+        _cancelledAtMeta,
+        cancelledAt.isAcceptableOrUnknown(
+          data['cancelled_at']!,
+          _cancelledAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('ends_at')) {
+      context.handle(
+        _endsAtMeta,
+        endsAt.isAcceptableOrUnknown(data['ends_at']!, _endsAtMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Contract map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Contract(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      documentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}document_id'],
+      ),
+      correspondentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}correspondent_id'],
+      ),
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      amountCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount_cents'],
+      ),
+      interval: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}interval'],
+      )!,
+      startDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}start_date'],
+      ),
+      minTermUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}min_term_until'],
+      ),
+      noticeValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}notice_value'],
+      ),
+      noticeUnit: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notice_unit'],
+      ),
+      noticeToEndOf: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notice_to_end_of'],
+      ),
+      autoRenewMonths: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}auto_renew_months'],
+      ),
+      cancelledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}cancelled_at'],
+      ),
+      endsAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}ends_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $ContractsTable createAlias(String alias) {
+    return $ContractsTable(attachedDatabase, alias);
+  }
+}
+
+class Contract extends DataClass implements Insertable<Contract> {
+  final String id;
+  final String? documentId;
+  final String? correspondentId;
+  final String title;
+  final int? amountCents;
+
+  /// `monatlich`, `vierteljaehrlich`, `halbjaehrlich`, `jaehrlich`, `einmalig`.
+  final String interval;
+  final DateTime? startDate;
+  final DateTime? minTermUntil;
+  final int? noticeValue;
+
+  /// `tage`, `wochen`, `monate`.
+  final String? noticeUnit;
+
+  /// `laufzeitende` oder `monatsende`.
+  final String? noticeToEndOf;
+  final int? autoRenewMonths;
+  final DateTime? cancelledAt;
+  final DateTime? endsAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const Contract({
+    required this.id,
+    this.documentId,
+    this.correspondentId,
+    required this.title,
+    this.amountCents,
+    required this.interval,
+    this.startDate,
+    this.minTermUntil,
+    this.noticeValue,
+    this.noticeUnit,
+    this.noticeToEndOf,
+    this.autoRenewMonths,
+    this.cancelledAt,
+    this.endsAt,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    if (!nullToAbsent || documentId != null) {
+      map['document_id'] = Variable<String>(documentId);
+    }
+    if (!nullToAbsent || correspondentId != null) {
+      map['correspondent_id'] = Variable<String>(correspondentId);
+    }
+    map['title'] = Variable<String>(title);
+    if (!nullToAbsent || amountCents != null) {
+      map['amount_cents'] = Variable<int>(amountCents);
+    }
+    map['interval'] = Variable<String>(interval);
+    if (!nullToAbsent || startDate != null) {
+      map['start_date'] = Variable<DateTime>(startDate);
+    }
+    if (!nullToAbsent || minTermUntil != null) {
+      map['min_term_until'] = Variable<DateTime>(minTermUntil);
+    }
+    if (!nullToAbsent || noticeValue != null) {
+      map['notice_value'] = Variable<int>(noticeValue);
+    }
+    if (!nullToAbsent || noticeUnit != null) {
+      map['notice_unit'] = Variable<String>(noticeUnit);
+    }
+    if (!nullToAbsent || noticeToEndOf != null) {
+      map['notice_to_end_of'] = Variable<String>(noticeToEndOf);
+    }
+    if (!nullToAbsent || autoRenewMonths != null) {
+      map['auto_renew_months'] = Variable<int>(autoRenewMonths);
+    }
+    if (!nullToAbsent || cancelledAt != null) {
+      map['cancelled_at'] = Variable<DateTime>(cancelledAt);
+    }
+    if (!nullToAbsent || endsAt != null) {
+      map['ends_at'] = Variable<DateTime>(endsAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  ContractsCompanion toCompanion(bool nullToAbsent) {
+    return ContractsCompanion(
+      id: Value(id),
+      documentId: documentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(documentId),
+      correspondentId: correspondentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(correspondentId),
+      title: Value(title),
+      amountCents: amountCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(amountCents),
+      interval: Value(interval),
+      startDate: startDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startDate),
+      minTermUntil: minTermUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(minTermUntil),
+      noticeValue: noticeValue == null && nullToAbsent
+          ? const Value.absent()
+          : Value(noticeValue),
+      noticeUnit: noticeUnit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(noticeUnit),
+      noticeToEndOf: noticeToEndOf == null && nullToAbsent
+          ? const Value.absent()
+          : Value(noticeToEndOf),
+      autoRenewMonths: autoRenewMonths == null && nullToAbsent
+          ? const Value.absent()
+          : Value(autoRenewMonths),
+      cancelledAt: cancelledAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cancelledAt),
+      endsAt: endsAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endsAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory Contract.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Contract(
+      id: serializer.fromJson<String>(json['id']),
+      documentId: serializer.fromJson<String?>(json['documentId']),
+      correspondentId: serializer.fromJson<String?>(json['correspondentId']),
+      title: serializer.fromJson<String>(json['title']),
+      amountCents: serializer.fromJson<int?>(json['amountCents']),
+      interval: serializer.fromJson<String>(json['interval']),
+      startDate: serializer.fromJson<DateTime?>(json['startDate']),
+      minTermUntil: serializer.fromJson<DateTime?>(json['minTermUntil']),
+      noticeValue: serializer.fromJson<int?>(json['noticeValue']),
+      noticeUnit: serializer.fromJson<String?>(json['noticeUnit']),
+      noticeToEndOf: serializer.fromJson<String?>(json['noticeToEndOf']),
+      autoRenewMonths: serializer.fromJson<int?>(json['autoRenewMonths']),
+      cancelledAt: serializer.fromJson<DateTime?>(json['cancelledAt']),
+      endsAt: serializer.fromJson<DateTime?>(json['endsAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'documentId': serializer.toJson<String?>(documentId),
+      'correspondentId': serializer.toJson<String?>(correspondentId),
+      'title': serializer.toJson<String>(title),
+      'amountCents': serializer.toJson<int?>(amountCents),
+      'interval': serializer.toJson<String>(interval),
+      'startDate': serializer.toJson<DateTime?>(startDate),
+      'minTermUntil': serializer.toJson<DateTime?>(minTermUntil),
+      'noticeValue': serializer.toJson<int?>(noticeValue),
+      'noticeUnit': serializer.toJson<String?>(noticeUnit),
+      'noticeToEndOf': serializer.toJson<String?>(noticeToEndOf),
+      'autoRenewMonths': serializer.toJson<int?>(autoRenewMonths),
+      'cancelledAt': serializer.toJson<DateTime?>(cancelledAt),
+      'endsAt': serializer.toJson<DateTime?>(endsAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  Contract copyWith({
+    String? id,
+    Value<String?> documentId = const Value.absent(),
+    Value<String?> correspondentId = const Value.absent(),
+    String? title,
+    Value<int?> amountCents = const Value.absent(),
+    String? interval,
+    Value<DateTime?> startDate = const Value.absent(),
+    Value<DateTime?> minTermUntil = const Value.absent(),
+    Value<int?> noticeValue = const Value.absent(),
+    Value<String?> noticeUnit = const Value.absent(),
+    Value<String?> noticeToEndOf = const Value.absent(),
+    Value<int?> autoRenewMonths = const Value.absent(),
+    Value<DateTime?> cancelledAt = const Value.absent(),
+    Value<DateTime?> endsAt = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => Contract(
+    id: id ?? this.id,
+    documentId: documentId.present ? documentId.value : this.documentId,
+    correspondentId: correspondentId.present
+        ? correspondentId.value
+        : this.correspondentId,
+    title: title ?? this.title,
+    amountCents: amountCents.present ? amountCents.value : this.amountCents,
+    interval: interval ?? this.interval,
+    startDate: startDate.present ? startDate.value : this.startDate,
+    minTermUntil: minTermUntil.present ? minTermUntil.value : this.minTermUntil,
+    noticeValue: noticeValue.present ? noticeValue.value : this.noticeValue,
+    noticeUnit: noticeUnit.present ? noticeUnit.value : this.noticeUnit,
+    noticeToEndOf: noticeToEndOf.present
+        ? noticeToEndOf.value
+        : this.noticeToEndOf,
+    autoRenewMonths: autoRenewMonths.present
+        ? autoRenewMonths.value
+        : this.autoRenewMonths,
+    cancelledAt: cancelledAt.present ? cancelledAt.value : this.cancelledAt,
+    endsAt: endsAt.present ? endsAt.value : this.endsAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  Contract copyWithCompanion(ContractsCompanion data) {
+    return Contract(
+      id: data.id.present ? data.id.value : this.id,
+      documentId: data.documentId.present
+          ? data.documentId.value
+          : this.documentId,
+      correspondentId: data.correspondentId.present
+          ? data.correspondentId.value
+          : this.correspondentId,
+      title: data.title.present ? data.title.value : this.title,
+      amountCents: data.amountCents.present
+          ? data.amountCents.value
+          : this.amountCents,
+      interval: data.interval.present ? data.interval.value : this.interval,
+      startDate: data.startDate.present ? data.startDate.value : this.startDate,
+      minTermUntil: data.minTermUntil.present
+          ? data.minTermUntil.value
+          : this.minTermUntil,
+      noticeValue: data.noticeValue.present
+          ? data.noticeValue.value
+          : this.noticeValue,
+      noticeUnit: data.noticeUnit.present
+          ? data.noticeUnit.value
+          : this.noticeUnit,
+      noticeToEndOf: data.noticeToEndOf.present
+          ? data.noticeToEndOf.value
+          : this.noticeToEndOf,
+      autoRenewMonths: data.autoRenewMonths.present
+          ? data.autoRenewMonths.value
+          : this.autoRenewMonths,
+      cancelledAt: data.cancelledAt.present
+          ? data.cancelledAt.value
+          : this.cancelledAt,
+      endsAt: data.endsAt.present ? data.endsAt.value : this.endsAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Contract(')
+          ..write('id: $id, ')
+          ..write('documentId: $documentId, ')
+          ..write('correspondentId: $correspondentId, ')
+          ..write('title: $title, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('interval: $interval, ')
+          ..write('startDate: $startDate, ')
+          ..write('minTermUntil: $minTermUntil, ')
+          ..write('noticeValue: $noticeValue, ')
+          ..write('noticeUnit: $noticeUnit, ')
+          ..write('noticeToEndOf: $noticeToEndOf, ')
+          ..write('autoRenewMonths: $autoRenewMonths, ')
+          ..write('cancelledAt: $cancelledAt, ')
+          ..write('endsAt: $endsAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    documentId,
+    correspondentId,
+    title,
+    amountCents,
+    interval,
+    startDate,
+    minTermUntil,
+    noticeValue,
+    noticeUnit,
+    noticeToEndOf,
+    autoRenewMonths,
+    cancelledAt,
+    endsAt,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Contract &&
+          other.id == this.id &&
+          other.documentId == this.documentId &&
+          other.correspondentId == this.correspondentId &&
+          other.title == this.title &&
+          other.amountCents == this.amountCents &&
+          other.interval == this.interval &&
+          other.startDate == this.startDate &&
+          other.minTermUntil == this.minTermUntil &&
+          other.noticeValue == this.noticeValue &&
+          other.noticeUnit == this.noticeUnit &&
+          other.noticeToEndOf == this.noticeToEndOf &&
+          other.autoRenewMonths == this.autoRenewMonths &&
+          other.cancelledAt == this.cancelledAt &&
+          other.endsAt == this.endsAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class ContractsCompanion extends UpdateCompanion<Contract> {
+  final Value<String> id;
+  final Value<String?> documentId;
+  final Value<String?> correspondentId;
+  final Value<String> title;
+  final Value<int?> amountCents;
+  final Value<String> interval;
+  final Value<DateTime?> startDate;
+  final Value<DateTime?> minTermUntil;
+  final Value<int?> noticeValue;
+  final Value<String?> noticeUnit;
+  final Value<String?> noticeToEndOf;
+  final Value<int?> autoRenewMonths;
+  final Value<DateTime?> cancelledAt;
+  final Value<DateTime?> endsAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const ContractsCompanion({
+    this.id = const Value.absent(),
+    this.documentId = const Value.absent(),
+    this.correspondentId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.amountCents = const Value.absent(),
+    this.interval = const Value.absent(),
+    this.startDate = const Value.absent(),
+    this.minTermUntil = const Value.absent(),
+    this.noticeValue = const Value.absent(),
+    this.noticeUnit = const Value.absent(),
+    this.noticeToEndOf = const Value.absent(),
+    this.autoRenewMonths = const Value.absent(),
+    this.cancelledAt = const Value.absent(),
+    this.endsAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ContractsCompanion.insert({
+    this.id = const Value.absent(),
+    this.documentId = const Value.absent(),
+    this.correspondentId = const Value.absent(),
+    required String title,
+    this.amountCents = const Value.absent(),
+    this.interval = const Value.absent(),
+    this.startDate = const Value.absent(),
+    this.minTermUntil = const Value.absent(),
+    this.noticeValue = const Value.absent(),
+    this.noticeUnit = const Value.absent(),
+    this.noticeToEndOf = const Value.absent(),
+    this.autoRenewMonths = const Value.absent(),
+    this.cancelledAt = const Value.absent(),
+    this.endsAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : title = Value(title);
+  static Insertable<Contract> custom({
+    Expression<String>? id,
+    Expression<String>? documentId,
+    Expression<String>? correspondentId,
+    Expression<String>? title,
+    Expression<int>? amountCents,
+    Expression<String>? interval,
+    Expression<DateTime>? startDate,
+    Expression<DateTime>? minTermUntil,
+    Expression<int>? noticeValue,
+    Expression<String>? noticeUnit,
+    Expression<String>? noticeToEndOf,
+    Expression<int>? autoRenewMonths,
+    Expression<DateTime>? cancelledAt,
+    Expression<DateTime>? endsAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (documentId != null) 'document_id': documentId,
+      if (correspondentId != null) 'correspondent_id': correspondentId,
+      if (title != null) 'title': title,
+      if (amountCents != null) 'amount_cents': amountCents,
+      if (interval != null) 'interval': interval,
+      if (startDate != null) 'start_date': startDate,
+      if (minTermUntil != null) 'min_term_until': minTermUntil,
+      if (noticeValue != null) 'notice_value': noticeValue,
+      if (noticeUnit != null) 'notice_unit': noticeUnit,
+      if (noticeToEndOf != null) 'notice_to_end_of': noticeToEndOf,
+      if (autoRenewMonths != null) 'auto_renew_months': autoRenewMonths,
+      if (cancelledAt != null) 'cancelled_at': cancelledAt,
+      if (endsAt != null) 'ends_at': endsAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ContractsCompanion copyWith({
+    Value<String>? id,
+    Value<String?>? documentId,
+    Value<String?>? correspondentId,
+    Value<String>? title,
+    Value<int?>? amountCents,
+    Value<String>? interval,
+    Value<DateTime?>? startDate,
+    Value<DateTime?>? minTermUntil,
+    Value<int?>? noticeValue,
+    Value<String?>? noticeUnit,
+    Value<String?>? noticeToEndOf,
+    Value<int?>? autoRenewMonths,
+    Value<DateTime?>? cancelledAt,
+    Value<DateTime?>? endsAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return ContractsCompanion(
+      id: id ?? this.id,
+      documentId: documentId ?? this.documentId,
+      correspondentId: correspondentId ?? this.correspondentId,
+      title: title ?? this.title,
+      amountCents: amountCents ?? this.amountCents,
+      interval: interval ?? this.interval,
+      startDate: startDate ?? this.startDate,
+      minTermUntil: minTermUntil ?? this.minTermUntil,
+      noticeValue: noticeValue ?? this.noticeValue,
+      noticeUnit: noticeUnit ?? this.noticeUnit,
+      noticeToEndOf: noticeToEndOf ?? this.noticeToEndOf,
+      autoRenewMonths: autoRenewMonths ?? this.autoRenewMonths,
+      cancelledAt: cancelledAt ?? this.cancelledAt,
+      endsAt: endsAt ?? this.endsAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (documentId.present) {
+      map['document_id'] = Variable<String>(documentId.value);
+    }
+    if (correspondentId.present) {
+      map['correspondent_id'] = Variable<String>(correspondentId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (amountCents.present) {
+      map['amount_cents'] = Variable<int>(amountCents.value);
+    }
+    if (interval.present) {
+      map['interval'] = Variable<String>(interval.value);
+    }
+    if (startDate.present) {
+      map['start_date'] = Variable<DateTime>(startDate.value);
+    }
+    if (minTermUntil.present) {
+      map['min_term_until'] = Variable<DateTime>(minTermUntil.value);
+    }
+    if (noticeValue.present) {
+      map['notice_value'] = Variable<int>(noticeValue.value);
+    }
+    if (noticeUnit.present) {
+      map['notice_unit'] = Variable<String>(noticeUnit.value);
+    }
+    if (noticeToEndOf.present) {
+      map['notice_to_end_of'] = Variable<String>(noticeToEndOf.value);
+    }
+    if (autoRenewMonths.present) {
+      map['auto_renew_months'] = Variable<int>(autoRenewMonths.value);
+    }
+    if (cancelledAt.present) {
+      map['cancelled_at'] = Variable<DateTime>(cancelledAt.value);
+    }
+    if (endsAt.present) {
+      map['ends_at'] = Variable<DateTime>(endsAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ContractsCompanion(')
+          ..write('id: $id, ')
+          ..write('documentId: $documentId, ')
+          ..write('correspondentId: $correspondentId, ')
+          ..write('title: $title, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('interval: $interval, ')
+          ..write('startDate: $startDate, ')
+          ..write('minTermUntil: $minTermUntil, ')
+          ..write('noticeValue: $noticeValue, ')
+          ..write('noticeUnit: $noticeUnit, ')
+          ..write('noticeToEndOf: $noticeToEndOf, ')
+          ..write('autoRenewMonths: $autoRenewMonths, ')
+          ..write('cancelledAt: $cancelledAt, ')
+          ..write('endsAt: $endsAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AttachmentsTable extends Attachments
+    with TableInfo<$AttachmentsTable, Attachment> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AttachmentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: _uuid.v4,
+  );
+  static const VerificationMeta _documentIdMeta = const VerificationMeta(
+    'documentId',
+  );
+  @override
+  late final GeneratedColumn<String> documentId = GeneratedColumn<String>(
+    'document_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _relPathMeta = const VerificationMeta(
+    'relPath',
+  );
+  @override
+  late final GeneratedColumn<String> relPath = GeneratedColumn<String>(
+    'rel_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _mimeMeta = const VerificationMeta('mime');
+  @override
+  late final GeneratedColumn<String> mime = GeneratedColumn<String>(
+    'mime',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _captionMeta = const VerificationMeta(
+    'caption',
+  );
+  @override
+  late final GeneratedColumn<String> caption = GeneratedColumn<String>(
+    'caption',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _sizeBytesMeta = const VerificationMeta(
+    'sizeBytes',
+  );
+  @override
+  late final GeneratedColumn<int> sizeBytes = GeneratedColumn<int>(
+    'size_bytes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _sha256Meta = const VerificationMeta('sha256');
+  @override
+  late final GeneratedColumn<String> sha256 = GeneratedColumn<String>(
+    'sha256',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    documentId,
+    kind,
+    relPath,
+    mime,
+    caption,
+    sizeBytes,
+    sha256,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'attachments';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Attachment> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('document_id')) {
+      context.handle(
+        _documentIdMeta,
+        documentId.isAcceptableOrUnknown(data['document_id']!, _documentIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_documentIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('rel_path')) {
+      context.handle(
+        _relPathMeta,
+        relPath.isAcceptableOrUnknown(data['rel_path']!, _relPathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_relPathMeta);
+    }
+    if (data.containsKey('mime')) {
+      context.handle(
+        _mimeMeta,
+        mime.isAcceptableOrUnknown(data['mime']!, _mimeMeta),
+      );
+    }
+    if (data.containsKey('caption')) {
+      context.handle(
+        _captionMeta,
+        caption.isAcceptableOrUnknown(data['caption']!, _captionMeta),
+      );
+    }
+    if (data.containsKey('size_bytes')) {
+      context.handle(
+        _sizeBytesMeta,
+        sizeBytes.isAcceptableOrUnknown(data['size_bytes']!, _sizeBytesMeta),
+      );
+    }
+    if (data.containsKey('sha256')) {
+      context.handle(
+        _sha256Meta,
+        sha256.isAcceptableOrUnknown(data['sha256']!, _sha256Meta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Attachment map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Attachment(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      documentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}document_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      relPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rel_path'],
+      )!,
+      mime: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mime'],
+      )!,
+      caption: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}caption'],
+      )!,
+      sizeBytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}size_bytes'],
+      )!,
+      sha256: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sha256'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $AttachmentsTable createAlias(String alias) {
+    return $AttachmentsTable(attachedDatabase, alias);
+  }
+}
+
+class Attachment extends DataClass implements Insertable<Attachment> {
+  final String id;
+  final String documentId;
+
+  /// `foto` oder `datei`.
+  final String kind;
+  final String relPath;
+  final String mime;
+  final String caption;
+  final int sizeBytes;
+  final String? sha256;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const Attachment({
+    required this.id,
+    required this.documentId,
+    required this.kind,
+    required this.relPath,
+    required this.mime,
+    required this.caption,
+    required this.sizeBytes,
+    this.sha256,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['document_id'] = Variable<String>(documentId);
+    map['kind'] = Variable<String>(kind);
+    map['rel_path'] = Variable<String>(relPath);
+    map['mime'] = Variable<String>(mime);
+    map['caption'] = Variable<String>(caption);
+    map['size_bytes'] = Variable<int>(sizeBytes);
+    if (!nullToAbsent || sha256 != null) {
+      map['sha256'] = Variable<String>(sha256);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  AttachmentsCompanion toCompanion(bool nullToAbsent) {
+    return AttachmentsCompanion(
+      id: Value(id),
+      documentId: Value(documentId),
+      kind: Value(kind),
+      relPath: Value(relPath),
+      mime: Value(mime),
+      caption: Value(caption),
+      sizeBytes: Value(sizeBytes),
+      sha256: sha256 == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sha256),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory Attachment.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Attachment(
+      id: serializer.fromJson<String>(json['id']),
+      documentId: serializer.fromJson<String>(json['documentId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      relPath: serializer.fromJson<String>(json['relPath']),
+      mime: serializer.fromJson<String>(json['mime']),
+      caption: serializer.fromJson<String>(json['caption']),
+      sizeBytes: serializer.fromJson<int>(json['sizeBytes']),
+      sha256: serializer.fromJson<String?>(json['sha256']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'documentId': serializer.toJson<String>(documentId),
+      'kind': serializer.toJson<String>(kind),
+      'relPath': serializer.toJson<String>(relPath),
+      'mime': serializer.toJson<String>(mime),
+      'caption': serializer.toJson<String>(caption),
+      'sizeBytes': serializer.toJson<int>(sizeBytes),
+      'sha256': serializer.toJson<String?>(sha256),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  Attachment copyWith({
+    String? id,
+    String? documentId,
+    String? kind,
+    String? relPath,
+    String? mime,
+    String? caption,
+    int? sizeBytes,
+    Value<String?> sha256 = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => Attachment(
+    id: id ?? this.id,
+    documentId: documentId ?? this.documentId,
+    kind: kind ?? this.kind,
+    relPath: relPath ?? this.relPath,
+    mime: mime ?? this.mime,
+    caption: caption ?? this.caption,
+    sizeBytes: sizeBytes ?? this.sizeBytes,
+    sha256: sha256.present ? sha256.value : this.sha256,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  Attachment copyWithCompanion(AttachmentsCompanion data) {
+    return Attachment(
+      id: data.id.present ? data.id.value : this.id,
+      documentId: data.documentId.present
+          ? data.documentId.value
+          : this.documentId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      relPath: data.relPath.present ? data.relPath.value : this.relPath,
+      mime: data.mime.present ? data.mime.value : this.mime,
+      caption: data.caption.present ? data.caption.value : this.caption,
+      sizeBytes: data.sizeBytes.present ? data.sizeBytes.value : this.sizeBytes,
+      sha256: data.sha256.present ? data.sha256.value : this.sha256,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Attachment(')
+          ..write('id: $id, ')
+          ..write('documentId: $documentId, ')
+          ..write('kind: $kind, ')
+          ..write('relPath: $relPath, ')
+          ..write('mime: $mime, ')
+          ..write('caption: $caption, ')
+          ..write('sizeBytes: $sizeBytes, ')
+          ..write('sha256: $sha256, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    documentId,
+    kind,
+    relPath,
+    mime,
+    caption,
+    sizeBytes,
+    sha256,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Attachment &&
+          other.id == this.id &&
+          other.documentId == this.documentId &&
+          other.kind == this.kind &&
+          other.relPath == this.relPath &&
+          other.mime == this.mime &&
+          other.caption == this.caption &&
+          other.sizeBytes == this.sizeBytes &&
+          other.sha256 == this.sha256 &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class AttachmentsCompanion extends UpdateCompanion<Attachment> {
+  final Value<String> id;
+  final Value<String> documentId;
+  final Value<String> kind;
+  final Value<String> relPath;
+  final Value<String> mime;
+  final Value<String> caption;
+  final Value<int> sizeBytes;
+  final Value<String?> sha256;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const AttachmentsCompanion({
+    this.id = const Value.absent(),
+    this.documentId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.relPath = const Value.absent(),
+    this.mime = const Value.absent(),
+    this.caption = const Value.absent(),
+    this.sizeBytes = const Value.absent(),
+    this.sha256 = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AttachmentsCompanion.insert({
+    this.id = const Value.absent(),
+    required String documentId,
+    required String kind,
+    required String relPath,
+    this.mime = const Value.absent(),
+    this.caption = const Value.absent(),
+    this.sizeBytes = const Value.absent(),
+    this.sha256 = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : documentId = Value(documentId),
+       kind = Value(kind),
+       relPath = Value(relPath);
+  static Insertable<Attachment> custom({
+    Expression<String>? id,
+    Expression<String>? documentId,
+    Expression<String>? kind,
+    Expression<String>? relPath,
+    Expression<String>? mime,
+    Expression<String>? caption,
+    Expression<int>? sizeBytes,
+    Expression<String>? sha256,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (documentId != null) 'document_id': documentId,
+      if (kind != null) 'kind': kind,
+      if (relPath != null) 'rel_path': relPath,
+      if (mime != null) 'mime': mime,
+      if (caption != null) 'caption': caption,
+      if (sizeBytes != null) 'size_bytes': sizeBytes,
+      if (sha256 != null) 'sha256': sha256,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AttachmentsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? documentId,
+    Value<String>? kind,
+    Value<String>? relPath,
+    Value<String>? mime,
+    Value<String>? caption,
+    Value<int>? sizeBytes,
+    Value<String?>? sha256,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return AttachmentsCompanion(
+      id: id ?? this.id,
+      documentId: documentId ?? this.documentId,
+      kind: kind ?? this.kind,
+      relPath: relPath ?? this.relPath,
+      mime: mime ?? this.mime,
+      caption: caption ?? this.caption,
+      sizeBytes: sizeBytes ?? this.sizeBytes,
+      sha256: sha256 ?? this.sha256,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (documentId.present) {
+      map['document_id'] = Variable<String>(documentId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (relPath.present) {
+      map['rel_path'] = Variable<String>(relPath.value);
+    }
+    if (mime.present) {
+      map['mime'] = Variable<String>(mime.value);
+    }
+    if (caption.present) {
+      map['caption'] = Variable<String>(caption.value);
+    }
+    if (sizeBytes.present) {
+      map['size_bytes'] = Variable<int>(sizeBytes.value);
+    }
+    if (sha256.present) {
+      map['sha256'] = Variable<String>(sha256.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AttachmentsCompanion(')
+          ..write('id: $id, ')
+          ..write('documentId: $documentId, ')
+          ..write('kind: $kind, ')
+          ..write('relPath: $relPath, ')
+          ..write('mime: $mime, ')
+          ..write('caption: $caption, ')
+          ..write('sizeBytes: $sizeBytes, ')
+          ..write('sha256: $sha256, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PersonalDataTable extends PersonalData
+    with TableInfo<$PersonalDataTable, PersonalDataData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PersonalDataTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: _uuid.v4,
+  );
+  static const VerificationMeta _personMeta = const VerificationMeta('person');
+  @override
+  late final GeneratedColumn<String> person = GeneratedColumn<String>(
+    'person',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _keyMeta = const VerificationMeta('key');
+  @override
+  late final GeneratedColumn<String> key = GeneratedColumn<String>(
+    'key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<String> value = GeneratedColumn<String>(
+    'value',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: DateTime.now,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    person,
+    key,
+    label,
+    value,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'personal_data';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PersonalDataData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('person')) {
+      context.handle(
+        _personMeta,
+        person.isAcceptableOrUnknown(data['person']!, _personMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_personMeta);
+    }
+    if (data.containsKey('key')) {
+      context.handle(
+        _keyMeta,
+        key.isAcceptableOrUnknown(data['key']!, _keyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_keyMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_labelMeta);
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+        _valueMeta,
+        value.isAcceptableOrUnknown(data['value']!, _valueMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PersonalDataData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PersonalDataData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      person: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}person'],
+      )!,
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      )!,
+      value: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}value'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $PersonalDataTable createAlias(String alias) {
+    return $PersonalDataTable(attachedDatabase, alias);
+  }
+}
+
+class PersonalDataData extends DataClass
+    implements Insertable<PersonalDataData> {
+  final String id;
+  final String person;
+
+  /// Vordefinierter Schlüssel (vorname, iban …) oder `frei`.
+  final String key;
+  final String label;
+  final String value;
+  final int sortOrder;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const PersonalDataData({
+    required this.id,
+    required this.person,
+    required this.key,
+    required this.label,
+    required this.value,
+    required this.sortOrder,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['person'] = Variable<String>(person);
+    map['key'] = Variable<String>(key);
+    map['label'] = Variable<String>(label);
+    map['value'] = Variable<String>(value);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  PersonalDataCompanion toCompanion(bool nullToAbsent) {
+    return PersonalDataCompanion(
+      id: Value(id),
+      person: Value(person),
+      key: Value(key),
+      label: Value(label),
+      value: Value(value),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory PersonalDataData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PersonalDataData(
+      id: serializer.fromJson<String>(json['id']),
+      person: serializer.fromJson<String>(json['person']),
+      key: serializer.fromJson<String>(json['key']),
+      label: serializer.fromJson<String>(json['label']),
+      value: serializer.fromJson<String>(json['value']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'person': serializer.toJson<String>(person),
+      'key': serializer.toJson<String>(key),
+      'label': serializer.toJson<String>(label),
+      'value': serializer.toJson<String>(value),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  PersonalDataData copyWith({
+    String? id,
+    String? person,
+    String? key,
+    String? label,
+    String? value,
+    int? sortOrder,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => PersonalDataData(
+    id: id ?? this.id,
+    person: person ?? this.person,
+    key: key ?? this.key,
+    label: label ?? this.label,
+    value: value ?? this.value,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  PersonalDataData copyWithCompanion(PersonalDataCompanion data) {
+    return PersonalDataData(
+      id: data.id.present ? data.id.value : this.id,
+      person: data.person.present ? data.person.value : this.person,
+      key: data.key.present ? data.key.value : this.key,
+      label: data.label.present ? data.label.value : this.label,
+      value: data.value.present ? data.value.value : this.value,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PersonalDataData(')
+          ..write('id: $id, ')
+          ..write('person: $person, ')
+          ..write('key: $key, ')
+          ..write('label: $label, ')
+          ..write('value: $value, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    person,
+    key,
+    label,
+    value,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PersonalDataData &&
+          other.id == this.id &&
+          other.person == this.person &&
+          other.key == this.key &&
+          other.label == this.label &&
+          other.value == this.value &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class PersonalDataCompanion extends UpdateCompanion<PersonalDataData> {
+  final Value<String> id;
+  final Value<String> person;
+  final Value<String> key;
+  final Value<String> label;
+  final Value<String> value;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const PersonalDataCompanion({
+    this.id = const Value.absent(),
+    this.person = const Value.absent(),
+    this.key = const Value.absent(),
+    this.label = const Value.absent(),
+    this.value = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PersonalDataCompanion.insert({
+    this.id = const Value.absent(),
+    required String person,
+    required String key,
+    required String label,
+    this.value = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : person = Value(person),
+       key = Value(key),
+       label = Value(label);
+  static Insertable<PersonalDataData> custom({
+    Expression<String>? id,
+    Expression<String>? person,
+    Expression<String>? key,
+    Expression<String>? label,
+    Expression<String>? value,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (person != null) 'person': person,
+      if (key != null) 'key': key,
+      if (label != null) 'label': label,
+      if (value != null) 'value': value,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PersonalDataCompanion copyWith({
+    Value<String>? id,
+    Value<String>? person,
+    Value<String>? key,
+    Value<String>? label,
+    Value<String>? value,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return PersonalDataCompanion(
+      id: id ?? this.id,
+      person: person ?? this.person,
+      key: key ?? this.key,
+      label: label ?? this.label,
+      value: value ?? this.value,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (person.present) {
+      map['person'] = Variable<String>(person.value);
+    }
+    if (key.present) {
+      map['key'] = Variable<String>(key.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (value.present) {
+      map['value'] = Variable<String>(value.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PersonalDataCompanion(')
+          ..write('id: $id, ')
+          ..write('person: $person, ')
+          ..write('key: $key, ')
+          ..write('label: $label, ')
+          ..write('value: $value, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -4866,6 +9125,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SignatureTemplatesTable signatureTemplates =
       $SignatureTemplatesTable(this);
   late final $DocTasksTable docTasks = $DocTasksTable(this);
+  late final $CasesTable cases = $CasesTable(this);
+  late final $CaseDocumentsTable caseDocuments = $CaseDocumentsTable(this);
+  late final $ContractsTable contracts = $ContractsTable(this);
+  late final $AttachmentsTable attachments = $AttachmentsTable(this);
+  late final $PersonalDataTable personalData = $PersonalDataTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4881,6 +9145,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     categories,
     signatureTemplates,
     docTasks,
+    cases,
+    caseDocuments,
+    contracts,
+    attachments,
+    personalData,
   ];
 }
 
@@ -4907,6 +9176,16 @@ typedef $$DocumentsTableCreateCompanionBuilder =
       Value<DateTime?> paymentReminderAt,
       Value<String?> filledPdfPath,
       Value<String?> fillData,
+      Value<String?> contentHash,
+      Value<DateTime?> warrantyUntil,
+      Value<String?> warrantyKind,
+      Value<DateTime?> objectionDeadline,
+      Value<String?> taxCategory,
+      Value<int?> taxYear,
+      Value<int?> taxAmountCents,
+      Value<DateTime?> destroyedAt,
+      Value<String?> destroyedFrom,
+      Value<String?> paymentReference,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -4934,6 +9213,16 @@ typedef $$DocumentsTableUpdateCompanionBuilder =
       Value<DateTime?> paymentReminderAt,
       Value<String?> filledPdfPath,
       Value<String?> fillData,
+      Value<String?> contentHash,
+      Value<DateTime?> warrantyUntil,
+      Value<String?> warrantyKind,
+      Value<DateTime?> objectionDeadline,
+      Value<String?> taxCategory,
+      Value<int?> taxYear,
+      Value<int?> taxAmountCents,
+      Value<DateTime?> destroyedAt,
+      Value<String?> destroyedFrom,
+      Value<String?> paymentReference,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -5050,6 +9339,56 @@ class $$DocumentsTableFilterComposer
 
   ColumnFilters<String> get fillData => $composableBuilder(
     column: $table.fillData,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contentHash => $composableBuilder(
+    column: $table.contentHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get warrantyUntil => $composableBuilder(
+    column: $table.warrantyUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get warrantyKind => $composableBuilder(
+    column: $table.warrantyKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get objectionDeadline => $composableBuilder(
+    column: $table.objectionDeadline,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get taxCategory => $composableBuilder(
+    column: $table.taxCategory,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get taxYear => $composableBuilder(
+    column: $table.taxYear,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get taxAmountCents => $composableBuilder(
+    column: $table.taxAmountCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get destroyedAt => $composableBuilder(
+    column: $table.destroyedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get destroyedFrom => $composableBuilder(
+    column: $table.destroyedFrom,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get paymentReference => $composableBuilder(
+    column: $table.paymentReference,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5178,6 +9517,56 @@ class $$DocumentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get contentHash => $composableBuilder(
+    column: $table.contentHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get warrantyUntil => $composableBuilder(
+    column: $table.warrantyUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get warrantyKind => $composableBuilder(
+    column: $table.warrantyKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get objectionDeadline => $composableBuilder(
+    column: $table.objectionDeadline,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get taxCategory => $composableBuilder(
+    column: $table.taxCategory,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get taxYear => $composableBuilder(
+    column: $table.taxYear,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get taxAmountCents => $composableBuilder(
+    column: $table.taxAmountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get destroyedAt => $composableBuilder(
+    column: $table.destroyedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get destroyedFrom => $composableBuilder(
+    column: $table.destroyedFrom,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get paymentReference => $composableBuilder(
+    column: $table.paymentReference,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -5279,6 +9668,54 @@ class $$DocumentsTableAnnotationComposer
   GeneratedColumn<String> get fillData =>
       $composableBuilder(column: $table.fillData, builder: (column) => column);
 
+  GeneratedColumn<String> get contentHash => $composableBuilder(
+    column: $table.contentHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get warrantyUntil => $composableBuilder(
+    column: $table.warrantyUntil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get warrantyKind => $composableBuilder(
+    column: $table.warrantyKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get objectionDeadline => $composableBuilder(
+    column: $table.objectionDeadline,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get taxCategory => $composableBuilder(
+    column: $table.taxCategory,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get taxYear =>
+      $composableBuilder(column: $table.taxYear, builder: (column) => column);
+
+  GeneratedColumn<int> get taxAmountCents => $composableBuilder(
+    column: $table.taxAmountCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get destroyedAt => $composableBuilder(
+    column: $table.destroyedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get destroyedFrom => $composableBuilder(
+    column: $table.destroyedFrom,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get paymentReference => $composableBuilder(
+    column: $table.paymentReference,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
@@ -5335,6 +9772,16 @@ class $$DocumentsTableTableManager
                 Value<DateTime?> paymentReminderAt = const Value.absent(),
                 Value<String?> filledPdfPath = const Value.absent(),
                 Value<String?> fillData = const Value.absent(),
+                Value<String?> contentHash = const Value.absent(),
+                Value<DateTime?> warrantyUntil = const Value.absent(),
+                Value<String?> warrantyKind = const Value.absent(),
+                Value<DateTime?> objectionDeadline = const Value.absent(),
+                Value<String?> taxCategory = const Value.absent(),
+                Value<int?> taxYear = const Value.absent(),
+                Value<int?> taxAmountCents = const Value.absent(),
+                Value<DateTime?> destroyedAt = const Value.absent(),
+                Value<String?> destroyedFrom = const Value.absent(),
+                Value<String?> paymentReference = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -5360,6 +9807,16 @@ class $$DocumentsTableTableManager
                 paymentReminderAt: paymentReminderAt,
                 filledPdfPath: filledPdfPath,
                 fillData: fillData,
+                contentHash: contentHash,
+                warrantyUntil: warrantyUntil,
+                warrantyKind: warrantyKind,
+                objectionDeadline: objectionDeadline,
+                taxCategory: taxCategory,
+                taxYear: taxYear,
+                taxAmountCents: taxAmountCents,
+                destroyedAt: destroyedAt,
+                destroyedFrom: destroyedFrom,
+                paymentReference: paymentReference,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,
@@ -5387,6 +9844,16 @@ class $$DocumentsTableTableManager
                 Value<DateTime?> paymentReminderAt = const Value.absent(),
                 Value<String?> filledPdfPath = const Value.absent(),
                 Value<String?> fillData = const Value.absent(),
+                Value<String?> contentHash = const Value.absent(),
+                Value<DateTime?> warrantyUntil = const Value.absent(),
+                Value<String?> warrantyKind = const Value.absent(),
+                Value<DateTime?> objectionDeadline = const Value.absent(),
+                Value<String?> taxCategory = const Value.absent(),
+                Value<int?> taxYear = const Value.absent(),
+                Value<int?> taxAmountCents = const Value.absent(),
+                Value<DateTime?> destroyedAt = const Value.absent(),
+                Value<String?> destroyedFrom = const Value.absent(),
+                Value<String?> paymentReference = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -5412,6 +9879,16 @@ class $$DocumentsTableTableManager
                 paymentReminderAt: paymentReminderAt,
                 filledPdfPath: filledPdfPath,
                 fillData: fillData,
+                contentHash: contentHash,
+                warrantyUntil: warrantyUntil,
+                warrantyKind: warrantyKind,
+                objectionDeadline: objectionDeadline,
+                taxCategory: taxCategory,
+                taxYear: taxYear,
+                taxAmountCents: taxAmountCents,
+                destroyedAt: destroyedAt,
+                destroyedFrom: destroyedFrom,
+                paymentReference: paymentReference,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,
@@ -5444,6 +9921,13 @@ typedef $$CorrespondentsTableCreateCompanionBuilder =
       required String name,
       Value<String> aliases,
       Value<String?> categoryId,
+      Value<String?> email,
+      Value<String?> fax,
+      Value<String?> postalAddress,
+      Value<String?> mailSubjectTemplate,
+      Value<String?> mailBodyTemplate,
+      Value<String?> iban,
+      Value<String?> bic,
       Value<String?> defaultDocType,
       Value<String> defaultTagIds,
       Value<DateTime> updatedAt,
@@ -5456,6 +9940,13 @@ typedef $$CorrespondentsTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String> aliases,
       Value<String?> categoryId,
+      Value<String?> email,
+      Value<String?> fax,
+      Value<String?> postalAddress,
+      Value<String?> mailSubjectTemplate,
+      Value<String?> mailBodyTemplate,
+      Value<String?> iban,
+      Value<String?> bic,
       Value<String?> defaultDocType,
       Value<String> defaultTagIds,
       Value<DateTime> updatedAt,
@@ -5489,6 +9980,41 @@ class $$CorrespondentsTableFilterComposer
 
   ColumnFilters<String> get categoryId => $composableBuilder(
     column: $table.categoryId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fax => $composableBuilder(
+    column: $table.fax,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get postalAddress => $composableBuilder(
+    column: $table.postalAddress,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mailSubjectTemplate => $composableBuilder(
+    column: $table.mailSubjectTemplate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mailBodyTemplate => $composableBuilder(
+    column: $table.mailBodyTemplate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get iban => $composableBuilder(
+    column: $table.iban,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get bic => $composableBuilder(
+    column: $table.bic,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5542,6 +10068,41 @@ class $$CorrespondentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fax => $composableBuilder(
+    column: $table.fax,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get postalAddress => $composableBuilder(
+    column: $table.postalAddress,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get mailSubjectTemplate => $composableBuilder(
+    column: $table.mailSubjectTemplate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get mailBodyTemplate => $composableBuilder(
+    column: $table.mailBodyTemplate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get iban => $composableBuilder(
+    column: $table.iban,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get bic => $composableBuilder(
+    column: $table.bic,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get defaultDocType => $composableBuilder(
     column: $table.defaultDocType,
     builder: (column) => ColumnOrderings(column),
@@ -5585,6 +10146,33 @@ class $$CorrespondentsTableAnnotationComposer
     column: $table.categoryId,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get email =>
+      $composableBuilder(column: $table.email, builder: (column) => column);
+
+  GeneratedColumn<String> get fax =>
+      $composableBuilder(column: $table.fax, builder: (column) => column);
+
+  GeneratedColumn<String> get postalAddress => $composableBuilder(
+    column: $table.postalAddress,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get mailSubjectTemplate => $composableBuilder(
+    column: $table.mailSubjectTemplate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get mailBodyTemplate => $composableBuilder(
+    column: $table.mailBodyTemplate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get iban =>
+      $composableBuilder(column: $table.iban, builder: (column) => column);
+
+  GeneratedColumn<String> get bic =>
+      $composableBuilder(column: $table.bic, builder: (column) => column);
 
   GeneratedColumn<String> get defaultDocType => $composableBuilder(
     column: $table.defaultDocType,
@@ -5640,6 +10228,13 @@ class $$CorrespondentsTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String> aliases = const Value.absent(),
                 Value<String?> categoryId = const Value.absent(),
+                Value<String?> email = const Value.absent(),
+                Value<String?> fax = const Value.absent(),
+                Value<String?> postalAddress = const Value.absent(),
+                Value<String?> mailSubjectTemplate = const Value.absent(),
+                Value<String?> mailBodyTemplate = const Value.absent(),
+                Value<String?> iban = const Value.absent(),
+                Value<String?> bic = const Value.absent(),
                 Value<String?> defaultDocType = const Value.absent(),
                 Value<String> defaultTagIds = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -5650,6 +10245,13 @@ class $$CorrespondentsTableTableManager
                 name: name,
                 aliases: aliases,
                 categoryId: categoryId,
+                email: email,
+                fax: fax,
+                postalAddress: postalAddress,
+                mailSubjectTemplate: mailSubjectTemplate,
+                mailBodyTemplate: mailBodyTemplate,
+                iban: iban,
+                bic: bic,
                 defaultDocType: defaultDocType,
                 defaultTagIds: defaultTagIds,
                 updatedAt: updatedAt,
@@ -5662,6 +10264,13 @@ class $$CorrespondentsTableTableManager
                 required String name,
                 Value<String> aliases = const Value.absent(),
                 Value<String?> categoryId = const Value.absent(),
+                Value<String?> email = const Value.absent(),
+                Value<String?> fax = const Value.absent(),
+                Value<String?> postalAddress = const Value.absent(),
+                Value<String?> mailSubjectTemplate = const Value.absent(),
+                Value<String?> mailBodyTemplate = const Value.absent(),
+                Value<String?> iban = const Value.absent(),
+                Value<String?> bic = const Value.absent(),
                 Value<String?> defaultDocType = const Value.absent(),
                 Value<String> defaultTagIds = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -5672,6 +10281,13 @@ class $$CorrespondentsTableTableManager
                 name: name,
                 aliases: aliases,
                 categoryId: categoryId,
+                email: email,
+                fax: fax,
+                postalAddress: postalAddress,
+                mailSubjectTemplate: mailSubjectTemplate,
+                mailBodyTemplate: mailBodyTemplate,
+                iban: iban,
+                bic: bic,
                 defaultDocType: defaultDocType,
                 defaultTagIds: defaultTagIds,
                 updatedAt: updatedAt,
@@ -7057,6 +11673,7 @@ typedef $$DocTasksTableCreateCompanionBuilder =
       Value<String> note,
       required DateTime dueAt,
       Value<String> repeat,
+      Value<String?> origin,
       Value<DateTime?> doneAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -7071,6 +11688,7 @@ typedef $$DocTasksTableUpdateCompanionBuilder =
       Value<String> note,
       Value<DateTime> dueAt,
       Value<String> repeat,
+      Value<String?> origin,
       Value<DateTime?> doneAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -7114,6 +11732,11 @@ class $$DocTasksTableFilterComposer
 
   ColumnFilters<String> get repeat => $composableBuilder(
     column: $table.repeat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get origin => $composableBuilder(
+    column: $table.origin,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7177,6 +11800,11 @@ class $$DocTasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get origin => $composableBuilder(
+    column: $table.origin,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get doneAt => $composableBuilder(
     column: $table.doneAt,
     builder: (column) => ColumnOrderings(column),
@@ -7227,6 +11855,9 @@ class $$DocTasksTableAnnotationComposer
   GeneratedColumn<String> get repeat =>
       $composableBuilder(column: $table.repeat, builder: (column) => column);
 
+  GeneratedColumn<String> get origin =>
+      $composableBuilder(column: $table.origin, builder: (column) => column);
+
   GeneratedColumn<DateTime> get doneAt =>
       $composableBuilder(column: $table.doneAt, builder: (column) => column);
 
@@ -7274,6 +11905,7 @@ class $$DocTasksTableTableManager
                 Value<String> note = const Value.absent(),
                 Value<DateTime> dueAt = const Value.absent(),
                 Value<String> repeat = const Value.absent(),
+                Value<String?> origin = const Value.absent(),
                 Value<DateTime?> doneAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -7286,6 +11918,7 @@ class $$DocTasksTableTableManager
                 note: note,
                 dueAt: dueAt,
                 repeat: repeat,
+                origin: origin,
                 doneAt: doneAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -7300,6 +11933,7 @@ class $$DocTasksTableTableManager
                 Value<String> note = const Value.absent(),
                 required DateTime dueAt,
                 Value<String> repeat = const Value.absent(),
+                Value<String?> origin = const Value.absent(),
                 Value<DateTime?> doneAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -7312,6 +11946,7 @@ class $$DocTasksTableTableManager
                 note: note,
                 dueAt: dueAt,
                 repeat: repeat,
+                origin: origin,
                 doneAt: doneAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -7340,6 +11975,1587 @@ typedef $$DocTasksTableProcessedTableManager =
       DocTask,
       PrefetchHooks Function()
     >;
+typedef $$CasesTableCreateCompanionBuilder =
+    CasesCompanion Function({
+      Value<String> id,
+      required String title,
+      Value<String> status,
+      Value<String?> correspondentId,
+      Value<String?> refKind,
+      Value<String?> refValue,
+      Value<String> note,
+      Value<DateTime?> closedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$CasesTableUpdateCompanionBuilder =
+    CasesCompanion Function({
+      Value<String> id,
+      Value<String> title,
+      Value<String> status,
+      Value<String?> correspondentId,
+      Value<String?> refKind,
+      Value<String?> refValue,
+      Value<String> note,
+      Value<DateTime?> closedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$CasesTableFilterComposer extends Composer<_$AppDatabase, $CasesTable> {
+  $$CasesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get correspondentId => $composableBuilder(
+    column: $table.correspondentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get refKind => $composableBuilder(
+    column: $table.refKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get refValue => $composableBuilder(
+    column: $table.refValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CasesTableOrderingComposer
+    extends Composer<_$AppDatabase, $CasesTable> {
+  $$CasesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get correspondentId => $composableBuilder(
+    column: $table.correspondentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get refKind => $composableBuilder(
+    column: $table.refKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get refValue => $composableBuilder(
+    column: $table.refValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CasesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CasesTable> {
+  $$CasesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get correspondentId => $composableBuilder(
+    column: $table.correspondentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get refKind =>
+      $composableBuilder(column: $table.refKind, builder: (column) => column);
+
+  GeneratedColumn<String> get refValue =>
+      $composableBuilder(column: $table.refValue, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get closedAt =>
+      $composableBuilder(column: $table.closedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$CasesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CasesTable,
+          Case,
+          $$CasesTableFilterComposer,
+          $$CasesTableOrderingComposer,
+          $$CasesTableAnnotationComposer,
+          $$CasesTableCreateCompanionBuilder,
+          $$CasesTableUpdateCompanionBuilder,
+          (Case, BaseReferences<_$AppDatabase, $CasesTable, Case>),
+          Case,
+          PrefetchHooks Function()
+        > {
+  $$CasesTableTableManager(_$AppDatabase db, $CasesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CasesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CasesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CasesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> correspondentId = const Value.absent(),
+                Value<String?> refKind = const Value.absent(),
+                Value<String?> refValue = const Value.absent(),
+                Value<String> note = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CasesCompanion(
+                id: id,
+                title: title,
+                status: status,
+                correspondentId: correspondentId,
+                refKind: refKind,
+                refValue: refValue,
+                note: note,
+                closedAt: closedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String title,
+                Value<String> status = const Value.absent(),
+                Value<String?> correspondentId = const Value.absent(),
+                Value<String?> refKind = const Value.absent(),
+                Value<String?> refValue = const Value.absent(),
+                Value<String> note = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CasesCompanion.insert(
+                id: id,
+                title: title,
+                status: status,
+                correspondentId: correspondentId,
+                refKind: refKind,
+                refValue: refValue,
+                note: note,
+                closedAt: closedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CasesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CasesTable,
+      Case,
+      $$CasesTableFilterComposer,
+      $$CasesTableOrderingComposer,
+      $$CasesTableAnnotationComposer,
+      $$CasesTableCreateCompanionBuilder,
+      $$CasesTableUpdateCompanionBuilder,
+      (Case, BaseReferences<_$AppDatabase, $CasesTable, Case>),
+      Case,
+      PrefetchHooks Function()
+    >;
+typedef $$CaseDocumentsTableCreateCompanionBuilder =
+    CaseDocumentsCompanion Function({
+      Value<String> id,
+      required String caseId,
+      required String documentId,
+      Value<String> role,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$CaseDocumentsTableUpdateCompanionBuilder =
+    CaseDocumentsCompanion Function({
+      Value<String> id,
+      Value<String> caseId,
+      Value<String> documentId,
+      Value<String> role,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$CaseDocumentsTableFilterComposer
+    extends Composer<_$AppDatabase, $CaseDocumentsTable> {
+  $$CaseDocumentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get caseId => $composableBuilder(
+    column: $table.caseId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get role => $composableBuilder(
+    column: $table.role,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CaseDocumentsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CaseDocumentsTable> {
+  $$CaseDocumentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get caseId => $composableBuilder(
+    column: $table.caseId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get role => $composableBuilder(
+    column: $table.role,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CaseDocumentsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CaseDocumentsTable> {
+  $$CaseDocumentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get caseId =>
+      $composableBuilder(column: $table.caseId, builder: (column) => column);
+
+  GeneratedColumn<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get role =>
+      $composableBuilder(column: $table.role, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$CaseDocumentsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CaseDocumentsTable,
+          CaseDocument,
+          $$CaseDocumentsTableFilterComposer,
+          $$CaseDocumentsTableOrderingComposer,
+          $$CaseDocumentsTableAnnotationComposer,
+          $$CaseDocumentsTableCreateCompanionBuilder,
+          $$CaseDocumentsTableUpdateCompanionBuilder,
+          (
+            CaseDocument,
+            BaseReferences<_$AppDatabase, $CaseDocumentsTable, CaseDocument>,
+          ),
+          CaseDocument,
+          PrefetchHooks Function()
+        > {
+  $$CaseDocumentsTableTableManager(_$AppDatabase db, $CaseDocumentsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CaseDocumentsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CaseDocumentsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CaseDocumentsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> caseId = const Value.absent(),
+                Value<String> documentId = const Value.absent(),
+                Value<String> role = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CaseDocumentsCompanion(
+                id: id,
+                caseId: caseId,
+                documentId: documentId,
+                role: role,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String caseId,
+                required String documentId,
+                Value<String> role = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CaseDocumentsCompanion.insert(
+                id: id,
+                caseId: caseId,
+                documentId: documentId,
+                role: role,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CaseDocumentsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CaseDocumentsTable,
+      CaseDocument,
+      $$CaseDocumentsTableFilterComposer,
+      $$CaseDocumentsTableOrderingComposer,
+      $$CaseDocumentsTableAnnotationComposer,
+      $$CaseDocumentsTableCreateCompanionBuilder,
+      $$CaseDocumentsTableUpdateCompanionBuilder,
+      (
+        CaseDocument,
+        BaseReferences<_$AppDatabase, $CaseDocumentsTable, CaseDocument>,
+      ),
+      CaseDocument,
+      PrefetchHooks Function()
+    >;
+typedef $$ContractsTableCreateCompanionBuilder =
+    ContractsCompanion Function({
+      Value<String> id,
+      Value<String?> documentId,
+      Value<String?> correspondentId,
+      required String title,
+      Value<int?> amountCents,
+      Value<String> interval,
+      Value<DateTime?> startDate,
+      Value<DateTime?> minTermUntil,
+      Value<int?> noticeValue,
+      Value<String?> noticeUnit,
+      Value<String?> noticeToEndOf,
+      Value<int?> autoRenewMonths,
+      Value<DateTime?> cancelledAt,
+      Value<DateTime?> endsAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$ContractsTableUpdateCompanionBuilder =
+    ContractsCompanion Function({
+      Value<String> id,
+      Value<String?> documentId,
+      Value<String?> correspondentId,
+      Value<String> title,
+      Value<int?> amountCents,
+      Value<String> interval,
+      Value<DateTime?> startDate,
+      Value<DateTime?> minTermUntil,
+      Value<int?> noticeValue,
+      Value<String?> noticeUnit,
+      Value<String?> noticeToEndOf,
+      Value<int?> autoRenewMonths,
+      Value<DateTime?> cancelledAt,
+      Value<DateTime?> endsAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$ContractsTableFilterComposer
+    extends Composer<_$AppDatabase, $ContractsTable> {
+  $$ContractsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get correspondentId => $composableBuilder(
+    column: $table.correspondentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get interval => $composableBuilder(
+    column: $table.interval,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startDate => $composableBuilder(
+    column: $table.startDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get minTermUntil => $composableBuilder(
+    column: $table.minTermUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get noticeValue => $composableBuilder(
+    column: $table.noticeValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get noticeUnit => $composableBuilder(
+    column: $table.noticeUnit,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get noticeToEndOf => $composableBuilder(
+    column: $table.noticeToEndOf,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get autoRenewMonths => $composableBuilder(
+    column: $table.autoRenewMonths,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get cancelledAt => $composableBuilder(
+    column: $table.cancelledAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get endsAt => $composableBuilder(
+    column: $table.endsAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ContractsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ContractsTable> {
+  $$ContractsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get correspondentId => $composableBuilder(
+    column: $table.correspondentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get interval => $composableBuilder(
+    column: $table.interval,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get startDate => $composableBuilder(
+    column: $table.startDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get minTermUntil => $composableBuilder(
+    column: $table.minTermUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get noticeValue => $composableBuilder(
+    column: $table.noticeValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get noticeUnit => $composableBuilder(
+    column: $table.noticeUnit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get noticeToEndOf => $composableBuilder(
+    column: $table.noticeToEndOf,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get autoRenewMonths => $composableBuilder(
+    column: $table.autoRenewMonths,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get cancelledAt => $composableBuilder(
+    column: $table.cancelledAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get endsAt => $composableBuilder(
+    column: $table.endsAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ContractsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ContractsTable> {
+  $$ContractsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get correspondentId => $composableBuilder(
+    column: $table.correspondentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get interval =>
+      $composableBuilder(column: $table.interval, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startDate =>
+      $composableBuilder(column: $table.startDate, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get minTermUntil => $composableBuilder(
+    column: $table.minTermUntil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get noticeValue => $composableBuilder(
+    column: $table.noticeValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get noticeUnit => $composableBuilder(
+    column: $table.noticeUnit,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get noticeToEndOf => $composableBuilder(
+    column: $table.noticeToEndOf,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get autoRenewMonths => $composableBuilder(
+    column: $table.autoRenewMonths,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get cancelledAt => $composableBuilder(
+    column: $table.cancelledAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get endsAt =>
+      $composableBuilder(column: $table.endsAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$ContractsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ContractsTable,
+          Contract,
+          $$ContractsTableFilterComposer,
+          $$ContractsTableOrderingComposer,
+          $$ContractsTableAnnotationComposer,
+          $$ContractsTableCreateCompanionBuilder,
+          $$ContractsTableUpdateCompanionBuilder,
+          (Contract, BaseReferences<_$AppDatabase, $ContractsTable, Contract>),
+          Contract,
+          PrefetchHooks Function()
+        > {
+  $$ContractsTableTableManager(_$AppDatabase db, $ContractsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ContractsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ContractsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ContractsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String?> documentId = const Value.absent(),
+                Value<String?> correspondentId = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<int?> amountCents = const Value.absent(),
+                Value<String> interval = const Value.absent(),
+                Value<DateTime?> startDate = const Value.absent(),
+                Value<DateTime?> minTermUntil = const Value.absent(),
+                Value<int?> noticeValue = const Value.absent(),
+                Value<String?> noticeUnit = const Value.absent(),
+                Value<String?> noticeToEndOf = const Value.absent(),
+                Value<int?> autoRenewMonths = const Value.absent(),
+                Value<DateTime?> cancelledAt = const Value.absent(),
+                Value<DateTime?> endsAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ContractsCompanion(
+                id: id,
+                documentId: documentId,
+                correspondentId: correspondentId,
+                title: title,
+                amountCents: amountCents,
+                interval: interval,
+                startDate: startDate,
+                minTermUntil: minTermUntil,
+                noticeValue: noticeValue,
+                noticeUnit: noticeUnit,
+                noticeToEndOf: noticeToEndOf,
+                autoRenewMonths: autoRenewMonths,
+                cancelledAt: cancelledAt,
+                endsAt: endsAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String?> documentId = const Value.absent(),
+                Value<String?> correspondentId = const Value.absent(),
+                required String title,
+                Value<int?> amountCents = const Value.absent(),
+                Value<String> interval = const Value.absent(),
+                Value<DateTime?> startDate = const Value.absent(),
+                Value<DateTime?> minTermUntil = const Value.absent(),
+                Value<int?> noticeValue = const Value.absent(),
+                Value<String?> noticeUnit = const Value.absent(),
+                Value<String?> noticeToEndOf = const Value.absent(),
+                Value<int?> autoRenewMonths = const Value.absent(),
+                Value<DateTime?> cancelledAt = const Value.absent(),
+                Value<DateTime?> endsAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ContractsCompanion.insert(
+                id: id,
+                documentId: documentId,
+                correspondentId: correspondentId,
+                title: title,
+                amountCents: amountCents,
+                interval: interval,
+                startDate: startDate,
+                minTermUntil: minTermUntil,
+                noticeValue: noticeValue,
+                noticeUnit: noticeUnit,
+                noticeToEndOf: noticeToEndOf,
+                autoRenewMonths: autoRenewMonths,
+                cancelledAt: cancelledAt,
+                endsAt: endsAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ContractsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ContractsTable,
+      Contract,
+      $$ContractsTableFilterComposer,
+      $$ContractsTableOrderingComposer,
+      $$ContractsTableAnnotationComposer,
+      $$ContractsTableCreateCompanionBuilder,
+      $$ContractsTableUpdateCompanionBuilder,
+      (Contract, BaseReferences<_$AppDatabase, $ContractsTable, Contract>),
+      Contract,
+      PrefetchHooks Function()
+    >;
+typedef $$AttachmentsTableCreateCompanionBuilder =
+    AttachmentsCompanion Function({
+      Value<String> id,
+      required String documentId,
+      required String kind,
+      required String relPath,
+      Value<String> mime,
+      Value<String> caption,
+      Value<int> sizeBytes,
+      Value<String?> sha256,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$AttachmentsTableUpdateCompanionBuilder =
+    AttachmentsCompanion Function({
+      Value<String> id,
+      Value<String> documentId,
+      Value<String> kind,
+      Value<String> relPath,
+      Value<String> mime,
+      Value<String> caption,
+      Value<int> sizeBytes,
+      Value<String?> sha256,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$AttachmentsTableFilterComposer
+    extends Composer<_$AppDatabase, $AttachmentsTable> {
+  $$AttachmentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get relPath => $composableBuilder(
+    column: $table.relPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mime => $composableBuilder(
+    column: $table.mime,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get caption => $composableBuilder(
+    column: $table.caption,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sizeBytes => $composableBuilder(
+    column: $table.sizeBytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sha256 => $composableBuilder(
+    column: $table.sha256,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AttachmentsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AttachmentsTable> {
+  $$AttachmentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get relPath => $composableBuilder(
+    column: $table.relPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get mime => $composableBuilder(
+    column: $table.mime,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get caption => $composableBuilder(
+    column: $table.caption,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sizeBytes => $composableBuilder(
+    column: $table.sizeBytes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sha256 => $composableBuilder(
+    column: $table.sha256,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AttachmentsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AttachmentsTable> {
+  $$AttachmentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get relPath =>
+      $composableBuilder(column: $table.relPath, builder: (column) => column);
+
+  GeneratedColumn<String> get mime =>
+      $composableBuilder(column: $table.mime, builder: (column) => column);
+
+  GeneratedColumn<String> get caption =>
+      $composableBuilder(column: $table.caption, builder: (column) => column);
+
+  GeneratedColumn<int> get sizeBytes =>
+      $composableBuilder(column: $table.sizeBytes, builder: (column) => column);
+
+  GeneratedColumn<String> get sha256 =>
+      $composableBuilder(column: $table.sha256, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$AttachmentsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AttachmentsTable,
+          Attachment,
+          $$AttachmentsTableFilterComposer,
+          $$AttachmentsTableOrderingComposer,
+          $$AttachmentsTableAnnotationComposer,
+          $$AttachmentsTableCreateCompanionBuilder,
+          $$AttachmentsTableUpdateCompanionBuilder,
+          (
+            Attachment,
+            BaseReferences<_$AppDatabase, $AttachmentsTable, Attachment>,
+          ),
+          Attachment,
+          PrefetchHooks Function()
+        > {
+  $$AttachmentsTableTableManager(_$AppDatabase db, $AttachmentsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AttachmentsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AttachmentsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AttachmentsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> documentId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> relPath = const Value.absent(),
+                Value<String> mime = const Value.absent(),
+                Value<String> caption = const Value.absent(),
+                Value<int> sizeBytes = const Value.absent(),
+                Value<String?> sha256 = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AttachmentsCompanion(
+                id: id,
+                documentId: documentId,
+                kind: kind,
+                relPath: relPath,
+                mime: mime,
+                caption: caption,
+                sizeBytes: sizeBytes,
+                sha256: sha256,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String documentId,
+                required String kind,
+                required String relPath,
+                Value<String> mime = const Value.absent(),
+                Value<String> caption = const Value.absent(),
+                Value<int> sizeBytes = const Value.absent(),
+                Value<String?> sha256 = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AttachmentsCompanion.insert(
+                id: id,
+                documentId: documentId,
+                kind: kind,
+                relPath: relPath,
+                mime: mime,
+                caption: caption,
+                sizeBytes: sizeBytes,
+                sha256: sha256,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AttachmentsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AttachmentsTable,
+      Attachment,
+      $$AttachmentsTableFilterComposer,
+      $$AttachmentsTableOrderingComposer,
+      $$AttachmentsTableAnnotationComposer,
+      $$AttachmentsTableCreateCompanionBuilder,
+      $$AttachmentsTableUpdateCompanionBuilder,
+      (
+        Attachment,
+        BaseReferences<_$AppDatabase, $AttachmentsTable, Attachment>,
+      ),
+      Attachment,
+      PrefetchHooks Function()
+    >;
+typedef $$PersonalDataTableCreateCompanionBuilder =
+    PersonalDataCompanion Function({
+      Value<String> id,
+      required String person,
+      required String key,
+      required String label,
+      Value<String> value,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$PersonalDataTableUpdateCompanionBuilder =
+    PersonalDataCompanion Function({
+      Value<String> id,
+      Value<String> person,
+      Value<String> key,
+      Value<String> label,
+      Value<String> value,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$PersonalDataTableFilterComposer
+    extends Composer<_$AppDatabase, $PersonalDataTable> {
+  $$PersonalDataTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get person => $composableBuilder(
+    column: $table.person,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PersonalDataTableOrderingComposer
+    extends Composer<_$AppDatabase, $PersonalDataTable> {
+  $$PersonalDataTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get person => $composableBuilder(
+    column: $table.person,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PersonalDataTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PersonalDataTable> {
+  $$PersonalDataTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get person =>
+      $composableBuilder(column: $table.person, builder: (column) => column);
+
+  GeneratedColumn<String> get key =>
+      $composableBuilder(column: $table.key, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<String> get value =>
+      $composableBuilder(column: $table.value, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$PersonalDataTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PersonalDataTable,
+          PersonalDataData,
+          $$PersonalDataTableFilterComposer,
+          $$PersonalDataTableOrderingComposer,
+          $$PersonalDataTableAnnotationComposer,
+          $$PersonalDataTableCreateCompanionBuilder,
+          $$PersonalDataTableUpdateCompanionBuilder,
+          (
+            PersonalDataData,
+            BaseReferences<_$AppDatabase, $PersonalDataTable, PersonalDataData>,
+          ),
+          PersonalDataData,
+          PrefetchHooks Function()
+        > {
+  $$PersonalDataTableTableManager(_$AppDatabase db, $PersonalDataTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PersonalDataTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PersonalDataTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PersonalDataTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> person = const Value.absent(),
+                Value<String> key = const Value.absent(),
+                Value<String> label = const Value.absent(),
+                Value<String> value = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PersonalDataCompanion(
+                id: id,
+                person: person,
+                key: key,
+                label: label,
+                value: value,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String person,
+                required String key,
+                required String label,
+                Value<String> value = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PersonalDataCompanion.insert(
+                id: id,
+                person: person,
+                key: key,
+                label: label,
+                value: value,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PersonalDataTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PersonalDataTable,
+      PersonalDataData,
+      $$PersonalDataTableFilterComposer,
+      $$PersonalDataTableOrderingComposer,
+      $$PersonalDataTableAnnotationComposer,
+      $$PersonalDataTableCreateCompanionBuilder,
+      $$PersonalDataTableUpdateCompanionBuilder,
+      (
+        PersonalDataData,
+        BaseReferences<_$AppDatabase, $PersonalDataTable, PersonalDataData>,
+      ),
+      PersonalDataData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -7363,4 +13579,14 @@ class $AppDatabaseManager {
       $$SignatureTemplatesTableTableManager(_db, _db.signatureTemplates);
   $$DocTasksTableTableManager get docTasks =>
       $$DocTasksTableTableManager(_db, _db.docTasks);
+  $$CasesTableTableManager get cases =>
+      $$CasesTableTableManager(_db, _db.cases);
+  $$CaseDocumentsTableTableManager get caseDocuments =>
+      $$CaseDocumentsTableTableManager(_db, _db.caseDocuments);
+  $$ContractsTableTableManager get contracts =>
+      $$ContractsTableTableManager(_db, _db.contracts);
+  $$AttachmentsTableTableManager get attachments =>
+      $$AttachmentsTableTableManager(_db, _db.attachments);
+  $$PersonalDataTableTableManager get personalData =>
+      $$PersonalDataTableTableManager(_db, _db.personalData);
 }

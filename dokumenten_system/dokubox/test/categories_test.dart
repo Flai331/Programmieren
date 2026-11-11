@@ -8,6 +8,8 @@ import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/downgrade.dart';
+
 void main() {
   group('Kategorien & Firmen', () {
     late AppDatabase db;
@@ -148,16 +150,7 @@ void main() {
       ocrText: 'depot',
     );
     // Auf den v2-Stand zurückbauen: ohne Kategorien, Firma ohne Spalte.
-    await db.customStatement('PRAGMA foreign_keys = OFF');
-    // v4-Teile (Ausfüllen, Vorlagen) entfernen.
-    await db.customStatement('DROP TABLE doc_tasks');
-    await db.customStatement('DROP TABLE signature_templates');
-    await db.customStatement('ALTER TABLE documents DROP COLUMN filled_pdf_path');
-    await db.customStatement('ALTER TABLE documents DROP COLUMN fill_data');
-    await db.customStatement('UPDATE correspondents SET category_id = NULL');
-    await db.customStatement('ALTER TABLE correspondents DROP COLUMN category_id');
-    await db.customStatement('DROP TABLE categories');
-    await db.customStatement('PRAGMA user_version = 2');
+    await downgradeTo(db, 2);
     await db.close();
 
     db = open();

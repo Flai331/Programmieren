@@ -64,6 +64,27 @@ class Documents extends Table {
   /// Eingetragene Texte/Haken/Unterschriften als JSON (siehe FillDocument),
   /// damit man später weiter ausfüllen kann.
   TextColumn get fillData => text().nullable()();
+
+  // ---- Schema v6 ----
+  /// SHA-256 der PDF (Dubletten-Erkennung).
+  TextColumn get contentHash => text().nullable()();
+  DateTimeColumn get warrantyUntil => dateTime().nullable()();
+
+  /// `garantie` oder `gewaehrleistung`.
+  TextColumn get warrantyKind => text().nullable()();
+  DateTimeColumn get objectionDeadline => dateTime().nullable()();
+
+  /// Steuer-Mappe: Kategorie, Jahr, anrechenbarer Betrag (Cent).
+  TextColumn get taxCategory => text().nullable()();
+  IntColumn get taxYear => integer().nullable()();
+  IntColumn get taxAmountCents => integer().nullable()();
+
+  /// Vernichtungs-Protokoll.
+  DateTimeColumn get destroyedAt => dateTime().nullable()();
+  TextColumn get destroyedFrom => text().nullable()();
+
+  /// Verwendungszweck für Überweisung (GiroCode).
+  TextColumn get paymentReference => text().nullable()();
   DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
@@ -106,6 +127,10 @@ class DocTasks extends Table {
 
   /// '' (einmalig), `monatlich`, `vierteljaehrlich`, `jaehrlich`.
   TextColumn get repeat => text().withDefault(const Constant(''))();
+
+  /// Automatisch erzeugt? z. B. `widerspruch`, `garantie`,
+  /// `kuendigung:<contractId>` (Schema v6).
+  TextColumn get origin => text().nullable()();
   DateTimeColumn get doneAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().clientDefault(DateTime.now)();
   DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
@@ -152,6 +177,15 @@ class Correspondents extends Table {
   /// darüber filtern (Schema v3).
   TextColumn get categoryId =>
       text().nullable().references(Categories, #id)();
+
+  // ---- Schema v6: Kontakt & Vorlagen ----
+  TextColumn get email => text().nullable()();
+  TextColumn get fax => text().nullable()();
+  TextColumn get postalAddress => text().nullable()();
+  TextColumn get mailSubjectTemplate => text().nullable()();
+  TextColumn get mailBodyTemplate => text().nullable()();
+  TextColumn get iban => text().nullable()();
+  TextColumn get bic => text().nullable()();
 
   /// Zuletzt bestätigte Werte — Grundlage der „lernenden Zuordnungen".
   TextColumn get defaultDocType => text().nullable()();
@@ -216,6 +250,114 @@ class Counters extends Table {
   Set<Column> get primaryKey => {year};
 }
 
+
+// ---------------------------------------------------------------- Schema v6
+
+/// Vorgang/Mappe: mehrere Dokumente zu einer Sache (Antrag → Bescheid …).
+class Cases extends Table {
+  TextColumn get id => text().clientDefault(_uuid.v4)();
+  TextColumn get title => text()();
+
+  /// `offen`, `wartet`, `erledigt`.
+  TextColumn get status => text().withDefault(const Constant('offen'))();
+  TextColumn get correspondentId =>
+      text().nullable().references(Correspondents, #id)();
+  TextColumn get refKind => text().nullable()();
+  TextColumn get refValue => text().nullable()();
+  TextColumn get note => text().withDefault(const Constant(''))();
+  DateTimeColumn get closedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class CaseDocuments extends Table {
+  TextColumn get id => text().clientDefault(_uuid.v4)();
+  TextColumn get caseId => text().references(Cases, #id)();
+  TextColumn get documentId => text().references(Documents, #id)();
+
+  /// `antrag`, `rueckfrage`, `bescheid`, `widerspruch`, `sonstiges`.
+  TextColumn get role => text().withDefault(const Constant('sonstiges'))();
+  DateTimeColumn get createdAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Vertrag/Versicherung mit Kosten und Kündigungsfrist.
+class Contracts extends Table {
+  TextColumn get id => text().clientDefault(_uuid.v4)();
+  TextColumn get documentId => text().nullable().references(Documents, #id)();
+  TextColumn get correspondentId =>
+      text().nullable().references(Correspondents, #id)();
+  TextColumn get title => text()();
+  IntColumn get amountCents => integer().nullable()();
+
+  /// `monatlich`, `vierteljaehrlich`, `halbjaehrlich`, `jaehrlich`, `einmalig`.
+  TextColumn get interval => text().withDefault(const Constant('monatlich'))();
+  DateTimeColumn get startDate => dateTime().nullable()();
+  DateTimeColumn get minTermUntil => dateTime().nullable()();
+  IntColumn get noticeValue => integer().nullable()();
+
+  /// `tage`, `wochen`, `monate`.
+  TextColumn get noticeUnit => text().nullable()();
+
+  /// `laufzeitende` oder `monatsende`.
+  TextColumn get noticeToEndOf => text().nullable()();
+  IntColumn get autoRenewMonths => integer().nullable()();
+  DateTimeColumn get cancelledAt => dateTime().nullable()();
+  DateTimeColumn get endsAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Foto/Datei an einem Dokument (Ordner `anhaenge/`).
+class Attachments extends Table {
+  TextColumn get id => text().clientDefault(_uuid.v4)();
+  TextColumn get documentId => text().references(Documents, #id)();
+
+  /// `foto` oder `datei`.
+  TextColumn get kind => text()();
+  TextColumn get relPath => text()();
+  TextColumn get mime => text().withDefault(const Constant(''))();
+  TextColumn get caption => text().withDefault(const Constant(''))();
+  IntColumn get sizeBytes => integer().withDefault(const Constant(0))();
+  TextColumn get sha256 => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// „Meine Daten“ zum Einsetzen beim Ausfüllen, mehrere Personen.
+class PersonalData extends Table {
+  TextColumn get id => text().clientDefault(_uuid.v4)();
+  TextColumn get person => text()();
+
+  /// Vordefinierter Schlüssel (vorname, iban …) oder `frei`.
+  TextColumn get key => text()();
+  TextColumn get label => text()();
+  TextColumn get value => text().withDefault(const Constant(''))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
   tables: [
     Documents,
@@ -228,6 +370,11 @@ class Counters extends Table {
     Categories,
     SignatureTemplates,
     DocTasks,
+    Cases,
+    CaseDocuments,
+    Contracts,
+    Attachments,
+    PersonalData,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -237,7 +384,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.open() : super(driftDatabase(name: 'dokubox'));
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -250,6 +397,7 @@ class AppDatabase extends _$AppDatabase {
             'document_id UNINDEXED, content, tokenize="unicode61")',
           );
           await _seedCategories();
+          await _createIndexes();
         },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
@@ -273,6 +421,41 @@ class AppDatabase extends _$AppDatabase {
           if (from < 5) {
             await m.createTable(docTasks);
           }
+          if (from < 6) {
+            for (final c in [
+              documents.contentHash,
+              documents.warrantyUntil,
+              documents.warrantyKind,
+              documents.objectionDeadline,
+              documents.taxCategory,
+              documents.taxYear,
+              documents.taxAmountCents,
+              documents.destroyedAt,
+              documents.destroyedFrom,
+              documents.paymentReference,
+            ]) {
+              await m.addColumn(documents, c);
+            }
+            for (final c in [
+              correspondents.email,
+              correspondents.fax,
+              correspondents.postalAddress,
+              correspondents.mailSubjectTemplate,
+              correspondents.mailBodyTemplate,
+              correspondents.iban,
+              correspondents.bic,
+            ]) {
+              await m.addColumn(correspondents, c);
+            }
+            // doc_tasks entsteht bei from < 5 schon mit dieser Spalte.
+            if (from >= 5) await m.addColumn(docTasks, docTasks.origin);
+            await m.createTable(cases);
+            await m.createTable(caseDocuments);
+            await m.createTable(contracts);
+            await m.createTable(attachments);
+            await m.createTable(personalData);
+          }
+          await _createIndexes();
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -304,6 +487,18 @@ class AppDatabase extends _$AppDatabase {
         await (update(correspondents)..where((c) => c.id.equals(existing.id)))
             .write(CorrespondentsCompanion(categoryId: Value(categoryId)));
       }
+    }
+  }
+
+  /// Indizes für Verknüpfen (Referenzen), Vorgänge und Dubletten.
+  Future<void> _createIndexes() async {
+    for (final sql in const [
+      'CREATE INDEX IF NOT EXISTS idx_refs_value ON extracted_refs (kind, value)',
+      'CREATE INDEX IF NOT EXISTS idx_case_docs_case ON case_documents (case_id)',
+      'CREATE INDEX IF NOT EXISTS idx_case_docs_doc ON case_documents (document_id)',
+      'CREATE INDEX IF NOT EXISTS idx_docs_hash ON documents (content_hash)',
+    ]) {
+      await customStatement(sql);
     }
   }
 }
