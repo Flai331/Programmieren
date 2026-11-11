@@ -16,6 +16,7 @@ import 'finance_actions.dart';
 import 'fill_screen.dart';
 import 'pdf_preview.dart';
 import '../data/cases.dart';
+import 'attachments_section.dart';
 import 'cases_screen.dart';
 import 'contracts_screen.dart';
 import 'girocode_screen.dart';
@@ -596,6 +597,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
           const SizedBox(height: 8),
           _casesSection(doc),
           _tasksSection(doc, theme),
+          AttachmentsSection(doc: doc),
           const SizedBox(height: 16),
           Card(
             child: Padding(

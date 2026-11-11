@@ -1,4 +1,5 @@
 import 'ai/ai_extraction_service.dart';
+import 'attachments/attachment_service.dart';
 import 'backup/backup_service.dart';
 import 'data/database.dart';
 import 'data/document_repository.dart';
@@ -20,6 +21,7 @@ class AppServices {
       NotificationService(repository);
   late final BackupService backup = BackupService(db);
   late final AiExtractionService ai = AiExtractionService();
+  late final AttachmentService attachments = AttachmentService(repository);
   late final TemplateService templates = TemplateService(repository);
   late final FillService fill = FillService(repository, templates);
 

@@ -493,6 +493,37 @@ class DocumentRepository {
         ),
       );
 
+  // ------------------------------------------------- Anhänge
+
+  Future<Attachment> addAttachment({
+    required String documentId,
+    required String kind,
+    required String relPath,
+    String mime = '',
+    String caption = '',
+    int sizeBytes = 0,
+    String? sha256,
+  }) =>
+      db.into(db.attachments).insertReturning(AttachmentsCompanion.insert(
+            documentId: documentId,
+            kind: kind,
+            relPath: relPath,
+            mime: Value(mime),
+            caption: Value(caption),
+            sizeBytes: Value(sizeBytes),
+            sha256: Value(sha256),
+          ));
+
+  Stream<List<Attachment>> watchAttachments(String documentId) =>
+      (db.select(db.attachments)
+            ..where((a) => a.documentId.equals(documentId) & a.deletedAt.isNull())
+            ..orderBy([(a) => OrderingTerm.asc(a.createdAt)]))
+          .watch();
+
+  Future<void> deleteAttachment(String id) =>
+      (db.update(db.attachments)..where((a) => a.id.equals(id)))
+          .write(AttachmentsCompanion(deletedAt: Value(DateTime.now())));
+
   // ------------------------------------------------- Meine Daten
 
   Stream<List<String>> watchPersons() => (db.select(db.personalData)

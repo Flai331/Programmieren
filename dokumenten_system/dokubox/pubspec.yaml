@@ -65,6 +65,7 @@ dependencies:
   multicast_dns: ^0.3.3+1
   xml: ^6.6.1
   qr_flutter: ^4.1.0
+  image_picker: ^1.2.4
 
 dev_dependencies:
   flutter_test:

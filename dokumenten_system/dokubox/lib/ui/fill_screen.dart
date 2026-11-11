@@ -621,7 +621,7 @@ class _FillScreenState extends State<FillScreen> {
               });
               if (tool == _Tool.signature) await _pickTemplate();
               if (tool == _Tool.personal && mounted) {
-                final t = await pickPersonalText(this.context);
+                final t = await pickPersonalText(context);
                 if (mounted) setState(() => _pendingPersonal = t);
               }
             },
