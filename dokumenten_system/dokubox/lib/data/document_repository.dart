@@ -447,13 +447,62 @@ class DocumentRepository {
   }
 
   /// Markiert das Original als vernichtet (Scan bleibt erhalten).
-  Future<void> markDestroyed(String id) async {
+  Future<void> markDestroyed(String id, {DateTime? at}) async {
+    final doc = await getDocument(id);
+    if (doc == null || doc.storageLocation == 'vernichtet') return;
     await (db.update(db.documents)..where((d) => d.id.equals(id))).write(
       DocumentsCompanion(
         storageLocation: const Value('vernichtet'),
+        destroyedAt: Value(at ?? DateTime.now()),
+        destroyedFrom: Value(doc.storageLocation),
         updatedAt: Value(DateTime.now()),
       ),
     );
+  }
+
+  // ------------------------------------------------- Ausdrucke
+
+  /// Lagerorte mit Originalen (ohne „vernichtet“), z. B. „Box 2026“.
+  Future<List<String>> storageLocations() async {
+    final rows = await db.customSelect(
+      "SELECT DISTINCT storage_location AS l FROM documents "
+      "WHERE deleted_at IS NULL AND storage_location != 'vernichtet' "
+      'ORDER BY storage_location',
+      readsFrom: {db.documents},
+    ).get();
+    return [for (final r in rows) r.read<String>('l')];
+  }
+
+  Future<String> _senderOf(Document d) async => d.correspondentId == null
+      ? ''
+      : (await getCorrespondent(d.correspondentId!))?.name ?? '';
+
+  /// Dokumente eines Lagerorts nach Nummer (für die Box-Inhaltsliste).
+  Future<List<({Document doc, String sender})>> documentsAt(
+      String location) async {
+    final docs = await (db.select(db.documents)
+          ..where((d) => d.deletedAt.isNull() & d.storageLocation.equals(location))
+          ..orderBy([(d) => OrderingTerm.asc(d.docNumber)]))
+        .get();
+    return [for (final d in docs) (doc: d, sender: await _senderOf(d))];
+  }
+
+  /// Vernichtete Originale in einem Zeitraum (Vernichtungs-Protokoll).
+  /// Alte Einträge ohne Datum kommen mit, wenn [includeUndated].
+  Future<List<({Document doc, String sender})>> destroyedBetween(
+      DateTime from, DateTime to,
+      {bool includeUndated = false}) async {
+    final docs = await (db.select(db.documents)
+          ..where((d) =>
+              d.deletedAt.isNull() &
+              d.storageLocation.equals('vernichtet') &
+              (d.destroyedAt.isBetweenValues(from, to) |
+                  (includeUndated
+                      ? d.destroyedAt.isNull()
+                      : const Constant(false))))
+          ..orderBy([(d) => OrderingTerm.asc(d.docNumber)]))
+        .get();
+    return [for (final d in docs) (doc: d, sender: await _senderOf(d))];
   }
 
   /// Dokumentenliste mit Filter + optionaler FTS5-Volltextsuche als Stream.

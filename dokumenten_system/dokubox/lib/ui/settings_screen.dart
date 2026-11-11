@@ -13,7 +13,9 @@ import '../scan/blank_pages.dart';
 import '../data/deadline_settings.dart';
 import '../data/setup_mode.dart';
 import '../extract/deadlines.dart';
+import '../reports/print_lists.dart';
 import 'firms_screen.dart';
+import 'report_share.dart';
 import 'templates_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -309,12 +311,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ];
 
+  Future<void> _printBoxList() async {
+    final locations = await services.repository.storageLocations();
+    if (!mounted) return;
+    final location = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(shrinkWrap: true, children: [
+          if (locations.isEmpty)
+            const ListTile(title: Text('Noch keine Dokumente.')),
+          for (final l in locations)
+            ListTile(
+              leading: const Icon(Icons.inventory_2_outlined),
+              title: Text(l),
+              onTap: () => Navigator.pop(ctx, l),
+            ),
+        ]),
+      ),
+    );
+    if (location == null) return;
+    final rows = await services.repository.documentsAt(location);
+    final bytes = await buildBoxListPdf(location, rows, font: await reportFont());
+    await shareReport(bytes, 'Inhalt $location');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Einstellungen')),
       body: ListView(
         children: [
+          ListTile(
+            leading: const Icon(Icons.print),
+            title: const Text('Box-Inhaltsliste drucken'),
+            subtitle: const Text('Was liegt in welcher Box – zum Beilegen'),
+            onTap: _printBoxList,
+          ),
           FutureBuilder<bool>(
             future: SetupMode.isOn(),
             builder: (context, snap) => SwitchListTile(
