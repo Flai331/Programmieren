@@ -3,7 +3,10 @@ import 'package:dokubox/data/document_repository.dart';
 import 'package:dokubox/data/tasks.dart';
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
+import 'package:dokubox/reminders/notification_service.dart';
+import 'package:dokubox/ui/task_widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
   group('nextDue (Wiederholung)', () {
@@ -134,5 +137,44 @@ void main() {
       expect(await repo.watchAllTasks().first, isEmpty);
       expect(await repo.watchDueTaskCount().first, 0);
     });
+  });
+
+  test('Benachrichtigung: Aktion, Titel, Notiz, Nummer; Tippen → Dokument',
+      () async {
+    final db = AppDatabase(DatabaseConnection(NativeDatabase.memory()));
+    final repo = DocumentRepository(db);
+    final doc = await repo.createDocument(
+      docNumber: '2026-0042',
+      draft: DocumentDraft(title: 'Antrag Beihilfe', storageLocation: 'Box'),
+      pdfPath: 'p.pdf',
+      pageCount: 1,
+      ocrText: '',
+    );
+    final task = await repo.createTask(
+        documentId: doc.id,
+        action: 'versenden',
+        note: 'an Beihilfestelle per Mail',
+        dueAt: DateTime(2026, 11, 20, 9));
+    final text = NotificationService.taskText(task, doc);
+    expect(text.title, 'Versenden: Antrag Beihilfe');
+    expect(text.body, 'an Beihilfestelle per Mail · 2026-0042');
+    final payload = NotificationService.payloadFor(doc.id);
+    expect(NotificationService.documentIdFromPayload(payload), doc.id);
+    expect(NotificationService.documentIdFromPayload('x'), isNull);
+    await db.close();
+  });
+
+  test('Termin-Anzeige und „Jetzt …“-Knöpfe', () async {
+    await initializeDateFormatting('de_DE');
+    final now = DateTime(2026, 11, 10, 12);
+    expect(taskDueLabel(DateTime(2026, 11, 10, 18), now: now), 'heute 18:00');
+    expect(taskDueLabel(DateTime(2026, 11, 11, 9), now: now), 'morgen 09:00');
+    expect(taskDueLabel(DateTime(2026, 11, 20, 9), now: now),
+        'Fr., 20.11.2026 · 09:00');
+    expect(quickActionFor('ausfuellen'), TaskQuickAction.fill);
+    expect(quickActionFor('unterschreiben'), TaskQuickAction.fill);
+    expect(quickActionFor('versenden'), TaskQuickAction.share);
+    expect(quickActionFor('bezahlen'), TaskQuickAction.paid);
+    expect(quickActionFor('anrufen'), isNull);
   });
 }

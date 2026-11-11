@@ -5,6 +5,7 @@ import 'package:timezone/timezone.dart' as tz;
 import '../data/database.dart';
 import '../data/document_repository.dart';
 import '../data/finance.dart';
+import '../data/tasks.dart';
 
 /// Lokale Benachrichtigungen für Wiedervorlagen/Kündigungsfristen,
 /// fällige Rechnungen und ausstehende Erstattungen.
@@ -24,6 +25,34 @@ class NotificationService {
     priority: Priority.high,
   );
 
+  static const _taskChannel = AndroidNotificationDetails(
+    'aufgaben',
+    'Aufgaben zu Dokumenten',
+    channelDescription:
+        'Erinnerungen wie Ausfüllen, Versenden, Bezahlen oder Anrufen',
+    importance: Importance.high,
+    priority: Priority.high,
+  );
+
+  /// Wird aufgerufen, wenn eine Benachrichtigung angetippt wird (Dokument
+  /// öffnen). In main() gesetzt.
+  void Function(String documentId)? onOpenDocument;
+
+  static String payloadFor(String documentId) => 'doc:$documentId';
+
+  static String? documentIdFromPayload(String? payload) =>
+      payload != null && payload.startsWith('doc:') && payload.length > 4
+          ? payload.substring(4)
+          : null;
+
+  /// Dokument, dessen Benachrichtigung die App gestartet hat (falls ja).
+  Future<String?> launchDocumentId() async {
+    await init();
+    final details = await _plugin.getNotificationAppLaunchDetails();
+    if (details?.didNotificationLaunchApp != true) return null;
+    return documentIdFromPayload(details!.notificationResponse?.payload);
+  }
+
   static const _paymentChannel = AndroidNotificationDetails(
     'zahlungen',
     'Rechnungen & Erstattungen',
@@ -41,6 +70,10 @@ class NotificationService {
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         iOS: DarwinInitializationSettings(),
       ),
+      onDidReceiveNotificationResponse: (response) {
+        final id = documentIdFromPayload(response.payload);
+        if (id != null) onOpenDocument?.call(id);
+      },
     );
     await _plugin
         .resolvePlatformSpecificImplementation<
@@ -55,12 +88,15 @@ class NotificationService {
       'zahlung:$documentId'.hashCode & 0x7fffffff;
   static int claimIdFor(String claimId) =>
       'erstattung:$claimId'.hashCode & 0x7fffffff;
+  static int taskIdFor(String taskId) =>
+      'aufgabe:$taskId'.hashCode & 0x7fffffff;
 
   static String _label(Document doc) =>
       doc.title.isEmpty ? doc.docNumber : doc.title;
 
   Future<void> _schedule(int id, String title, String body, DateTime when,
-      AndroidNotificationDetails channel) async {
+      AndroidNotificationDetails channel,
+      {String? documentId}) async {
     if (when.isBefore(DateTime.now())) return;
     await init();
     await _plugin.zonedSchedule(
@@ -70,7 +106,29 @@ class NotificationService {
       tz.TZDateTime.from(when, tz.local),
       NotificationDetails(android: channel),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: documentId == null ? null : payloadFor(documentId),
     );
+  }
+
+  /// Text einer Aufgaben-Benachrichtigung, z. B.
+  /// „Versenden: Antrag Beihilfe“ / „an Beihilfestelle per Mail · 2026-0042“.
+  static ({String title, String body}) taskText(DocTask task, Document doc) {
+    final action = taskAction(task.action);
+    return (
+      title: '${action.verb}: ${_label(doc)}',
+      body: [
+        if (task.note.trim().isNotEmpty) task.note.trim(),
+        doc.docNumber,
+      ].join(' · '),
+    );
+  }
+
+  Future<void> scheduleTask(DocTask task, Document doc) async {
+    if (task.doneAt != null || task.deletedAt != null) return;
+    final text = taskText(task, doc);
+    await _schedule(taskIdFor(task.id), text.title, text.body, task.dueAt,
+        _taskChannel,
+        documentId: doc.id);
   }
 
   /// Wiedervorlage und (bei offener Rechnung) Zahlungserinnerung planen.
@@ -85,6 +143,7 @@ class NotificationService {
             : 'Wiedervorlage für Dokument ${doc.docNumber}',
         when,
         _channel,
+        documentId: doc.id,
       );
     }
     final payAt = doc.paymentReminderAt;
@@ -100,6 +159,7 @@ class NotificationService {
         '${_label(doc)} (${doc.docNumber})$due',
         payAt,
         _paymentChannel,
+        documentId: doc.id,
       );
     }
   }
@@ -114,6 +174,7 @@ class NotificationService {
           '${_date(claim.submittedAt ?? when)} eingereicht – schon erstattet?',
       when,
       _paymentChannel,
+      documentId: doc.id,
     );
   }
 
@@ -124,6 +185,9 @@ class NotificationService {
     for (final claim in await repository.claimsForDocument(documentId,
         includeDeleted: true)) {
       await _plugin.cancel(claimIdFor(claim.id));
+    }
+    for (final task in await repository.allTasksForDocument(documentId)) {
+      await _plugin.cancel(taskIdFor(task.id));
     }
   }
 
@@ -136,6 +200,9 @@ class NotificationService {
     for (final claim in await repository.claimsForDocument(documentId)) {
       await scheduleClaim(claim, doc);
     }
+    for (final task in await repository.allTasksForDocument(documentId)) {
+      await scheduleTask(task, doc);
+    }
   }
 
   /// Nach App-Start alle anstehenden Erinnerungen neu planen (deckt auch
@@ -147,6 +214,7 @@ class NotificationService {
       for (final doc in await repository.upcomingPaymentReminders()) doc.id,
       for (final claim in await repository.upcomingClaimFollowUps())
         claim.documentId,
+      for (final task in await repository.upcomingTasks()) task.documentId,
     };
     for (final id in ids) {
       await syncDocument(id);

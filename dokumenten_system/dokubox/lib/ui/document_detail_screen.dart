@@ -15,13 +15,19 @@ import 'finance_actions.dart';
 import 'fill_screen.dart';
 import 'pdf_preview.dart';
 import 'share_name.dart';
+import 'task_widgets.dart';
 
 final _dateFormat = DateFormat('dd.MM.yyyy');
 
 class DocumentDetailScreen extends StatefulWidget {
   final String documentId;
 
-  const DocumentDetailScreen({super.key, required this.documentId});
+  /// Direkt nach dem Öffnen ausführen (aus der Aufgaben-Übersicht:
+  /// „Jetzt ausfüllen/versenden“).
+  final TaskQuickAction? initialAction;
+
+  const DocumentDetailScreen(
+      {super.key, required this.documentId, this.initialAction});
 
   @override
   State<DocumentDetailScreen> createState() => _DocumentDetailScreenState();
@@ -36,7 +42,87 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _load().then((_) {
+      final action = widget.initialAction;
+      if (action != null && mounted && _doc != null) _runQuick(action);
+    });
+  }
+
+  /// „Jetzt …“-Knopf einer Aufgabe.
+  Future<void> _runQuick(TaskQuickAction action) async {
+    final doc = _doc;
+    if (doc == null) return;
+    switch (action) {
+      case TaskQuickAction.fill:
+        await _fill();
+      case TaskQuickAction.share:
+        await _sharePdf(filled: doc.filledPdfPath != null);
+      case TaskQuickAction.paid:
+        await markPaid(context, doc);
+        if (!mounted) return;
+        await offerCompleteTasks(context,
+            documentId: doc.id,
+            actions: {'bezahlen'},
+            question: 'Aufgabe „Bezahlen“ abhaken?');
+        await _load();
+    }
+  }
+
+  Future<void> _addTask({String? action}) async {
+    final doc = _doc;
+    if (doc == null) return;
+    await showTaskEditor(context, doc: doc, presetAction: action);
+  }
+
+  Widget _tasksSection(Document doc, ThemeData theme) {
+    return StreamBuilder<List<DocTask>>(
+      stream: services.repository.watchTasksForDocument(doc.id),
+      builder: (context, snap) {
+        final tasks = snap.data ?? const <DocTask>[];
+        final open = tasks.where((t) => t.doneAt == null).toList();
+        final done = tasks.where((t) => t.doneAt != null).toList();
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.alarm, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text('Aufgaben & Erinnerungen',
+                            style: theme.textTheme.titleSmall),
+                      ),
+                      TextButton.icon(
+                        onPressed: _addTask,
+                        icon: const Icon(Icons.alarm_add),
+                        label: const Text('Neu'),
+                      ),
+                    ],
+                  ),
+                ),
+                if (tasks.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Text('Noch nichts geplant – z. B. „Versenden bis '
+                        'Freitag“ oder „Jährlich Vertrag prüfen“.'),
+                  ),
+                for (final t in [...open, ...done.take(3)])
+                  TaskTile(
+                    task: t,
+                    onQuickAction: _runQuick,
+                    onEdit: () => showTaskEditor(context, doc: doc, task: t),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _load() async {
@@ -91,10 +177,15 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       suggestion: suggestedShareName(doc.docNumber, doc.title, filled: filled),
     );
     if (copy == null) return;
-    await SharePlus.instance.share(ShareParams(
+    final result = await SharePlus.instance.share(ShareParams(
       files: [XFile(copy, mimeType: 'application/pdf')],
       subject: copy.split(Platform.pathSeparator).last.replaceAll('.pdf', ''),
     ));
+    if (result.status == ShareResultStatus.dismissed || !mounted) return;
+    await offerCompleteTasks(context,
+        documentId: doc.id,
+        actions: {'versenden'},
+        question: 'Versendet – Aufgabe abhaken?');
   }
 
   /// Formular ausfüllen (Text, Haken, Kreuz, Datum, Unterschrift). Das
@@ -105,9 +196,18 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     );
     await _load();
     if (saved == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Ausgefüllte Kopie gespeichert – Original unverändert'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:
+            const Text('Ausgefüllte Kopie gespeichert – Original unverändert'),
+        action: SnackBarAction(
+          label: 'Versenden-Erinnerung',
+          onPressed: () => _addTask(action: 'versenden'),
+        ),
       ));
+      await offerCompleteTasks(context,
+          documentId: _doc!.id,
+          actions: {'ausfuellen', 'unterschreiben'},
+          question: 'Ausgefüllt – Aufgabe abhaken?');
     }
   }
 
@@ -439,6 +539,8 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
             )
           else
             _filledSection(doc, theme),
+          const SizedBox(height: 8),
+          _tasksSection(doc, theme),
           const SizedBox(height: 16),
           Card(
             child: Padding(

@@ -735,6 +735,12 @@ class DocumentRepository {
             ]))
           .watch();
 
+  /// Alle (auch erledigte/gelöschte) Aufgaben eines Dokuments – zum
+  /// Planen/Löschen von Benachrichtigungen.
+  Future<List<DocTask>> allTasksForDocument(String documentId) =>
+      (db.select(db.docTasks)..where((t) => t.documentId.equals(documentId)))
+          .get();
+
   /// Offene Aufgaben einer Aktion für ein Dokument (z. B. nach dem
   /// Ausfüllen: „Aufgabe Ausfüllen erledigt?“).
   Future<List<DocTask>> openTasksFor(String documentId, Set<String> actions) =>

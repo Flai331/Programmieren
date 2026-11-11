@@ -12,6 +12,7 @@ import 'package:pdfrx/pdfrx.dart';
 import 'app_services.dart';
 import 'data/database.dart';
 import 'lock/lock_gate.dart';
+import 'ui/document_detail_screen.dart';
 import 'ui/home_screen.dart';
 
 Future<void> main() async {
@@ -24,10 +25,17 @@ Future<void> main() async {
   await _applyPendingRestore();
 
   services = AppServices(AppDatabase.open());
+  // Benachrichtigung angetippt → Dokument öffnen.
+  services.notifications.onOpenDocument = _openDocument;
   // Anstehende Fristen neu planen (deckt Geräteneustarts ab).
   services.notifications.rescheduleAll();
 
   runApp(const DokuBoxApp());
+  // App wurde über eine Benachrichtigung gestartet → Dokument öffnen.
+  final launchDoc = await services.notifications.launchDocumentId();
+  if (launchDoc != null) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openDocument(launchDoc));
+  }
 }
 
 /// Falls ein wiederhergestelltes Backup bereitliegt (Einstellungen →
@@ -46,12 +54,22 @@ Future<void> _applyPendingRestore() async {
   }
 }
 
+/// Für Navigation von außerhalb der Widgets (Benachrichtigungen).
+final navigatorKey = GlobalKey<NavigatorState>();
+
+void _openDocument(String documentId) {
+  navigatorKey.currentState?.push(MaterialPageRoute(
+    builder: (_) => DocumentDetailScreen(documentId: documentId),
+  ));
+}
+
 class DokuBoxApp extends StatelessWidget {
   const DokuBoxApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'DokuBox',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

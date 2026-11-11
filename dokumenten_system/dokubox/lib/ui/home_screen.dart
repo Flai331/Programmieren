@@ -25,6 +25,8 @@ import 'finance_actions.dart';
 import 'finance_screen.dart';
 import 'network_scanner_screen.dart';
 import 'settings_screen.dart';
+import 'task_widgets.dart';
+import 'tasks_screen.dart';
 import 'wlan_scan_screen.dart';
 
 final _dateFormat = DateFormat('dd.MM.yyyy');
@@ -446,7 +448,16 @@ class _HomeScreenState extends State<HomeScreen> {
       refs: extractRefs(outcome.ocrText),
     );
     await services.notifications.syncDocument(doc.id);
-    _snack('$docNumber gespeichert – Original vorne in die Box legen');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$docNumber gespeichert – Original vorne in die Box legen'),
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(
+          label: 'Erinnerung',
+          onPressed: () => showTaskEditor(context, doc: doc),
+        ),
+      ));
+    }
     return true;
   }
 
@@ -515,6 +526,23 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('DokuBox'),
         actions: [
+          StreamBuilder<int>(
+            stream: services.repository.watchDueTaskCount(),
+            builder: (context, snapshot) {
+              final count = snapshot.data ?? 0;
+              return IconButton(
+                icon: Badge(
+                  isLabelVisible: count > 0,
+                  label: Text('$count'),
+                  child: const Icon(Icons.task_alt),
+                ),
+                tooltip: 'Aufgaben (heute fällig oder überfällig: $count)',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const TasksScreen()),
+                ),
+              );
+            },
+          ),
           StreamBuilder<int>(
             stream: services.repository.watchOpenFinanceCount(),
             builder: (context, snapshot) {
