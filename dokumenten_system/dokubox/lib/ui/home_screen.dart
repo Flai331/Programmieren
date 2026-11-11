@@ -14,6 +14,9 @@ import '../data/deadline_settings.dart';
 import '../extract/deadlines.dart';
 import '../extract/ref_matching.dart';
 import '../data/setup_mode.dart';
+import '../sync/pairing.dart';
+import '../sync/sync_runner.dart';
+import '../sync/sync_service.dart';
 import '../data/doc_types.dart';
 import '../data/document_repository.dart';
 import '../data/finance.dart';
@@ -48,7 +51,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _searchController = TextEditingController();
   DocumentFilter _filter = const DocumentFilter();
   bool _scanning = false;
@@ -57,12 +60,33 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     // PDFs aus dem „Teilen"-Menü: beim Start und während die App läuft.
+    WidgetsBinding.instance.addObserver(this);
+    // Abgleich mit gekoppelten Geräten beim Start; am PC zusätzlich
+    // bereitstellen, damit das Handy jederzeit abgleichen kann.
+    if (isDesktop) {
+      SyncService.localAddress().then((host) {
+        if (host != null) services.sync.startServer(host: host).ignore();
+      });
+    }
+    autoSync().then((_) {
+      if (mounted) setState(() {});
+    });
     ShareReceiver.listen(_importShared);
     WidgetsBinding.instance.addPostFrameCallback((_) => _importShared());
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_scanning) {
+      autoSync().then((_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _searchController.dispose();
     super.dispose();
   }
@@ -471,7 +495,9 @@ class _HomeScreenState extends State<HomeScreen> {
   /// gespeicherter Dokumente.
   Future<int> _confirmOutcomes(List<ScanOutcome> outcomes) async {
     if (outcomes.isEmpty) return 0;
-    if (outcomes.length == 1 || await SetupMode.isOn()) {
+    if (outcomes.length == 1 ||
+        await SetupMode.isOn() ||
+        !await SyncSettings.isMain()) {
       // Ersterfassung: jedes Dokument bekommt eine vorläufige Nummer, die
       // endgültigen kommen gesammelt bei „Nummern vergeben“.
       if (outcomes.length > 1) {
@@ -784,9 +810,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<bool> _confirmAndSave(ScanOutcome outcome) async {
+    // Ersterfassung oder weiteres Gerät (Laptop/Tablet): vorläufige Nummer,
+    // die endgültige vergibt das Haupt-Handy beim Abgleich.
+    final isMain = await SyncSettings.isMain();
     final docNumber = await SetupMode.isOn()
         ? await services.repository.nextProvisionalNumber()
-        : await services.repository.nextDocNumber();
+        : !isMain
+            ? await services.repository
+                .nextProvisionalNumber(tag: await SyncSettings.deviceTag())
+            : await services.repository.nextDocNumber();
     final pdfPath = await services.scanner.renamePdf(
       outcome.relativePdfPath,
       docNumber,

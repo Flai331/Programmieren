@@ -211,7 +211,9 @@ class DocumentRepository {
   static bool isProvisional(String docNumber) =>
       docNumber.startsWith(provisionalPrefix);
 
-  Future<String> nextProvisionalNumber() => db.transaction(() async {
+  /// [tag]: Kürzel weiterer Geräte (V-L0001), damit sich vorläufige Nummern
+  /// verschiedener Geräte nicht überschneiden.
+  Future<String> nextProvisionalNumber({String tag = ''}) => db.transaction(() async {
         final row = await (db.select(db.counters)
               ..where((c) => c.year.equals(0)))
             .getSingleOrNull();
@@ -219,7 +221,7 @@ class DocumentRepository {
         await db.into(db.counters).insertOnConflictUpdate(
               CountersCompanion(year: const Value(0), lastNumber: Value(next)),
             );
-        return '$provisionalPrefix${next.toString().padLeft(4, '0')}';
+        return '$provisionalPrefix$tag${next.toString().padLeft(4, '0')}';
       });
 
   Stream<int> watchProvisionalCount() => (db.select(db.documents)

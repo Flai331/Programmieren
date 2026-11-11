@@ -14,6 +14,7 @@ import '../data/deadline_settings.dart';
 import '../data/setup_mode.dart';
 import '../extract/deadlines.dart';
 import '../reports/print_lists.dart';
+import 'devices_screen.dart';
 import 'firms_screen.dart';
 import 'personal_data_screen.dart';
 import 'report_share.dart';
@@ -343,6 +344,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(title: const Text('Einstellungen')),
       body: ListView(
         children: [
+          ListTile(
+            leading: const Icon(Icons.devices),
+            title: const Text('Geräte & Abgleich'),
+            subtitle: const Text('Handy, Tablet, Laptop koppeln – im WLAN, ohne Cloud'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DevicesScreen()),
+            ),
+          ),
           ListTile(
             leading: const Icon(Icons.badge_outlined),
             title: const Text('Meine Daten'),
