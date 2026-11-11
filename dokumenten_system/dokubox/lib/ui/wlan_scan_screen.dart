@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../scan/wlan_receiver.dart';
+import '../platform.dart';
 
 /// Scannt den QR-Code, den der Scan-Trenner am PC unter „Per WLAN ans
 /// Handy“ zeigt. Liefert die geprüfte Basis-Adresse zurück (oder `null`).
@@ -93,20 +94,28 @@ class _WlanScanScreenState extends State<WlanScanScreen> {
       body: Column(
         children: [
           Expanded(
-            child: MobileScanner(
-              controller: _controller,
-              onDetect: _onDetect,
-              errorBuilder: (context, error) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    'Kamera nicht verfügbar (${error.errorCode.name}).\n'
-                    'Den Link kannst du oben rechts auch eintippen.',
-                    textAlign: TextAlign.center,
+            child: isDesktop
+                ? Center(
+                    child: FilledButton.icon(
+                      onPressed: _enterManually,
+                      icon: const Icon(Icons.keyboard),
+                      label: const Text('Link eingeben'),
+                    ),
+                  )
+                : MobileScanner(
+                    controller: _controller,
+                    onDetect: _onDetect,
+                    errorBuilder: (context, error) => Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'Kamera nicht verfügbar (${error.errorCode.name}).\n'
+                          'Den Link kannst du oben rechts auch eintippen.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
           ),
           Container(
             width: double.infinity,

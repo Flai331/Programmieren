@@ -37,6 +37,7 @@ import 'settings_screen.dart';
 import 'task_widgets.dart';
 import 'tasks_screen.dart';
 import 'wlan_scan_screen.dart';
+import '../platform.dart';
 
 final _dateFormat = DateFormat('dd.MM.yyyy');
 
@@ -82,10 +83,10 @@ class _HomeScreenState extends State<HomeScreen> {
         query: query ?? _filter.query,
         docType: clearDocType ? null : (docType ?? _filter.docType),
         year: clearYear ? null : (year ?? _filter.year),
-        financeStatus:
-            clearFinance ? null : (financeStatus ?? _filter.financeStatus),
-        categoryId:
-            clearCategory ? null : (categoryId ?? _filter.categoryId),
+        financeStatus: clearFinance
+            ? null
+            : (financeStatus ?? _filter.financeStatus),
+        categoryId: clearCategory ? null : (categoryId ?? _filter.categoryId),
       );
     });
   }
@@ -127,8 +128,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Leere Seiten',
-                        style: Theme.of(ctx).textTheme.titleSmall),
+                    Text(
+                      'Leere Seiten',
+                      style: Theme.of(ctx).textTheme.titleSmall,
+                    ),
                     const SizedBox(height: 6),
                     SizedBox(
                       width: double.infinity,
@@ -141,24 +144,28 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(mode.description,
-                        style: Theme.of(ctx).textTheme.bodySmall),
+                    Text(
+                      mode.description,
+                      style: Theme.of(ctx).textTheme.bodySmall,
+                    ),
                   ],
                 ),
               ),
             ),
             const Divider(),
-            ListTile(
-              leading: const Icon(Icons.photo_camera),
-              title: const Text('Mit der Kamera'),
-              subtitle: const Text('Randerkennung, mehrere Seiten'),
-              onTap: () => Navigator.pop(ctx, 'camera'),
-            ),
+            if (isMobile)
+              ListTile(
+                leading: const Icon(Icons.photo_camera),
+                title: const Text('Mit der Kamera'),
+                subtitle: const Text('Randerkennung, mehrere Seiten'),
+                onTap: () => Navigator.pop(ctx, 'camera'),
+              ),
             ListTile(
               leading: const Icon(Icons.print),
               title: const Text('Mit dem Scanner (WLAN)'),
               subtitle: const Text(
-                  'Epson, Canon, HP, Brother … – Einzug, doppelseitig'),
+                'Epson, Canon, HP, Brother … – Einzug, doppelseitig',
+              ),
               onTap: () => Navigator.pop(ctx, 'network'),
             ),
           ],
@@ -180,8 +187,10 @@ class _HomeScreenState extends State<HomeScreen> {
       final scan = await _withProgress(
         'Erkenne Leerseiten und lese ${result.imagePaths.length} '
         'Seite${result.imagePaths.length == 1 ? '' : 'n'} …',
-        () => services.scanner
-            .processImages(result.imagePaths, duplex: result.duplex),
+        () => services.scanner.processImages(
+          result.imagePaths,
+          duplex: result.duplex,
+        ),
       );
       await _handleScanResult(scan);
     } finally {
@@ -197,8 +206,10 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       if (result.documents.length > 1 || result.blankPages > 0) {
-        _snack('${result.documents.length} Dokument(e) erkannt, '
-            '${result.blankPages} Leerseite(n) entfernt');
+        _snack(
+          '${result.documents.length} Dokument(e) erkannt, '
+          '${result.blankPages} Leerseite(n) entfernt',
+        );
       }
 
       await _confirmOutcomes(result.documents);
@@ -229,7 +240,8 @@ class _HomeScreenState extends State<HomeScreen> {
               leading: const Icon(Icons.wifi),
               title: const Text('Vom PC (WLAN)'),
               subtitle: const Text(
-                  'PDFs und Unterschriften per QR-Code vom Scan-Trenner'),
+                'PDFs und Unterschriften per QR-Code vom Scan-Trenner',
+              ),
               onTap: () => Navigator.pop(ctx, 'wlan'),
             ),
           ],
@@ -243,14 +255,13 @@ class _HomeScreenState extends State<HomeScreen> {
   /// QR-Code vom Scan-Trenner scannen, PDFs übers WLAN laden, importieren.
   Future<void> _receiveWlan() async {
     if (_scanning) return;
-    final base = await Navigator.of(context).push<Uri>(
-      MaterialPageRoute(builder: (_) => const WlanScanScreen()),
-    );
+    final base = await Navigator.of(
+      context,
+    ).push<Uri>(MaterialPageRoute(builder: (_) => const WlanScanScreen()));
     if (base == null || !mounted) return;
     final receiver = WlanReceiver(base);
     try {
-      final files =
-          await _withProgress('Verbinde mit dem PC …', receiver.list);
+      final files = await _withProgress('Verbinde mit dem PC …', receiver.list);
       if (files.isEmpty) {
         _snack('Der PC bietet keine Dateien an.');
         return;
@@ -259,8 +270,10 @@ class _HomeScreenState extends State<HomeScreen> {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('${files.length} Datei${files.length == 1 ? '' : 'en'} '
-              'vom PC übernehmen?'),
+          title: Text(
+            '${files.length} Datei${files.length == 1 ? '' : 'en'} '
+            'vom PC übernehmen?',
+          ),
           content: SizedBox(
             width: double.maxFinite,
             child: ListView(
@@ -269,13 +282,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 for (final f in files)
                   ListTile(
                     dense: true,
-                    leading: Icon(f.isTemplate
-                        ? Icons.draw
-                        : Icons.picture_as_pdf),
+                    leading: Icon(
+                      f.isTemplate ? Icons.draw : Icons.picture_as_pdf,
+                    ),
                     title: Text(f.name),
-                    subtitle: Text(f.isTemplate
-                        ? 'Unterschrift/Vorlage · ${(f.size / 1024).ceil()} KB'
-                        : '${(f.size / 1024).ceil()} KB'),
+                    subtitle: Text(
+                      f.isTemplate
+                          ? 'Unterschrift/Vorlage · ${(f.size / 1024).ceil()} KB'
+                          : '${(f.size / 1024).ceil()} KB',
+                    ),
                   ),
               ],
             ),
@@ -308,7 +323,9 @@ class _HomeScreenState extends State<HomeScreen> {
         final file = File(paths[i]);
         try {
           final name = files[i].name.replaceAll(
-              RegExp(r'\.png$', caseSensitive: false), '');
+            RegExp(r'\.png$', caseSensitive: false),
+            '',
+          );
           await services.templates.addPng(name, await file.readAsBytes());
           templates++;
         } on FormatException {
@@ -320,9 +337,11 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
       if (templates > 0) {
-        _snack('$templates Unterschrift${templates == 1 ? '' : 'en'}/'
-            'Vorlage${templates == 1 ? '' : 'n'} gespeichert – beim '
-            'Ausfüllen unter „Unterschrift“');
+        _snack(
+          '$templates Unterschrift${templates == 1 ? '' : 'en'}/'
+          'Vorlage${templates == 1 ? '' : 'n'} gespeichert – beim '
+          'Ausfüllen unter „Unterschrift“',
+        );
       }
       if (pdfs.isNotEmpty) await _importPaths(pdfs, deleteSources: true);
     } on WlanException catch (e) {
@@ -359,14 +378,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Liest jede PDF (Textebene oder OCR) und schickt sie durch denselben
   /// Ablauf wie einen Scan: Nummer → Regeln + KI → Bestätigen → Speichern.
-  Future<void> _importPaths(List<String> paths,
-      {bool deleteSources = false}) async {
+  Future<void> _importPaths(
+    List<String> paths, {
+    bool deleteSources = false,
+  }) async {
     if (_scanning) return;
     setState(() => _scanning = true);
     try {
       if (!await services.ai.isReady()) {
-        _snack('Tipp: Mit der lokalen KI (Einstellungen) werden Absender, '
-            'Titel und Tags genauer erkannt.');
+        _snack(
+          'Tipp: Mit der lokalen KI (Einstellungen) werden Absender, '
+          'Titel und Tags genauer erkannt.',
+        );
       }
       var saved = 0;
       var failed = 0;
@@ -389,15 +412,19 @@ class _HomeScreenState extends State<HomeScreen> {
           if (deleteSources) {
             try {
               await File(paths[i]).delete();
-            } catch (_) {/* Cache-Kopie, räumt das System notfalls auf */}
+            } catch (_) {
+              /* Cache-Kopie, räumt das System notfalls auf */
+            }
           }
         }
         outcomes.add(outcome);
       }
       saved = await _confirmOutcomes(outcomes);
       if (paths.length > 1 && mounted) {
-        _snack('$saved von ${paths.length} PDFs gespeichert'
-            '${failed > 0 ? ', $failed nicht lesbar' : ''}');
+        _snack(
+          '$saved von ${paths.length} PDFs gespeichert'
+          '${failed > 0 ? ', $failed nicht lesbar' : ''}',
+        );
       }
     } finally {
       if (mounted) setState(() => _scanning = false);
@@ -467,10 +494,11 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Nummern vergeben?'),
         content: Text(
-            '$count Dokumente bekommen jetzt ihre endgültigen Nummern – nach '
-            'Dokumentdatum sortiert, ältestes zuerst (ohne Datum ans Ende). '
-            'Danach ist die Ersterfassung beendet und neue Scans bekommen '
-            'wieder sofort ihre Nummer.'),
+          '$count Dokumente bekommen jetzt ihre endgültigen Nummern – nach '
+          'Dokumentdatum sortiert, ältestes zuerst (ohne Datum ans Ende). '
+          'Danach ist die Ersterfassung beendet und neue Scans bekommen '
+          'wieder sofort ihre Nummer.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -501,12 +529,16 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     setState(() {});
     if (result.isEmpty) return;
-    await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => NumberListScreen(entries: [
-        for (final n in result)
-          (doc: n.doc, sender: n.sender, oldNumber: n.oldNumber),
-      ]),
-    ));
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NumberListScreen(
+          entries: [
+            for (final n in result)
+              (doc: n.doc, sender: n.sender, oldNumber: n.oldNumber),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _setupBanner() {
@@ -529,13 +561,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Icon(Icons.playlist_add_check),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text('Ersterfassung: $count Dokument'
-                          '${count == 1 ? '' : 'e'} gesammelt (vorläufige '
-                          'Nummern)'),
+                      child: Text(
+                        'Ersterfassung: $count Dokument'
+                        '${count == 1 ? '' : 'e'} gesammelt (vorläufige '
+                        'Nummern)',
+                      ),
                     ),
                     FilledButton(
-                      onPressed:
-                          count == 0 ? null : () => _finishSetup(count),
+                      onPressed: count == 0 ? null : () => _finishSetup(count),
                       child: const Text('Nummern vergeben'),
                     ),
                   ],
@@ -550,18 +583,30 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Prüft vor dem Bestätigen auf Dubletten und verwandte Dokumente.
   Future<
-      ({
-        List<({String docNumber, String title, String reason})> duplicates,
-        List<({String id, String docNumber, String title, String reasons, bool strong})> related,
-      })> _analyze(ScanOutcome outcome, DocumentDraft draft) async {
+    ({
+      List<({String docNumber, String title, String reason})> duplicates,
+      List<
+        ({
+          String id,
+          String docNumber,
+          String title,
+          String reasons,
+          bool strong,
+        })
+      >
+      related,
+    })
+  >
+  _analyze(ScanOutcome outcome, DocumentDraft draft) async {
     final repo = services.repository;
     try {
       final bytes = await File(
-              await ScanService.absolutePdfPath(outcome.relativePdfPath))
-          .readAsBytes();
+        await ScanService.absolutePdfPath(outcome.relativePdfPath),
+      ).readAsBytes();
       final hash = await Sha256().hash(bytes);
-      draft.contentHash =
-          hash.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      draft.contentHash = hash.bytes
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join();
     } catch (_) {}
     final refs = extractRefs(outcome.ocrText);
     final dups = await repo.findDuplicates(
@@ -574,16 +619,29 @@ class _HomeScreenState extends State<HomeScreen> {
     final firmId = draft.correspondentName == null
         ? null
         : (await repo.allCorrespondents())
-            .where((c) =>
-                c.name.toLowerCase() ==
-                draft.correspondentName!.trim().toLowerCase())
-            .firstOrNull
-            ?.id;
+              .where(
+                (c) =>
+                    c.name.toLowerCase() ==
+                    draft.correspondentName!.trim().toLowerCase(),
+              )
+              .firstOrNull
+              ?.id;
     final dupIds = {for (final d in dups) d.doc.id};
-    final matches = matchRefs(refs, firmId, await repo.refCandidates(refs))
-        .where((m) => !dupIds.contains(m.documentId))
-        .take(5);
-    final related = <({String id, String docNumber, String title, String reasons, bool strong})>[];
+    final matches = matchRefs(
+      refs,
+      firmId,
+      await repo.refCandidates(refs),
+    ).where((m) => !dupIds.contains(m.documentId)).take(5);
+    final related =
+        <
+          ({
+            String id,
+            String docNumber,
+            String title,
+            String reasons,
+            bool strong,
+          })
+        >[];
     for (final m in matches) {
       final d = await repo.getDocument(m.documentId);
       if (d == null) continue;
@@ -609,18 +667,22 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _afterLink(List<String> linked) async {
     for (final id in linked) {
       if (!mounted) return;
-      await offerCompleteTasks(context,
-          documentId: id,
-          actions: {'nachhaken', 'einreichen'},
-          question: 'Antwort ist da – Aufgabe beim verknüpften Dokument abhaken?');
+      await offerCompleteTasks(
+        context,
+        documentId: id,
+        actions: {'nachhaken', 'einreichen'},
+        question: 'Antwort ist da – Aufgabe beim verknüpften Dokument abhaken?',
+      );
     }
   }
 
   /// Regeln + KI → vorausgefüllter Entwurf.
   Future<DocumentDraft> _prepareDraft(ScanOutcome outcome) async {
     final finance = await FinanceSettings.load();
-    final draft = await services.suggestions
-        .buildDraft(outcome.ocrText, finance: finance);
+    final draft = await services.suggestions.buildDraft(
+      outcome.ocrText,
+      finance: finance,
+    );
     await _refineWithAi(draft, outcome.ocrText, outcome.firstPageOcr);
     // Die KI kann Datum/Typ korrigiert haben → Fälligkeit neu berechnen.
     applyPaymentSuggestions(draft, outcome.ocrText, finance: finance);
@@ -628,8 +690,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final deadlines = await DeadlineSettings.load();
     draft.objectionLeadDays = deadlines.objectionLeadDays;
     draft.objectionDeadline ??= extractObjectionDeadline(
-        outcome.ocrText, draft.docDate,
-        state: deadlines.state);
+      outcome.ocrText,
+      draft.docDate,
+      state: deadlines.state,
+    );
     final warranty = extractWarranty(outcome.ocrText, draft.docDate);
     if (warranty != null && draft.warrantyUntil == null) {
       draft.warrantyUntil = warranty.until;
@@ -647,7 +711,10 @@ class _HomeScreenState extends State<HomeScreen> {
     for (var i = 0; i < n; i++) {
       if (!mounted) break;
       _snack('Lese Dokument ${i + 1} von $n …');
-      prepared.add((outcome: outcomes[i], draft: await _prepareDraft(outcomes[i])));
+      prepared.add((
+        outcome: outcomes[i],
+        draft: await _prepareDraft(outcomes[i]),
+      ));
     }
     final order = sortForNumbering(prepared, (e) => e.draft.docDate);
 
@@ -684,8 +751,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final entries = <({Document doc, String sender})>[];
     for (final item in sortForNumbering(confirmed, (e) => e.draft.docDate)) {
       final docNumber = await services.repository.nextDocNumber();
-      final pdfPath = await services.scanner
-          .renamePdf(item.outcome.relativePdfPath, docNumber);
+      final pdfPath = await services.scanner.renamePdf(
+        item.outcome.relativePdfPath,
+        docNumber,
+      );
       final doc = await services.repository.createDocument(
         docNumber: docNumber,
         draft: item.draft,
@@ -700,11 +769,16 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     if (mounted) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      await Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => NumberListScreen(entries: [
-        for (final e in entries) (doc: e.doc, sender: e.sender, oldNumber: null),
-      ]),
-      ));
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => NumberListScreen(
+            entries: [
+              for (final e in entries)
+                (doc: e.doc, sender: e.sender, oldNumber: null),
+            ],
+          ),
+        ),
+      );
     }
     return entries.length;
   }
@@ -713,8 +787,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final docNumber = await SetupMode.isOn()
         ? await services.repository.nextProvisionalNumber()
         : await services.repository.nextDocNumber();
-    final pdfPath =
-        await services.scanner.renamePdf(outcome.relativePdfPath, docNumber);
+    final pdfPath = await services.scanner.renamePdf(
+      outcome.relativePdfPath,
+      docNumber,
+    );
     final draft = await _prepareDraft(outcome);
 
     if (!mounted) {
@@ -725,12 +801,14 @@ class _HomeScreenState extends State<HomeScreen> {
       return false;
     }
     final analysis = await _analyze(
-        ScanOutcome(
-            relativePdfPath: pdfPath,
-            pageCount: outcome.pageCount,
-            ocrText: outcome.ocrText,
-            firstPageOcr: outcome.firstPageOcr),
-        draft);
+      ScanOutcome(
+        relativePdfPath: pdfPath,
+        pageCount: outcome.pageCount,
+        ocrText: outcome.ocrText,
+        firstPageOcr: outcome.firstPageOcr,
+      ),
+      draft,
+    );
     if (!mounted) return false;
     final confirmed = await Navigator.of(context).push<DocumentDraft>(
       MaterialPageRoute(
@@ -762,17 +840,21 @@ class _HomeScreenState extends State<HomeScreen> {
     await services.notifications.syncDocument(doc.id);
     await _afterLink(confirmed.linkDocumentIds);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(DocumentRepository.isProvisional(docNumber)
-            ? '$docNumber gespeichert (vorläufig) – Original auf den '
-                'Ersterfassungs-Stapel'
-            : '$docNumber gespeichert – Original vorne in die Box legen'),
-        duration: const Duration(seconds: 6),
-        action: SnackBarAction(
-          label: 'Erinnerung',
-          onPressed: () => showTaskEditor(context, doc: doc),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            DocumentRepository.isProvisional(docNumber)
+                ? '$docNumber gespeichert (vorläufig) – Original auf den '
+                      'Ersterfassungs-Stapel'
+                : '$docNumber gespeichert – Original vorne in die Box legen',
+          ),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'Erinnerung',
+            onPressed: () => showTaskEditor(context, doc: doc),
+          ),
         ),
-      ));
+      );
     }
     return true;
   }
@@ -781,7 +863,10 @@ class _HomeScreenState extends State<HomeScreen> {
   /// aktiviert). Zeigt solange einen Hinweis-Dialog; Fehler und Timeouts
   /// fallen still auf die Regel-Vorschläge zurück.
   Future<void> _refineWithAi(
-      DocumentDraft draft, String fullOcr, String firstPageOcr) async {
+    DocumentDraft draft,
+    String fullOcr,
+    String firstPageOcr,
+  ) async {
     if (!await services.ai.isReady()) return;
     if (!mounted) return;
 
@@ -803,8 +888,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       // Bekannten Absender aus dem Volltext, aber KI nur auf die erste
       // Seite ansetzen (schneller; Absender/Datum/Betreff stehen dort).
-      final known =
-          await services.suggestions.knownCorrespondentName(fullOcr);
+      final known = await services.suggestions.knownCorrespondentName(fullOcr);
       final knownTags = await services.repository.allTagNames();
       final categories = await services.repository.allCategories();
       final ai = await services.ai.extract(
@@ -817,8 +901,9 @@ class _HomeScreenState extends State<HomeScreen> {
         // Kategorie nur für Firmen vorschlagen, die noch keine haben — eine
         // selbst vergebene Kategorie hat immer Vorrang.
         if (ai.kategorie != null &&
-            await services.repository
-                    .categoryIdForCorrespondentName(draft.correspondentName) ==
+            await services.repository.categoryIdForCorrespondentName(
+                  draft.correspondentName,
+                ) ==
                 null) {
           for (final c in categories) {
             if (c.name == ai.kategorie) draft.categoryId = c.id;
@@ -853,9 +938,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: const Icon(Icons.folder_copy_outlined),
                 ),
                 tooltip: 'Vorgänge',
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const CasesScreen()),
-                ),
+                onPressed: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const CasesScreen())),
               );
             },
           ),
@@ -870,9 +955,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: const Icon(Icons.task_alt),
                 ),
                 tooltip: 'Aufgaben (heute fällig oder überfällig: $count)',
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const TasksScreen()),
-                ),
+                onPressed: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const TasksScreen())),
               );
             },
           ),
@@ -896,16 +981,16 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.delete_sweep_outlined),
             tooltip: 'Ausmistliste',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const CleanupScreen()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const CleanupScreen())),
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Einstellungen',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ).then((_) => setState(() {})), // Ersterfassung an/aus
+            onPressed: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const SettingsScreen()))
+                .then((_) => setState(() {})), // Ersterfassung an/aus
           ),
         ],
       ),
@@ -953,8 +1038,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           _updateFilter(query: '');
                         },
                       ),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(28)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(28),
+                ),
                 isDense: true,
               ),
               onChanged: (value) => _updateFilter(query: value),
@@ -1027,15 +1113,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.inbox_outlined,
-                              size: 64,
-                              color: theme.colorScheme.onSurfaceVariant),
+                          Icon(
+                            Icons.inbox_outlined,
+                            size: 64,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                           const SizedBox(height: 16),
                           Text(
                             _filter.isEmpty
                                 ? 'Noch keine Dokumente.\nTippe auf „Scannen", '
-                                    'nummeriere das Original und leg es vorne '
-                                    'in die Box.'
+                                      'nummeriere das Original und leg es vorne '
+                                      'in die Box.'
                                 : 'Nichts gefunden.',
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyLarge,
@@ -1059,14 +1147,17 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       title: Text(
-                          doc.title.isEmpty ? doc.docNumber : doc.title),
-                      subtitle: Text([
-                        doc.docNumber,
-                        if (doc.docDate != null)
-                          _dateFormat.format(doc.docDate!),
-                        if (doc.docType != null) doc.docType!,
-                        doc.storageLocation,
-                      ].join(' · ')),
+                        doc.title.isEmpty ? doc.docNumber : doc.title,
+                      ),
+                      subtitle: Text(
+                        [
+                          doc.docNumber,
+                          if (doc.docDate != null)
+                            _dateFormat.format(doc.docDate!),
+                          if (doc.docType != null) doc.docType!,
+                          doc.storageLocation,
+                        ].join(' · '),
+                      ),
                       trailing: doc.paymentStatus == PaymentStatus.open
                           ? Icon(
                               isOverdue(doc)
@@ -1078,9 +1169,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   : null,
                             )
                           : doc.reminderAt != null &&
-                                  doc.reminderAt!.isAfter(DateTime.now())
-                              ? const Icon(Icons.alarm, size: 20)
-                              : null,
+                                doc.reminderAt!.isAfter(DateTime.now())
+                          ? const Icon(Icons.alarm, size: 20)
+                          : null,
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) =>

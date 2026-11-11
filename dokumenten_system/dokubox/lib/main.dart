@@ -19,7 +19,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('de_DE');
   // Engine für das optionale lokale KI-Modell (Qwen3, .litertlm).
-  await FlutterGemma.initialize(inferenceEngines: const [LiteRtLmEngine()]);
+  try {
+    await FlutterGemma.initialize(inferenceEngines: const [LiteRtLmEngine()]);
+  } catch (_) {
+    // KI ist optional (z. B. am PC nicht verfügbar).
+  }
   // PDF-Engine für Import und Vorschau des Originals.
   await pdfrxFlutterInitialize();
   await _applyPendingRestore();

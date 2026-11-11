@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import 'blank_pages.dart';
+import '../platform.dart';
 
 /// Ergebnis eines abgeschlossenen Scan-Durchlaufs.
 class ScanOutcome {
@@ -147,6 +148,8 @@ class ScanService {
   /// OCR pro Seite; liefert eine Liste mit einem Eintrag je Seite (in
   /// Lesereihenfolge sortiert).
   Future<List<String>> runOcr(List<String> imagePaths) async {
+    // ML Kit gibt es nur auf dem Handy – am PC zählt die Textebene der PDF.
+    if (isDesktop) return [for (final _ in imagePaths) ''];
     final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
     final pages = <String>[];
     try {

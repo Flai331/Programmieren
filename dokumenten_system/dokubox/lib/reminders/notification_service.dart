@@ -69,6 +69,11 @@ class NotificationService {
       const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         iOS: DarwinInitializationSettings(),
+        windows: WindowsInitializationSettings(
+          appName: 'DokuBox',
+          appUserModelId: 'de.flai.dokubox',
+          guid: '6b0e5c1e-3f7a-4d8e-9b2a-1c4d5e6f7a80',
+        ),
       ),
       onDidReceiveNotificationResponse: (response) {
         final id = documentIdFromPayload(response.payload);
