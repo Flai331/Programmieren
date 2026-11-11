@@ -2,8 +2,6 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../ai/ai_extraction_service.dart';
@@ -205,22 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final restored =
           await services.backup.restoreToTemp(File(path), password);
 
-      // Wiederhergestellte Daten an Ort und Stelle kopieren; die neue
-      // Datenbank wird beim nächsten App-Start geladen.
-      final docsDir = await getApplicationDocumentsDirectory();
-      for (final dirName in backupDirs) {
-        final source = Directory(p.join(restored.path, dirName));
-        if (!await source.exists()) continue;
-        final target = Directory(p.join(docsDir.path, dirName));
-        await target.create(recursive: true);
-        await for (final entity in source.list()) {
-          if (entity is File) {
-            await entity.copy(p.join(target.path, p.basename(entity.path)));
-          }
-        }
-      }
-      final dbTarget = File(p.join(docsDir.path, 'dokubox_restore.sqlite'));
-      await File(p.join(restored.path, 'dokubox.sqlite')).copy(dbTarget.path);
+      await services.backup.applyRestore(restored);
 
       if (mounted) {
         await showDialog<void>(

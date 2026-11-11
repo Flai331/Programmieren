@@ -20,8 +20,17 @@ class BackupService {
   static const _iterations = 150000;
 
   final AppDatabase db;
+  final Future<Directory> Function() _docsDir;
+  final Future<Directory> Function() _tempDir;
 
-  BackupService(this.db);
+  BackupService(this.db,
+      {Future<Directory> Function()? docsDir,
+      Future<Directory> Function()? tempDir})
+      : _docsDir = docsDir ?? getApplicationDocumentsDirectory,
+        _tempDir = tempDir ?? getTemporaryDirectory;
+
+  /// Formatversion der Archiv-Inhalte (manifest.json).
+  static const manifestFormat = 1;
 
   Future<SecretKey> _deriveKey(String password, List<int> salt) {
     final pbkdf2 = Pbkdf2(
@@ -37,8 +46,8 @@ class BackupService {
 
   /// Erstellt die verschlüsselte Backup-Datei und liefert ihren Pfad.
   Future<File> createBackup(String password) async {
-    final docsDir = await getApplicationDocumentsDirectory();
-    final tempDir = await getTemporaryDirectory();
+    final docsDir = await _docsDir();
+    final tempDir = await _tempDir();
 
     // Konsistente DB-Kopie trotz geöffneter Verbindung.
     final dbCopy = File(p.join(tempDir.path, 'dokubox.sqlite'));
@@ -66,6 +75,13 @@ class BackupService {
         }
       }
     }
+    final manifest = utf8.encode(jsonEncode({
+      'format': manifestFormat,
+      'schema': db.schemaVersion,
+      'created': DateTime.now().toIso8601String(),
+      'files': archive.files.length,
+    }));
+    archive.addFile(ArchiveFile('manifest.json', manifest.length, manifest));
     final zipBytes = ZipEncoder().encode(archive);
     await dbCopy.delete();
 
@@ -117,7 +133,7 @@ class BackupService {
     }
 
     final archive = ZipDecoder().decodeBytes(zipBytes);
-    final tempDir = await getTemporaryDirectory();
+    final tempDir = await _tempDir();
     final target = Directory(
         p.join(tempDir.path, 'restore-${DateTime.now().millisecondsSinceEpoch}'));
     await target.create(recursive: true);
@@ -130,12 +146,47 @@ class BackupService {
     if (!await File(p.join(target.path, 'dokubox.sqlite')).exists()) {
       throw const BackupException('Backup enthält keine Datenbank.');
     }
+    final manifest = File(p.join(target.path, 'manifest.json'));
+    if (await manifest.exists()) {
+      final m = jsonDecode(await manifest.readAsString());
+      final schema = m is Map ? m['schema'] : null;
+      if (schema is int && schema > db.schemaVersion) {
+        throw const BackupException('Das Backup stammt aus einer neueren '
+            'App-Version. Bitte erst DokuBox aktualisieren.');
+      }
+    }
     return target;
+  }
+
+  /// Wiederhergestellte Daten an Ort und Stelle kopieren; die Datenbank
+  /// wird beim nächsten App-Start eingewechselt (`dokubox_restore.sqlite`).
+  Future<void> applyRestore(Directory restored) async {
+    final docsDir = await _docsDir();
+    for (final dirName in backupDirs) {
+      final source = Directory(p.join(restored.path, dirName));
+      if (!await source.exists()) continue;
+      final target = Directory(p.join(docsDir.path, dirName));
+      await target.create(recursive: true);
+      await for (final entity in source.list()) {
+        if (entity is File) {
+          await entity.copy(p.join(target.path, p.basename(entity.path)));
+        }
+      }
+    }
+    await File(p.join(restored.path, 'dokubox.sqlite'))
+        .copy(p.join(docsDir.path, 'dokubox_restore.sqlite'));
   }
 }
 
 /// Verzeichnisse (relativ zum App-Verzeichnis), die ins Backup kommen.
-const backupDirs = [ScanService.pdfDirName, TemplateService.dirName];
+const backupDirs = [
+  ScanService.pdfDirName,
+  TemplateService.dirName,
+  attachmentsDirName,
+];
+
+/// Ordner für Fotos/Dateien an Dokumenten (Schema v6).
+const attachmentsDirName = 'anhaenge';
 
 class BackupException implements Exception {
   final String message;
