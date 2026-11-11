@@ -8,6 +8,9 @@ import 'package:pdf/widgets.dart' as pw;
 class NumberListRow {
   final String docNumber;
 
+  /// Position im Haufen (1 = oben), wenn nach Scan-Reihenfolge gelistet.
+  final int? position;
+
   /// Vorläufige Nummer aus der Ersterfassung (V-0012), falls vorhanden.
   final String? oldNumber;
   final DateTime? docDate;
@@ -19,6 +22,7 @@ class NumberListRow {
 
   const NumberListRow({
     required this.docNumber,
+    this.position,
     this.oldNumber,
     this.docDate,
     this.sender = '',
@@ -92,6 +96,9 @@ Future<Uint8List> buildNumberListPdf(List<NumberListRow> rows,
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Row(children: [
+                        if (r.position != null)
+                          pw.Text('${r.position}. im Haufen → ',
+                              style: const pw.TextStyle(fontSize: 12)),
                         pw.Text(r.docNumber,
                             style: pw.TextStyle(
                                 fontSize: 20, fontWeight: pw.FontWeight.bold)),

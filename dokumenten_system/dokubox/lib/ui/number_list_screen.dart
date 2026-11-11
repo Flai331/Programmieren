@@ -31,6 +31,26 @@ class NumberListScreen extends StatefulWidget {
 
 class _NumberListScreenState extends State<NumberListScreen> {
   final _done = <String>{};
+
+  /// Reihenfolge der Liste: wie der Haufen liegt oder nach neuer Nummer.
+  late _Order _order =
+      _hasPile ? _Order.firstOnTop : _Order.byNumber;
+
+  bool get _hasPile => widget.entries.any((e) => e.oldNumber != null);
+
+  /// Einträge in der gewählten Reihenfolge, mit Position im Haufen
+  /// (1 = oberstes Blatt).
+  List<({Document doc, String sender, String? oldNumber})> get _ordered {
+    final byScan = [...widget.entries]
+      ..sort((a, b) => (a.oldNumber ?? a.doc.docNumber)
+          .compareTo(b.oldNumber ?? b.doc.docNumber));
+    return switch (_order) {
+      _Order.firstOnTop => byScan,
+      _Order.lastOnTop => byScan.reversed.toList(),
+      _Order.byNumber => [...widget.entries]
+        ..sort((a, b) => a.doc.docNumber.compareTo(b.doc.docNumber)),
+    };
+  }
   bool _exporting = false;
 
   Future<Uint8List?> _thumbnail(Document doc) async {
@@ -62,8 +82,11 @@ class _NumberListScreenState extends State<NumberListScreen> {
     setState(() => _exporting = true);
     try {
       final rows = <NumberListRow>[];
-      for (final e in widget.entries) {
+      final ordered = _ordered;
+      for (var i = 0; i < ordered.length; i++) {
+        final e = ordered[i];
         rows.add(NumberListRow(
+          position: _order == _Order.byNumber ? null : i + 1,
           docNumber: e.doc.docNumber,
           oldNumber: e.oldNumber,
           docDate: e.doc.docDate,
@@ -115,13 +138,36 @@ class _NumberListScreenState extends State<NumberListScreen> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
-              '$n Dokumente gespeichert, Nummern nach Datum vergeben (ältestes '
-              'zuerst). Schreib die Nummer auf das passende Original, hak es '
-              'ab und leg den Stapel in dieser Reihenfolge vorne in die Box.',
+              _order == _Order.byNumber
+                  ? '$n Dokumente, Nummern nach Datum vergeben. Nummer auf das '
+                      'passende Original schreiben und abhaken.'
+                  : 'Haufen von oben nach unten abarbeiten: auf jedes '
+                      'Dokument die angezeigte Nummer schreiben, abhaken, '
+                      'danach von Hand nach Nummer sortieren. Verworfene '
+                      'Dokumente vorher herausnehmen.',
               style: theme.textTheme.bodyMedium,
             ),
           ),
-          for (final e in widget.entries)
+          if (_hasPile)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: SegmentedButton<_Order>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(
+                      value: _Order.firstOnTop,
+                      label: Text('Zuerst gescannt oben')),
+                  ButtonSegment(
+                      value: _Order.lastOnTop,
+                      label: Text('Zuletzt gescannt oben')),
+                  ButtonSegment(
+                      value: _Order.byNumber, label: Text('Nach Nummer')),
+                ],
+                selected: {_order},
+                onSelectionChanged: (v) => setState(() => _order = v.first),
+              ),
+            ),
+          for (final (i, e) in _ordered.indexed)
             CheckboxListTile(
               value: _done.contains(e.doc.id),
               onChanged: (v) => setState(() =>
@@ -134,6 +180,10 @@ class _NumberListScreenState extends State<NumberListScreen> {
                 child: _Thumb(path: e.doc.pdfPath),
               ),
               title: Text.rich(TextSpan(children: [
+                if (_order != _Order.byNumber)
+                  TextSpan(
+                      text: '${i + 1}. im Haufen → ',
+                      style: theme.textTheme.bodyMedium),
                 TextSpan(
                     text: e.doc.docNumber,
                     style: theme.textTheme.titleLarge
@@ -145,6 +195,7 @@ class _NumberListScreenState extends State<NumberListScreen> {
               ])),
               subtitle: Text([
                 e.doc.docDate == null ? 'ohne Datum' : _date.format(e.doc.docDate!),
+                if (e.doc.pageCount > 1) '${e.doc.pageCount} Seiten',
                 if (e.sender.isNotEmpty) e.sender,
                 if (e.doc.title.isNotEmpty) e.doc.title,
               ].join(' · ')),
@@ -191,3 +242,5 @@ class _Thumb extends StatelessWidget {
     );
   }
 }
+
+enum _Order { firstOnTop, lastOnTop, byNumber }
