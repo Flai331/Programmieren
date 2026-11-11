@@ -22,7 +22,7 @@ final _date = DateFormat('dd.MM.yyyy');
 /// nach Nummer (= nach Datum), mit Vorschau der ersten Seite zum
 /// Wiedererkennen, Abhaken beim Beschriften und PDF zum Ausdrucken.
 class NumberListScreen extends StatefulWidget {
-  final List<({Document doc, String sender})> entries;
+  final List<({Document doc, String sender, String? oldNumber})> entries;
   const NumberListScreen({super.key, required this.entries});
 
   @override
@@ -65,6 +65,7 @@ class _NumberListScreenState extends State<NumberListScreen> {
       for (final e in widget.entries) {
         rows.add(NumberListRow(
           docNumber: e.doc.docNumber,
+          oldNumber: e.oldNumber,
           docDate: e.doc.docDate,
           sender: e.sender,
           title: e.doc.title,
@@ -132,9 +133,16 @@ class _NumberListScreenState extends State<NumberListScreen> {
                 )),
                 child: _Thumb(path: e.doc.pdfPath),
               ),
-              title: Text(e.doc.docNumber,
-                  style: theme.textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.bold)),
+              title: Text.rich(TextSpan(children: [
+                TextSpan(
+                    text: e.doc.docNumber,
+                    style: theme.textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+                if (e.oldNumber != null)
+                  TextSpan(
+                      text: '   (war ${e.oldNumber})',
+                      style: theme.textTheme.bodySmall),
+              ])),
               subtitle: Text([
                 e.doc.docDate == null ? 'ohne Datum' : _date.format(e.doc.docDate!),
                 if (e.sender.isNotEmpty) e.sender,

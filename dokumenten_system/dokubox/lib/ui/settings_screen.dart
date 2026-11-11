@@ -12,6 +12,7 @@ import '../backup/backup_service.dart';
 import '../data/finance.dart';
 import '../lock/lock_gate.dart';
 import '../scan/blank_pages.dart';
+import '../data/setup_mode.dart';
 import 'firms_screen.dart';
 import 'templates_screen.dart';
 
@@ -329,6 +330,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(title: const Text('Einstellungen')),
       body: ListView(
         children: [
+          FutureBuilder<bool>(
+            future: SetupMode.isOn(),
+            builder: (context, snap) => SwitchListTile(
+              secondary: const Icon(Icons.playlist_add_check),
+              title: const Text('Ersterfassung'),
+              subtitle: const Text(
+                  'Alle vorhandenen Dokumente erst einscannen (vorläufige '
+                  'Nummern V-0001 …), am Ende auf dem Startbildschirm '
+                  '„Nummern vergeben“ – nach Datum sortiert.'),
+              value: snap.data ?? false,
+              onChanged: (v) async {
+                await SetupMode.set(v);
+                setState(() {});
+              },
+            ),
+          ),
           ListTile(
             leading: const Icon(Icons.business),
             title: const Text('Firmen & Kategorien'),

@@ -9,6 +9,7 @@ import '../ai/ai_extraction_service.dart';
 import '../app_services.dart';
 import '../data/batch_numbering.dart';
 import '../data/database.dart';
+import '../data/setup_mode.dart';
 import '../data/doc_types.dart';
 import '../data/document_repository.dart';
 import '../data/finance.dart';
@@ -438,10 +439,108 @@ class _HomeScreenState extends State<HomeScreen> {
   /// gespeicherter Dokumente.
   Future<int> _confirmOutcomes(List<ScanOutcome> outcomes) async {
     if (outcomes.isEmpty) return 0;
-    if (outcomes.length == 1) {
+    if (outcomes.length == 1 || await SetupMode.isOn()) {
+      // Ersterfassung: jedes Dokument bekommt eine vorläufige Nummer, die
+      // endgültigen kommen gesammelt bei „Nummern vergeben“.
+      if (outcomes.length > 1) {
+        var saved = 0;
+        for (final o in outcomes) {
+          if (await _confirmAndSave(o)) saved++;
+        }
+        return saved;
+      }
       return await _confirmAndSave(outcomes.single) ? 1 : 0;
     }
     return _confirmBatch(outcomes);
+  }
+
+  /// Ersterfassung abschließen: alle vorläufigen Dokumente bekommen
+  /// endgültige Nummern nach Datum; danach Nummernliste.
+  Future<void> _finishSetup(int count) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nummern vergeben?'),
+        content: Text(
+            '$count Dokumente bekommen jetzt ihre endgültigen Nummern – nach '
+            'Dokumentdatum sortiert, ältestes zuerst (ohne Datum ans Ende). '
+            'Danach ist die Ersterfassung beendet und neue Scans bekommen '
+            'wieder sofort ihre Nummer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Noch nicht'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Nummern vergeben'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final result = await _withProgress('Vergebe Nummern …', () async {
+      final r = await services.repository.assignFinalNumbers();
+      for (final n in r) {
+        for (final e in n.renames.entries) {
+          final from = File(await ScanService.absolutePdfPath(e.key));
+          if (await from.exists()) {
+            await from.rename(await ScanService.absolutePdfPath(e.value));
+          }
+        }
+        await services.notifications.syncDocument(n.doc.id);
+      }
+      await SetupMode.set(false);
+      return r;
+    });
+    if (!mounted) return;
+    setState(() {});
+    if (result.isEmpty) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => NumberListScreen(entries: [
+        for (final n in result)
+          (doc: n.doc, sender: n.sender, oldNumber: n.oldNumber),
+      ]),
+    ));
+  }
+
+  Widget _setupBanner() {
+    return FutureBuilder<bool>(
+      future: SetupMode.isOn(),
+      builder: (context, on) {
+        if (on.data != true) return const SizedBox.shrink();
+        return StreamBuilder<int>(
+          stream: services.repository.watchProvisionalCount(),
+          builder: (context, snap) {
+            final count = snap.data ?? 0;
+            final theme = Theme.of(context);
+            return Card(
+              margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              color: theme.colorScheme.tertiaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.playlist_add_check),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text('Ersterfassung: $count Dokument'
+                          '${count == 1 ? '' : 'e'} gesammelt (vorläufige '
+                          'Nummern)'),
+                    ),
+                    FilledButton(
+                      onPressed:
+                          count == 0 ? null : () => _finishSetup(count),
+                      child: const Text('Nummern vergeben'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   /// Regeln + KI → vorausgefüllter Entwurf.
@@ -513,14 +612,18 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       await Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => NumberListScreen(entries: entries),
+        builder: (_) => NumberListScreen(entries: [
+        for (final e in entries) (doc: e.doc, sender: e.sender, oldNumber: null),
+      ]),
       ));
     }
     return entries.length;
   }
 
   Future<bool> _confirmAndSave(ScanOutcome outcome) async {
-    final docNumber = await services.repository.nextDocNumber();
+    final docNumber = await SetupMode.isOn()
+        ? await services.repository.nextProvisionalNumber()
+        : await services.repository.nextDocNumber();
     final pdfPath =
         await services.scanner.renamePdf(outcome.relativePdfPath, docNumber);
     final draft = await _prepareDraft(outcome);
@@ -560,7 +663,10 @@ class _HomeScreenState extends State<HomeScreen> {
     await services.notifications.syncDocument(doc.id);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('$docNumber gespeichert – Original vorne in die Box legen'),
+        content: Text(DocumentRepository.isProvisional(docNumber)
+            ? '$docNumber gespeichert (vorläufig) – Original auf den '
+                'Ersterfassungs-Stapel'
+            : '$docNumber gespeichert – Original vorne in die Box legen'),
         duration: const Duration(seconds: 6),
         action: SnackBarAction(
           label: 'Erinnerung',
@@ -682,7 +788,7 @@ class _HomeScreenState extends State<HomeScreen> {
             tooltip: 'Einstellungen',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
+            ).then((_) => setState(() {})), // Ersterfassung an/aus
           ),
         ],
       ),
@@ -713,6 +819,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
+          _setupBanner(),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: TextField(

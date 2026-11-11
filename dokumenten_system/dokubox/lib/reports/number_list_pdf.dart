@@ -7,6 +7,9 @@ import 'package:pdf/widgets.dart' as pw;
 /// Eine Zeile der Nummernliste.
 class NumberListRow {
   final String docNumber;
+
+  /// Vorläufige Nummer aus der Ersterfassung (V-0012), falls vorhanden.
+  final String? oldNumber;
   final DateTime? docDate;
   final String sender;
   final String title;
@@ -16,6 +19,7 @@ class NumberListRow {
 
   const NumberListRow({
     required this.docNumber,
+    this.oldNumber,
     this.docDate,
     this.sender = '',
     this.title = '',
@@ -87,9 +91,15 @@ Future<Uint8List> buildNumberListPdf(List<NumberListRow> rows,
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text(r.docNumber,
-                          style: pw.TextStyle(
-                              fontSize: 20, fontWeight: pw.FontWeight.bold)),
+                      pw.Row(children: [
+                        pw.Text(r.docNumber,
+                            style: pw.TextStyle(
+                                fontSize: 20, fontWeight: pw.FontWeight.bold)),
+                        if (r.oldNumber != null)
+                          pw.Text('   (war ${r.oldNumber})',
+                              style: const pw.TextStyle(
+                                  fontSize: 10, color: PdfColors.grey700)),
+                      ]),
                       pw.SizedBox(height: 2),
                       pw.Text([
                         r.docDate == null ? 'ohne Datum' : _date.format(r.docDate!),

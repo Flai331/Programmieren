@@ -355,7 +355,11 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    Text('Diese Nummer aufs Original schreiben:',
+                    Text(
+                        DocumentRepository.isProvisional(widget.docNumber!)
+                            ? 'Ersterfassung – vorläufige Nummer (optional '
+                                'klein mit Bleistift notieren):'
+                            : 'Diese Nummer aufs Original schreiben:',
                         style: theme.textTheme.bodyMedium),
                     const SizedBox(height: 8),
                     Text(
@@ -366,7 +370,11 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text('… und vorne in die Box legen. Nicht sortieren!',
+                    Text(
+                        DocumentRepository.isProvisional(widget.docNumber!)
+                            ? 'Die endgültige Nummer kommt bei „Nummern '
+                                'vergeben“ – nach Datum sortiert.'
+                            : '… und vorne in die Box legen. Nicht sortieren!',
                         style: theme.textTheme.bodySmall),
                   ],
                 ),

@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import 'database.dart';
+import 'batch_numbering.dart';
 import 'finance.dart';
 import 'tasks.dart';
 
@@ -123,6 +124,21 @@ class DocumentDraft {
         claims = claims ?? [];
 }
 
+/// Ergebnis von [DocumentRepository.assignFinalNumbers].
+class FinalNumbering {
+  final Document doc;
+  final String oldNumber;
+  final String sender;
+
+  /// Alte → neue relative Dateipfade (umbenennen!).
+  final Map<String, String> renames;
+  const FinalNumbering(
+      {required this.doc,
+      required this.oldNumber,
+      required this.sender,
+      required this.renames});
+}
+
 class DocumentRepository {
   final AppDatabase db;
 
@@ -148,13 +164,86 @@ class DocumentRepository {
   static String formatDocNumber(int year, int number) =>
       '$year-${number.toString().padLeft(4, '0')}';
 
+  // ------------------------------------------------- Ersterfassung
+
+  /// Vorläufige Nummern (V-0001 …) während der Ersterfassung; Zähler unter
+  /// Jahr 0.
+  static const provisionalPrefix = 'V-';
+  static bool isProvisional(String docNumber) =>
+      docNumber.startsWith(provisionalPrefix);
+
+  Future<String> nextProvisionalNumber() => db.transaction(() async {
+        final row = await (db.select(db.counters)
+              ..where((c) => c.year.equals(0)))
+            .getSingleOrNull();
+        final next = (row?.lastNumber ?? 0) + 1;
+        await db.into(db.counters).insertOnConflictUpdate(
+              CountersCompanion(year: const Value(0), lastNumber: Value(next)),
+            );
+        return '$provisionalPrefix${next.toString().padLeft(4, '0')}';
+      });
+
+  Stream<int> watchProvisionalCount() => (db.select(db.documents)
+        ..where((d) =>
+            d.deletedAt.isNull() & d.docNumber.like('$provisionalPrefix%')))
+      .watch()
+      .map((rows) => rows.length);
+
+  /// Vergibt allen vorläufig nummerierten Dokumenten endgültige Nummern
+  /// nach Dokumentdatum (ältestes zuerst, ohne Datum ans Ende, sonst in
+  /// Scan-Reihenfolge). Passt PDF-Pfade und Suchindex an; die Dateien
+  /// benennt der Aufrufer um (siehe Rückgabe).
+  Future<List<FinalNumbering>> assignFinalNumbers({DateTime? now}) =>
+      db.transaction(() async {
+        final docs = await (db.select(db.documents)
+              ..where((d) =>
+                  d.deletedAt.isNull() &
+                  d.docNumber.like('$provisionalPrefix%'))
+              ..orderBy([(d) => OrderingTerm.asc(d.scannedAt)]))
+            .get();
+        final result = <FinalNumbering>[];
+        for (final doc in sortForNumbering(docs, (d) => d.docDate)) {
+          final number = await nextDocNumber(now: now);
+          String? swap(String? path) =>
+              path?.replaceAll(doc.docNumber, number);
+          await (db.update(db.documents)..where((d) => d.id.equals(doc.id)))
+              .write(DocumentsCompanion(
+            docNumber: Value(number),
+            pdfPath: Value(swap(doc.pdfPath)!),
+            filledPdfPath: Value(swap(doc.filledPdfPath)),
+            updatedAt: Value(DateTime.now()),
+          ));
+          await db.customStatement(
+            'UPDATE document_fts SET content = replace(content, ?, ?) '
+            'WHERE document_id = ?',
+            [doc.docNumber, number, doc.id],
+          );
+          final sender = doc.correspondentId == null
+              ? ''
+              : (await getCorrespondent(doc.correspondentId!))?.name ?? '';
+          result.add(FinalNumbering(
+            doc: (await getDocument(doc.id))!,
+            oldNumber: doc.docNumber,
+            sender: sender,
+            renames: {
+              doc.pdfPath: swap(doc.pdfPath)!,
+              if (doc.filledPdfPath != null)
+                doc.filledPdfPath!: swap(doc.filledPdfPath)!,
+            },
+          ));
+        }
+        // Vorläufiger Zähler startet bei der nächsten Ersterfassung neu.
+        await (db.delete(db.counters)..where((c) => c.year.equals(0))).go();
+        return result;
+      });
+
   /// Rollback für einen verworfenen Scan: War [docNumber] die zuletzt
   /// vergebene Nummer und wurde kein Dokument damit angelegt, wird der
   /// Zähler zurückgedreht, damit keine Lücke in der Box entsteht.
   Future<void> releaseDocNumberIfUnused(String docNumber) async {
     final parts = docNumber.split('-');
     if (parts.length != 2) return;
-    final year = int.tryParse(parts[0]);
+    final year = isProvisional(docNumber) ? 0 : int.tryParse(parts[0]);
     final number = int.tryParse(parts[1]);
     if (year == null || number == null) return;
     await db.transaction(() async {
