@@ -1,0 +1,59 @@
+name: DokuBox Windows bauen
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ccr-04e9598f-nwh0iq
+    paths:
+      - 'dokumenten_system/dokubox/**'
+      - '.github/workflows/build-dokubox-windows.yml'
+
+concurrency:
+  group: dokubox-windows
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.6
+          cache: true
+
+      - name: Abhängigkeiten
+        working-directory: dokumenten_system/dokubox
+        run: flutter pub get
+
+      - name: Windows-App bauen
+        working-directory: dokumenten_system/dokubox
+        run: flutter build windows --release
+
+      - name: Als ZIP packen
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dokumenten_system/dokubox/build/windows/x64/runner/Release/* -DestinationPath DokuBox-Windows.zip
+          Get-Item DokuBox-Windows.zip | Select-Object Name, Length
+
+      - name: Als GitHub-Release veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-latest
+          name: DokuBox für Windows (neueste)
+          body: |
+            ZIP entpacken und `dokubox.exe` starten.
+          files: DokuBox-Windows.zip
+          prerelease: true
+
+      - name: Zusätzlich als Build-Artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: DokuBox-Windows
+          path: DokuBox-Windows.zip
