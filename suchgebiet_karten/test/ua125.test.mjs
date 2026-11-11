@@ -395,6 +395,18 @@ test('Kamerabewertung: Hauptkamera vor Weitwinkel, Tele, Tiefe; Frontkamera zule
   assert.equal(pickCamera([{ kind: 'audioinput' }]), null);
 });
 
+// v130.13: gemerkte Kamera auch über den Namen wiederfinden, falls sich die deviceId geändert hat
+// (manche Browser/WebViews vergeben nach einem Neustart neue deviceIds)
+test('pickCamera: gemerkte Kamera per Name wiederfinden, wenn sich die deviceId geändert hat', () => {
+  const devs = [cam('main-new', 'camera2 0, facing back'), cam('tele-new', 'camera2 3, facing back telephoto')];
+  // deviceId von früher gibt es nicht mehr, aber der Name passt noch
+  assert.equal(pickCamera(devs, { deviceId: 'tele-old', label: 'camera2 3, facing back telephoto' }).deviceId, 'tele-new');
+  // weder deviceId noch Name bekannt -> automatisch beste Kamera
+  assert.equal(pickCamera(devs, { deviceId: 'weg', label: 'unbekannt' }).deviceId, 'main-new');
+  // reine deviceId (alter, nicht-objekt Speicherstand) funktioniert weiter wie gehabt
+  assert.equal(pickCamera(devs, 'tele-new').deviceId, 'tele-new');
+});
+
 test('Kamerabewertung: andere Namensschemata', () => {
   assert.ok(scoreCamera('Rückkamera') > scoreCamera('Rückkamera Ultraweitwinkel'));
   assert.ok(scoreCamera('back camera') > scoreCamera('Back Ultra Wide Camera 0.5x'));

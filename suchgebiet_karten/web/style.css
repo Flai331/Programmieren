@@ -468,6 +468,7 @@ html.night .leaflet-container { background: #111; }
 /* Wetter-Overlay */
 .wx {
   position: fixed; top: 60px; left: 72px; z-index: 990; width: min(330px, calc(100vw - 150px));
+  max-height: calc(100vh - 60px - 100px); overflow-y: auto; overscroll-behavior: contain;
   background: rgba(255,255,255,0.96); border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.3); padding: 6px 8px; font-size: 13px;
 }
 .wx-head { display: flex; align-items: center; gap: 8px; }
@@ -555,7 +556,8 @@ body.hf #overlay { height: calc(100% - 136px); }
 .hfinfo span { display: block; color: #333; overflow-wrap: anywhere; }
 .hfinfo.min span { display: none; }
 .hfinfo.closed { border-left-color: #2e7d32; background: rgba(232,245,233,0.97); }
-body.hf .wx { top: calc(var(--hfi-b, 52px) + 6px); } /* unter der Auftragskarte statt darüber */
+/* v130.12: unter der Auftragskarte statt darüber, und nie über den unteren Knopfleisten hinaus (sonst scrollen) */
+body.hf .wx { top: calc(var(--hfi-b, 52px) + 6px); max-height: calc(100vh - var(--hfi-b, 52px) - 6px - 100px); }
 /* Randknöpfe zweispaltig: Auftragsanzeige endet davor */
 @media (max-height: 640px) and (orientation: portrait) { .hfinfo { right: 124px; } }
 @media (max-height: 500px) and (orientation: landscape) { .hfinfo { right: 98px; left: 54px; top: 46px; } }
@@ -565,7 +567,6 @@ body.hf .wx { top: calc(var(--hfi-b, 52px) + 6px); } /* unter der Auftragskarte 
   display: flex; align-items: center; justify-content: center; overflow: hidden;
 }
 .leaflet-control-attribution.folded::before { content: 'ⓘ'; font-size: 15px; color: #333; }
-body.hf .wx { top: 120px; }
 .hfm-list button { font-size: 16px; padding: 12px; text-align: left; }
 html.night .hfbar, html.night .hfinfo, html.night .qrbox { filter: invert(1) hue-rotate(180deg); }
 html.night .qr-code { filter: invert(1); }

@@ -79,8 +79,10 @@ test('Mehrteiliger QR-Code: Teile in beliebiger Reihenfolge, doppelt gelesen', (
   for (const i of [2, 0, 2, 3]) r = addPart(store, parseShared(links[i]).data);
   assert.equal(r.done, null);
   assert.equal(r.have, 3);
+  assert.deepEqual(r.missing, [2]); // v130.13: zeigt an, welcher Teil (1-basiert) noch fehlt
   r = addPart(store, parts[1]);
   assert.equal(r.done, data);
+  assert.deepEqual(r.missing, []);
   // neuer Code (andere Kennung) beginnt von vorn
   const other = splitParts('xyz', 1000);
   assert.equal(addPart(store, other[0]).done, 'xyz');

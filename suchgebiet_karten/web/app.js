@@ -80,7 +80,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.9';
+const APP_VERSION = 'v130.14';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1175,6 +1175,9 @@ function textDialog(i) {
   if (!it || it.kind !== 'text') return;
   if (isLocked()) return lockedToast();
   if (blocked(it) || guardAssigned(assignedOf(P, it))) return;
+  // v130.14: Punkte von der EL (Auftragsinhalt, Zusatz) sind beim Hundeführer schreibgeschützt – nicht verschieb-
+  // oder löschbar. EL/ELW dürfen sie immer ändern; ein UA ist schon über blocked()/lockOf() oben eingeschränkt.
+  if (db.mode !== 'el' && it.fromEl) return toast(MSG_VIEW, 4000);
   openDlg((box, close) => {
     dlgHead(box, '📍 Text', 'Ändern oder löschen.');
     const inp = document.createElement('input');
@@ -3870,12 +3873,22 @@ function loadScript(src) {
   });
 }
 const QR_MAX = 1800; // Zeichen, die eine Handy-Kamera vom Bildschirm noch sicher liest
+const QR_INTERVAL = 1500; // v130.13: etwas langsamer als vorher (900ms) – mehr Zeit zum Fokussieren/Lesen
 let qrCycle = null;
+let qrParts = null; // { svgs, i, paused } – für Pause/◀/▶ bei mehrteiligen Codes
 function qrSvg(data) {
   const q = window.qrcode(0, data.length < 2000 ? 'M' : 'L');
   q.addData(data, 'Byte');
   q.make();
   return q.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+}
+function qrShowPart() {
+  const { svgs, i } = qrParts;
+  $('qr-code').innerHTML = `${svgs[i]}<b class="qr-part">Teil ${i + 1} von ${svgs.length}</b>`;
+}
+function qrPause(paused) {
+  qrParts.paused = paused;
+  $('qr-pause').textContent = paused ? '▶️ Weiter' : '⏸️ Pause';
 }
 // parts: mehrere QR-Inhalte, die im Wechsel angezeigt werden (Scanner in der App sammelt sie)
 async function showQr(link, title, text, parts = null) {
@@ -3884,15 +3897,15 @@ async function showQr(link, title, text, parts = null) {
   $('qr-text').textContent = text;
   const box = $('qr-code');
   clearInterval(qrCycle);
+  qrCycle = null;
+  qrParts = null;
+  $('qr-nav').hidden = true;
   if (parts && parts.length > 1) {
-    const svgs = parts.map(qrSvg);
-    let i = 0;
-    const show = () => {
-      box.innerHTML = `${svgs[i]}<b class="qr-part">Teil ${i + 1} von ${svgs.length}</b>`;
-      i = (i + 1) % svgs.length;
-    };
-    show();
-    qrCycle = setInterval(show, 900);
+    qrParts = { svgs: parts.map(qrSvg), i: 0, paused: false };
+    qrShowPart();
+    qrPause(false);
+    qrCycle = setInterval(() => { if (!qrParts.paused) { qrParts.i = (qrParts.i + 1) % qrParts.svgs.length; qrShowPart(); } }, QR_INTERVAL);
+    $('qr-nav').hidden = false;
   } else if (link.length > QR_MAX) {
     box.innerHTML = '<p class="small">Zu viele Daten für einen QR-Code – bitte über „Teilen“ (WhatsApp, SMS …) senden.</p>';
   } else {
@@ -3901,6 +3914,10 @@ async function showQr(link, title, text, parts = null) {
   $('qrbox').dataset.link = link;
   $('qrbox').hidden = false;
 }
+// v130.13: mehrteiliger Code manuell steuern – praktisch, wenn die Kamera des Scanners einen Teil immer wieder verpasst
+$('qr-pause').addEventListener('click', () => qrPause(!qrParts.paused));
+$('qr-prev').addEventListener('click', () => { qrPause(true); qrParts.i = (qrParts.i - 1 + qrParts.svgs.length) % qrParts.svgs.length; qrShowPart(); });
+$('qr-next').addEventListener('click', () => { qrPause(true); qrParts.i = (qrParts.i + 1) % qrParts.svgs.length; qrShowPart(); });
 async function shareLinkText(link, title, text) {
   const msg = `${text}\n${link}`;
   if (bridge && bridge.shareText) return bridge.shareText(title, msg);
@@ -4681,7 +4698,9 @@ function statusMarks() {
   else if (!db.msgOff) list = allMsgs().map((m) => ({ m, color: teamColorOf(m.a) }));
   else return [];
   list = list.filter((x) => x.m.lat != null);
-  if (labelDetail(map.getZoom()) === 0) list = list.filter((x) => isUrgent(x.m)); // weit weg: nur Fund/Hilfe
+  // v130.10: Fund/Hinweis der EL (auch „Spur“, Gegenstand, Wärmequelle …) bleibt immer sichtbar – sonst verschwindet
+  // ein frisch angetippter Punkt außerhalb des Rastergebiets, weil man dafür meist weiter herauszoomen muss.
+  if (labelDetail(map.getZoom()) === 0) list = list.filter((x) => isUrgent(x.m) || isFind(x.m));
   const newest = new Map();
   for (const x of list) newest.set(x.m.a, x.m.id); // Liste ist nach Zeit sortiert
   for (const x of list) x.big = newest.get(x.m.a) === x.m.id;
@@ -5762,6 +5781,15 @@ function renderStatusPanel() {
       ft.title = m.fs === 'g' ? 'Wieder offen' : 'Als geprüft markieren';
       ft.addEventListener('click', (e) => { e.stopPropagation(); findToggle(m); });
       d.appendChild(ft);
+      if (m.lat != null) { // v130.11: Prüfauftrag auch nachträglich an ein/mehrere Teams senden
+        const sb = document.createElement('button');
+        sb.type = 'button';
+        sb.className = 'del find-send';
+        sb.textContent = '📤';
+        sb.title = 'An Team(s) senden';
+        sb.addEventListener('click', (e) => { e.stopPropagation(); findSendDialog(m); });
+        d.appendChild(sb);
+      }
     }
     box.appendChild(d);
   }
@@ -5963,12 +5991,23 @@ async function findDialog() {
     dr.className = 'check';
     dr.innerHTML = '<input type="checkbox" id="find-urgent"><span>❗ Dringend melden (Fenster bei allen EL-Geräten)</span>';
     box.appendChild(dr);
-    let chk = null;
+    // v130.11: Prüfauftrag an ein oder mehrere Teams (nicht mehr nur eins)
+    const checkIds = new Set();
     if (targets.length) {
-      chk = dlgField(box, 'Prüfauftrag an Team (optional)', document.createElement('select'));
-      chk.id = 'find-check';
-      chk.add(new Option('– keiner –', ''));
-      for (const q of targets) chk.add(new Option(q.label, q.a));
+      const h = document.createElement('p');
+      h.className = 'small';
+      h.textContent = 'Prüfauftrag an Team(s) (optional):';
+      box.appendChild(h);
+      for (const q of targets) {
+        const l = document.createElement('label');
+        l.className = 'check';
+        const c = Object.assign(document.createElement('input'), { type: 'checkbox' });
+        c.addEventListener('change', () => { if (c.checked) checkIds.add(q.a); else checkIds.delete(q.a); });
+        const sp = document.createElement('span');
+        sp.textContent = q.label;
+        l.append(c, sp);
+        box.appendChild(l);
+      }
     }
     const btns = FIND_KINDS.map((k) => dlgButton(list, esc(`${k.ico} ${k.label}`), '', () => {
       art = k;
@@ -5978,7 +6017,7 @@ async function findDialog() {
       for (const h of k.hints) dlgButton(hints, esc(h), '', () => { txt.value = h; });
     }));
     const need = () => { if (!art) { toast('Bitte erst die Art wählen'); return null; } const t = timeOfDay(tm.value, Date.now()); if (t == null) { toast('Uhrzeit nicht lesbar (z. B. 20:05)'); return null; } return t; };
-    const out = (t) => ({ art: art.code, txt: txt.value.trim(), t, finder: finder.value.trim(), geprueft: st.value === 'g', dringend: dr.querySelector('input').checked, file: file.files[0] || null, check: chk ? chk.value : '' });
+    const out = (t) => ({ art: art.code, txt: txt.value.trim(), t, finder: finder.value.trim(), geprueft: st.value === 'g', dringend: dr.querySelector('input').checked, file: file.files[0] || null, check: [...checkIds] });
     dlgButton(box, '👆 Ort auf der Karte antippen', 'primary', () => { const t = need(); if (t != null) close({ ...out(t), where: 'map' }); });
     dlgButton(box, '📍 Ort = mein Standort', '', () => { const t = need(); if (t != null) close({ ...out(t), where: 'gps' }); });
     dlgButton(box, 'Abbrechen', '', () => close(null));
@@ -6005,23 +6044,58 @@ async function findCommit(r, pos) {
   P.updated = Date.now();
   if (P.live) elSend(m).catch(() => {});
   let pa = '';
-  if (r.check && P.live) {
-    const tg = elTargets(P.sent, P.marks).find((q) => q.a === r.check);
-    if (tg) {
-      const where = formatMgrs(pos.lat, pos.lon);
-      // v130: der Ort kommt als Punkt auf die Karte des Teams (ältere Apps sehen weiter den Text mit Koordinate)
-      const z = buildZusatz(P, { to: tg.a, points: [{ lat: pos.lat, lon: pos.lon, name: `${findLabel(m.fa) || 'Fund'}${m.txt ? `: ${m.txt}` : ''}`.slice(0, 60), task: 'Bitte prüfen' }], prio: true });
-      const pm = buildElMsg({ to: tg.a, txt: checkText(m, where), prio: 1 });
-      if (z) pm.z = z.msg.z;
-      elSend(pm).catch(() => {});
-      pa = ` · Prüfauftrag an ${tg.label}`;
-    }
+  if (r.check && r.check.length) {
+    const labels = sendFindCheck(m, r.check);
+    if (labels.length) pa = ` · Prüfauftrag an ${labels.join(', ')}`;
   }
   changed();
   redraw();
   renderSentList();
   if ($('panel-status').hidden === false) renderStatusPanel();
   toast(`🔎 ${msgLabel(m)} eingetragen (${hhmm(m.t)})${m.ph ? ' mit Foto' : ''}${pa}`, 6000);
+}
+// Prüfauftrag zu einem Fund an ein oder mehrere Teams senden (bei der Eingabe oder nachträglich aus der Meldungsliste)
+// -> Namen der Teams, an die es tatsächlich ging (ohne Live-Kanal geht nichts)
+function sendFindCheck(m, teamIds) {
+  if (!P.live || m.lat == null) return [];
+  const where = formatMgrs(m.lat, m.lon);
+  const labels = [];
+  for (const a of teamIds) {
+    const tg = elTargets(P.sent, P.marks).find((q) => q.a === a);
+    if (!tg) continue;
+    // v130: der Ort kommt als Punkt auf die Karte des Teams (ältere Apps sehen weiter den Text mit Koordinate)
+    const z = buildZusatz(P, { to: tg.a, points: [{ lat: m.lat, lon: m.lon, name: `${findLabel(m.fa) || 'Fund'}${m.txt ? `: ${m.txt}` : ''}`.slice(0, 60), task: 'Bitte prüfen' }], prio: true });
+    const pm = buildElMsg({ to: tg.a, txt: checkText(m, where), prio: 1 });
+    if (z) pm.z = z.msg.z;
+    elSend(pm).catch(() => {});
+    labels.push(tg.label);
+  }
+  return labels;
+}
+// v130.11: Prüfauftrag nachträglich aus der Meldungsliste senden (nicht nur bei der Eingabe)
+async function findSendDialog(m) {
+  if (!P.live) return toast('Kein laufender Auftrag mit Status-Server – erst unter „Teams“ einen Auftrag per QR-Code vergeben', 7000);
+  const targets = elTargets(P.sent, P.marks);
+  if (!targets.length) return toast('Kein Team mit laufendem Auftrag', 5000);
+  const picked = new Set();
+  const ids = await openDlg((box, close) => {
+    dlgHead(box, '📤 Prüfauftrag senden', `${msgLabel(m)}${m.txt ? `: ${m.txt}` : ''} – an ein oder mehrere Teams.`);
+    for (const q of targets) {
+      const l = document.createElement('label');
+      l.className = 'check';
+      const c = Object.assign(document.createElement('input'), { type: 'checkbox' });
+      c.addEventListener('change', () => { if (c.checked) picked.add(q.a); else picked.delete(q.a); });
+      const sp = document.createElement('span');
+      sp.textContent = q.label;
+      l.append(c, sp);
+      box.appendChild(l);
+    }
+    dlgButton(box, '📤 Senden', 'primary', () => close([...picked]));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!ids || !ids.length) return;
+  const labels = sendFindCheck(m, ids);
+  toast(labels.length ? `📤 Prüfauftrag an ${labels.join(', ')} gesendet` : 'Nicht gesendet – kein Team erreichbar', 6000);
 }
 // Fund als geprüft (oder wieder offen) markieren: Korrektur-Meldung, geht an alle EL-Geräte
 function findToggle(m) {
@@ -6155,13 +6229,30 @@ async function zusatzDialog(pre = {}) {
     });
     if (!out) { toast('Bitte mindestens einen Punkt, ein Gebiet oder einen Ort auswählen'); continue; }
     if (out.size > ZUSATZ_MAX) { toast('Zu viel auf einmal für den Status-Server – bitte weniger oder einfachere Zeichnungen auswählen', 7000); continue; }
+    // v130.13: an ein bestimmtes Team gesendete Umrisse/Zeichnungen auch beim EL diesem Team zuordnen (Farbe/Zuteilung) –
+    // nicht bei „Alle Teams“, da dort keine einzelne Zuteilung Sinn ergibt
+    const team = t && t.teamId ? P.marks.find((m) => m.id === t.teamId) : null;
     // neue Punkte bleiben auch auf der Karte der Einsatzleitung (als Textpunkt mit Aufgabe)
     const fresh = st.points.filter((x) => !x.fromMsg);
-    if (fresh.length) {
+    if (fresh.length || (team && st.items.size)) {
       snapshot();
       for (const x of fresh) P.items.push({ kind: 'text', color: '#c62828', text: (x.name || '').trim() || 'Punkt', lat: x.lat, lon: x.lon, ...((x.task || st.task).trim() ? { note: (x.task || st.task).trim().slice(0, 200) } : {}), t: Date.now(), marker: true }); // v130.2: immer sichtbar
+      if (team) {
+        for (const i of st.items) {
+          const it = P.items[i];
+          if (!it) continue;
+          if (it.kind === 'track') { it.to = team.id; it.color = team.color; }
+          else if (it.kind === 'stroke') {
+            for (const x of it.group ? P.items.filter((y) => y.group === it.group) : [it]) {
+              if (!x.teams) x.teams = [];
+              if (!x.teams.includes(team.id)) x.teams.push(team.id);
+            }
+          }
+        }
+      }
       changed();
       redraw();
+      if (!$('panel-teams').hidden) renderMarks();
     }
     const ok = await elSend(out.msg);
     if ($('panel-status').hidden === false) renderStatusPanel();
@@ -6820,8 +6911,11 @@ let scanRun = false;
 // v125: Hauptkamera statt Ultraweitwinkel. Erst die Freigabe über facingMode (damit die Kameras Namen haben), dann die
 // beste Rückkamera nach Namen mit deviceId, 1920x1080 und Dauerfokus; die Wahl (auch „🔄 Kamera wechseln“) wird gemerkt.
 let scanCams = [];
-const camSaved = () => { try { return localStorage.getItem(CAM_KEY) || ''; } catch { return ''; } };
-const camSave = (id) => { try { localStorage.setItem(CAM_KEY, id); } catch { /* ohne Speicher: gilt nur jetzt */ } };
+// v130.13: Name der Kamera mitspeichern – falls die deviceId sich (Browser-Neustart, Datenschutz-Salt) ändert,
+// findet pickCamera() die gemerkte Kamera trotzdem über ihren Namen wieder, statt auf die „beste automatische“
+// Wahl zurückzufallen (die auf manchen Geräten das Weitwinkel-Objektiv statt der normalen Kamera trifft).
+const camSaved = () => { try { return JSON.parse(localStorage.getItem(CAM_KEY) || 'null') || ''; } catch { return ''; } };
+const camSave = (id, label) => { try { localStorage.setItem(CAM_KEY, JSON.stringify({ deviceId: id, label: label || '' })); } catch { /* ohne Speicher: gilt nur jetzt */ } };
 async function focusTrack(stream) {
   try {
     const tr = stream.getVideoTracks()[0];
@@ -6863,7 +6957,7 @@ async function switchScanCamera() {
     scanStream = stream;
     $('scan-video').srcObject = stream;
     await $('scan-video').play().catch(() => {});
-    camSave(scanCams.curId || next.deviceId);
+    camSave(scanCams.curId || next.deviceId, next.label);
     $('scan-text').textContent = `Kamera: ${next.label || 'Kamera'} – auf den QR-Code richten.`;
   } catch { $('scan-text').textContent = 'Kamera lässt sich nicht wechseln.'; }
 }
@@ -6908,7 +7002,8 @@ async function startScan() {
         // mehrteiliger Code: Teile sammeln, bis alle da sind
         const r = addPart(scanParts, sh.data);
         if (r.done) { stopScan(); handleShared(shareLink('e', r.done)); return; }
-        if (r.n) $('scan-text').textContent = `Mehrteiliger Code: ${r.have} von ${r.n} Teilen gelesen – Kamera ruhig auf den Code halten …`;
+        // v130.13: zeigt, welche Teile konkret noch fehlen – hilft beim Zurückspulen auf dem anderen Gerät
+        if (r.n) $('scan-text').textContent = `Mehrteiliger Code: ${r.have} von ${r.n} Teilen gelesen – noch fehlt Teil ${r.missing.join(', ')}. Kamera ruhig halten …`;
       } else if (text) { stopScan(); handleShared(text); return; }
     }
     setTimeout(tick, 200);
