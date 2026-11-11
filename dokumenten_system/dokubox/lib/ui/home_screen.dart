@@ -11,6 +11,7 @@ import '../app_services.dart';
 import '../data/batch_numbering.dart';
 import '../data/database.dart';
 import '../data/deadline_settings.dart';
+import '../data/tax.dart';
 import '../extract/deadlines.dart';
 import '../extract/ref_matching.dart';
 import '../data/setup_mode.dart';
@@ -720,6 +721,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       draft.docDate,
       state: deadlines.state,
     );
+    draft.taxCategory ??= suggestTaxCategory(outcome.ocrText, draft.docType);
     final warranty = extractWarranty(outcome.ocrText, draft.docDate);
     if (warranty != null && draft.warrantyUntil == null) {
       draft.warrantyUntil = warranty.until;

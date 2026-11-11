@@ -508,6 +508,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       objectionDeadline: doc.objectionDeadline,
       warrantyUntil: doc.warrantyUntil,
       warrantyKind: doc.warrantyKind,
+      taxCategory: doc.taxCategory,
+      taxYear: doc.taxYear,
+      taxAmountCents: doc.taxAmountCents,
       objectionLeadDays: leadDays,
     );
     if (!mounted) return;

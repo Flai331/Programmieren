@@ -122,6 +122,11 @@ class DocumentDraft {
   /// Beim Anlegen mit diesen Dokumenten zu einem Vorgang verknüpfen.
   List<String> linkDocumentIds;
 
+  /// Steuer-Mappe.
+  String? taxCategory;
+  int? taxYear;
+  int? taxAmountCents;
+
   DocumentDraft({
     this.title = '',
     this.docDate,
@@ -145,6 +150,9 @@ class DocumentDraft {
     this.contentHash,
     this.objectionLeadDays = 7,
     List<String>? linkDocumentIds,
+    this.taxCategory,
+    this.taxYear,
+    this.taxAmountCents,
   })  : linkDocumentIds = linkDocumentIds ?? [],
         tagNames = tagNames ?? [],
         claims = claims ?? [];
@@ -347,6 +355,9 @@ class DocumentRepository {
         warrantyUntil: Value(draft.warrantyUntil),
         warrantyKind: Value(draft.warrantyKind),
         contentHash: Value(draft.contentHash),
+        taxCategory: Value(draft.taxCategory),
+        taxYear: Value(draft.taxYear),
+        taxAmountCents: Value(draft.taxAmountCents),
       );
       final doc =
           await db.into(db.documents).insertReturning(companion);
@@ -411,6 +422,9 @@ class DocumentRepository {
           objectionDeadline: Value(draft.objectionDeadline),
           warrantyUntil: Value(draft.warrantyUntil),
           warrantyKind: Value(draft.warrantyKind),
+          taxCategory: Value(draft.taxCategory),
+          taxYear: Value(draft.taxYear),
+          taxAmountCents: Value(draft.taxAmountCents),
           updatedAt: Value(DateTime.now()),
         ),
       );
@@ -693,6 +707,22 @@ class DocumentRepository {
     final list = stats.values.toList()
       ..sort((a, b) => b.amountCents.compareTo(a.amountCents));
     return list;
+  }
+
+  // ------------------------------------------------- Steuer
+
+  /// Steuer-Dokumente eines Jahres (Jahr = taxYear, sonst Zahlung/Datum).
+  Future<List<({Document doc, String sender})>> taxDocuments(int year) async {
+    final docs = await (db.select(db.documents)
+          ..where((d) => d.deletedAt.isNull() & d.taxCategory.isNotNull())
+          ..orderBy([(d) => OrderingTerm.asc(d.docDate)]))
+        .get();
+    final out = <({Document doc, String sender})>[];
+    for (final d in docs) {
+      final y = d.taxYear ?? (d.paidAt ?? d.docDate ?? d.scannedAt).year;
+      if (y == year) out.add((doc: d, sender: await _senderOf(d)));
+    }
+    return out;
   }
 
   // ------------------------------------------------- Ausdrucke

@@ -17,6 +17,7 @@ import '../reports/print_lists.dart';
 import 'devices_screen.dart';
 import 'firms_screen.dart';
 import 'personal_data_screen.dart';
+import 'tax_screen.dart';
 import 'report_share.dart';
 import 'templates_screen.dart';
 
@@ -360,6 +361,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const PersonalDataScreen()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.account_balance),
+            title: const Text('Steuer-Mappe'),
+            subtitle: const Text('Belege eines Jahres als eine PDF mit Inhaltsverzeichnis'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const TaxScreen()),
             ),
           ),
           ListTile(

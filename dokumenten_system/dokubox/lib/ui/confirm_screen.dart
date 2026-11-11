@@ -6,6 +6,7 @@ import '../data/database.dart';
 import '../data/doc_types.dart';
 import '../data/document_repository.dart';
 import '../data/finance.dart';
+import '../data/tax.dart';
 import 'pdf_preview.dart';
 
 final _dateFormat = DateFormat('dd.MM.yyyy');
@@ -330,6 +331,20 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
             style: theme.textTheme.bodySmall,
           ),
       ],
+      const SizedBox(height: 12),
+      DropdownButtonFormField<String?>(
+        initialValue: _draft.taxCategory,
+        isExpanded: true,
+        decoration: const InputDecoration(
+            labelText: 'Steuer-Mappe', border: OutlineInputBorder()),
+        items: [
+          const DropdownMenuItem<String?>(value: null, child: Text('– nicht steuerrelevant –')),
+          for (final e in kTaxCategories.entries)
+            DropdownMenuItem<String?>(
+                value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis)),
+        ],
+        onChanged: (v) => setState(() => _draft.taxCategory = v),
+      ),
       const SizedBox(height: 12),
       _DateRow(
         label: _draft.warrantyKind == 'garantie'
