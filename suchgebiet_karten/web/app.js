@@ -20,6 +20,7 @@ import { emptySel, selectAll, selSummary, selCount, subsetProject, itemsWithin, 
 import { MSG_VIEW, MSG_DELETE, ownTeamMsgs, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock, assignedOf, assignedCell, assignedGrid, markAccepted, isAccepted, unlockUntil } from './locks.js';
 import { isDone, openPoints, guardApplies, msgPct, closeMsg, sentPct, closeAsk, autoCloseDue, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
 import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts } from './elw.js'; // v124
+import { RTC_KIND, buildRtcMsg, rtcFor, shouldYield } from './rtc.js'; // v130.15
 import { nextTeamLabel, uaPrefix, sameTeamName, uaName, uaTitle, joinUaNames, renameUa } from './uateam.js';
 import { typeIcon, typeText, unitType, isDog, unitLine, cleanUnit, nextFunkrufname, UNIT_TYPES, ORGS, forcesFromTeams, forcesText, whoText } from './units.js'; // v128
 import { FUNK_KINDS, funkKind, funkLabel, timeOfDay, funkTargets, buildFunkMsg, addFunkMsg, buildFindMsg, msgSource } from './funk.js'; // v128
@@ -80,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.14';
+const APP_VERSION = 'v130.15';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -293,6 +294,8 @@ function changed() {
   if (!$('panel-teams').hidden) renderMarks();
   redraw();
   save();
+  rtcScheduleSend(); // v130.15: automatischer Live-Abgleich – eigene Änderungen gebündelt an den verbundenen Peer
+  renderRtcStatus();
 }
 
 // ---------- Karte ----------
@@ -6383,8 +6386,9 @@ async function pollLive() {
     const fresh = sp.team.filter((m) => !known.has(m.id) && !(proj.msgDel && proj.msgDel[m.id]));
     liveInit(l);
     const knownOut = new Set(l.out.map((m) => m.id));
-    const freshEl = sp.el.filter((m) => !knownOut.has(m.id) && !ELW_KINDS.includes(m.s)); // auch von anderen EL-Geräten (v124: ELW-Aufträge nicht)
+    const freshEl = sp.el.filter((m) => !knownOut.has(m.id) && !ELW_KINDS.includes(m.s) && m.s !== RTC_KIND); // auch von anderen EL-Geräten (v124: ELW-Aufträge, v130.15: WebRTC-Signalisierung nicht)
     takeElw(proj, sp.el); // v124: Aufträge an den ELW
+    if (proj === P) rtcHandleSignals(sp.el.filter((m) => m.s === RTC_KIND)); // v130.15: automatischer Live-Abgleich
     let readsNew = false;
     for (const [k, v] of Object.entries(sp.reads)) {
       const o = l.reads[k] || {};
@@ -6415,6 +6419,143 @@ async function pollLive() {
     }
   } catch { /* kein Netz oder Server weg: nächster Versuch */ } finally { liveBusy = false; }
   showUrgent();
+  if (proj === P) rtcMaybeConnect(proj); // v130.15: automatischer Live-Abgleich – alle 15 s neu versuchen, falls noch nicht verbunden
+}
+// ---------- v130.15: Automatischer Live-Abgleich (WebRTC) zwischen Geräten der Einsatzleitung ----------
+// Signalisierung über denselben Status-Server-Raum (devId() statt Team-Auftrag adressiert), Nutzlast ist dieselbe
+// wie bei „Fortschritt senden“ (buildProgress/mergeProgress) – nur der Transportweg ist neu (Datenkanal statt QR).
+let rtcPC = null; // aktuelle RTCPeerConnection (immer höchstens eine – erster Schritt: EL <-> ein weiteres Gerät)
+let rtcChan = null; // RTCDataChannel, sobald offen
+let rtcPeerId = ''; // devId() des verbundenen/gerade verhandelten Geräts
+let rtcPeerName = ''; // sein Anzeigename (für die Fortschritt-Peer-Liste)
+let rtcPendingCand = []; // ICE-Kandidaten, die vor der Remote-Beschreibung ankamen
+let rtcTriedAt = 0; // letzter Verbindungsversuch (Drosselung)
+let rtcSendTimer = null; // Debounce fürs automatische Senden bei eigenen Änderungen
+const RTC_RETRY_MS = 15e3;
+const RTC_SEND_DEBOUNCE_MS = 2500;
+function rtcReset() {
+  if (rtcPC) { try { rtcPC.close(); } catch { /* schon zu */ } }
+  rtcPC = null;
+  rtcChan = null;
+  rtcPeerId = '';
+  rtcPeerName = '';
+  rtcPendingCand = [];
+  clearTimeout(rtcSendTimer);
+  rtcSendTimer = null;
+  renderRtcStatus();
+}
+function rtcSend(msg) { elSend(msg).catch(() => {}); }
+function rtcNewPC() {
+  // v130.15: bewusst ohne STUN-Server – der Zweck ist der Abgleich im selben WLAN (z. B. am ELW-Router), wo
+  // die eigene (Host-)Adresse zum Verbinden reicht; ein ggf. nicht erreichbarer STUN-Dienst soll das nicht ausbremsen
+  const pc = new RTCPeerConnection({ iceServers: [] });
+  pc.onicecandidate = (e) => { if (e.candidate) rtcSend(buildRtcMsg({ by: devId(), to: rtcPeerId || '*', rt: 'ice', cand: e.candidate.toJSON() })); };
+  pc.onconnectionstatechange = () => {
+    if (pc !== rtcPC) return;
+    if (pc.connectionState === 'connected') renderRtcStatus();
+    else if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) rtcReset();
+  };
+  pc.ondatachannel = (e) => { rtcWireChannel(e.channel); };
+  return pc;
+}
+function rtcWireChannel(ch) {
+  rtcChan = ch;
+  ch.onopen = () => { renderRtcStatus(); rtcSendProgress(true); };
+  ch.onclose = () => { if (ch === rtcChan) rtcChan = null; };
+  ch.onmessage = (e) => { try { rtcApplyProgress(JSON.parse(e.data)); } catch { /* keine gültige Nutzlast */ } };
+}
+// Neue Verbindung anstoßen, wenn noch keine besteht und genug Zeit seit dem letzten Versuch vergangen ist
+function rtcMaybeConnect(proj) {
+  if (db.mode !== 'el' || !proj.live || proj.closed || !wantsLive(proj)) return;
+  if (rtcPC || Date.now() - rtcTriedAt < RTC_RETRY_MS) return;
+  rtcTriedAt = Date.now();
+  rtcPC = rtcNewPC();
+  rtcWireChannel(rtcPC.createDataChannel('sync'));
+  rtcPC.createOffer().then((offer) => rtcPC.setLocalDescription(offer)).then(() => {
+    if (!rtcPC || !rtcPC.localDescription) return;
+    rtcSend(buildRtcMsg({ by: devId(), byName: devBy(), to: '*', rt: 'offer', sdp: rtcPC.localDescription.sdp }));
+  }).catch(() => rtcReset());
+}
+async function rtcFlushCandidates() {
+  const cs = rtcPendingCand;
+  rtcPendingCand = [];
+  for (const c of cs) { try { await rtcPC.addIceCandidate(c); } catch { /* veraltet/ungültig */ } }
+}
+// Eingehende Signalisierung: Angebot (ggf. „Glarre“ auflösen), Antwort, ICE-Kandidat
+async function rtcHandleSignals(msgs) {
+  if (!msgs.length) return;
+  const mine = devId();
+  if (!mine) return; // ohne eigene Geräte-ID (noch keine Lizenz geladen) keine Zuordnung möglich
+  for (const m of rtcFor(msgs, mine)) {
+    if (m.rt === 'offer') {
+      if (rtcPC && rtcPeerId && rtcPeerId !== m.by) continue; // schon mit einem anderen Gerät verbunden/dabei
+      if (rtcPC && rtcPC.signalingState === 'have-local-offer') {
+        if (!shouldYield(mine, m.by)) continue; // bleibe Anbieter, ignoriere das fremde Angebot
+        rtcReset(); // gebe nach: eigenes Angebot verwerfen, das andere annehmen
+      } else if (rtcPC) continue; // schon verbunden/am Verhandeln mit genau diesem Gerät
+      rtcPeerId = m.by;
+      rtcPeerName = m.byName || 'Gerät';
+      rtcPC = rtcNewPC();
+      try {
+        await rtcPC.setRemoteDescription({ type: 'offer', sdp: m.sdp });
+        await rtcFlushCandidates();
+        const answer = await rtcPC.createAnswer();
+        await rtcPC.setLocalDescription(answer);
+        rtcSend(buildRtcMsg({ by: mine, byName: devBy(), to: m.by, rt: 'answer', sdp: rtcPC.localDescription.sdp }));
+      } catch { rtcReset(); }
+    } else if (m.rt === 'answer') {
+      if (!rtcPC || rtcPC.signalingState !== 'have-local-offer') continue;
+      rtcPeerId = m.by;
+      rtcPeerName = m.byName || 'Gerät';
+      try { await rtcPC.setRemoteDescription({ type: 'answer', sdp: m.sdp }); await rtcFlushCandidates(); } catch { rtcReset(); }
+    } else if (m.rt === 'ice') {
+      if (!rtcPC) continue;
+      if (rtcPC.remoteDescription) { try { await rtcPC.addIceCandidate(m.cand); } catch { /* veraltet/ungültig */ } } else rtcPendingCand.push(m.cand);
+    }
+  }
+}
+// Eigene Änderungen automatisch schicken, sobald sich etwas geändert hat (gebündelt, nicht bei jedem Tastendruck einzeln)
+function rtcScheduleSend() {
+  if (!rtcChan || rtcChan.readyState !== 'open') return;
+  clearTimeout(rtcSendTimer);
+  rtcSendTimer = setTimeout(() => rtcSendProgress(false), RTC_SEND_DEBOUNCE_MS);
+}
+function rtcSendProgress(full) {
+  if (!rtcChan || rtcChan.readyState !== 'open' || !P || !P.live) return;
+  const from = devBy();
+  if (!peerOf(P, rtcPeerName)) setPeer(P, rtcPeerName, 0, false);
+  setPeerId(P, rtcPeerName, rtcPeerId);
+  const peer = peerOf(P, rtcPeerName);
+  const since = full ? 0 : (peer ? peer.lastSent : 0);
+  const f = buildProgress(P, { from, fromId: devId(), to: rtcPeerName, toId: rtcPeerId, since, full });
+  if (!f) return;
+  try { rtcChan.send(JSON.stringify(f)); setPeer(P, rtcPeerName, f.at); saveNow(); } catch { /* Kanal gerade nicht bereit */ }
+}
+// Eingehende Fortschritt-Nutzlast einarbeiten – wie „Fortschritt einfügen“, aber still (kein Projektwechsel/Nachfrage)
+function rtcApplyProgress(f) {
+  const target = progressTarget(db.projects, f);
+  if (!target || target !== P || isClosed()) return;
+  snapshot();
+  const r = mergeProgress(P, f);
+  if (!r) return;
+  const name = f.from || rtcPeerName;
+  // v130.15: Empfangenes gilt als „bis hierhin abgeglichen“ – sonst würde das Nächste eigene Senden denselben
+  // Stand gleich wieder zurückschicken (der Peer-Zeitstempel ist beiden Richtungen gemeinsam)
+  setPeer(P, name, f.at, false);
+  setPeerId(P, name, f.fi);
+  progBase.set(P, snapshotBase(P));
+  markAccepted(P, allMsgsRaw());
+  syncGrid();
+  changed();
+  redraw();
+}
+function renderRtcStatus() {
+  const el = $('rtc-status');
+  if (!el) return;
+  const on = rtcChan && rtcChan.readyState === 'open';
+  el.hidden = !(P && P.live && wantsLive(P));
+  el.textContent = on ? `🔗 Live verbunden mit ${rtcPeerName || 'Gerät'}` : rtcPC ? '🔗 Verbinde …' : '';
+  el.className = `rtc-status${on ? ' on' : ''}`;
 }
 // ---- v117: Rückkanal Einsatzleitung -> Hundeführer ----
 // Quittungen („✓ Gesehen“) und Nachrichten schreibt die EL selbst in den Raum des Einsatzes (derselbe Schlüssel wie im Auftrag, ls);
@@ -8004,6 +8145,7 @@ function switchProject(id) {
   if (recWatch !== null) stopRec(); // Aufzeichnung gehört zum alten Einsatz
   endGridFit();
   endVertex();
+  rtcReset(); // v130.15: Live-Verbindung gehört zum alten Einsatz – für den neuen baut sich bei Bedarf eine eigene auf
   saveNow();
   db.currentId = id;
   P = db.projects[id];
