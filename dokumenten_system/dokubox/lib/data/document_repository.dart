@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import 'database.dart';
+import '../extract/ref_matching.dart';
 import 'batch_numbering.dart';
 import 'finance.dart';
 import 'tasks.dart';
@@ -733,6 +734,73 @@ class DocumentRepository {
   Stream<Document?> watchDocument(String id) =>
       (db.select(db.documents)..where((d) => d.id.equals(id)))
           .watchSingleOrNull();
+
+  // ------------------------------------------------- Verknüpfen
+
+  /// Dokumente mit mindestens einer gleichen Referenz (normalisiert), als
+  /// Kandidaten für [matchRefs]. [excludeId]: das Dokument selbst.
+  Future<List<RefCandidate>> refCandidates(Map<String, Set<String>> refs,
+      {String? excludeId}) async {
+    final values = {
+      for (final v in refs.values.expand((v) => v)) normalizeRef(v),
+    }.where((v) => v.length >= 4).toList();
+    if (values.isEmpty) return const [];
+    final placeholders = List.filled(values.length, '?').join(',');
+    final rows = await db.customSelect(
+      'SELECT r.document_id, r.kind, r.value, d.correspondent_id '
+      'FROM extracted_refs r JOIN documents d ON d.id = r.document_id '
+      'WHERE d.deleted_at IS NULL '
+      "AND upper(replace(replace(replace(replace(r.value, ' ', ''), '-', ''), '/', ''), '.', '')) "
+      'IN ($placeholders)',
+      variables: [for (final v in values) Variable.withString(v)],
+      readsFrom: {db.extractedRefs, db.documents},
+    ).get();
+    final byDoc = <String, RefCandidate>{};
+    for (final r in rows) {
+      final id = r.read<String>('document_id');
+      if (id == excludeId) continue;
+      final c = byDoc.putIfAbsent(
+          id,
+          () => RefCandidate(
+              id, r.readNullable<String>('correspondent_id'), {}));
+      c.refs.putIfAbsent(r.read<String>('kind'), () => {})
+          .add(r.read<String>('value'));
+    }
+    return byDoc.values.toList();
+  }
+
+  /// Automatisch erzeugte Aufgabe (Widerspruchsfrist, Garantie,
+  /// Kündigung …) anlegen, verschieben oder – bei [dueAt] == null – löschen.
+  /// Zugeordnet über [origin], damit nichts doppelt entsteht.
+  Future<DocTask?> ensureAutoTask({
+    required String documentId,
+    required String origin,
+    required String action,
+    required DateTime? dueAt,
+    String note = '',
+  }) async {
+    final existing = await (db.select(db.docTasks)
+          ..where((t) =>
+              t.documentId.equals(documentId) &
+              t.origin.equals(origin) &
+              t.deletedAt.isNull()))
+        .getSingleOrNull();
+    if (dueAt == null) {
+      if (existing != null) await deleteTask(existing.id);
+      return null;
+    }
+    if (existing != null) {
+      if (existing.doneAt == null) {
+        await updateTask(existing.id, dueAt: dueAt, note: note);
+      }
+      return getTask(existing.id);
+    }
+    final task = await createTask(
+        documentId: documentId, action: action, note: note, dueAt: dueAt);
+    await (db.update(db.docTasks)..where((t) => t.id.equals(task.id)))
+        .write(DocTasksCompanion(origin: Value(origin)));
+    return getTask(task.id);
+  }
 
   // ------------------------------------------------- Aufgaben/Erinnerungen
 
