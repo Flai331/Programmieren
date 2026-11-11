@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.16';
+const APP_VERSION = 'v130.17';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -7266,9 +7266,12 @@ $('handed').addEventListener('click', async () => {
   });
   if (ok) { delete P.handedOver; changed(); }
 });
-$('ho-send').addEventListener('click', () => handoverQr(P, true));
-// Einsatz (ganz oder Unterabschnitt aus „Weitergeben“) per QR-Code an ein Gerät der Einsatzleitung
-async function handoverQr(proj, whole) {
+$('ho-send').addEventListener('click', () => handoverQr(P, 'handover'));
+// Einsatz (ganz oder Unterabschnitt aus „Weitergeben“) per QR-Code an ein Gerät der Einsatzleitung.
+// mode: 'handover' (dieses Gerät gibt ab, z. B. Handy -> Tablet), 'device' (bleibt zusätzlich aktiv, z. B. ELW),
+// 'ua' (Unterabschnitt). 'handover' und 'device' geben den ganzen Einsatz weiter, nur 'ua' einen Ausschnitt.
+async function handoverQr(proj, mode) {
+  const whole = mode !== 'ua';
   stamp();
   saveNow();
   // erst ein QR-Code mit wenig Vereinfachung, sonst mehrere im Wechsel
@@ -7296,12 +7299,18 @@ async function handoverQr(proj, whole) {
     : 'Auf dem anderen Gerät „Einsätze → 📷 Einsatz übernehmen“ antippen oder den Code mit der Kamera scannen.';
   const pc = ' Zum PC: „Teilen“ oder „Link kopieren“ (z. B. WhatsApp Web, Mail).';
   const lost = miss.length ? ` Nicht dabei: ${miss.join(', ')} – dafür „Suchgebiet als Datei senden“.` : '';
-  // das neue Gerät gleich als Empfänger für „Fortschritt senden“ merken (Name lässt sich dort ändern bzw. neu eintragen)
+  // das neue Gerät gleich als Empfänger für „Fortschritt senden“ merken (Name lässt sich dort ändern bzw. neu eintragen);
+  // v130.17: role merkt, ob es eine Übergabe (löst ab) oder ein zusätzliches, dauerhaft aktives Gerät (z. B. ELW) ist
   const now = Date.now();
-  setPeer(P, `Gerät ${hhmm(now)}${whole ? '' : ' (UA)'}`, now);
+  const suf = mode === 'ua' ? ' (UA)' : mode === 'device' ? ' (ELW)' : '';
+  const peer = setPeer(P, `Gerät ${hhmm(now)}${suf}`, now);
+  peer.role = mode;
   touch();
-  if (whole) qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
-  showQr(link, `📲 ${whole ? 'Einsatz' : 'Unterabschnitt'} „${proj.title || 'Suchgebiet'}“ übergeben`, how + pc + lost, parts);
+  if (mode === 'handover') qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
+  const title = mode === 'handover' ? `📲 Einsatz „${proj.title || 'Suchgebiet'}“ übergeben`
+    : mode === 'device' ? `➕ Einsatz „${proj.title || 'Suchgebiet'}“ an weiteres Gerät freigeben`
+      : `📲 Unterabschnitt „${proj.title || 'Suchgebiet'}“ übergeben`;
+  showQr(link, title, how + pc + lost, parts);
 }
 $('ho-scan').addEventListener('click', () => { closePanels(); startScan(); });
 
@@ -9041,10 +9050,11 @@ function openExport() {
 }
 
 // ---------- Teilen: „An wen?“ (Empfänger), „Was?“ (Umfang) und „Wie?“ (Weg) ----------
-const SHARE_TO = ['ua', 'el', 'other'];
+const SHARE_TO = ['ua', 'el', 'elw', 'other'];
 const SHARE_HINT = {
   ua: 'Unterabschnitt: bearbeitbar ist nur das ausgewählte Gebiet, der Rest ist nur zum Ansehen (QR-Code an ein Gerät mit dieser App).',
-  el: 'Weiteres EL-Tablet / Einsatzleitwagen: bekommt den ganzen Einsatz, Rückmeldungen laufen dann dort ein (QR-Code).',
+  el: 'Übergabe (dieses Gerät gibt ab, z. B. Handy → Tablet): bekommt den ganzen Einsatz, Rückmeldungen laufen dann dort ein (QR-Code).',
+  elw: 'Weiteres Gerät, z. B. ELW (bleibt zusätzlich aktiv): bekommt den ganzen Einsatz dazu, dieses Gerät läuft normal weiter (QR-Code).',
   other: 'Stellen ohne die App (Polizei, Feuerwehr, Druck, Garmin, Mail …): Datei oder PDF, kein QR-Code.',
 };
 let shareScope = 'all';
@@ -9063,26 +9073,26 @@ function openShare() {
   }
   // Rückkehr von der Kartenauswahl ohne passenden Empfänger -> „Sonstige“ (alle Wege außer QR)
   if (!shareTo && (shareScope === 'pick' || shareScope === 'area' || shareScope === 'areas') && shareSel) shareTo = 'other';
-  if (shareTo === 'el' || shareScope === 'all') { if (shareTo) shareSel = selectAll(P); }
+  if (shareTo === 'el' || shareTo === 'elw' || shareScope === 'all') { if (shareTo) shareSel = selectAll(P); }
   renderShare();
   openPanel('panel-share');
 }
 // Empfänger setzen und den Umfang dazu sinnvoll vorbelegen
 function applyShareTo(to) {
   shareTo = to;
-  if (to === 'el') { shareScope = 'all'; shareSel = selectAll(P); }
+  if (to === 'el' || to === 'elw') { shareScope = 'all'; shareSel = selectAll(P); }
   else if (to === 'ua') {
     if (shareScope === 'all' || !shareSel) { shareScope = 'pick'; shareName = 'Auswahl'; shareSel = emptySel(); }
   } else if (!shareSel) { shareScope = 'all'; shareSel = selectAll(P); }
 }
 function renderShare() {
   const to = shareTo;
-  const app = to === 'ua' || to === 'el'; // nur QR-Übergabe
+  const app = to === 'ua' || to === 'el' || to === 'elw'; // nur QR-Übergabe
   document.querySelectorAll('#share-to button').forEach((b) => b.classList.toggle('active', b.dataset.to === to));
   document.querySelectorAll('#share-scopes button').forEach((b) => b.classList.toggle('active', b.dataset.scope === shareScope));
   document.querySelector('#share-scopes [data-scope=all]').hidden = to === 'ua';
   $('share-tohint').textContent = to ? SHARE_HINT[to] : 'Zuerst wählen, an wen es geht – dann kommen die passenden Wege.';
-  $('share-what').hidden = !to || to === 'el';
+  $('share-what').hidden = !to || to === 'el' || to === 'elw';
   $('share-how').hidden = !to;
   const sum = shareSel ? selSummary(P, shareSel) : '';
   $('share-summary').textContent = `${shareScope === 'all' ? 'Ganzer Einsatz' : shareLabel()}: ${sum || 'nichts ausgewählt'}`;
@@ -9158,9 +9168,10 @@ $('share-save').addEventListener('click', () => shareRun(async () => { const f =
 $('share-file').addEventListener('click', () => $('proj-share').click());
 $('share-qr').addEventListener('click', () => shareRun(async () => {
   stamp(); // feste IDs vor dem Ausschneiden eines Unterabschnitts
-  if (shareTo === 'el') return handoverQr(P, true);
+  if (shareTo === 'el') return handoverQr(P, 'handover');
+  if (shareTo === 'elw') return handoverQr(P, 'device'); // v130.17: zusätzliches, dauerhaft aktives Gerät (z. B. ELW)
   if (shareTo === 'ua') ensureLive(P, liveUrlNow()); // v127: der UA bekommt den Live-Kanal des Grund-Einsatzes mit
-  if (shareTo === 'ua') return handoverQr(subsetProject(P, shareSel, uaTitle(P.title, shareLabel()), { base: true }), false); // v128: nie „UA UA …“
+  if (shareTo === 'ua') return handoverQr(subsetProject(P, shareSel, uaTitle(P.title, shareLabel()), { base: true }), 'ua'); // v128: nie „UA UA …“
 }));
 $('share-pdf').addEventListener('click', () => shareRun(async () => {
   if (shareScope === 'all') return openExport();
