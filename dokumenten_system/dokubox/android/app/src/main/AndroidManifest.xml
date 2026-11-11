@@ -53,6 +53,16 @@
                 <data android:mimeType="application/pdf"/>
             </intent-filter>
         </activity>
+        <!-- E-Mail mit Anhang an eine bestimmte Adresse (dokubox/email) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.dokubox.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/dokubox_file_paths" />
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

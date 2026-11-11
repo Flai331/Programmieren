@@ -3,23 +3,28 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../app_services.dart';
+import '../data/cases.dart';
 import '../data/database.dart';
 import '../data/deadline_settings.dart';
 import '../data/document_repository.dart';
 import '../data/finance.dart';
+import '../reports/cover_letter.dart';
 import '../scan/scan_service.dart';
-import 'confirm_screen.dart';
-import 'finance_actions.dart';
-import 'fill_screen.dart';
-import 'pdf_preview.dart';
-import '../data/cases.dart';
+import '../share/email_sender.dart';
+import '../share/templates.dart';
 import 'attachments_section.dart';
 import 'cases_screen.dart';
+import 'confirm_screen.dart';
 import 'contracts_screen.dart';
+import 'fill_screen.dart';
+import 'finance_actions.dart';
 import 'girocode_screen.dart';
+import 'pdf_preview.dart';
+import 'report_share.dart';
 import 'share_name.dart';
 import 'task_widgets.dart';
 
@@ -72,6 +77,164 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
             question: 'Aufgabe „Bezahlen“ abhaken?');
         await _load();
     }
+  }
+
+  Future<Correspondent?> _firm() async => _doc?.correspondentId == null
+      ? null
+      : services.repository.getCorrespondent(_doc!.correspondentId!);
+
+  Future<String?> _askText(String title, String hint,
+      {String initial = '', int lines = 1}) {
+    final c = TextEditingController(text: initial);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+            controller: c,
+            autofocus: true,
+            minLines: lines,
+            maxLines: lines + 3,
+            decoration: InputDecoration(hintText: hint)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, c.text), child: const Text('OK')),
+        ],
+      ),
+    );
+  }
+
+  /// Name des Absenders (erste Person aus „Meine Daten“).
+  Future<({String name, Map<String, String> values})> _me() async {
+    final persons = await services.repository.watchPersons().first;
+    if (persons.isEmpty) return (name: '', values: <String, String>{});
+    final v = await services.repository.personalValues(persons.first);
+    final name = [v['vorname'], v['nachname']]
+        .whereType<String>()
+        .where((s) => s.trim().isNotEmpty)
+        .join(' ');
+    return (name: name, values: v);
+  }
+
+  Future<void> _mailToFirm() async {
+    final doc = _doc!;
+    final firm = await _firm();
+    var email = firm?.email ?? '';
+    if (email.isEmpty) {
+      final entered = await _askText(
+          'E-Mail-Adresse${firm == null ? '' : ' von ${firm.name}'}',
+          'name@beispiel.de');
+      if (entered == null || entered.trim().isEmpty) return;
+      email = entered.trim();
+      if (firm != null) {
+        await services.repository.saveCorrespondent(
+            id: firm.id,
+            name: firm.name,
+            aliases: firm.aliases,
+            categoryId: firm.categoryId,
+            contact: (
+              email: email,
+              fax: firm.fax ?? '',
+              postalAddress: firm.postalAddress ?? '',
+              subject: firm.mailSubjectTemplate ?? '',
+              body: firm.mailBodyTemplate ?? '',
+            ));
+      }
+    }
+    final filled = doc.filledPdfPath != null;
+    final path = await ScanService.absolutePdfPath(filled ? doc.filledPdfPath! : doc.pdfPath);
+    if (!mounted) return;
+    final copy = await askShareCopy(context,
+        sourcePath: path,
+        rememberKey: '${doc.id}_${filled ? 'filled' : 'original'}',
+        suggestion: suggestedShareName(doc.docNumber, doc.title, filled: filled));
+    if (copy == null) return;
+    final me = await _me();
+    final v = templateValues(
+        docNumber: doc.docNumber,
+        title: doc.title,
+        docDate: doc.docDate,
+        firm: firm?.name ?? '',
+        refs: await services.repository.refsForDocument(doc.id),
+        name: me.name);
+    await sendEmail(
+      to: [email],
+      subject: fillTemplate(firm?.mailSubjectTemplate ?? '{titel} – {kdnr}', v),
+      body: (firm?.mailBodyTemplate ?? '').trim().isEmpty
+          ? defaultMailBody(v)
+          : fillTemplate(firm!.mailBodyTemplate!, v),
+      files: [copy],
+    );
+    if (!mounted) return;
+    await offerCompleteTasks(context,
+        documentId: doc.id,
+        actions: {'versenden'},
+        question: 'Versendet – Aufgabe abhaken?');
+  }
+
+  Future<void> _coverLetter() async {
+    final doc = _doc!;
+    final firm = await _firm();
+    var address = firm?.postalAddress ?? '';
+    if (address.trim().isEmpty) {
+      final entered = await _askText('Anschrift des Empfängers',
+          'Straße\nPLZ Ort', lines: 3);
+      if (entered == null) return;
+      address = entered;
+    }
+    final me = await _me();
+    final refs = await services.repository.refsForDocument(doc.id);
+    final v = templateValues(
+        docNumber: doc.docNumber,
+        title: doc.title,
+        docDate: doc.docDate,
+        firm: firm?.name ?? '',
+        refs: refs,
+        name: me.name);
+    final sender = [
+      me.name,
+      me.values['strasse'] ?? '',
+      me.values['plz_ort'] ?? '',
+    ].where((s) => s.trim().isNotEmpty).join('\n');
+    final reference = [
+      if (refs['AZ']?.isNotEmpty ?? false) 'Aktenzeichen: ${refs['AZ']!.first}',
+      if (refs['KDNR']?.isNotEmpty ?? false) 'Kundennummer: ${refs['KDNR']!.first}',
+      if (refs['VSNR']?.isNotEmpty ?? false) 'Vertrag/Versicherung: ${refs['VSNR']!.first}',
+      if (refs['STNR']?.isNotEmpty ?? false) 'Steuernummer: ${refs['STNR']!.first}',
+    ].join(' · ');
+    final templates = await services.repository.allTemplates();
+    final signature = templates.isEmpty
+        ? null
+        : await services.templates.bytes(templates.first.id);
+    final bytes = await buildCoverLetter(
+      senderLines: sender,
+      recipientLines: [firm?.name ?? '', address].where((s) => s.trim().isNotEmpty).join('\n'),
+      subject: fillTemplate(firm?.mailSubjectTemplate ?? '{titel}', v),
+      reference: reference,
+      body: (firm?.mailBodyTemplate ?? '').trim().isEmpty
+          ? defaultMailBody(v)
+          : fillTemplate(firm!.mailBodyTemplate!, v),
+      enclosures: [doc.title.isEmpty ? doc.docNumber : doc.title],
+      fax: firm?.fax,
+      totalPages: 1 + doc.pageCount,
+      signature: signature,
+      signerName: me.name,
+      place: (me.values['plz_ort'] ?? '').replaceFirst(RegExp(r'^\d{5}\s*'), ''),
+      font: await reportFont(),
+    );
+    final dir = await getTemporaryDirectory();
+    final cover = File('${dir.path}/${safePdfFileName('Anschreiben ${doc.docNumber}')}');
+    await cover.writeAsBytes(bytes, flush: true);
+    final filled = doc.filledPdfPath != null;
+    final docPath =
+        await ScanService.absolutePdfPath(filled ? doc.filledPdfPath! : doc.pdfPath);
+    await SharePlus.instance.share(ShareParams(
+      files: [
+        XFile(cover.path, mimeType: 'application/pdf'),
+        XFile(docPath, mimeType: 'application/pdf'),
+      ],
+      subject: 'Anschreiben ${doc.docNumber}',
+    ));
   }
 
   Future<void> _editContract() async {
@@ -545,6 +708,10 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                   _openExternal();
                 case 'contract':
                   _editContract();
+                case 'mail':
+                  _mailToFirm();
+                case 'cover':
+                  _coverLetter();
                 case 'girocode':
                   openGiroCode(context, _doc!);
                 case 'destroyed':
@@ -557,6 +724,10 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
               const PopupMenuItem(value: 'share', child: Text('PDF teilen')),
               const PopupMenuItem(
                   value: 'external', child: Text('In anderer App öffnen')),
+              const PopupMenuItem(
+                  value: 'mail', child: Text('Per E-Mail an die Firma')),
+              const PopupMenuItem(
+                  value: 'cover', child: Text('Anschreiben/Deckblatt (Brief, Fax)')),
               const PopupMenuItem(
                   value: 'contract', child: Text('Als Vertrag erfassen')),
               const PopupMenuItem(

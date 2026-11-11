@@ -53,6 +53,38 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // E-Mail mit Empfänger, Betreff, Text und Anhängen (share_plus kann
+        // keinen Empfänger setzen).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dokubox/email")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "send") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                try {
+                    val to = call.argument<List<String>>("to") ?: emptyList()
+                    val files = call.argument<List<String>>("files") ?: emptyList()
+                    val uris = ArrayList(files.map {
+                        androidx.core.content.FileProvider.getUriForFile(
+                            this, "$packageName.dokubox.files", File(it))
+                    })
+                    val send = Intent(
+                        if (uris.size > 1) Intent.ACTION_SEND_MULTIPLE else Intent.ACTION_SEND
+                    ).apply {
+                        type = "application/pdf"
+                        putExtra(Intent.EXTRA_EMAIL, to.toTypedArray())
+                        putExtra(Intent.EXTRA_SUBJECT, call.argument<String>("subject") ?: "")
+                        putExtra(Intent.EXTRA_TEXT, call.argument<String>("body") ?: "")
+                        if (uris.size > 1) putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                        else if (uris.size == 1) putExtra(Intent.EXTRA_STREAM, uris[0])
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    startActivity(Intent.createChooser(send, "E-Mail senden"))
+                    result.success(true)
+                } catch (e: Exception) {
+                    result.error("email", e.message, null)
+                }
+            }
         collect(intent)
     }
 

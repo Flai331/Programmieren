@@ -114,6 +114,14 @@ class _FirmDialog extends StatefulWidget {
 class _FirmDialogState extends State<_FirmDialog> {
   late final TextEditingController _name;
   late final TextEditingController _aliases;
+  late final _email = TextEditingController(text: widget.firm?.email ?? '');
+  late final _fax = TextEditingController(text: widget.firm?.fax ?? '');
+  late final _address =
+      TextEditingController(text: widget.firm?.postalAddress ?? '');
+  late final _subject =
+      TextEditingController(text: widget.firm?.mailSubjectTemplate ?? '');
+  late final _body =
+      TextEditingController(text: widget.firm?.mailBodyTemplate ?? '');
   String? _categoryId;
   List<Category> _categories = const [];
 
@@ -145,6 +153,9 @@ class _FirmDialogState extends State<_FirmDialog> {
   void dispose() {
     _name.dispose();
     _aliases.dispose();
+    for (final c in [_email, _fax, _address, _subject, _body]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -156,6 +167,13 @@ class _FirmDialogState extends State<_FirmDialog> {
         name: _name.text,
         aliases: _aliases.text,
         categoryId: _categoryId,
+        contact: (
+          email: _email.text,
+          fax: _fax.text,
+          postalAddress: _address.text,
+          subject: _subject.text,
+          body: _body.text,
+        ),
       );
     } catch (_) {
       if (mounted) {
@@ -242,6 +260,40 @@ class _FirmDialogState extends State<_FirmDialog> {
                     'im Dokument, wird diese Firma vorgeschlagen.',
                 helperMaxLines: 3,
               ),
+            ),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Kontakt & E-Mail-Vorlage'),
+              children: [
+                TextField(
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(labelText: 'E-Mail')),
+                TextField(
+                    controller: _fax,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(labelText: 'Fax')),
+                TextField(
+                    controller: _address,
+                    minLines: 2,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                        labelText: 'Postanschrift (für Anschreiben)')),
+                TextField(
+                    controller: _subject,
+                    decoration: const InputDecoration(
+                        labelText: 'Betreff-Vorlage',
+                        hintText: '{titel} – {kdnr}')),
+                TextField(
+                    controller: _body,
+                    minLines: 3,
+                    maxLines: 8,
+                    decoration: const InputDecoration(
+                        labelText: 'Text-Vorlage',
+                        helperText: 'Platzhalter: {nummer} {titel} {datum} '
+                            '{firma} {kdnr} {az} {rgnr} {vsnr} {name}',
+                        helperMaxLines: 3)),
+              ],
             ),
           ],
         ),

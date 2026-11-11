@@ -176,6 +176,8 @@ class ClaimStats {
       amountCents - openCents <= 0 ? 0 : reimbursedCents / (amountCents - openCents);
 }
 
+String? _nn(String s) => s.trim().isEmpty ? null : s.trim();
+
 class DocumentRepository {
   final AppDatabase db;
 
@@ -1654,6 +1656,8 @@ class DocumentRepository {
     required String name,
     String aliases = '',
     String? categoryId,
+    ({String email, String fax, String postalAddress, String subject, String body})?
+        contact,
   }) async {
     final trimmed = name.trim();
     final aliasList = [
@@ -1671,6 +1675,15 @@ class DocumentRepository {
         name: Value(trimmed),
         aliases: Value(aliasList),
         categoryId: Value(categoryId),
+        email: contact == null ? const Value.absent() : Value(_nn(contact.email)),
+        fax: contact == null ? const Value.absent() : Value(_nn(contact.fax)),
+        postalAddress: contact == null
+            ? const Value.absent()
+            : Value(_nn(contact.postalAddress)),
+        mailSubjectTemplate:
+            contact == null ? const Value.absent() : Value(_nn(contact.subject)),
+        mailBodyTemplate:
+            contact == null ? const Value.absent() : Value(_nn(contact.body)),
         updatedAt: Value(DateTime.now()),
       ),
     );
