@@ -5,6 +5,7 @@ import '../extract/ref_matching.dart';
 import '../extract/duplicates.dart';
 import 'batch_numbering.dart';
 import 'cases.dart';
+import 'contracts.dart';
 import 'finance.dart';
 import 'tasks.dart';
 
@@ -161,6 +162,17 @@ class FinalNumbering {
       required this.oldNumber,
       required this.sender,
       required this.renames});
+}
+
+class ClaimStats {
+  final String target;
+  int count = 0, rejected = 0, open = 0;
+  int amountCents = 0, reimbursedCents = 0, openCents = 0;
+  ClaimStats(this.target);
+
+  /// Erstattungsquote der abgeschlossenen Einreichungen (0…1).
+  double get quota =>
+      amountCents - openCents <= 0 ? 0 : reimbursedCents / (amountCents - openCents);
 }
 
 class DocumentRepository {
@@ -458,6 +470,135 @@ class DocumentRepository {
         updatedAt: Value(DateTime.now()),
       ),
     );
+  }
+
+  Future<Map<String, Set<String>>> refsForDocument(String documentId) async {
+    final rows = await (db.select(db.extractedRefs)
+          ..where((r) => r.documentId.equals(documentId)))
+        .get();
+    final refs = <String, Set<String>>{};
+    for (final r in rows) {
+      refs.putIfAbsent(r.kind, () => {}).add(r.value);
+    }
+    return refs;
+  }
+
+  Future<void> setCorrespondentBank(String id, {String? iban, String? bic}) =>
+      (db.update(db.correspondents)..where((c) => c.id.equals(id))).write(
+        CorrespondentsCompanion(
+          iban: iban == null ? const Value.absent() : Value(iban),
+          bic: bic == null ? const Value.absent() : Value(bic),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  // ------------------------------------------------- Verträge
+
+  Stream<List<({Contract c, String firm, String? categoryId})>>
+      watchContracts() {
+    final q = db.select(db.contracts).join([
+      leftOuterJoin(db.correspondents,
+          db.correspondents.id.equalsExp(db.contracts.correspondentId)),
+    ])
+      ..where(db.contracts.deletedAt.isNull())
+      ..orderBy([OrderingTerm.asc(db.contracts.title)]);
+    return q.watch().map((rows) => [
+          for (final r in rows)
+            (
+              c: r.readTable(db.contracts),
+              firm: r.readTableOrNull(db.correspondents)?.name ?? '',
+              categoryId: r.readTableOrNull(db.correspondents)?.categoryId,
+            ),
+        ]);
+  }
+
+  Future<Contract?> contractForDocument(String documentId) =>
+      (db.select(db.contracts)
+            ..where((c) => c.documentId.equals(documentId) & c.deletedAt.isNull()))
+          .getSingleOrNull();
+
+  /// Vertrag speichern; plant die Kündigungs-Erinnerung [leadDays] vor dem
+  /// letzten Kündigungstag.
+  Future<Contract> saveContract(ContractsCompanion data,
+      {String? id, int leadDays = 14, DateTime? now}) async {
+    now ??= DateTime.now();
+    late Contract c;
+    if (id == null) {
+      c = await db.into(db.contracts).insertReturning(data);
+    } else {
+      await (db.update(db.contracts)..where((x) => x.id.equals(id)))
+          .write(data.copyWith(updatedAt: Value(now)));
+      c = (await (db.select(db.contracts)..where((x) => x.id.equals(id)))
+          .getSingle());
+    }
+    final docId = c.documentId;
+    if (docId != null) {
+      final end = nextTermEnd(
+          minTermUntil: c.minTermUntil, renewMonths: c.autoRenewMonths, now: now);
+      final last = c.cancelledAt != null
+          ? null
+          : lastCancelDay(
+              termEnd: end,
+              noticeValue: c.noticeValue,
+              noticeUnit: c.noticeUnit,
+              noticeToEndOf: c.noticeToEndOf,
+              now: now);
+      // Erinnerung [leadDays] vorher; ist das schon vorbei, aber die Frist
+      // noch nicht, gleich erinnern. Frist verpasst → keine Erinnerung.
+      DateTime? due;
+      if (last != null && !last.isBefore(DateTime(now.year, now.month, now.day))) {
+        due = DateTime(last.year, last.month, last.day - leadDays, 9);
+        if (due.isBefore(now)) due = now.add(const Duration(hours: 1));
+      }
+      String date(DateTime d) =>
+          '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+      await ensureAutoTask(
+        documentId: docId,
+        origin: 'kuendigung:${c.id}',
+        action: 'kuendigen',
+        dueAt: due,
+        note: last == null
+            ? ''
+            : 'Kündigung muss bis ${date(last)} eingehen – Tarif prüfen?',
+      );
+    }
+    return c;
+  }
+
+  Future<void> deleteContract(String id) =>
+      (db.update(db.contracts)..where((c) => c.id.equals(id)))
+          .write(ContractsCompanion(deletedAt: Value(DateTime.now())));
+
+  // ------------------------------------------------- Erstattungs-Statistik
+
+  /// Pro Stelle und Jahr (Einreichdatum, sonst Dokumentdatum): Anzahl,
+  /// eingereichte Summe, erstattet, abgelehnt, offen.
+  Future<List<ClaimStats>> claimStats(int year) async {
+    final q = db.select(db.claims).join([
+      innerJoin(db.documents, db.documents.id.equalsExp(db.claims.documentId)),
+    ])
+      ..where(db.claims.deletedAt.isNull() & db.documents.deletedAt.isNull());
+    final stats = <String, ClaimStats>{};
+    for (final r in await q.get()) {
+      final c = r.readTable(db.claims);
+      final d = r.readTable(db.documents);
+      final when = c.submittedAt ?? d.docDate ?? d.scannedAt;
+      if (when.year != year) continue;
+      final s = stats.putIfAbsent(c.target, () => ClaimStats(c.target));
+      s.count++;
+      s.amountCents += d.amountCents ?? 0;
+      if (c.status == ClaimStatus.reimbursed || c.status == ClaimStatus.partly) {
+        s.reimbursedCents += c.reimbursedCents ?? d.amountCents ?? 0;
+      } else if (c.status == ClaimStatus.rejected) {
+        s.rejected++;
+      } else {
+        s.open++;
+        s.openCents += d.amountCents ?? 0;
+      }
+    }
+    final list = stats.values.toList()
+      ..sort((a, b) => b.amountCents.compareTo(a.amountCents));
+    return list;
   }
 
   // ------------------------------------------------- Ausdrucke

@@ -17,6 +17,8 @@ import 'fill_screen.dart';
 import 'pdf_preview.dart';
 import '../data/cases.dart';
 import 'cases_screen.dart';
+import 'contracts_screen.dart';
+import 'girocode_screen.dart';
 import 'share_name.dart';
 import 'task_widgets.dart';
 
@@ -69,6 +71,13 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
             question: 'Aufgabe „Bezahlen“ abhaken?');
         await _load();
     }
+  }
+
+  Future<void> _editContract() async {
+    final doc = _doc!;
+    final existing = await services.repository.contractForDocument(doc.id);
+    if (!mounted) return;
+    await editContract(context, contract: existing, doc: doc);
   }
 
   Future<void> _addTask({String? action}) async {
@@ -533,6 +542,10 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                   _sharePdf();
                 case 'external':
                   _openExternal();
+                case 'contract':
+                  _editContract();
+                case 'girocode':
+                  openGiroCode(context, _doc!);
                 case 'destroyed':
                   _markDestroyed();
                 case 'delete':
@@ -543,6 +556,10 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
               const PopupMenuItem(value: 'share', child: Text('PDF teilen')),
               const PopupMenuItem(
                   value: 'external', child: Text('In anderer App öffnen')),
+              const PopupMenuItem(
+                  value: 'contract', child: Text('Als Vertrag erfassen')),
+              const PopupMenuItem(
+                  value: 'girocode', child: Text('Überweisen (GiroCode)')),
               const PopupMenuItem(
                   value: 'destroyed',
                   child: Text('Original als vernichtet markieren')),

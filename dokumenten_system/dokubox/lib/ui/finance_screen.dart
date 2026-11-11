@@ -5,7 +5,9 @@ import '../app_services.dart';
 import '../data/database.dart';
 import '../data/document_repository.dart';
 import '../data/finance.dart';
+import 'contracts_screen.dart';
 import 'document_detail_screen.dart';
+import 'girocode_screen.dart';
 import 'finance_actions.dart';
 
 final _dateFormat = DateFormat('dd.MM.yyyy');
@@ -19,21 +21,24 @@ class FinanceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Offene Posten'),
           bottom: const TabBar(
+            isScrollable: true,
             tabs: [
               Tab(icon: Icon(Icons.payments_outlined), text: 'Zu bezahlen'),
               Tab(
                   icon: Icon(Icons.local_hospital_outlined),
                   text: 'Erstattungen'),
+              Tab(icon: Icon(Icons.description_outlined), text: 'Verträge'),
+              Tab(icon: Icon(Icons.bar_chart), text: 'Statistik'),
             ],
           ),
         ),
         body: const TabBarView(
-          children: [_PaymentsTab(), _ClaimsTab()],
+          children: [_PaymentsTab(), _ClaimsTab(), ContractsTab(), ClaimStatsTab()],
         ),
       ),
     );
@@ -126,10 +131,7 @@ class _PaymentsTab extends StatelessWidget {
             ),
             for (final doc in docs)
               ListTile(
-                leading: Icon(
-                  isOverdue(doc) ? Icons.warning_amber : Icons.receipt_long,
-                  color: isOverdue(doc) ? theme.colorScheme.error : null,
-                ),
+
                 title: Text(_docLabel(doc)),
                 subtitle: Text([
                   doc.docNumber,
@@ -144,6 +146,12 @@ class _PaymentsTab extends StatelessWidget {
                     ? theme.textTheme.bodyMedium
                         ?.copyWith(color: theme.colorScheme.error)
                     : null,
+                leading: IconButton(
+                  tooltip: 'Überweisen (GiroCode)',
+                  icon: Icon(Icons.qr_code_2,
+                      color: isOverdue(doc) ? theme.colorScheme.error : null),
+                  onPressed: () => openGiroCode(context, doc),
+                ),
                 trailing: FilledButton.tonal(
                   onPressed: () => markPaid(context, doc),
                   child: const Text('Bezahlt'),
