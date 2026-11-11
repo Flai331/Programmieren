@@ -55,6 +55,10 @@ add_subdirectory("runner")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+# Neuere Visual-Studio-Versionen brechen sonst bei local_auth_windows und
+# flutter_local_notifications_windows ab (experimentelle Coroutinen).
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 include(flutter/generated_plugins.cmake)
 
 
