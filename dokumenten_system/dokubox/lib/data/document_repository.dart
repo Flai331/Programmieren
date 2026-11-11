@@ -1782,6 +1782,30 @@ class DocumentRepository {
     }
   }
 
+  /// Suchindex eines Dokuments neu aufbauen (z. B. nach dem Abgleich).
+  Future<void> rebuildFts(String documentId) async {
+    final doc = await getDocument(documentId);
+    await db.customStatement(
+        'DELETE FROM document_fts WHERE document_id = ?', [documentId]);
+    if (doc == null || doc.deletedAt != null) return;
+    final firm = doc.correspondentId == null
+        ? null
+        : await getCorrespondent(doc.correspondentId!);
+    await _writeFtsEntry(
+      documentId,
+      doc.docNumber,
+      DocumentDraft(
+        title: doc.title,
+        correspondentName: firm?.name,
+        docType: doc.docType,
+        tagNames: await tagNamesForDocument(documentId),
+        storageLocation: doc.storageLocation,
+      ),
+      doc.ocrText,
+      await refsForDocument(documentId),
+    );
+  }
+
   Future<void> _writeFtsEntry(String documentId, String docNumber,
       DocumentDraft draft, String ocrText, Map<String, Set<String>> refs) async {
     final content = [
