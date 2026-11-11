@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.15';
+const APP_VERSION = 'v130.16';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -3696,11 +3696,11 @@ $('hf-rec').addEventListener('click', () => (recWatch !== null ? stopRec() : sta
 
 // Markieren: Art wählen, Position = GPS-Standort oder auf der Karte angetippt
 const HF_MARKS = [['⚠️', 'Anzeige'], ['✅', 'Fund'], ['🐾', 'Spur'], ['🎒', 'Gegenstand'], ['❗', 'Gefahr'], ['📝', 'Hinweis']];
-// Mit GPS: Punkt am Standort. Ohne GPS: fragen – auf der Karte antippen oder Standort einschalten
+// v130.16: immer explizit fragen – auf der Karte antippen oder am eigenen Standort markieren
+// (vorher wurde bei vorhandenem GPS-Fix automatisch der Standort genommen, ohne Wahlmöglichkeit)
 $('hf-mark').addEventListener('click', () => {
-  if (lastPos) return hfMarkDialog({ lat: lastPos[0], lon: lastPos[1] }, 'Position: dein GPS-Standort.');
   openDlg((box, close) => {
-    dlgHead(box, '📍 Markieren', 'Der Standort (GPS) ist aus. Wo soll der Punkt hin?');
+    dlgHead(box, '📍 Markieren', 'Wo soll der Punkt hin?');
     const list = document.createElement('div');
     list.className = 'dlg-btns';
     box.appendChild(list);
@@ -3709,7 +3709,8 @@ $('hf-mark').addEventListener('click', () => {
       setTool('hfmarkpt');
       toast('Auf die Karte tippen: dort wird der Punkt gesetzt', 5000);
     });
-    const gpsBtn = dlgButton(list, '🛰️ Standort einschalten', 'primary', () => {
+    const gpsBtn = dlgButton(list, '📍 Punkt = mein Standort', 'primary', () => {
+      if (lastPos) { close(true); return hfMarkDialog({ lat: lastPos[0], lon: lastPos[1] }, 'Position: dein GPS-Standort.'); }
       if (!navigator.geolocation) return toast('Standort wird nicht unterstützt');
       startGps(false);
       gpsBtn.disabled = true;
