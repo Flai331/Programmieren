@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.17';
+const APP_VERSION = 'v130.18';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -7267,11 +7267,41 @@ $('handed').addEventListener('click', async () => {
   if (ok) { delete P.handedOver; changed(); }
 });
 $('ho-send').addEventListener('click', () => handoverQr(P, 'handover'));
+// v130.18: Name des Geräts (bzw. UA), an das übergeben/geteilt wird, gleich beim Teilen abfragen – statt des
+// bisherigen „Gerät HH:MM“-Platzhalters. Hilft später beim Zuordnen von Rückmeldungen und beim gezielten Senden.
+const PEER_NAME_SUGG = { handover: ['Tablet EL', 'Handy EL', 'PC EL'], device: ['ELW', 'EL 2', 'Tablet EL'], ua: ['UA'] };
+async function askPeerName(mode, fallback) {
+  const title = mode === 'device' ? '📛 Name des weiteren Geräts' : mode === 'ua' ? '📛 Name des Unterabschnitts (UA)' : '📛 Name des übernehmenden Geräts';
+  const hint = mode === 'device' ? 'Wie soll das zusätzliche, dauerhaft aktive Gerät heißen (z. B. der ELW)? Hilft später beim gezielten Senden von Aufträgen/Zeichnungen.'
+    : mode === 'ua' ? 'Wie soll dieser Unterabschnitt bzw. das Gerät dort heißen?'
+      : 'Wie soll das Gerät heißen, das den Einsatz übernimmt? Hilft später beim Zuordnen von Rückmeldungen.';
+  const sugg = PEER_NAME_SUGG[mode] || [];
+  return openDlg((box, close) => {
+    dlgHead(box, title, hint);
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.placeholder = sugg[0] || 'Name';
+    inp.value = fallback || '';
+    inp.setAttribute('list', 'peer-name-sugg');
+    const dl = document.createElement('datalist');
+    dl.id = 'peer-name-sugg';
+    for (const v of sugg) { const o = document.createElement('option'); o.value = v; dl.appendChild(o); }
+    box.append(inp, dl);
+    const go = () => close(inp.value.trim() || fallback || null);
+    inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') go(); });
+    dlgButton(box, 'Weiter', 'primary', go);
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+    setTimeout(() => { inp.focus(); inp.select(); }, 50);
+  });
+}
 // Einsatz (ganz oder Unterabschnitt aus „Weitergeben“) per QR-Code an ein Gerät der Einsatzleitung.
 // mode: 'handover' (dieses Gerät gibt ab, z. B. Handy -> Tablet), 'device' (bleibt zusätzlich aktiv, z. B. ELW),
 // 'ua' (Unterabschnitt). 'handover' und 'device' geben den ganzen Einsatz weiter, nur 'ua' einen Ausschnitt.
 async function handoverQr(proj, mode) {
   const whole = mode !== 'ua';
+  const defName = mode === 'device' ? 'ELW' : mode === 'ua' ? (proj.title || 'UA') : '';
+  const peerName = await askPeerName(mode, defName);
+  if (!peerName) return;
   stamp();
   saveNow();
   // erst ein QR-Code mit wenig Vereinfachung, sonst mehrere im Wechsel
@@ -7299,11 +7329,10 @@ async function handoverQr(proj, mode) {
     : 'Auf dem anderen Gerät „Einsätze → 📷 Einsatz übernehmen“ antippen oder den Code mit der Kamera scannen.';
   const pc = ' Zum PC: „Teilen“ oder „Link kopieren“ (z. B. WhatsApp Web, Mail).';
   const lost = miss.length ? ` Nicht dabei: ${miss.join(', ')} – dafür „Suchgebiet als Datei senden“.` : '';
-  // das neue Gerät gleich als Empfänger für „Fortschritt senden“ merken (Name lässt sich dort ändern bzw. neu eintragen);
+  // das neue Gerät gleich als Empfänger für „Fortschritt senden“ merken (Name lässt sich bei „An ELW senden“ ändern);
   // v130.17: role merkt, ob es eine Übergabe (löst ab) oder ein zusätzliches, dauerhaft aktives Gerät (z. B. ELW) ist
   const now = Date.now();
-  const suf = mode === 'ua' ? ' (UA)' : mode === 'device' ? ' (ELW)' : '';
-  const peer = setPeer(P, `Gerät ${hhmm(now)}${suf}`, now);
+  const peer = setPeer(P, peerName, now);
   peer.role = mode;
   touch();
   if (mode === 'handover') qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
