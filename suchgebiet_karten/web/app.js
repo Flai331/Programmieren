@@ -80,7 +80,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.13';
+const APP_VERSION = 'v130.14';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1175,6 +1175,9 @@ function textDialog(i) {
   if (!it || it.kind !== 'text') return;
   if (isLocked()) return lockedToast();
   if (blocked(it) || guardAssigned(assignedOf(P, it))) return;
+  // v130.14: Punkte von der EL (Auftragsinhalt, Zusatz) sind beim Hundeführer schreibgeschützt – nicht verschieb-
+  // oder löschbar. EL/ELW dürfen sie immer ändern; ein UA ist schon über blocked()/lockOf() oben eingeschränkt.
+  if (db.mode !== 'el' && it.fromEl) return toast(MSG_VIEW, 4000);
   openDlg((box, close) => {
     dlgHead(box, '📍 Text', 'Ändern oder löschen.');
     const inp = document.createElement('input');
