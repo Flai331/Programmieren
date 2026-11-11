@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import 'database.dart';
 import 'finance.dart';
+import 'tasks.dart';
 
 /// Filter für die Dokumentenliste/-suche.
 class DocumentFilter {
@@ -643,6 +644,153 @@ class DocumentRepository {
   Stream<Document?> watchDocument(String id) =>
       (db.select(db.documents)..where((d) => d.id.equals(id)))
           .watchSingleOrNull();
+
+  // ------------------------------------------------- Aufgaben/Erinnerungen
+
+  Future<DocTask> createTask({
+    required String documentId,
+    required String action,
+    String note = '',
+    required DateTime dueAt,
+    String repeat = '',
+  }) =>
+      db.into(db.docTasks).insertReturning(DocTasksCompanion.insert(
+            documentId: documentId,
+            action: action,
+            note: Value(note.trim()),
+            dueAt: dueAt,
+            repeat: Value(repeat),
+          ));
+
+  Future<void> updateTask(String id,
+          {String? action, String? note, DateTime? dueAt, String? repeat}) =>
+      (db.update(db.docTasks)..where((t) => t.id.equals(id))).write(
+        DocTasksCompanion(
+          action: action == null ? const Value.absent() : Value(action),
+          note: note == null ? const Value.absent() : Value(note.trim()),
+          dueAt: dueAt == null ? const Value.absent() : Value(dueAt),
+          repeat: repeat == null ? const Value.absent() : Value(repeat),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  Future<DocTask?> getTask(String id) =>
+      (db.select(db.docTasks)..where((t) => t.id.equals(id))).getSingleOrNull();
+
+  /// Abhaken. Bei Wiederholung wird die nächste Aufgabe angelegt und
+  /// zurückgegeben.
+  Future<DocTask?> completeTask(String id, {DateTime? now}) =>
+      db.transaction(() async {
+        final task = await getTask(id);
+        if (task == null || task.doneAt != null) return null;
+        now ??= DateTime.now();
+        await (db.update(db.docTasks)..where((t) => t.id.equals(id))).write(
+          DocTasksCompanion(doneAt: Value(now), updatedAt: Value(now!)),
+        );
+        final next = nextDue(task.dueAt, task.repeat, now: now);
+        if (next == null) return null;
+        return createTask(
+          documentId: task.documentId,
+          action: task.action,
+          note: task.note,
+          dueAt: next,
+          repeat: task.repeat,
+        );
+      });
+
+  /// Wieder öffnen (versehentlich abgehakt).
+  Future<void> reopenTask(String id) =>
+      (db.update(db.docTasks)..where((t) => t.id.equals(id))).write(
+        DocTasksCompanion(
+          doneAt: const Value(null),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  /// Verschieben um [by] (ab jetzt, wenn schon überfällig).
+  Future<DateTime> snoozeTask(String id, Duration by, {DateTime? now}) async {
+    final task = await getTask(id);
+    now ??= DateTime.now();
+    final base = task == null || task.dueAt.isBefore(now) ? now : task.dueAt;
+    var next = base.add(by);
+    // Überfälliges auf morgen 9 Uhr statt mitten in die Nacht.
+    if (by.inDays >= 1 && (task == null || task.dueAt.isBefore(now))) {
+      next = DateTime(next.year, next.month, next.day, 9);
+    }
+    await updateTask(id, dueAt: next);
+    return next;
+  }
+
+  Future<void> deleteTask(String id) =>
+      (db.update(db.docTasks)..where((t) => t.id.equals(id))).write(
+        DocTasksCompanion(deletedAt: Value(DateTime.now())),
+      );
+
+  Stream<List<DocTask>> watchTasksForDocument(String documentId) =>
+      (db.select(db.docTasks)
+            ..where((t) => t.documentId.equals(documentId) & t.deletedAt.isNull())
+            ..orderBy([
+              (t) => OrderingTerm(expression: t.doneAt.isNotNull()),
+              (t) => OrderingTerm.asc(t.dueAt),
+            ]))
+          .watch();
+
+  /// Offene Aufgaben einer Aktion für ein Dokument (z. B. nach dem
+  /// Ausfüllen: „Aufgabe Ausfüllen erledigt?“).
+  Future<List<DocTask>> openTasksFor(String documentId, Set<String> actions) =>
+      (db.select(db.docTasks)
+            ..where((t) =>
+                t.documentId.equals(documentId) &
+                t.deletedAt.isNull() &
+                t.doneAt.isNull() &
+                t.action.isIn(actions))
+            ..orderBy([(t) => OrderingTerm.asc(t.dueAt)]))
+          .get();
+
+  /// Alle offenen Aufgaben + in den letzten [doneDays] Tagen erledigte, mit
+  /// Dokument (gelöschte Dokumente fallen raus).
+  Stream<List<({DocTask task, Document doc})>> watchAllTasks(
+      {int doneDays = 30}) {
+    final since = DateTime.now().subtract(Duration(days: doneDays));
+    final query = db.select(db.docTasks).join([
+      innerJoin(db.documents, db.documents.id.equalsExp(db.docTasks.documentId)),
+    ])
+      ..where(db.docTasks.deletedAt.isNull() &
+          db.documents.deletedAt.isNull() &
+          (db.docTasks.doneAt.isNull() |
+              db.docTasks.doneAt.isBiggerOrEqualValue(since)))
+      ..orderBy([OrderingTerm.asc(db.docTasks.dueAt)]);
+    return query.watch().map((rows) => [
+          for (final r in rows)
+            (task: r.readTable(db.docTasks), doc: r.readTable(db.documents)),
+        ]);
+  }
+
+  /// Anzahl offener Aufgaben, die heute oder früher fällig sind (für das
+  /// Symbol auf dem Startbildschirm).
+  Stream<int> watchDueTaskCount() {
+    final now = DateTime.now();
+    final endOfDay = DateTime(now.year, now.month, now.day + 1);
+    final query = db.select(db.docTasks).join([
+      innerJoin(db.documents, db.documents.id.equalsExp(db.docTasks.documentId)),
+    ])
+      ..where(db.docTasks.deletedAt.isNull() &
+          db.docTasks.doneAt.isNull() &
+          db.documents.deletedAt.isNull() &
+          db.docTasks.dueAt.isSmallerThanValue(endOfDay));
+    return query.watch().map((rows) => rows.length);
+  }
+
+  /// Offene Aufgaben mit Termin in der Zukunft (für Benachrichtigungen).
+  Future<List<DocTask>> upcomingTasks({DateTime? now}) {
+    now ??= DateTime.now();
+    return (db.select(db.docTasks)
+          ..where((t) =>
+              t.deletedAt.isNull() &
+              t.doneAt.isNull() &
+              t.dueAt.isBiggerThanValue(now!)))
+        .get();
+  }
 
   // ------------------------------------------------ Unterschriften/Vorlagen
 

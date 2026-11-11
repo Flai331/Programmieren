@@ -27,6 +27,7 @@ void main() {
     // Auch die v3-Teile (Kategorien) entfernen, damit es echter v1-Stand ist.
     await db.customStatement('PRAGMA foreign_keys = OFF');
     // v4-Teile (Ausfüllen, Vorlagen) entfernen.
+    await db.customStatement('DROP TABLE doc_tasks');
     await db.customStatement('DROP TABLE signature_templates');
     await db.customStatement('ALTER TABLE documents DROP COLUMN filled_pdf_path');
     await db.customStatement('ALTER TABLE documents DROP COLUMN fill_data');

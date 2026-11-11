@@ -91,6 +91,30 @@ class SignatureTemplates extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Aufgabe/Erinnerung zu einem Dokument: was ist wann zu tun (ausfüllen,
+/// versenden, bezahlen …), optional wiederkehrend (Schema v5).
+class DocTasks extends Table {
+  TextColumn get id => text().clientDefault(_uuid.v4)();
+  TextColumn get documentId => text().references(Documents, #id)();
+
+  /// Siehe `TaskAction` (lib/data/tasks.dart), z. B. `versenden`.
+  TextColumn get action => text()();
+
+  /// Was genau zu tun ist, z. B. „an Beihilfestelle per Mail“.
+  TextColumn get note => text().withDefault(const Constant(''))();
+  DateTimeColumn get dueAt => dateTime()();
+
+  /// '' (einmalig), `monatlich`, `vierteljaehrlich`, `jaehrlich`.
+  TextColumn get repeat => text().withDefault(const Constant(''))();
+  DateTimeColumn get doneAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get updatedAt => dateTime().clientDefault(DateTime.now)();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// Einreichung einer Rechnung bei einer Erstattungsstelle (Krankenkasse,
 /// Beihilfe, Heilfürsorge, Steuererklärung …). Mehrere pro Dokument
 /// möglich, z. B. Beihilfe + Private Krankenversicherung.
@@ -203,6 +227,7 @@ class Counters extends Table {
     Claims,
     Categories,
     SignatureTemplates,
+    DocTasks,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -212,7 +237,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.open() : super(driftDatabase(name: 'dokubox'));
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -244,6 +269,9 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(documents, documents.filledPdfPath);
             await m.addColumn(documents, documents.fillData);
             await m.createTable(signatureTemplates);
+          }
+          if (from < 5) {
+            await m.createTable(docTasks);
           }
         },
         beforeOpen: (details) async {
