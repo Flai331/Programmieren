@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:dokubox/scan/blank_pages.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Uint8List page(int w, int h, int paper) =>
     Uint8List(w * h)..fillRange(0, w * h, paper);
@@ -140,6 +141,53 @@ void main() {
       expect(groupDuplexAtBlankSheets(sheets('TLLLTT'), split: false), [
         [0, 4, 5],
       ]);
+    });
+  });
+
+  group('Leerseiten-Modus (Trennen & löschen / Nur löschen / Aus)', () {
+    // Stapel: Text, Text, leer, Text
+    final blank = [false, false, true, false];
+
+    test('Trennen & löschen: zwei Dokumente ohne die leere Seite', () {
+      final m = BlankMode.splitAndDelete;
+      expect(m.detect, isTrue);
+      expect(groupPagesAtBlanks(blank, split: m.split), [
+        [0, 1],
+        [3],
+      ]);
+    });
+
+    test('Nur löschen: ein Dokument ohne die leere Seite', () {
+      final m = BlankMode.deleteOnly;
+      expect(m.detect, isTrue);
+      expect(groupPagesAtBlanks(blank, split: m.split), [
+        [0, 1, 3],
+      ]);
+    });
+
+    test('Nur löschen bei doppelseitigem Scan: auch leere Blätter raus', () {
+      // T/L, L/L, T/T → alles ein Dokument, nur bedruckte Seiten
+      final duplex = [false, true, true, true, false, false];
+      expect(groupDuplexAtBlankSheets(duplex, split: BlankMode.deleteOnly.split),
+          [
+        [0, 4, 5],
+      ]);
+    });
+
+    test('Aus: keine Erkennung', () {
+      expect(BlankMode.off.detect, isFalse);
+    });
+
+    test('Einstellung wird gemerkt, alte Ein/Aus-Einstellung übernommen',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      expect(await BlankPageSettings.mode(), BlankMode.splitAndDelete);
+
+      SharedPreferences.setMockInitialValues({'blank_pages_enabled': false});
+      expect(await BlankPageSettings.mode(), BlankMode.off);
+
+      await BlankPageSettings.setMode(BlankMode.deleteOnly);
+      expect(await BlankPageSettings.mode(), BlankMode.deleteOnly);
     });
   });
 }

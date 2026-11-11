@@ -89,7 +89,8 @@ class ScanService {
     stamp ??= DateTime.now().millisecondsSinceEpoch;
     try {
       final blank = List<bool>.filled(imagePaths.length, false);
-      final detect = await BlankPageSettings.isEnabled();
+      final mode = await BlankPageSettings.mode();
+      final detect = mode.detect;
       if (detect) {
         final threshold = (await BlankPageSettings.sensitivity()).inkThreshold;
         for (var i = 0; i < imagePaths.length; i++) {
@@ -99,8 +100,8 @@ class ScanService {
       }
 
       final groups = duplex
-          ? groupDuplexAtBlankSheets(blank, split: detect)
-          : groupPagesAtBlanks(blank, split: detect);
+          ? groupDuplexAtBlankSheets(blank, split: mode.split)
+          : groupPagesAtBlanks(blank, split: mode.split);
       final documents = <ScanOutcome>[];
       for (var n = 0; n < groups.length; n++) {
         final paths = [for (final i in groups[n]) imagePaths[i]];

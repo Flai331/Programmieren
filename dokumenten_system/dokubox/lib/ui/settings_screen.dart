@@ -24,7 +24,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _lockEnabled = false;
-  bool _blankEnabled = true;
+  BlankMode _blankMode = BlankMode.splitAndDelete;
   BlankSensitivity _blankSensitivity = BlankSensitivity.normal;
   bool _busy = false;
   bool _aiInstalled = false;
@@ -41,8 +41,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     AppLockSettings.isEnabled().then((value) {
       if (mounted) setState(() => _lockEnabled = value);
     });
-    BlankPageSettings.isEnabled().then((value) {
-      if (mounted) setState(() => _blankEnabled = value);
+    BlankPageSettings.mode().then((value) {
+      if (mounted) setState(() => _blankMode = value);
     });
     BlankPageSettings.sensitivity().then((value) {
       if (mounted) setState(() => _blankSensitivity = value);
@@ -363,19 +363,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
           const Divider(),
-          SwitchListTile(
-            secondary: const Icon(Icons.content_cut),
-            title: const Text('Leerseiten trennen & löschen'),
-            subtitle: const Text(
-                'Ein leeres Blatt im Stapel trennt die Dokumente. Leere '
-                'Seiten werden nicht gespeichert.'),
-            value: _blankEnabled,
-            onChanged: (value) async {
-              await BlankPageSettings.setEnabled(value);
-              setState(() => _blankEnabled = value);
-            },
+          ListTile(
+            leading: const Icon(Icons.content_cut),
+            title: const Text('Leere Seiten beim Scannen'),
+            subtitle: Text(_blankMode.description),
           ),
-          if (_blankEnabled)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: BlankModeSelector(
+              value: _blankMode,
+              onChanged: (value) async {
+                await BlankPageSettings.setMode(value);
+                setState(() => _blankMode = value);
+              },
+            ),
+          ),
+          if (_blankMode.detect)
             ListTile(
               leading: const SizedBox(width: 24),
               title: const Text('Empfindlichkeit'),
@@ -469,6 +472,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Auswahl Trennen & löschen / Nur löschen / Aus – in den Einstellungen und
+/// direkt vor dem Scannen.
+class BlankModeSelector extends StatelessWidget {
+  final BlankMode value;
+  final ValueChanged<BlankMode> onChanged;
+  const BlankModeSelector(
+      {super.key, required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<BlankMode>(
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(
+            value: BlankMode.splitAndDelete,
+            icon: Icon(Icons.content_cut),
+            label: Text('Trennen & löschen')),
+        ButtonSegment(
+            value: BlankMode.deleteOnly,
+            icon: Icon(Icons.delete_sweep_outlined),
+            label: Text('Nur löschen')),
+        ButtonSegment(
+            value: BlankMode.off,
+            icon: Icon(Icons.block),
+            label: Text('Aus')),
+      ],
+      selected: {value},
+      onSelectionChanged: (v) => onChanged(v.first),
     );
   }
 }

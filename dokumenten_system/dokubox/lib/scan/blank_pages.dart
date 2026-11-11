@@ -20,16 +20,49 @@ enum BlankSensitivity {
   const BlankSensitivity(this.label, this.inkThreshold);
 }
 
+/// Was mit leeren Seiten beim Scannen passiert.
+enum BlankMode {
+  /// Leeres Blatt trennt Dokumente, leere Seiten werden gelöscht.
+  splitAndDelete('Trennen & löschen',
+      'Ein leeres Blatt trennt die Dokumente, leere Seiten werden gelöscht'),
+
+  /// Alles bleibt ein Dokument, nur leere Seiten fliegen raus (z. B. leere
+  /// Rückseiten).
+  deleteOnly('Nur löschen',
+      'Alles bleibt ein Dokument, nur leere Seiten werden entfernt'),
+
+  /// Nichts erkennen: alle Seiten bleiben, wie gescannt.
+  off('Aus', 'Alle Seiten bleiben, auch leere');
+
+  final String label;
+  final String description;
+  const BlankMode(this.label, this.description);
+
+  bool get detect => this != off;
+  bool get split => this == splitAndDelete;
+}
+
 /// Einstellungen für die Leerseiten-Erkennung beim Scannen.
 class BlankPageSettings {
-  static const _enabledKey = 'blank_pages_enabled';
+  static const _modeKey = 'blank_pages_mode';
+  static const _enabledKey = 'blank_pages_enabled'; // alte Ein/Aus-Einstellung
   static const _sensitivityKey = 'blank_pages_sensitivity';
 
-  static Future<bool> isEnabled() async =>
-      (await SharedPreferences.getInstance()).getBool(_enabledKey) ?? true;
+  static Future<BlankMode> mode() async {
+    final p = await SharedPreferences.getInstance();
+    final name = p.getString(_modeKey);
+    if (name != null) {
+      return BlankMode.values.firstWhere((m) => m.name == name,
+          orElse: () => BlankMode.splitAndDelete);
+    }
+    // Übernahme aus früheren Versionen (nur ein/aus).
+    return (p.getBool(_enabledKey) ?? true)
+        ? BlankMode.splitAndDelete
+        : BlankMode.off;
+  }
 
-  static Future<void> setEnabled(bool value) async =>
-      (await SharedPreferences.getInstance()).setBool(_enabledKey, value);
+  static Future<void> setMode(BlankMode mode) async =>
+      (await SharedPreferences.getInstance()).setString(_modeKey, mode.name);
 
   static Future<BlankSensitivity> sensitivity() async {
     final name =

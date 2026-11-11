@@ -14,6 +14,7 @@ import '../data/finance.dart';
 import '../extract/extractors.dart';
 import '../extract/suggestion_service.dart';
 import '../lock/lock_gate.dart';
+import '../scan/blank_pages.dart';
 import '../scan/pdf_import_service.dart';
 import '../scan/scan_service.dart';
 import '../scan/share_receiver.dart';
@@ -103,12 +104,42 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Kamera oder Netzwerk-Scanner?
   Future<void> _scanMenu() async {
     if (_scanning) return;
+    var mode = await BlankPageSettings.mode();
+    if (!mounted) return;
     final choice = await showModalBottomSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Leere Seiten: direkt vor dem Scan umschaltbar (wird gemerkt).
+            StatefulBuilder(
+              builder: (ctx, setSheet) => Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Leere Seiten',
+                        style: Theme.of(ctx).textTheme.titleSmall),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: double.infinity,
+                      child: BlankModeSelector(
+                        value: mode,
+                        onChanged: (m) async {
+                          await BlankPageSettings.setMode(m);
+                          setSheet(() => mode = m);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(mode.description,
+                        style: Theme.of(ctx).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+            ),
+            const Divider(),
             ListTile(
               leading: const Icon(Icons.photo_camera),
               title: const Text('Mit der Kamera'),
