@@ -80,7 +80,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.12';
+const APP_VERSION = 'v130.13';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -3870,12 +3870,22 @@ function loadScript(src) {
   });
 }
 const QR_MAX = 1800; // Zeichen, die eine Handy-Kamera vom Bildschirm noch sicher liest
+const QR_INTERVAL = 1500; // v130.13: etwas langsamer als vorher (900ms) – mehr Zeit zum Fokussieren/Lesen
 let qrCycle = null;
+let qrParts = null; // { svgs, i, paused } – für Pause/◀/▶ bei mehrteiligen Codes
 function qrSvg(data) {
   const q = window.qrcode(0, data.length < 2000 ? 'M' : 'L');
   q.addData(data, 'Byte');
   q.make();
   return q.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+}
+function qrShowPart() {
+  const { svgs, i } = qrParts;
+  $('qr-code').innerHTML = `${svgs[i]}<b class="qr-part">Teil ${i + 1} von ${svgs.length}</b>`;
+}
+function qrPause(paused) {
+  qrParts.paused = paused;
+  $('qr-pause').textContent = paused ? '▶️ Weiter' : '⏸️ Pause';
 }
 // parts: mehrere QR-Inhalte, die im Wechsel angezeigt werden (Scanner in der App sammelt sie)
 async function showQr(link, title, text, parts = null) {
@@ -3884,15 +3894,15 @@ async function showQr(link, title, text, parts = null) {
   $('qr-text').textContent = text;
   const box = $('qr-code');
   clearInterval(qrCycle);
+  qrCycle = null;
+  qrParts = null;
+  $('qr-nav').hidden = true;
   if (parts && parts.length > 1) {
-    const svgs = parts.map(qrSvg);
-    let i = 0;
-    const show = () => {
-      box.innerHTML = `${svgs[i]}<b class="qr-part">Teil ${i + 1} von ${svgs.length}</b>`;
-      i = (i + 1) % svgs.length;
-    };
-    show();
-    qrCycle = setInterval(show, 900);
+    qrParts = { svgs: parts.map(qrSvg), i: 0, paused: false };
+    qrShowPart();
+    qrPause(false);
+    qrCycle = setInterval(() => { if (!qrParts.paused) { qrParts.i = (qrParts.i + 1) % qrParts.svgs.length; qrShowPart(); } }, QR_INTERVAL);
+    $('qr-nav').hidden = false;
   } else if (link.length > QR_MAX) {
     box.innerHTML = '<p class="small">Zu viele Daten für einen QR-Code – bitte über „Teilen“ (WhatsApp, SMS …) senden.</p>';
   } else {
@@ -3901,6 +3911,10 @@ async function showQr(link, title, text, parts = null) {
   $('qrbox').dataset.link = link;
   $('qrbox').hidden = false;
 }
+// v130.13: mehrteiliger Code manuell steuern – praktisch, wenn die Kamera des Scanners einen Teil immer wieder verpasst
+$('qr-pause').addEventListener('click', () => qrPause(!qrParts.paused));
+$('qr-prev').addEventListener('click', () => { qrPause(true); qrParts.i = (qrParts.i - 1 + qrParts.svgs.length) % qrParts.svgs.length; qrShowPart(); });
+$('qr-next').addEventListener('click', () => { qrPause(true); qrParts.i = (qrParts.i + 1) % qrParts.svgs.length; qrShowPart(); });
 async function shareLinkText(link, title, text) {
   const msg = `${text}\n${link}`;
   if (bridge && bridge.shareText) return bridge.shareText(title, msg);
@@ -6212,13 +6226,30 @@ async function zusatzDialog(pre = {}) {
     });
     if (!out) { toast('Bitte mindestens einen Punkt, ein Gebiet oder einen Ort auswählen'); continue; }
     if (out.size > ZUSATZ_MAX) { toast('Zu viel auf einmal für den Status-Server – bitte weniger oder einfachere Zeichnungen auswählen', 7000); continue; }
+    // v130.13: an ein bestimmtes Team gesendete Umrisse/Zeichnungen auch beim EL diesem Team zuordnen (Farbe/Zuteilung) –
+    // nicht bei „Alle Teams“, da dort keine einzelne Zuteilung Sinn ergibt
+    const team = t && t.teamId ? P.marks.find((m) => m.id === t.teamId) : null;
     // neue Punkte bleiben auch auf der Karte der Einsatzleitung (als Textpunkt mit Aufgabe)
     const fresh = st.points.filter((x) => !x.fromMsg);
-    if (fresh.length) {
+    if (fresh.length || (team && st.items.size)) {
       snapshot();
       for (const x of fresh) P.items.push({ kind: 'text', color: '#c62828', text: (x.name || '').trim() || 'Punkt', lat: x.lat, lon: x.lon, ...((x.task || st.task).trim() ? { note: (x.task || st.task).trim().slice(0, 200) } : {}), t: Date.now(), marker: true }); // v130.2: immer sichtbar
+      if (team) {
+        for (const i of st.items) {
+          const it = P.items[i];
+          if (!it) continue;
+          if (it.kind === 'track') { it.to = team.id; it.color = team.color; }
+          else if (it.kind === 'stroke') {
+            for (const x of it.group ? P.items.filter((y) => y.group === it.group) : [it]) {
+              if (!x.teams) x.teams = [];
+              if (!x.teams.includes(team.id)) x.teams.push(team.id);
+            }
+          }
+        }
+      }
       changed();
       redraw();
+      if (!$('panel-teams').hidden) renderMarks();
     }
     const ok = await elSend(out.msg);
     if ($('panel-status').hidden === false) renderStatusPanel();
@@ -6877,8 +6908,11 @@ let scanRun = false;
 // v125: Hauptkamera statt Ultraweitwinkel. Erst die Freigabe über facingMode (damit die Kameras Namen haben), dann die
 // beste Rückkamera nach Namen mit deviceId, 1920x1080 und Dauerfokus; die Wahl (auch „🔄 Kamera wechseln“) wird gemerkt.
 let scanCams = [];
-const camSaved = () => { try { return localStorage.getItem(CAM_KEY) || ''; } catch { return ''; } };
-const camSave = (id) => { try { localStorage.setItem(CAM_KEY, id); } catch { /* ohne Speicher: gilt nur jetzt */ } };
+// v130.13: Name der Kamera mitspeichern – falls die deviceId sich (Browser-Neustart, Datenschutz-Salt) ändert,
+// findet pickCamera() die gemerkte Kamera trotzdem über ihren Namen wieder, statt auf die „beste automatische“
+// Wahl zurückzufallen (die auf manchen Geräten das Weitwinkel-Objektiv statt der normalen Kamera trifft).
+const camSaved = () => { try { return JSON.parse(localStorage.getItem(CAM_KEY) || 'null') || ''; } catch { return ''; } };
+const camSave = (id, label) => { try { localStorage.setItem(CAM_KEY, JSON.stringify({ deviceId: id, label: label || '' })); } catch { /* ohne Speicher: gilt nur jetzt */ } };
 async function focusTrack(stream) {
   try {
     const tr = stream.getVideoTracks()[0];
@@ -6920,7 +6954,7 @@ async function switchScanCamera() {
     scanStream = stream;
     $('scan-video').srcObject = stream;
     await $('scan-video').play().catch(() => {});
-    camSave(scanCams.curId || next.deviceId);
+    camSave(scanCams.curId || next.deviceId, next.label);
     $('scan-text').textContent = `Kamera: ${next.label || 'Kamera'} – auf den QR-Code richten.`;
   } catch { $('scan-text').textContent = 'Kamera lässt sich nicht wechseln.'; }
 }
@@ -6965,7 +6999,8 @@ async function startScan() {
         // mehrteiliger Code: Teile sammeln, bis alle da sind
         const r = addPart(scanParts, sh.data);
         if (r.done) { stopScan(); handleShared(shareLink('e', r.done)); return; }
-        if (r.n) $('scan-text').textContent = `Mehrteiliger Code: ${r.have} von ${r.n} Teilen gelesen – Kamera ruhig auf den Code halten …`;
+        // v130.13: zeigt, welche Teile konkret noch fehlen – hilft beim Zurückspulen auf dem anderen Gerät
+        if (r.n) $('scan-text').textContent = `Mehrteiliger Code: ${r.have} von ${r.n} Teilen gelesen – noch fehlt Teil ${r.missing.join(', ')}. Kamera ruhig halten …`;
       } else if (text) { stopScan(); handleShared(text); return; }
     }
     setTimeout(tick, 200);

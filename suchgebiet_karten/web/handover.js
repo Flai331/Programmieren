@@ -65,15 +65,17 @@ export function splitParts(data, size = 1000) {
   const sid = uid().slice(0, 4);
   return Array.from({ length: n }, (_, i) => `${sid}${b36(i)}${b36(n)}${data.slice(i * size, (i + 1) * size)}`);
 }
-// Sammelt Teile in store (Objekt); liefert { n, have, done } – done ist der zusammengesetzte Inhalt
+// Sammelt Teile in store (Objekt); liefert { n, have, done, missing } – done ist der zusammengesetzte Inhalt,
+// missing die noch fehlenden Teil-Nummern (1-basiert, für die Anzeige beim Scannen)
 export function addPart(store, part) {
   const sid = part.slice(0, 4);
   const i = parseInt(part.slice(4, 6), 36);
   const n = parseInt(part.slice(6, 8), 36);
-  if (!(n > 0) || !(i >= 0) || i >= n) return { n: 0, have: 0, done: null };
+  if (!(n > 0) || !(i >= 0) || i >= n) return { n: 0, have: 0, done: null, missing: [] };
   if (store.sid !== sid) { store.sid = sid; store.n = n; store.parts = {}; }
   store.parts[i] = part.slice(8);
   const have = Object.keys(store.parts).length;
   const done = have === n ? Array.from({ length: n }, (_, k) => store.parts[k]).join('') : null;
-  return { n, have, done };
+  const missing = done ? [] : Array.from({ length: n }, (_, k) => k + 1).filter((k) => !(k - 1 in store.parts));
+  return { n, have, done, missing };
 }
