@@ -29,6 +29,14 @@ class ConfirmScreen extends StatefulWidget {
   /// Ende nach Datum vergeben ([docNumber] ist dann null).
   final String? batchInfo;
 
+  /// Mögliche Dubletten (Nummer, Titel, Grund).
+  final List<({String docNumber, String title, String reason})> duplicates;
+
+  /// Ältere Dokumente mit gleichen Referenzen → zu Vorgang verknüpfen.
+  final List<
+      ({String id, String docNumber, String title, String reasons, bool strong})>
+      related;
+
   const ConfirmScreen({
     super.key,
     required this.draft,
@@ -36,6 +44,8 @@ class ConfirmScreen extends StatefulWidget {
     this.saveLabel = 'Speichern',
     this.pdfPath,
     this.batchInfo,
+    this.duplicates = const [],
+    this.related = const [],
   });
 
   @override
@@ -72,6 +82,12 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
         TextEditingController(text: _draft.correspondentName ?? '');
     _tagInput = TextEditingController();
     _reminderNote = TextEditingController(text: _draft.reminderNote ?? '');
+    // Starke Treffer (Aktenzeichen/Rechnungsnummer) vorab ankreuzen.
+    for (final r in widget.related) {
+      if (r.strong && !_draft.linkDocumentIds.contains(r.id)) {
+        _draft.linkDocumentIds.add(r.id);
+      }
+    }
     services.repository.allCategories().then((value) {
       if (mounted) setState(() => _categories = value);
     });
@@ -451,6 +467,54 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
               ),
             ),
             const SizedBox(height: 16),
+          ],
+          if (widget.duplicates.isNotEmpty) ...[
+            Card(
+              color: theme.colorScheme.errorContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Vielleicht schon vorhanden:',
+                        style: theme.textTheme.titleSmall),
+                    for (final d in widget.duplicates)
+                      Text('• ${d.docNumber} ${d.title} (${d.reason})'),
+                    const SizedBox(height: 4),
+                    const Text('Doppelt? Dann mit „Zurück“ verwerfen.'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (widget.related.isNotEmpty) ...[
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Text('Gehört zu … (Vorgang)',
+                          style: theme.textTheme.titleSmall),
+                    ),
+                    for (final r in widget.related)
+                      CheckboxListTile(
+                        dense: true,
+                        value: _draft.linkDocumentIds.contains(r.id),
+                        onChanged: (v) => setState(() => v == true
+                            ? _draft.linkDocumentIds.add(r.id)
+                            : _draft.linkDocumentIds.remove(r.id)),
+                        title: Text('${r.docNumber} ${r.title}'),
+                        subtitle: Text('gleich: ${r.reasons}'),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
           ],
           if (widget.pdfPath != null) ...[
             OriginalPreview(

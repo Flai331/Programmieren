@@ -2,7 +2,9 @@ import 'package:drift/drift.dart';
 
 import 'database.dart';
 import '../extract/ref_matching.dart';
+import '../extract/duplicates.dart';
 import 'batch_numbering.dart';
+import 'cases.dart';
 import 'finance.dart';
 import 'tasks.dart';
 
@@ -115,6 +117,9 @@ class DocumentDraft {
   /// Tage vor der Widerspruchsfrist erinnern (aus den Einstellungen).
   int objectionLeadDays;
 
+  /// Beim Anlegen mit diesen Dokumenten zu einem Vorgang verknüpfen.
+  List<String> linkDocumentIds;
+
   DocumentDraft({
     this.title = '',
     this.docDate,
@@ -137,7 +142,9 @@ class DocumentDraft {
     this.warrantyKind,
     this.contentHash,
     this.objectionLeadDays = 7,
-  })  : tagNames = tagNames ?? [],
+    List<String>? linkDocumentIds,
+  })  : linkDocumentIds = linkDocumentIds ?? [],
+        tagNames = tagNames ?? [],
         claims = claims ?? [];
 }
 
@@ -348,6 +355,9 @@ class DocumentRepository {
       await _writeFtsEntry(doc.id, docNumber, draft, ocrText, refs);
       await _writeClaims(doc.id, draft.claims);
       await _syncAutoTasks(doc.id, draft);
+      for (final other in draft.linkDocumentIds) {
+        await linkDocuments(doc.id, other, role: guessCaseRole(draft.docType));
+      }
       if (correspondentId != null) {
         await _learnDefaults(correspondentId, draft.docType, tagIds);
       }
@@ -761,6 +771,227 @@ class DocumentRepository {
   Stream<Document?> watchDocument(String id) =>
       (db.select(db.documents)..where((d) => d.id.equals(id)))
           .watchSingleOrNull();
+
+  // ------------------------------------------------- Dubletten
+
+  /// Mögliche Dubletten eines neuen Dokuments: gleiche Datei (Hash), gleiche
+  /// Rechnungsnummer bei gleicher Firma, oder fast gleicher Text bei gleicher
+  /// Firma ±60 Tage.
+  Future<List<({Document doc, String reason})>> findDuplicates({
+    String? contentHash,
+    Map<String, Set<String>> refs = const {},
+    String? correspondentName,
+    String ocrText = '',
+    DateTime? docDate,
+  }) async {
+    final found = <String, ({Document doc, String reason})>{};
+    final alive = db.documents.deletedAt.isNull();
+    if (contentHash != null) {
+      for (final d in await (db.select(db.documents)
+            ..where((d) => alive & d.contentHash.equals(contentHash)))
+          .get()) {
+        found[d.id] = (doc: d, reason: 'gleiche Datei');
+      }
+    }
+    final firm = correspondentName == null || correspondentName.trim().isEmpty
+        ? null
+        : await (db.select(db.correspondents)
+              ..where((c) =>
+                  c.name.lower().equals(correspondentName.trim().toLowerCase())))
+            .getSingleOrNull();
+    if (firm != null) {
+      final rgnr = refs['RGNR'] ?? const {};
+      if (rgnr.isNotEmpty) {
+        for (final c in await refCandidates({'RGNR': rgnr})) {
+          if (c.correspondentId != firm.id || found.containsKey(c.documentId)) {
+            continue;
+          }
+          final d = await getDocument(c.documentId);
+          if (d != null && d.docType != 'Mahnung') {
+            found[d.id] = (doc: d, reason: 'gleiche Rechnungsnummer');
+          }
+        }
+      }
+      if (ocrText.trim().isNotEmpty) {
+        final from = docDate?.subtract(const Duration(days: 60));
+        final to = docDate?.add(const Duration(days: 60));
+        final sameFirm = await (db.select(db.documents)
+              ..where((d) {
+                var w = alive & d.correspondentId.equals(firm.id);
+                if (from != null && to != null) {
+                  w = w &
+                      (d.docDate.isNull() | d.docDate.isBetweenValues(from, to));
+                }
+                return w;
+              })
+              ..limit(200))
+            .get();
+        for (final d in sameFirm) {
+          if (found.containsKey(d.id)) continue;
+          if (textSimilarity(ocrText, d.ocrText) >= kDuplicateSimilarity) {
+            found[d.id] = (doc: d, reason: 'fast gleicher Text');
+          }
+        }
+      }
+    }
+    return found.values.toList();
+  }
+
+  // ------------------------------------------------- Vorgänge
+
+  Future<Case> createCase(String title,
+          {String? correspondentId, String note = ''}) =>
+      db.into(db.cases).insertReturning(CasesCompanion.insert(
+            title: title.trim().isEmpty ? 'Vorgang' : title.trim(),
+            correspondentId: Value(correspondentId),
+            note: Value(note),
+          ));
+
+  Future<void> addToCase(String caseId, String documentId,
+      {String role = 'sonstiges'}) async {
+    final existing = await (db.select(db.caseDocuments)
+          ..where((c) =>
+              c.caseId.equals(caseId) &
+              c.documentId.equals(documentId) &
+              c.deletedAt.isNull()))
+        .getSingleOrNull();
+    if (existing != null) return;
+    await db.into(db.caseDocuments).insert(CaseDocumentsCompanion.insert(
+        caseId: caseId, documentId: documentId, role: Value(role)));
+    await _touchCase(caseId);
+  }
+
+  Future<void> removeFromCase(String caseId, String documentId) async {
+    await (db.update(db.caseDocuments)
+          ..where((c) =>
+              c.caseId.equals(caseId) & c.documentId.equals(documentId)))
+        .write(CaseDocumentsCompanion(deletedAt: Value(DateTime.now())));
+    await _touchCase(caseId);
+  }
+
+  Future<void> _touchCase(String caseId) =>
+      (db.update(db.cases)..where((c) => c.id.equals(caseId)))
+          .write(CasesCompanion(updatedAt: Value(DateTime.now())));
+
+  Future<void> setCaseStatus(String caseId, String status) =>
+      (db.update(db.cases)..where((c) => c.id.equals(caseId))).write(
+        CasesCompanion(
+          status: Value(status),
+          closedAt: Value(status == 'erledigt' ? DateTime.now() : null),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  Future<void> renameCase(String caseId, String title) =>
+      (db.update(db.cases)..where((c) => c.id.equals(caseId))).write(
+          CasesCompanion(
+              title: Value(title.trim()), updatedAt: Value(DateTime.now())));
+
+  Future<void> deleteCase(String caseId) =>
+      (db.update(db.cases)..where((c) => c.id.equals(caseId)))
+          .write(CasesCompanion(deletedAt: Value(DateTime.now())));
+
+  /// Neues Dokument mit einem vorhandenen verknüpfen: in dessen Vorgang
+  /// aufnehmen, oder einen neuen Vorgang für beide anlegen.
+  Future<Case> linkDocuments(String newId, String otherId,
+      {String role = 'sonstiges'}) async {
+    final existing = await casesForDocument(otherId);
+    Case target;
+    if (existing.isNotEmpty) {
+      target = existing.first;
+    } else {
+      final other = await getDocument(otherId);
+      final firm = other?.correspondentId == null
+          ? null
+          : await getCorrespondent(other!.correspondentId!);
+      target = await createCase(
+        [firm?.name, other?.title]
+            .whereType<String>()
+            .where((s) => s.isNotEmpty)
+            .join(' – '),
+        correspondentId: other?.correspondentId,
+      );
+      await addToCase(target.id, otherId);
+    }
+    await addToCase(target.id, newId, role: role);
+    if (target.status == 'wartet') await setCaseStatus(target.id, 'offen');
+    return target;
+  }
+
+  Future<List<Case>> casesForDocument(String documentId) async {
+    final q = db.select(db.cases).join([
+      innerJoin(db.caseDocuments,
+          db.caseDocuments.caseId.equalsExp(db.cases.id)),
+    ])
+      ..where(db.caseDocuments.documentId.equals(documentId) &
+          db.caseDocuments.deletedAt.isNull() &
+          db.cases.deletedAt.isNull())
+      ..orderBy([OrderingTerm.desc(db.cases.updatedAt)]);
+    return [for (final r in await q.get()) r.readTable(db.cases)];
+  }
+
+  Stream<List<Case>> watchCasesForDocument(String documentId) {
+    final q = db.select(db.cases).join([
+      innerJoin(db.caseDocuments,
+          db.caseDocuments.caseId.equalsExp(db.cases.id)),
+    ])
+      ..where(db.caseDocuments.documentId.equals(documentId) &
+          db.caseDocuments.deletedAt.isNull() &
+          db.cases.deletedAt.isNull());
+    return q.watch().map((rows) => [for (final r in rows) r.readTable(db.cases)]);
+  }
+
+  /// Alle Vorgänge mit Anzahl Dokumente; offene zuerst.
+  Stream<List<({Case c, int docs})>> watchCases() => db
+      .customSelect(
+        'SELECT c.id, COUNT(cd.id) AS n FROM cases c '
+        'LEFT JOIN case_documents cd ON cd.case_id = c.id AND cd.deleted_at IS NULL '
+        'LEFT JOIN documents d ON d.id = cd.document_id AND d.deleted_at IS NULL '
+        'WHERE c.deleted_at IS NULL GROUP BY c.id',
+        readsFrom: {db.cases, db.caseDocuments, db.documents},
+      )
+      .watch()
+      .asyncMap((rows) async {
+        final counts = {for (final r in rows) r.read<String>('id'): r.read<int>('n')};
+        final cases = await (db.select(db.cases)
+              ..where((c) => c.id.isIn(counts.keys)))
+            .get();
+        int rank(String s) => s == 'erledigt' ? 2 : (s == 'wartet' ? 1 : 0);
+        cases.sort((a, b) {
+          final r = rank(a.status).compareTo(rank(b.status));
+          return r != 0 ? r : b.updatedAt.compareTo(a.updatedAt);
+        });
+        return [for (final c in cases) (c: c, docs: counts[c.id] ?? 0)];
+      });
+
+  Stream<int> watchOpenCaseCount() => (db.select(db.cases)
+        ..where((c) => c.deletedAt.isNull() & c.status.equals('erledigt').not()))
+      .watch()
+      .map((r) => r.length);
+
+  Stream<Case?> watchCase(String id) =>
+      (db.select(db.cases)..where((c) => c.id.equals(id))).watchSingleOrNull();
+
+  /// Dokumente eines Vorgangs, zeitlich (Dokumentdatum, sonst Scan).
+  Stream<List<({Document doc, String role})>> watchCaseDocuments(
+      String caseId) {
+    final q = db.select(db.caseDocuments).join([
+      innerJoin(db.documents,
+          db.documents.id.equalsExp(db.caseDocuments.documentId)),
+    ])
+      ..where(db.caseDocuments.caseId.equals(caseId) &
+          db.caseDocuments.deletedAt.isNull() &
+          db.documents.deletedAt.isNull());
+    return q.watch().map((rows) {
+      final list = [
+        for (final r in rows)
+          (doc: r.readTable(db.documents), role: r.readTable(db.caseDocuments).role),
+      ];
+      list.sort((a, b) => (a.doc.docDate ?? a.doc.scannedAt)
+          .compareTo(b.doc.docDate ?? b.doc.scannedAt));
+      return list;
+    });
+  }
 
   // ------------------------------------------------- Verknüpfen
 

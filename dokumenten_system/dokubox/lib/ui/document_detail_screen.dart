@@ -15,6 +15,8 @@ import 'confirm_screen.dart';
 import 'finance_actions.dart';
 import 'fill_screen.dart';
 import 'pdf_preview.dart';
+import '../data/cases.dart';
+import 'cases_screen.dart';
 import 'share_name.dart';
 import 'task_widgets.dart';
 
@@ -73,6 +75,34 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     final doc = _doc;
     if (doc == null) return;
     await showTaskEditor(context, doc: doc, presetAction: action);
+  }
+
+  Widget _casesSection(Document doc) {
+    return StreamBuilder<List<Case>>(
+      stream: services.repository.watchCasesForDocument(doc.id),
+      builder: (context, snap) {
+        final cases = snap.data ?? const <Case>[];
+        return Card(
+          child: Column(children: [
+            for (final c in cases)
+              ListTile(
+                leading: const Icon(Icons.folder_open),
+                title: Text(c.title),
+                subtitle: Text('Vorgang · ${kCaseStatus[c.status] ?? c.status}'),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => CaseDetailScreen(caseId: c.id))),
+              ),
+            ListTile(
+              leading: const Icon(Icons.create_new_folder_outlined),
+              title: Text(cases.isEmpty
+                  ? 'Zu Vorgang hinzufügen'
+                  : 'Weiterem Vorgang hinzufügen'),
+              onTap: () => addDocumentToCase(context, doc),
+            ),
+          ]),
+        );
+      },
+    );
   }
 
   Widget _tasksSection(Document doc, ThemeData theme) {
@@ -547,6 +577,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
           else
             _filledSection(doc, theme),
           const SizedBox(height: 8),
+          _casesSection(doc),
           _tasksSection(doc, theme),
           const SizedBox(height: 16),
           Card(

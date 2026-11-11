@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_doc_scanner/flutter_doc_scanner.dart';
@@ -11,6 +12,7 @@ import '../data/batch_numbering.dart';
 import '../data/database.dart';
 import '../data/deadline_settings.dart';
 import '../extract/deadlines.dart';
+import '../extract/ref_matching.dart';
 import '../data/setup_mode.dart';
 import '../data/doc_types.dart';
 import '../data/document_repository.dart';
@@ -23,6 +25,7 @@ import '../scan/pdf_import_service.dart';
 import '../scan/scan_service.dart';
 import '../scan/share_receiver.dart';
 import '../scan/wlan_receiver.dart';
+import 'cases_screen.dart';
 import 'cleanup_screen.dart';
 import 'confirm_screen.dart';
 import 'document_detail_screen.dart';
@@ -545,6 +548,74 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Prüft vor dem Bestätigen auf Dubletten und verwandte Dokumente.
+  Future<
+      ({
+        List<({String docNumber, String title, String reason})> duplicates,
+        List<({String id, String docNumber, String title, String reasons, bool strong})> related,
+      })> _analyze(ScanOutcome outcome, DocumentDraft draft) async {
+    final repo = services.repository;
+    try {
+      final bytes = await File(
+              await ScanService.absolutePdfPath(outcome.relativePdfPath))
+          .readAsBytes();
+      final hash = await Sha256().hash(bytes);
+      draft.contentHash =
+          hash.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    } catch (_) {}
+    final refs = extractRefs(outcome.ocrText);
+    final dups = await repo.findDuplicates(
+      contentHash: draft.contentHash,
+      refs: refs,
+      correspondentName: draft.correspondentName,
+      ocrText: outcome.ocrText,
+      docDate: draft.docDate,
+    );
+    final firmId = draft.correspondentName == null
+        ? null
+        : (await repo.allCorrespondents())
+            .where((c) =>
+                c.name.toLowerCase() ==
+                draft.correspondentName!.trim().toLowerCase())
+            .firstOrNull
+            ?.id;
+    final dupIds = {for (final d in dups) d.doc.id};
+    final matches = matchRefs(refs, firmId, await repo.refCandidates(refs))
+        .where((m) => !dupIds.contains(m.documentId))
+        .take(5);
+    final related = <({String id, String docNumber, String title, String reasons, bool strong})>[];
+    for (final m in matches) {
+      final d = await repo.getDocument(m.documentId);
+      if (d == null) continue;
+      related.add((
+        id: d.id,
+        docNumber: d.docNumber,
+        title: d.title,
+        reasons: m.reasons.join(', '),
+        strong: m.score >= 10,
+      ));
+    }
+    return (
+      duplicates: [
+        for (final d in dups)
+          (docNumber: d.doc.docNumber, title: d.doc.title, reason: d.reason),
+      ],
+      related: related,
+    );
+  }
+
+  /// Nach dem Verknüpfen: offene Nachhaken/Einreichen-Aufgaben der
+  /// verknüpften Dokumente abhaken?
+  Future<void> _afterLink(List<String> linked) async {
+    for (final id in linked) {
+      if (!mounted) return;
+      await offerCompleteTasks(context,
+          documentId: id,
+          actions: {'nachhaken', 'einreichen'},
+          question: 'Antwort ist da – Aufgabe beim verknüpften Dokument abhaken?');
+    }
+  }
+
   /// Regeln + KI → vorausgefüllter Entwurf.
   Future<DocumentDraft> _prepareDraft(ScanOutcome outcome) async {
     final finance = await FinanceSettings.load();
@@ -587,11 +658,15 @@ class _HomeScreenState extends State<HomeScreen> {
         await services.scanner.deletePdf(item.outcome.relativePdfPath);
         continue;
       }
+      final analysis = await _analyze(item.outcome, item.draft);
+      if (!mounted) continue;
       final result = await Navigator.of(context).push<DocumentDraft>(
         MaterialPageRoute(
           builder: (_) => ConfirmScreen(
             draft: item.draft,
             pdfPath: item.outcome.relativePdfPath,
+            duplicates: analysis.duplicates,
+            related: analysis.related,
             batchInfo: '${i + 1} von ${order.length}',
             saveLabel: i == order.length - 1 ? 'Fertig' : 'Weiter',
           ),
@@ -620,6 +695,7 @@ class _HomeScreenState extends State<HomeScreen> {
         refs: extractRefs(item.outcome.ocrText),
       );
       await services.notifications.syncDocument(doc.id);
+      await _afterLink(item.draft.linkDocumentIds);
       entries.add((doc: doc, sender: item.draft.correspondentName ?? ''));
     }
     if (mounted) {
@@ -648,12 +724,22 @@ class _HomeScreenState extends State<HomeScreen> {
       await services.repository.releaseDocNumberIfUnused(docNumber);
       return false;
     }
+    final analysis = await _analyze(
+        ScanOutcome(
+            relativePdfPath: pdfPath,
+            pageCount: outcome.pageCount,
+            ocrText: outcome.ocrText,
+            firstPageOcr: outcome.firstPageOcr),
+        draft);
+    if (!mounted) return false;
     final confirmed = await Navigator.of(context).push<DocumentDraft>(
       MaterialPageRoute(
         builder: (_) => ConfirmScreen(
           draft: draft,
           docNumber: docNumber,
           pdfPath: pdfPath,
+          duplicates: analysis.duplicates,
+          related: analysis.related,
         ),
       ),
     );
@@ -674,6 +760,7 @@ class _HomeScreenState extends State<HomeScreen> {
       refs: extractRefs(outcome.ocrText),
     );
     await services.notifications.syncDocument(doc.id);
+    await _afterLink(confirmed.linkDocumentIds);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(DocumentRepository.isProvisional(docNumber)
@@ -755,6 +842,23 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('DokuBox'),
         actions: [
+          StreamBuilder<int>(
+            stream: services.repository.watchOpenCaseCount(),
+            builder: (context, snapshot) {
+              final count = snapshot.data ?? 0;
+              return IconButton(
+                icon: Badge(
+                  isLabelVisible: count > 0,
+                  label: Text('$count'),
+                  child: const Icon(Icons.folder_copy_outlined),
+                ),
+                tooltip: 'Vorgänge',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CasesScreen()),
+                ),
+              );
+            },
+          ),
           StreamBuilder<int>(
             stream: services.repository.watchDueTaskCount(),
             builder: (context, snapshot) {
