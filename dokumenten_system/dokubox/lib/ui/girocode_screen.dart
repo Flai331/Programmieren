@@ -21,7 +21,12 @@ Future<void> openGiroCode(BuildContext context, Document doc) async {
       ? null
       : await repo.getCorrespondent(doc.correspondentId!);
   final refs = await repo.refsForDocument(doc.id);
-  final iban = firm?.iban ?? refs['IBAN']?.firstOrNull ?? '';
+  final own = await repo.ownIbans();
+  final iban = firm?.iban ??
+      refs['IBAN']
+          ?.where((i) => !own.contains(i.replaceAll(' ', '').toUpperCase()))
+          .firstOrNull ??
+      '';
   final reference = doc.paymentReference ??
       [
         for (final k in ['RGNR', 'KDNR', 'VSNR'])

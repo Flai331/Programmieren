@@ -6,6 +6,7 @@ import '../extract/duplicates.dart';
 import 'batch_numbering.dart';
 import 'cases.dart';
 import 'contracts.dart';
+import 'personal.dart';
 import 'finance.dart';
 import 'tasks.dart';
 
@@ -491,6 +492,64 @@ class DocumentRepository {
           updatedAt: Value(DateTime.now()),
         ),
       );
+
+  // ------------------------------------------------- Meine Daten
+
+  Stream<List<String>> watchPersons() => (db.select(db.personalData)
+        ..where((p) => p.deletedAt.isNull())
+        ..orderBy([(p) => OrderingTerm.asc(p.createdAt)]))
+      .watch()
+      .map((rows) => {for (final r in rows) r.person}.toList());
+
+  /// Werte einer Person (Schlüssel → Wert).
+  Future<Map<String, String>> personalValues(String person) async {
+    final rows = await (db.select(db.personalData)
+          ..where((p) => p.person.equals(person) & p.deletedAt.isNull())
+          ..orderBy([(p) => OrderingTerm.asc(p.sortOrder)]))
+        .get();
+    return {for (final r in rows) r.key: r.value};
+  }
+
+  Future<void> setPersonalValue(String person, String key, String value) async {
+    final existing = await (db.select(db.personalData)
+          ..where((p) =>
+              p.person.equals(person) & p.key.equals(key) & p.deletedAt.isNull()))
+        .getSingleOrNull();
+    if (existing != null) {
+      await (db.update(db.personalData)..where((p) => p.id.equals(existing.id)))
+          .write(PersonalDataCompanion(
+              value: Value(value.trim()), updatedAt: Value(DateTime.now())));
+      return;
+    }
+    final order = kPersonalFields.keys.toList().indexOf(key);
+    await db.into(db.personalData).insert(PersonalDataCompanion.insert(
+          person: person,
+          key: key,
+          label: kPersonalFields[key] ?? key,
+          value: Value(value.trim()),
+          sortOrder: Value(order < 0 ? 999 : order),
+        ));
+  }
+
+  Future<void> addPerson(String person) =>
+      setPersonalValue(person, 'vorname', '');
+
+  Future<void> renamePerson(String from, String to) =>
+      (db.update(db.personalData)..where((p) => p.person.equals(from))).write(
+          PersonalDataCompanion(
+              person: Value(to.trim()), updatedAt: Value(DateTime.now())));
+
+  Future<void> deletePerson(String person) =>
+      (db.update(db.personalData)..where((p) => p.person.equals(person)))
+          .write(PersonalDataCompanion(deletedAt: Value(DateTime.now())));
+
+  /// Eigene IBANs (aus Meine Daten) – nicht als Empfänger-IBAN vorschlagen.
+  Future<Set<String>> ownIbans() async {
+    final rows = await (db.select(db.personalData)
+          ..where((p) => p.key.equals('iban') & p.deletedAt.isNull()))
+        .get();
+    return {for (final r in rows) r.value.replaceAll(' ', '').toUpperCase()};
+  }
 
   // ------------------------------------------------- Verträge
 

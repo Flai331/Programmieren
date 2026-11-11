@@ -15,6 +15,7 @@ import '../data/setup_mode.dart';
 import '../extract/deadlines.dart';
 import '../reports/print_lists.dart';
 import 'firms_screen.dart';
+import 'personal_data_screen.dart';
 import 'report_share.dart';
 import 'templates_screen.dart';
 
@@ -342,6 +343,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(title: const Text('Einstellungen')),
       body: ListView(
         children: [
+          ListTile(
+            leading: const Icon(Icons.badge_outlined),
+            title: const Text('Meine Daten'),
+            subtitle: const Text('Name, Anschrift, IBAN … zum Einsetzen beim Ausfüllen'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PersonalDataScreen()),
+            ),
+          ),
           ListTile(
             leading: const Icon(Icons.print),
             title: const Text('Box-Inhaltsliste drucken'),

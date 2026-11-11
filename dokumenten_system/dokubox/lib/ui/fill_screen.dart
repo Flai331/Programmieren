@@ -10,8 +10,9 @@ import '../data/database.dart';
 import '../fill/fill_model.dart';
 import '../scan/scan_service.dart';
 import 'fill_item_view.dart';
+import 'personal_data_screen.dart';
 
-enum _Tool { text, check, cross, date, signature }
+enum _Tool { text, check, cross, date, signature, personal }
 
 /// Formular ausfüllen: Antippen setzt Text/Haken/Kreuz/Datum/Unterschrift,
 /// Ziehen verschiebt, der Griff unten rechts ändert die Größe. Zwei Finger
@@ -33,6 +34,9 @@ class _FillScreenState extends State<FillScreen> {
   _Tool _tool = _Tool.text;
   int _color = kFillColors.first;
   SignatureTemplate? _pendingTemplate;
+
+  /// Aus „Meine Daten“ gewählter Text – wird beim nächsten Tipp eingesetzt.
+  String? _pendingPersonal;
   List<SignatureTemplate> _templates = const [];
   final _templateBytes = <String, Uint8List>{};
   bool _dirty = false;
@@ -102,6 +106,11 @@ class _FillScreenState extends State<FillScreen> {
       case _Tool.text:
         final text = await _editText('');
         if (text == null || text.trim().isEmpty) return;
+        item = _textItem(text, fx, fy, size);
+      case _Tool.personal:
+        final text = _pendingPersonal ?? await pickPersonalText(context);
+        if (text == null) return;
+        _pendingPersonal = null;
         item = _textItem(text, fx, fy, size);
       case _Tool.date:
         item = _textItem(DateFormat('dd.MM.yyyy').format(DateTime.now()), fx,
@@ -611,6 +620,10 @@ class _FillScreenState extends State<FillScreen> {
                 _selectedId = null;
               });
               if (tool == _Tool.signature) await _pickTemplate();
+              if (tool == _Tool.personal && mounted) {
+                final t = await pickPersonalText(this.context);
+                if (mounted) setState(() => _pendingPersonal = t);
+              }
             },
           ),
         );
@@ -625,6 +638,7 @@ class _FillScreenState extends State<FillScreen> {
             chip(_Tool.check, Icons.check, 'Haken'),
             chip(_Tool.cross, Icons.close, 'Kreuz'),
             chip(_Tool.date, Icons.today, 'Datum'),
+            chip(_Tool.personal, Icons.badge_outlined, 'Meine Daten'),
             chip(_Tool.signature, Icons.draw,
                 _pendingTemplate == null ? 'Unterschrift' : _pendingTemplate!.name),
           ],
