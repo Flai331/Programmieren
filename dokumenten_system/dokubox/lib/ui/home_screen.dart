@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../ai/ai_extraction_service.dart';
 import '../app_services.dart';
+import '../data/batch_numbering.dart';
 import '../data/database.dart';
 import '../data/doc_types.dart';
 import '../data/document_repository.dart';
@@ -25,6 +26,7 @@ import 'document_detail_screen.dart';
 import 'finance_actions.dart';
 import 'finance_screen.dart';
 import 'network_scanner_screen.dart';
+import 'number_list_screen.dart';
 import 'settings_screen.dart';
 import 'task_widgets.dart';
 import 'tasks_screen.dart';
@@ -193,13 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
             '${result.blankPages} Leerseite(n) entfernt');
       }
 
-      // Jedes Dokument des Stapels einzeln bestätigen. „Zurück" verwirft nur
-      // dieses eine Dokument, die übrigen bleiben im Ablauf.
-      var saved = 0;
-      for (final outcome in result.documents) {
-        if (await _confirmAndSave(outcome)) saved++;
-      }
-      if (saved > 1 && mounted) _snack('$saved Dokumente gespeichert');
+      await _confirmOutcomes(result.documents);
     }
   }
 
@@ -368,6 +364,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       var saved = 0;
       var failed = 0;
+      final outcomes = <ScanOutcome>[];
       for (var i = 0; i < paths.length; i++) {
         if (!mounted) break;
         final ScanOutcome outcome;
@@ -389,8 +386,9 @@ class _HomeScreenState extends State<HomeScreen> {
             } catch (_) {/* Cache-Kopie, räumt das System notfalls auf */}
           }
         }
-        if (await _confirmAndSave(outcome)) saved++;
+        outcomes.add(outcome);
       }
+      saved = await _confirmOutcomes(outcomes);
       if (paths.length > 1 && mounted) {
         _snack('$saved von ${paths.length} PDFs gespeichert'
             '${failed > 0 ? ', $failed nicht lesbar' : ''}');
@@ -435,16 +433,97 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Vergibt die Nummer, füllt vor, lässt bestätigen und speichert ein
   /// Dokument. Liefert `true`, wenn es gespeichert wurde.
-  Future<bool> _confirmAndSave(ScanOutcome outcome) async {
-    final docNumber = await services.repository.nextDocNumber();
-    final pdfPath =
-        await services.scanner.renamePdf(outcome.relativePdfPath, docNumber);
+  /// Ein Dokument → sofort Nummer, bestätigen, speichern. Mehrere →
+  /// [_confirmBatch] (Nummern am Ende nach Datum). Liefert die Anzahl
+  /// gespeicherter Dokumente.
+  Future<int> _confirmOutcomes(List<ScanOutcome> outcomes) async {
+    if (outcomes.isEmpty) return 0;
+    if (outcomes.length == 1) {
+      return await _confirmAndSave(outcomes.single) ? 1 : 0;
+    }
+    return _confirmBatch(outcomes);
+  }
+
+  /// Regeln + KI → vorausgefüllter Entwurf.
+  Future<DocumentDraft> _prepareDraft(ScanOutcome outcome) async {
     final finance = await FinanceSettings.load();
     final draft = await services.suggestions
         .buildDraft(outcome.ocrText, finance: finance);
     await _refineWithAi(draft, outcome.ocrText, outcome.firstPageOcr);
     // Die KI kann Datum/Typ korrigiert haben → Fälligkeit neu berechnen.
     applyPaymentSuggestions(draft, outcome.ocrText, finance: finance);
+    return draft;
+  }
+
+  /// Stapel: erst alle auslesen und nach Datum sortiert bestätigen, dann
+  /// Nummern lückenlos nach (bestätigtem) Datum vergeben – ältestes zuerst –
+  /// und eine Nummernliste zum Beschriften zeigen.
+  Future<int> _confirmBatch(List<ScanOutcome> outcomes) async {
+    final n = outcomes.length;
+    final prepared = <({ScanOutcome outcome, DocumentDraft draft})>[];
+    for (var i = 0; i < n; i++) {
+      if (!mounted) break;
+      _snack('Lese Dokument ${i + 1} von $n …');
+      prepared.add((outcome: outcomes[i], draft: await _prepareDraft(outcomes[i])));
+    }
+    final order = sortForNumbering(prepared, (e) => e.draft.docDate);
+
+    final confirmed = <({ScanOutcome outcome, DocumentDraft draft})>[];
+    for (var i = 0; i < order.length; i++) {
+      final item = order[i];
+      if (!mounted) {
+        await services.scanner.deletePdf(item.outcome.relativePdfPath);
+        continue;
+      }
+      final result = await Navigator.of(context).push<DocumentDraft>(
+        MaterialPageRoute(
+          builder: (_) => ConfirmScreen(
+            draft: item.draft,
+            pdfPath: item.outcome.relativePdfPath,
+            batchInfo: '${i + 1} von ${order.length}',
+            saveLabel: i == order.length - 1 ? 'Fertig' : 'Weiter',
+          ),
+        ),
+      );
+      if (result == null) {
+        await services.scanner.deletePdf(item.outcome.relativePdfPath);
+      } else {
+        confirmed.add((outcome: item.outcome, draft: result));
+      }
+    }
+    if (confirmed.isEmpty) return 0;
+
+    // Nummern erst jetzt, nach dem bestätigten Datum.
+    final entries = <({Document doc, String sender})>[];
+    for (final item in sortForNumbering(confirmed, (e) => e.draft.docDate)) {
+      final docNumber = await services.repository.nextDocNumber();
+      final pdfPath = await services.scanner
+          .renamePdf(item.outcome.relativePdfPath, docNumber);
+      final doc = await services.repository.createDocument(
+        docNumber: docNumber,
+        draft: item.draft,
+        pdfPath: pdfPath,
+        pageCount: item.outcome.pageCount,
+        ocrText: item.outcome.ocrText,
+        refs: extractRefs(item.outcome.ocrText),
+      );
+      await services.notifications.syncDocument(doc.id);
+      entries.add((doc: doc, sender: item.draft.correspondentName ?? ''));
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => NumberListScreen(entries: entries),
+      ));
+    }
+    return entries.length;
+  }
+
+  Future<bool> _confirmAndSave(ScanOutcome outcome) async {
+    final docNumber = await services.repository.nextDocNumber();
+    final pdfPath =
+        await services.scanner.renamePdf(outcome.relativePdfPath, docNumber);
+    final draft = await _prepareDraft(outcome);
 
     if (!mounted) {
       // Sollte nach dem Overlay-Fix nicht mehr vorkommen; falls doch,

@@ -25,12 +25,17 @@ class ConfirmScreen extends StatefulWidget {
   /// gezeigt, damit man die Vorschläge mit dem Original vergleichen kann.
   final String? pdfPath;
 
+  /// Teil eines Stapels, z. B. „Dokument 2 von 5“. Die Nummer wird erst am
+  /// Ende nach Datum vergeben ([docNumber] ist dann null).
+  final String? batchInfo;
+
   const ConfirmScreen({
     super.key,
     required this.draft,
     this.docNumber,
     this.saveLabel = 'Speichern',
     this.pdfPath,
+    this.batchInfo,
   });
 
   @override
@@ -310,13 +315,39 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.docNumber == null
-            ? 'Dokument bearbeiten'
-            : 'Kontrollieren & speichern'),
+        title: Text(widget.batchInfo != null
+            ? 'Kontrollieren · ${widget.batchInfo}'
+            : widget.docNumber == null
+                ? 'Dokument bearbeiten'
+                : 'Kontrollieren & speichern'),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (widget.batchInfo != null && widget.docNumber == null) ...[
+            Card(
+              color: theme.colorScheme.secondaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.format_list_numbered),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Nummer folgt: Wenn alle Dokumente des Stapels '
+                        'bestätigt sind, werden die Nummern nach Datum '
+                        'vergeben – ältestes zuerst. Danach kommt eine Liste '
+                        'zum Beschriften der Originale.',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           if (widget.docNumber != null) ...[
             Card(
               color: theme.colorScheme.primaryContainer,
