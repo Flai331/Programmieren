@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.21';
+const APP_VERSION = 'v130.22';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -6798,7 +6798,14 @@ function openDeviceList() {
         const lab = document.createElement('span');
         lab.textContent = `${x.name}${PEER_ROLE_LABEL[x.role] ? ` (${PEER_ROLE_LABEL[x.role]})` : ''}`;
         row.appendChild(lab);
-        dlgButton(row, '🗑️ Entfernen', 'mini', () => {
+        dlgButton(row, '🗑️ Entfernen', 'mini', async () => {
+          // v130.22: erst nachfragen – ein versehentlicher Tipp hätte sonst sofort das Gerät (samt Live-Verbindung) entfernt
+          const ok = await openDlg((box2, close2) => {
+            dlgHead(box2, '🗑️ Gerät entfernen?', `„${x.name}“ wirklich aus der Geräteliste entfernen?`);
+            dlgButton(box2, 'Entfernen', 'primary', () => close2(true));
+            dlgButton(box2, 'Abbrechen', '', () => close2(false));
+          });
+          if (!ok) return render();
           P.peers = (P.peers || []).filter((p2) => p2 !== x);
           // v130.21: steht gerade eine Live-Verbindung (WebRTC) zu genau diesem Gerät, auch trennen – sonst
           // legt rtcSendProgress den Peer beim nächsten Abgleich automatisch wieder an (die Verbindung besteht ja noch)
