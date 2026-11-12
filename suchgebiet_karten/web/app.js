@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.18';
+const APP_VERSION = 'v130.19';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -6780,6 +6780,36 @@ async function sendElw() {
   saveNow();
   const wohin = res.to || 'alle EL-Geräte';
   toast(waiting ? `⏳ Auftrag an ${wohin} wartet auf Netz – wird automatisch nachgesendet` : `✓ Auftrag an ${wohin} gesendet ${hhmm(Date.now())}${parts.length > 1 ? ` (${parts.length} Teile)` : ''}`, 5000);
+}
+
+// v130.19: Übersicht der für diesen Einsatz registrierten Geräte (role aus v130.17: handover/device/ua) – zum Entfernen
+const PEER_ROLE_LABEL = { handover: 'Übergabe', device: 'Weiteres Gerät / ELW', ua: 'UA' };
+$('more-devices').addEventListener('click', () => { closePanels(); openDeviceList(); });
+function openDeviceList() {
+  openDlg((box, close) => {
+    const render = () => {
+      box.innerHTML = '';
+      dlgHead(box, '📟 Geräte', `Für „${P.title || 'diesen Einsatz'}“ registrierte Geräte.`);
+      const peers = P.peers || [];
+      if (!peers.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = 'Noch keine Geräte registriert.'; box.appendChild(p); }
+      for (const x of peers) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const lab = document.createElement('span');
+        lab.textContent = `${x.name}${PEER_ROLE_LABEL[x.role] ? ` (${PEER_ROLE_LABEL[x.role]})` : ''}`;
+        row.appendChild(lab);
+        dlgButton(row, '🗑️ Entfernen', 'mini', () => {
+          P.peers = (P.peers || []).filter((p2) => p2 !== x);
+          changed();
+          saveNow();
+          render();
+        });
+        box.appendChild(row);
+      }
+      dlgButton(box, 'Fertig', 'primary', () => close(true));
+    };
+    render();
+  });
 }
 
 // Anzeigen
