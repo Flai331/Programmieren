@@ -2,11 +2,15 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../ai/ai_extraction_service.dart';
 import '../app_services.dart';
+import '../backup/auto_backup.dart';
 import '../backup/backup_service.dart';
+import '../platform.dart';
 import '../data/finance.dart';
 import '../lock/lock_gate.dart';
 import '../scan/blank_pages.dart';
@@ -37,10 +41,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _aiEnabled = false;
   int? _aiDownloadProgress;
   FinanceSettings _finance = const FinanceSettings();
+  AutoBackupConfig _auto = const AutoBackupConfig();
+  bool _autostart = false;
 
   @override
   void initState() {
     super.initState();
+    if (isDesktop) {
+      AutoBackup.load().then((v) {
+        if (mounted) setState(() => _auto = v);
+      });
+      WindowsAutostart.isOn().then((v) {
+        if (mounted) setState(() => _autostart = v);
+      });
+    }
     FinanceSettings.load().then((value) {
       if (mounted) setState(() => _finance = value);
     });
@@ -190,6 +204,116 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  Future<void> _saveAuto(AutoBackupConfig c) async {
+    await AutoBackup.save(c);
+    setState(() => _auto = c);
+  }
+
+  Future<void> _toggleAuto(bool on) async {
+    var c = _auto.copyWith(enabled: on);
+    if (on && c.password.isEmpty) {
+      final pw = await _askPassword(title: 'Passwort für automatische Backups');
+      if (pw == null) return;
+      c = c.copyWith(password: pw);
+    }
+    if (on && c.targets.isEmpty) {
+      final docs = await getApplicationDocumentsDirectory();
+      c = c.copyWith(targets: [p.join(docs.path, 'DokuBox-Backups')]);
+    }
+    await _saveAuto(c);
+    if (on) _runAutoNow();
+  }
+
+  Future<void> _addTarget() async {
+    final dir = await FilePicker.platform
+        .getDirectoryPath(dialogTitle: 'Backup-Ordner (z. B. USB-Stick)');
+    if (dir == null) return;
+    final target = p.basename(dir) == 'DokuBox-Backups' ? dir : p.join(dir, 'DokuBox-Backups');
+    if (_auto.targets.contains(target)) return;
+    await _saveAuto(_auto.copyWith(targets: [..._auto.targets, target]));
+  }
+
+  Future<void> _runAutoNow() async {
+    setState(() => _busy = true);
+    try {
+      final r = await AutoBackup(services.backup.createBackupFile)
+          .runIfDue(force: true);
+      _snack([
+        if (r.written.isNotEmpty) 'Gesichert: ${r.written.length} Ziel(e)',
+        if (r.missing.isNotEmpty) 'Nicht erreichbar: ${r.missing.join(', ')}',
+      ].join(' · '));
+    } catch (e) {
+      _snack('Backup fehlgeschlagen: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  List<Widget> _autoBackupTiles() => [
+        SwitchListTile(
+          secondary: const Icon(Icons.update),
+          title: const Text('Automatisches Backup'),
+          subtitle: const Text(
+              'Täglich verschlüsselt auf Laptop und USB-Stick/externe Platte. '
+              'Fehlt der Stick, wird nachgeholt, sobald er steckt.'),
+          value: _auto.enabled,
+          onChanged: _busy ? null : _toggleAuto,
+        ),
+        if (_auto.enabled) ...[
+          for (final t in _auto.targets)
+            ListTile(
+              dense: true,
+              contentPadding: const EdgeInsets.only(left: 72, right: 8),
+              title: Text(t),
+              subtitle: FutureBuilder<DateTime?>(
+                future: AutoBackup.lastBackup(t),
+                builder: (_, s) => Text(s.data == null
+                    ? 'noch kein Backup'
+                    : 'zuletzt ${s.data!.toString().substring(0, 16)}'),
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => _saveAuto(_auto.copyWith(
+                    targets: _auto.targets.where((x) => x != t).toList())),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(left: 64),
+            child: Wrap(spacing: 8, children: [
+              TextButton.icon(
+                  onPressed: _addTarget,
+                  icon: const Icon(Icons.usb),
+                  label: const Text('Ziel hinzufügen')),
+              TextButton.icon(
+                  onPressed: _busy ? null : _runAutoNow,
+                  icon: const Icon(Icons.backup),
+                  label: const Text('Jetzt sichern')),
+              TextButton.icon(
+                  onPressed: () async {
+                    final pw = await _askPassword(title: 'Neues Backup-Passwort');
+                    if (pw != null) await _saveAuto(_auto.copyWith(password: pw));
+                  },
+                  icon: const Icon(Icons.key),
+                  label: const Text('Passwort ändern')),
+            ]),
+          ),
+        ],
+        if (Platform.isWindows)
+          SwitchListTile(
+            secondary: const Icon(Icons.power_settings_new),
+            title: const Text('Mit Windows starten'),
+            subtitle: const Text(
+                'DokuBox startet minimiert – Abgleich, Ablage-Ordner und '
+                'Backups laufen im Hintergrund.'),
+            value: _autostart,
+            onChanged: (v) async {
+              await WindowsAutostart.set(v);
+              final now = await WindowsAutostart.isOn();
+              if (mounted) setState(() => _autostart = now);
+            },
+          ),
+      ];
 
   Future<void> _importBackup() async {
     // Datei-Auswahl ist eine eigene Activity → Sperre kurz unterdrücken.
@@ -566,6 +690,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             enabled: !_busy,
             onTap: _importBackup,
           ),
+          if (isDesktop) ..._autoBackupTiles(),
           if (_busy)
             const Padding(
               padding: EdgeInsets.all(24),

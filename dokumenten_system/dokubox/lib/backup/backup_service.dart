@@ -44,6 +44,9 @@ class BackupService {
     );
   }
 
+  /// Für [AutoBackup]: gleiche Datei, als Tear-off nutzbar.
+  Future<File> createBackupFile(String password) => createBackup(password);
+
   /// Erstellt die verschlüsselte Backup-Datei und liefert ihren Pfad.
   Future<File> createBackup(String password) async {
     final docsDir = await _docsDir();

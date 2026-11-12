@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_doc_scanner/flutter_doc_scanner.dart';
 import 'package:intl/intl.dart';
 
 import '../ai/ai_extraction_service.dart';
+import '../backup/auto_backup.dart';
 import '../app_services.dart';
 import '../data/batch_numbering.dart';
 import '../data/database.dart';
@@ -56,6 +58,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _searchController = TextEditingController();
   DocumentFilter _filter = const DocumentFilter();
   bool _scanning = false;
+  Timer? _backupTimer;
+
+  /// Am PC: fällige Backups schreiben (alle 15 min prüfen → USB-Stick
+  /// wird erkannt, sobald er steckt) und an alte Backups erinnern.
+  Future<void> _autoBackup() async {
+    try {
+      await AutoBackup(services.backup.createBackupFile).runIfDue();
+    } catch (_) {}
+  }
 
   @override
   void initState() {
@@ -68,6 +79,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       SyncService.localAddress().then((host) {
         if (host != null) services.sync.startServer(host: host).ignore();
       });
+      _autoBackup().then((_) async {
+        final hint = await AutoBackup.reminder();
+        if (hint != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(hint)));
+        }
+      });
+      _backupTimer =
+          Timer.periodic(const Duration(minutes: 15), (_) => _autoBackup());
     }
     autoSync().then((_) {
       if (mounted) setState(() {});
@@ -88,6 +107,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _backupTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }

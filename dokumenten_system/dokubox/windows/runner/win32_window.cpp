@@ -149,8 +149,11 @@ bool Win32Window::Create(const std::wstring& title,
   return OnCreate();
 }
 
+extern bool g_start_minimized;
+
 bool Win32Window::Show() {
-  return ShowWindow(window_handle_, SW_SHOWNORMAL);
+  return ShowWindow(window_handle_,
+                    g_start_minimized ? SW_SHOWMINNOACTIVE : SW_SHOWNORMAL);
 }
 
 // static
