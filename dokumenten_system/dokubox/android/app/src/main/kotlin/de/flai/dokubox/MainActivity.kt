@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.wifi.WifiManager
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -83,6 +84,31 @@ class MainActivity : FlutterFragmentActivity() {
                     result.success(true)
                 } catch (e: Exception) {
                     result.error("email", e.message, null)
+                }
+            }
+        // Update: heruntergeladene APK dem System-Installer übergeben.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dokubox/update")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "install") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                try {
+                    if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+                        startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            Uri.parse("package:$packageName")))
+                        result.success("permission")
+                        return@setMethodCallHandler
+                    }
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        this, "$packageName.dokubox.files", File(call.argument<String>("path")!!))
+                    startActivity(Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                    result.success("ok")
+                } catch (e: Exception) {
+                    result.error("update", e.message, null)
                 }
             }
         collect(intent)

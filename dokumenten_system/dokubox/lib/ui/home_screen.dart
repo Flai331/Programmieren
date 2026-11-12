@@ -40,6 +40,7 @@ import 'finance_screen.dart';
 import 'network_scanner_screen.dart';
 import 'number_list_screen.dart';
 import 'settings_screen.dart';
+import 'update_ui.dart';
 import 'task_widgets.dart';
 import 'tasks_screen.dart';
 import 'wlan_scan_screen.dart';
@@ -90,6 +91,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     autoSync().then((_) {
       if (mounted) setState(() {});
+    });
+    // Einmal beim Start still nach einer neuen Version schauen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) checkForUpdate(context, silent: true);
     });
     ShareReceiver.listen(_importShared);
     WidgetsBinding.instance.addPostFrameCallback((_) => _importShared());

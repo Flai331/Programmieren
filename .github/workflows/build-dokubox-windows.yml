@@ -34,7 +34,7 @@ jobs:
 
       - name: Windows-App bauen
         working-directory: dokumenten_system/dokubox
-        run: flutter build windows --release
+        run: flutter build windows --release --dart-define=BUILD_NUMBER=${{ github.run_number }}
 
       - name: Als ZIP packen
         shell: pwsh
@@ -48,6 +48,7 @@ jobs:
           tag_name: windows-latest
           name: DokuBox für Windows (neueste)
           body: |
+            Build ${{ github.run_number }}
             ZIP entpacken und `dokubox.exe` starten.
           files: DokuBox-Windows.zip
           prerelease: true

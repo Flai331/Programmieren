@@ -10,6 +10,8 @@
     <!-- Netzwerk-Scanner im WLAN finden (mDNS/Bonjour) -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <!-- Aktualisieren-Knopf: neue APK aus dem GitHub-Release installieren -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
         android:label="DokuBox"
         android:name="${applicationName}"

@@ -6,6 +6,7 @@ on:
     branches:
       - claude/document-digitalization-system-ezb1my
       - ccr-f1c4c65b-jqkigw
+      - ccr-04e9598f-nwh0iq
     paths:
       - 'dokumenten_system/dokubox/**'
       - '.github/workflows/build-dokubox-apk.yml'
@@ -50,7 +51,7 @@ jobs:
         env:
           DOKUBOX_KEYSTORE_PASSWORD: ${{ secrets.DOKUBOX_KEYSTORE_PASSWORD }}
         # Fortlaufende Versionsnummer, damit Android jede neue APK als Update sieht.
-        run: flutter build apk --release --target-platform android-arm64 --build-number=${{ github.run_number }}
+        run: flutter build apk --release --target-platform android-arm64 --build-number=${{ github.run_number }} --dart-define=BUILD_NUMBER=${{ github.run_number }}
 
       - name: Signatur prüfen
         env:
@@ -77,6 +78,7 @@ jobs:
           tag_name: apk-latest
           name: DokuBox (neueste APK)
           body: |
+            Build ${{ github.run_number }}
             Automatisch gebaute Android-App (arm64).
             **Download unten: `DokuBox.apk`** — auf ein Android-Handy laden und antippen.
             Enthält optionales lokales KI-Auslesen (Modell wird bei Bedarf in der App geladen).

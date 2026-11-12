@@ -21,6 +21,8 @@ import '../reports/print_lists.dart';
 import 'devices_screen.dart';
 import 'firms_screen.dart';
 import 'personal_data_screen.dart';
+import 'update_ui.dart';
+import '../update/updater.dart';
 import 'tax_screen.dart';
 import 'report_share.dart';
 import 'templates_screen.dart';
@@ -486,6 +488,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const PersonalDataScreen()),
             ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.system_update),
+            title: const Text('Nach Update suchen'),
+            subtitle: Text(kBuildNumber == 0
+                ? 'Eigener Build – jede GitHub-Version gilt als neuer'
+                : 'Installiert: Build $kBuildNumber'),
+            onTap: () => checkForUpdate(context),
           ),
           ListTile(
             leading: const Icon(Icons.account_balance),
