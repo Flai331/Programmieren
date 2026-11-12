@@ -119,7 +119,7 @@ export function normalizeProject(p) {
   if (!out.eid) out.eid = out.id;
   // v90: Zeichnungen bekommen feste ID, Änderungszeit (t) und Gerät (by); Sperren (lock) nur 'base' | 'ua'
   for (const k of ['itemDel', 'cellT', 'cellBy', 'gridT', 'glock', 'gown']) if (!out[k] || typeof out[k] !== 'object' || Array.isArray(out[k])) out[k] = {};
-  out.peers = (Array.isArray(out.peers) ? out.peers : []).filter((x) => x && typeof x.name === 'string' && x.name).map((x) => ({ name: x.name.slice(0, 60), lastSent: Number(x.lastSent) || 0, sent: x.sent != null ? Number(x.sent) || 0 : Number(x.lastSent) || 0, ...(typeof x.id === 'string' && x.id ? { id: x.id.slice(0, 40) } : {}) })); // v125: id = Geräte-ID
+  out.peers = (Array.isArray(out.peers) ? out.peers : []).filter((x) => x && typeof x.name === 'string' && x.name).map((x) => ({ name: x.name.slice(0, 60), lastSent: Number(x.lastSent) || 0, sent: x.sent != null ? Number(x.sent) || 0 : Number(x.lastSent) || 0, ...(typeof x.id === 'string' && x.id ? { id: x.id.slice(0, 40) } : {}), ...(['handover', 'device', 'ua'].includes(x.role) ? { role: x.role } : {}) })); // v125: id = Geräte-ID, v130.17: role
   out.items = out.items.map((it) => {
     const x = { ...it, id: it.id || uid(), t: Number(it.t) || out.updated || Date.now(), by: String(it.by || '') };
     if (x.lock !== 'base' && x.lock !== 'ua') delete x.lock;
@@ -143,6 +143,10 @@ export function normalizeProject(p) {
   // v124: empfangene Aufträge an den ELW (elw.js), neueste zuerst; elwSent = Zeit des letzten Sendens an den ELW
   out.elwIn = Array.isArray(out.elwIn) ? out.elwIn.filter((m) => m && typeof m.id === 'string' && Array.isArray(m.items)).slice(0, 50) : [];
   out.elwSent = Number(out.elwSent) || 0;
+  // v130.23: eigene gesendete ELW-Aufträge mit Lesestatus (ack = Zeit, 0 = noch nicht gesehen)
+  out.elwOut = Array.isArray(out.elwOut) ? out.elwOut.filter((x) => x && typeof x.id === 'string').slice(-50).map((x) => ({
+    id: x.id, to: String(x.to || '').slice(0, 60), txt: String(x.txt || '').slice(0, 300), t: Number(x.t) || 0, n: Number(x.n) || 0, ack: Number(x.ack) || 0, ackBy: String(x.ackBy || '').slice(0, 60),
+  })) : [];
   out.qmsgs = Array.isArray(out.qmsgs) ? out.qmsgs.slice(-500) : []; // Status-Meldungen aus QR-Rückmeldungen
   if (out.hf && typeof out.hf === 'object') {
     out.hf = { ...out.hf };

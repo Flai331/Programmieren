@@ -19,7 +19,7 @@ import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './in
 import { emptySel, selectAll, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids, unionSel } from './scope.js';
 import { MSG_VIEW, MSG_DELETE, ownTeamMsgs, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock, assignedOf, assignedCell, assignedGrid, markAccepted, isAccepted, unlockUntil } from './locks.js';
 import { isDone, openPoints, guardApplies, msgPct, closeMsg, sentPct, closeAsk, autoCloseDue, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
-import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts } from './elw.js'; // v124
+import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts, buildElwAck, isElwAck } from './elw.js'; // v124, v130.23
 import { RTC_KIND, buildRtcMsg, rtcFor, shouldYield } from './rtc.js'; // v130.15
 import { nextTeamLabel, uaPrefix, sameTeamName, uaName, uaTitle, joinUaNames, renameUa } from './uateam.js';
 import { typeIcon, typeText, unitType, isDog, unitLine, cleanUnit, nextFunkrufname, UNIT_TYPES, ORGS, forcesFromTeams, forcesText, whoText } from './units.js'; // v128
@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.22';
+const APP_VERSION = 'v130.23';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -6387,8 +6387,9 @@ async function pollLive() {
     const fresh = sp.team.filter((m) => !known.has(m.id) && !(proj.msgDel && proj.msgDel[m.id]));
     liveInit(l);
     const knownOut = new Set(l.out.map((m) => m.id));
-    const freshEl = sp.el.filter((m) => !knownOut.has(m.id) && !ELW_KINDS.includes(m.s) && m.s !== RTC_KIND); // auch von anderen EL-Geräten (v124: ELW-Aufträge, v130.15: WebRTC-Signalisierung nicht)
+    const freshEl = sp.el.filter((m) => !knownOut.has(m.id) && !ELW_KINDS.includes(m.s) && m.s !== RTC_KIND && !isElwAck(m)); // auch von anderen EL-Geräten (v124: ELW-Aufträge, v130.15: WebRTC-Signalisierung, v130.23: ELW-Lesebestätigung nicht)
     takeElw(proj, sp.el); // v124: Aufträge an den ELW
+    takeElwAcks(proj, sp.el); // v130.23: Lesebestätigung für gesendete ELW-Aufträge
     if (proj === P) rtcHandleSignals(sp.el.filter((m) => m.s === RTC_KIND)); // v130.15: automatischer Live-Abgleich
     let readsNew = false;
     for (const [k, v] of Object.entries(sp.reads)) {
@@ -6640,6 +6641,7 @@ function renderElwBar() {
 $('elw-list').addEventListener('click', () => elwList());
 $('elw-off').addEventListener('click', elwClearPreview);
 $('more-elw-in').addEventListener('click', () => { closePanels(); elwList(true); });
+$('more-elw-out').addEventListener('click', () => { closePanels(); elwOutList(); });
 $('more-elw').addEventListener('click', () => { closePanels(); sendElw(); });
 
 // Empfangen: alle Raum-Meldungen durchsehen, Teile sammeln, neue Aufträge für dieses Gerät speichern und melden
@@ -6669,6 +6671,17 @@ function takeElw(proj, msgs) {
   const tb = $('toast');
   tb.onclick = () => { if (tb.textContent === msg) { tb.hidden = true; elwOpenOrder(o); } };
 }
+// v130.23: Lesebestätigung für eigene gesendete ELW-Aufträge einarbeiten (proj.elwOut, siehe sendElw)
+function takeElwAcks(proj, msgs) {
+  const acks = (msgs || []).filter((m) => isElwAck(m) && m.to === devBy());
+  if (!acks.length || !proj.elwOut || !proj.elwOut.length) return;
+  let changedAny = false;
+  for (const a of acks) {
+    const x = proj.elwOut.find((o) => o.id === a.ref);
+    if (x && !x.ack) { x.ack = a.t; x.ackBy = a.from || ''; changedAny = true; }
+  }
+  if (changedAny) { proj.updated = Date.now(); saveNow(); if (proj === P) toast(`✓ Auftrag gesehen${acks[0].from ? ` (${acks[0].from})` : ''}`, 4000); }
+}
 async function pollElw() {
   const proj = P;
   const l = proj && proj.live;
@@ -6678,6 +6691,7 @@ async function pollElw() {
   try {
     const r = await pollMessages({ url: l.url, key: l.key, since: l.eSince || 0 });
     takeElw(proj, r.msgs);
+    takeElwAcks(proj, r.msgs);
     if (r.since !== l.eSince) { l.eSince = r.since; saveNow(); }
   } catch { /* kein Netz: nächster Versuch */ } finally { elwPollBusy = false; }
 }
@@ -6777,9 +6791,29 @@ async function sendElw() {
   const waiting = proj.live.outbox.some((m) => ids.has(m.id));
   if (!waiting && !ok.every(Boolean)) return; // abgelehnt: flushStatus hat schon gewarnt
   proj.elwSent = Date.now();
+  // v130.23: zum Nachsehen in „📨 Gesendete Aufträge“ merken, ob/wann der Empfänger ihn geöffnet hat
+  proj.elwOut = proj.elwOut || [];
+  proj.elwOut.push({ id: order.id, to: res.to || '', txt: res.txt, t: Date.now(), n: items.length, ack: 0, ackBy: '' });
+  proj.elwOut = proj.elwOut.slice(-50);
   saveNow();
   const wohin = res.to || 'alle EL-Geräte';
   toast(waiting ? `⏳ Auftrag an ${wohin} wartet auf Netz – wird automatisch nachgesendet` : `✓ Auftrag an ${wohin} gesendet ${hhmm(Date.now())}${parts.length > 1 ? ` (${parts.length} Teile)` : ''}`, 5000);
+}
+// v130.23: eigene gesendete ELW-Aufträge mit Lesestatus ansehen
+async function elwOutList() {
+  const list = (P.elwOut || []).slice().reverse();
+  if (!list.length) return toast('Noch keine Aufträge gesendet');
+  await openDlg((box, close) => {
+    dlgHead(box, `📨 Gesendete Aufträge (${list.length})`, 'Ob und wann der Empfänger den Auftrag geöffnet hat.');
+    for (const x of list) {
+      const status = x.ack ? `✓ gesehen ${hhmm(x.ack)}${x.ackBy ? ` (${esc(x.ackBy)})` : ''}` : '… noch nicht gesehen';
+      const p = document.createElement('p');
+      p.className = 'small';
+      p.innerHTML = `<b>${esc(x.to || 'alle EL-Geräte')}</b> ${hhmm(x.t)}<br>${esc(x.txt || '–')}<br>${status}`;
+      box.appendChild(p);
+    }
+    dlgButton(box, 'Schließen', 'primary', () => close(null));
+  });
 }
 
 // v130.19: Übersicht der für diesen Einsatz registrierten Geräte (role aus v130.17: handover/device/ua) – zum Entfernen
@@ -6839,6 +6873,12 @@ async function elwList(all) {
 async function elwOpenOrder(o) {
   const proj = P;
   elwPreview(o);
+  // v130.23: Lesebestätigung – einmal je Auftrag, geht an den Absender zurück
+  if (!o.ackSent && o.from && proj.live) {
+    o.ackSent = true;
+    elSend(buildElwAck({ ref: o.id, to: o.from, from: devBy() }));
+    saveNow();
+  }
   const had = proj.items.filter((i) => i.elw === o.id).length;
   const r = await openDlg((box, close) => {
     dlgHead(box, `📥 Auftrag von ${o.from || 'EL'} · ${hhmm(o.t)}${o.done ? ' · erledigt' : ''}`, `${elwCounts(o.items)} – auf der Karte gestrichelt (lila).`);

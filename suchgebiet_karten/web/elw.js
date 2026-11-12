@@ -51,6 +51,13 @@ export function buildElwOrder({ from, to = '', txt = '', items = [], marks = [],
   };
 }
 
+// v130.23: Lesebestätigung für einen Auftrag (ref = dessen ID) – geht beim Öffnen automatisch zurück an „from“
+export const ELW_ACK = 'elwq';
+export function buildElwAck({ ref, to, from, t = Date.now(), id } = {}) {
+  return { s: ELW_ACK, a: 'EL', tm: 'Einsatzleitung', v: 1, id: id || uid(), t, ref: str(ref, 40), to: str(to, 60), from: str(from, 60) };
+}
+export const isElwAck = (m) => !!m && m.s === ELW_ACK && typeof m.ref === 'string';
+
 // Sonderzeichen als \uXXXX, damit die Länge in Zeichen der Länge in Bytes entspricht
 const asciiJson = (o) => JSON.stringify(o).replace(/[\u0080-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
 

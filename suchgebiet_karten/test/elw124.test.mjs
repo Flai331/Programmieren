@@ -1,7 +1,7 @@
 // v124: Zeichnung mit Auftrag an den ELW
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildElwOrder, splitElwOrder, joinElwParts, elwInbox, mergeElwItems, addElwIn, elwTemplates, elwCounts, ELW_MAX_CHARS } from '../web/elw.js';
+import { buildElwOrder, splitElwOrder, joinElwParts, elwInbox, mergeElwItems, addElwIn, elwTemplates, elwCounts, ELW_MAX_CHARS, buildElwAck, isElwAck } from '../web/elw.js';
 import { EL_KINDS, forHf, needsAck, encryptMsg, newLiveKey } from '../web/status.js';
 import { normalizeProject, newProject } from '../web/store.js';
 
@@ -15,6 +15,13 @@ test('buildElwOrder: Form, Rundung, keine internen Felder', () => {
   assert.equal(t.pts[0][0], 52.123457);
   for (const k of ['id', 't', 'by', 'lock']) assert.ok(!(k in t));
   assert.equal(elwCounts(m.items), '1 Umriss, 1 Zeichnung, 1 Text');
+});
+test('v130.23: buildElwAck/isElwAck – Lesebestätigung referenziert den Auftrag', () => {
+  const ack = buildElwAck({ ref: 'O1', to: 'Handy EL', from: 'ELW', t: 9 });
+  assert.equal(ack.s, 'elwq'); assert.equal(ack.ref, 'O1'); assert.equal(ack.to, 'Handy EL'); assert.equal(ack.from, 'ELW');
+  assert.ok(isElwAck(ack));
+  assert.ok(!isElwAck(buildElwOrder({ from: 'A' })));
+  assert.ok(!isElwAck(null));
 });
 test('buildElwOrder: Team nur als Name', () => {
   const m = buildElwOrder({ from: 'A', items: [track(3, { to: 'T9' })], marks: [{ id: 'T9', label: 'DRK 1' }] });
