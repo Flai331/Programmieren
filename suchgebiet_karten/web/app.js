@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.19';
+const APP_VERSION = 'v130.21';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -6800,6 +6800,9 @@ function openDeviceList() {
         row.appendChild(lab);
         dlgButton(row, '🗑️ Entfernen', 'mini', () => {
           P.peers = (P.peers || []).filter((p2) => p2 !== x);
+          // v130.21: steht gerade eine Live-Verbindung (WebRTC) zu genau diesem Gerät, auch trennen – sonst
+          // legt rtcSendProgress den Peer beim nächsten Abgleich automatisch wieder an (die Verbindung besteht ja noch)
+          if (rtcPC && (rtcPeerId === x.id || (!x.id && rtcPeerName === x.name))) rtcReset();
           changed();
           saveNow();
           render();
