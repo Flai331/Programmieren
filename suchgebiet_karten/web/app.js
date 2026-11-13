@@ -19,7 +19,8 @@ import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './in
 import { emptySel, selectAll, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids, unionSel } from './scope.js';
 import { MSG_VIEW, MSG_DELETE, ownTeamMsgs, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock, assignedOf, assignedCell, assignedGrid, markAccepted, isAccepted, unlockUntil } from './locks.js';
 import { isDone, openPoints, guardApplies, msgPct, closeMsg, sentPct, closeAsk, autoCloseDue, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
-import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts } from './elw.js'; // v124
+import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts, buildElwAck, isElwAck } from './elw.js'; // v124, v130.23
+import { RTC_KIND, buildRtcMsg, rtcFor, shouldYield } from './rtc.js'; // v130.15
 import { nextTeamLabel, uaPrefix, sameTeamName, uaName, uaTitle, joinUaNames, renameUa } from './uateam.js';
 import { typeIcon, typeText, unitType, isDog, unitLine, cleanUnit, nextFunkrufname, UNIT_TYPES, ORGS, forcesFromTeams, forcesText, whoText } from './units.js'; // v128
 import { FUNK_KINDS, funkKind, funkLabel, timeOfDay, funkTargets, buildFunkMsg, addFunkMsg, buildFindMsg, msgSource } from './funk.js'; // v128
@@ -80,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.14';
+const APP_VERSION = 'v130.26';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -121,6 +122,7 @@ let pendingMove = null; // „📍 Verlegen“ mit Tippen auf die Karte: { msg: 
 const NO_RP_HF = 'Die Einsatzleitung hat keine Rettungspunkte mitgeschickt.';
 let pendingSpot = null; // „Standort melden“ mit Tippen auf die Karte (Hundeführer): { cat, txt }
 let elwPollBusy = false; // v124: Abholen der Aufträge an den ELW läuft
+let elwTodoSendTimer = null; // v130.26: Debounce fürs Zurücksenden der To-do-Haken
 let elwLayer = null; // v124: Vorschau eines Auftrags auf der Karte
 let elwShown = ''; // v124: ID des Auftrags, dessen Vorschau steht
 let liveBusy = false; // Abholen der Status-Meldungen läuft
@@ -293,6 +295,8 @@ function changed() {
   if (!$('panel-teams').hidden) renderMarks();
   redraw();
   save();
+  rtcScheduleSend(); // v130.15: automatischer Live-Abgleich – eigene Änderungen gebündelt an den verbundenen Peer
+  renderRtcStatus();
 }
 
 // ---------- Karte ----------
@@ -3693,11 +3697,11 @@ $('hf-rec').addEventListener('click', () => (recWatch !== null ? stopRec() : sta
 
 // Markieren: Art wählen, Position = GPS-Standort oder auf der Karte angetippt
 const HF_MARKS = [['⚠️', 'Anzeige'], ['✅', 'Fund'], ['🐾', 'Spur'], ['🎒', 'Gegenstand'], ['❗', 'Gefahr'], ['📝', 'Hinweis']];
-// Mit GPS: Punkt am Standort. Ohne GPS: fragen – auf der Karte antippen oder Standort einschalten
+// v130.16: immer explizit fragen – auf der Karte antippen oder am eigenen Standort markieren
+// (vorher wurde bei vorhandenem GPS-Fix automatisch der Standort genommen, ohne Wahlmöglichkeit)
 $('hf-mark').addEventListener('click', () => {
-  if (lastPos) return hfMarkDialog({ lat: lastPos[0], lon: lastPos[1] }, 'Position: dein GPS-Standort.');
   openDlg((box, close) => {
-    dlgHead(box, '📍 Markieren', 'Der Standort (GPS) ist aus. Wo soll der Punkt hin?');
+    dlgHead(box, '📍 Markieren', 'Wo soll der Punkt hin?');
     const list = document.createElement('div');
     list.className = 'dlg-btns';
     box.appendChild(list);
@@ -3706,7 +3710,8 @@ $('hf-mark').addEventListener('click', () => {
       setTool('hfmarkpt');
       toast('Auf die Karte tippen: dort wird der Punkt gesetzt', 5000);
     });
-    const gpsBtn = dlgButton(list, '🛰️ Standort einschalten', 'primary', () => {
+    const gpsBtn = dlgButton(list, '📍 Punkt = mein Standort', 'primary', () => {
+      if (lastPos) { close(true); return hfMarkDialog({ lat: lastPos[0], lon: lastPos[1] }, 'Position: dein GPS-Standort.'); }
       if (!navigator.geolocation) return toast('Standort wird nicht unterstützt');
       startGps(false);
       gpsBtn.disabled = true;
@@ -6383,8 +6388,10 @@ async function pollLive() {
     const fresh = sp.team.filter((m) => !known.has(m.id) && !(proj.msgDel && proj.msgDel[m.id]));
     liveInit(l);
     const knownOut = new Set(l.out.map((m) => m.id));
-    const freshEl = sp.el.filter((m) => !knownOut.has(m.id) && !ELW_KINDS.includes(m.s)); // auch von anderen EL-Geräten (v124: ELW-Aufträge nicht)
+    const freshEl = sp.el.filter((m) => !knownOut.has(m.id) && !ELW_KINDS.includes(m.s) && m.s !== RTC_KIND && !isElwAck(m)); // auch von anderen EL-Geräten (v124: ELW-Aufträge, v130.15: WebRTC-Signalisierung, v130.23: ELW-Lesebestätigung nicht)
     takeElw(proj, sp.el); // v124: Aufträge an den ELW
+    takeElwAcks(proj, sp.el); // v130.23: Lesebestätigung für gesendete ELW-Aufträge
+    if (proj === P) rtcHandleSignals(sp.el.filter((m) => m.s === RTC_KIND)); // v130.15: automatischer Live-Abgleich
     let readsNew = false;
     for (const [k, v] of Object.entries(sp.reads)) {
       const o = l.reads[k] || {};
@@ -6415,6 +6422,143 @@ async function pollLive() {
     }
   } catch { /* kein Netz oder Server weg: nächster Versuch */ } finally { liveBusy = false; }
   showUrgent();
+  if (proj === P) rtcMaybeConnect(proj); // v130.15: automatischer Live-Abgleich – alle 15 s neu versuchen, falls noch nicht verbunden
+}
+// ---------- v130.15: Automatischer Live-Abgleich (WebRTC) zwischen Geräten der Einsatzleitung ----------
+// Signalisierung über denselben Status-Server-Raum (devId() statt Team-Auftrag adressiert), Nutzlast ist dieselbe
+// wie bei „Fortschritt senden“ (buildProgress/mergeProgress) – nur der Transportweg ist neu (Datenkanal statt QR).
+let rtcPC = null; // aktuelle RTCPeerConnection (immer höchstens eine – erster Schritt: EL <-> ein weiteres Gerät)
+let rtcChan = null; // RTCDataChannel, sobald offen
+let rtcPeerId = ''; // devId() des verbundenen/gerade verhandelten Geräts
+let rtcPeerName = ''; // sein Anzeigename (für die Fortschritt-Peer-Liste)
+let rtcPendingCand = []; // ICE-Kandidaten, die vor der Remote-Beschreibung ankamen
+let rtcTriedAt = 0; // letzter Verbindungsversuch (Drosselung)
+let rtcSendTimer = null; // Debounce fürs automatische Senden bei eigenen Änderungen
+const RTC_RETRY_MS = 15e3;
+const RTC_SEND_DEBOUNCE_MS = 2500;
+function rtcReset() {
+  if (rtcPC) { try { rtcPC.close(); } catch { /* schon zu */ } }
+  rtcPC = null;
+  rtcChan = null;
+  rtcPeerId = '';
+  rtcPeerName = '';
+  rtcPendingCand = [];
+  clearTimeout(rtcSendTimer);
+  rtcSendTimer = null;
+  renderRtcStatus();
+}
+function rtcSend(msg) { elSend(msg).catch(() => {}); }
+function rtcNewPC() {
+  // v130.15: bewusst ohne STUN-Server – der Zweck ist der Abgleich im selben WLAN (z. B. am ELW-Router), wo
+  // die eigene (Host-)Adresse zum Verbinden reicht; ein ggf. nicht erreichbarer STUN-Dienst soll das nicht ausbremsen
+  const pc = new RTCPeerConnection({ iceServers: [] });
+  pc.onicecandidate = (e) => { if (e.candidate) rtcSend(buildRtcMsg({ by: devId(), to: rtcPeerId || '*', rt: 'ice', cand: e.candidate.toJSON() })); };
+  pc.onconnectionstatechange = () => {
+    if (pc !== rtcPC) return;
+    if (pc.connectionState === 'connected') renderRtcStatus();
+    else if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) rtcReset();
+  };
+  pc.ondatachannel = (e) => { rtcWireChannel(e.channel); };
+  return pc;
+}
+function rtcWireChannel(ch) {
+  rtcChan = ch;
+  ch.onopen = () => { renderRtcStatus(); rtcSendProgress(true); };
+  ch.onclose = () => { if (ch === rtcChan) rtcChan = null; };
+  ch.onmessage = (e) => { try { rtcApplyProgress(JSON.parse(e.data)); } catch { /* keine gültige Nutzlast */ } };
+}
+// Neue Verbindung anstoßen, wenn noch keine besteht und genug Zeit seit dem letzten Versuch vergangen ist
+function rtcMaybeConnect(proj) {
+  if (db.mode !== 'el' || !proj.live || proj.closed || !wantsLive(proj)) return;
+  if (rtcPC || Date.now() - rtcTriedAt < RTC_RETRY_MS) return;
+  rtcTriedAt = Date.now();
+  rtcPC = rtcNewPC();
+  rtcWireChannel(rtcPC.createDataChannel('sync'));
+  rtcPC.createOffer().then((offer) => rtcPC.setLocalDescription(offer)).then(() => {
+    if (!rtcPC || !rtcPC.localDescription) return;
+    rtcSend(buildRtcMsg({ by: devId(), byName: devBy(), to: '*', rt: 'offer', sdp: rtcPC.localDescription.sdp }));
+  }).catch(() => rtcReset());
+}
+async function rtcFlushCandidates() {
+  const cs = rtcPendingCand;
+  rtcPendingCand = [];
+  for (const c of cs) { try { await rtcPC.addIceCandidate(c); } catch { /* veraltet/ungültig */ } }
+}
+// Eingehende Signalisierung: Angebot (ggf. „Glarre“ auflösen), Antwort, ICE-Kandidat
+async function rtcHandleSignals(msgs) {
+  if (!msgs.length) return;
+  const mine = devId();
+  if (!mine) return; // ohne eigene Geräte-ID (noch keine Lizenz geladen) keine Zuordnung möglich
+  for (const m of rtcFor(msgs, mine)) {
+    if (m.rt === 'offer') {
+      if (rtcPC && rtcPeerId && rtcPeerId !== m.by) continue; // schon mit einem anderen Gerät verbunden/dabei
+      if (rtcPC && rtcPC.signalingState === 'have-local-offer') {
+        if (!shouldYield(mine, m.by)) continue; // bleibe Anbieter, ignoriere das fremde Angebot
+        rtcReset(); // gebe nach: eigenes Angebot verwerfen, das andere annehmen
+      } else if (rtcPC) continue; // schon verbunden/am Verhandeln mit genau diesem Gerät
+      rtcPeerId = m.by;
+      rtcPeerName = m.byName || 'Gerät';
+      rtcPC = rtcNewPC();
+      try {
+        await rtcPC.setRemoteDescription({ type: 'offer', sdp: m.sdp });
+        await rtcFlushCandidates();
+        const answer = await rtcPC.createAnswer();
+        await rtcPC.setLocalDescription(answer);
+        rtcSend(buildRtcMsg({ by: mine, byName: devBy(), to: m.by, rt: 'answer', sdp: rtcPC.localDescription.sdp }));
+      } catch { rtcReset(); }
+    } else if (m.rt === 'answer') {
+      if (!rtcPC || rtcPC.signalingState !== 'have-local-offer') continue;
+      rtcPeerId = m.by;
+      rtcPeerName = m.byName || 'Gerät';
+      try { await rtcPC.setRemoteDescription({ type: 'answer', sdp: m.sdp }); await rtcFlushCandidates(); } catch { rtcReset(); }
+    } else if (m.rt === 'ice') {
+      if (!rtcPC) continue;
+      if (rtcPC.remoteDescription) { try { await rtcPC.addIceCandidate(m.cand); } catch { /* veraltet/ungültig */ } } else rtcPendingCand.push(m.cand);
+    }
+  }
+}
+// Eigene Änderungen automatisch schicken, sobald sich etwas geändert hat (gebündelt, nicht bei jedem Tastendruck einzeln)
+function rtcScheduleSend() {
+  if (!rtcChan || rtcChan.readyState !== 'open') return;
+  clearTimeout(rtcSendTimer);
+  rtcSendTimer = setTimeout(() => rtcSendProgress(false), RTC_SEND_DEBOUNCE_MS);
+}
+function rtcSendProgress(full) {
+  if (!rtcChan || rtcChan.readyState !== 'open' || !P || !P.live) return;
+  const from = devBy();
+  if (!peerOf(P, rtcPeerName)) setPeer(P, rtcPeerName, 0, false);
+  setPeerId(P, rtcPeerName, rtcPeerId);
+  const peer = peerOf(P, rtcPeerName);
+  const since = full ? 0 : (peer ? peer.lastSent : 0);
+  const f = buildProgress(P, { from, fromId: devId(), to: rtcPeerName, toId: rtcPeerId, since, full });
+  if (!f) return;
+  try { rtcChan.send(JSON.stringify(f)); setPeer(P, rtcPeerName, f.at); saveNow(); } catch { /* Kanal gerade nicht bereit */ }
+}
+// Eingehende Fortschritt-Nutzlast einarbeiten – wie „Fortschritt einfügen“, aber still (kein Projektwechsel/Nachfrage)
+function rtcApplyProgress(f) {
+  const target = progressTarget(db.projects, f);
+  if (!target || target !== P || isClosed()) return;
+  snapshot();
+  const r = mergeProgress(P, f);
+  if (!r) return;
+  const name = f.from || rtcPeerName;
+  // v130.15: Empfangenes gilt als „bis hierhin abgeglichen“ – sonst würde das Nächste eigene Senden denselben
+  // Stand gleich wieder zurückschicken (der Peer-Zeitstempel ist beiden Richtungen gemeinsam)
+  setPeer(P, name, f.at, false);
+  setPeerId(P, name, f.fi);
+  progBase.set(P, snapshotBase(P));
+  markAccepted(P, allMsgsRaw());
+  syncGrid();
+  changed();
+  redraw();
+}
+function renderRtcStatus() {
+  const el = $('rtc-status');
+  if (!el) return;
+  const on = rtcChan && rtcChan.readyState === 'open';
+  el.hidden = !(P && P.live && wantsLive(P));
+  el.textContent = on ? `🔗 Live verbunden mit ${rtcPeerName || 'Gerät'}` : rtcPC ? '🔗 Verbinde …' : '';
+  el.className = `rtc-status${on ? ' on' : ''}`;
 }
 // ---- v117: Rückkanal Einsatzleitung -> Hundeführer ----
 // Quittungen („✓ Gesehen“) und Nachrichten schreibt die EL selbst in den Raum des Einsatzes (derselbe Schlüssel wie im Auftrag, ls);
@@ -6498,6 +6642,7 @@ function renderElwBar() {
 $('elw-list').addEventListener('click', () => elwList());
 $('elw-off').addEventListener('click', elwClearPreview);
 $('more-elw-in').addEventListener('click', () => { closePanels(); elwList(true); });
+$('more-elw-out').addEventListener('click', () => { closePanels(); elwOutList(); });
 $('more-elw').addEventListener('click', () => { closePanels(); sendElw(); });
 
 // Empfangen: alle Raum-Meldungen durchsehen, Teile sammeln, neue Aufträge für dieses Gerät speichern und melden
@@ -6527,6 +6672,22 @@ function takeElw(proj, msgs) {
   const tb = $('toast');
   tb.onclick = () => { if (tb.textContent === msg) { tb.hidden = true; elwOpenOrder(o); } };
 }
+// v130.23: Lesebestätigung für eigene gesendete ELW-Aufträge einarbeiten (proj.elwOut, siehe sendElw).
+// v130.26: trägt jetzt auch laufend den Haken-Zustand der To-do-Liste nach (m.todo), nicht nur einmalig das „gesehen“.
+function takeElwAcks(proj, msgs) {
+  const acks = (msgs || []).filter((m) => isElwAck(m) && m.to === devBy());
+  if (!acks.length || !proj.elwOut || !proj.elwOut.length) return;
+  let firstSeen = false;
+  for (const a of acks) {
+    const x = proj.elwOut.find((o) => o.id === a.ref);
+    if (!x) continue;
+    if (!x.ack) { x.ack = a.t; x.ackBy = a.from || ''; firstSeen = true; }
+    if (Array.isArray(a.todo)) x.todoDone = a.todo;
+  }
+  proj.updated = Date.now();
+  saveNow();
+  if (proj === P && firstSeen) toast(`✓ Auftrag gesehen${acks[0].from ? ` (${acks[0].from})` : ''}`, 4000);
+}
 async function pollElw() {
   const proj = P;
   const l = proj && proj.live;
@@ -6536,6 +6697,7 @@ async function pollElw() {
   try {
     const r = await pollMessages({ url: l.url, key: l.key, since: l.eSince || 0 });
     takeElw(proj, r.msgs);
+    takeElwAcks(proj, r.msgs);
     if (r.since !== l.eSince) { l.eSince = r.since; saveNow(); }
   } catch { /* kein Netz: nächster Versuch */ } finally { elwPollBusy = false; }
 }
@@ -6560,7 +6722,7 @@ async function sendElw() {
   if (!db.deviceName) await askDeviceName(false);
   stamp();
   const proj = P;
-  // wählbar: Umrisse (je einer) und Stift-Zeichnungen (je Gruppe)
+  // wählbar: Umrisse (je einer), Stift-Zeichnungen (je Gruppe) und v130.24: einzelne Punkte/Markierungen (📍)
   const rows = [];
   const byGroup = new Map();
   for (const it of proj.items) {
@@ -6571,9 +6733,11 @@ async function sendElw() {
       const r = byGroup.get(k);
       r.items.push(it);
       r.t = Math.max(r.t, it.t || 0);
+    } else if (it.kind === 'text' && Number.isFinite(it.lat) && Number.isFinite(it.lon)) {
+      rows.push({ key: it.id, label: `📍 ${it.text || 'Markierung'}`, items: [it], t: it.t || 0 });
     }
   }
-  if (!rows.length) return toast('Keine Umrisse oder Stift-Zeichnungen vorhanden');
+  if (!rows.length) return toast('Keine Umrisse, Zeichnungen oder Markierungen vorhanden');
   const since = proj.elwSent || 0;
   const newer = since ? rows.filter((r) => r.t > since) : [];
   const pre = new Set((newer.length ? newer : rows).map((r) => r.key)); // neu/geändert seit dem letzten Senden, sonst alles
@@ -6607,16 +6771,16 @@ async function sendElw() {
     nn.id = 'elw-to-new';
     nn.placeholder = 'oder anderes Gerät: Name';
     box.appendChild(nn);
-    lab('Auftrag an den Empfänger:');
-    const txt = document.createElement('input');
-    txt.type = 'text';
+    lab('Auftrag an den Empfänger – als To-do-Liste, ein Punkt pro Zeile:');
+    const txt = document.createElement('textarea');
     txt.id = 'elw-txt';
-    txt.maxLength = 300;
-    txt.placeholder = 'Auftrag (z. B. In 2 Gebiete aufteilen)';
+    txt.maxLength = 600;
+    txt.rows = 4;
+    txt.placeholder = 'z. B.:\nIn 4 gleich große Gebiete aufteilen\nAn JUH1-3 und DRK5 verteilen\nMit Polizei klären, ob absuchbar';
     box.appendChild(txt);
     const q = document.createElement('div');
     q.className = 'elw-tpl';
-    for (const t of elwTemplates) dlgButton(q, esc(t), 'mini', () => { txt.value = t; });
+    for (const t of elwTemplates) dlgButton(q, esc(t), 'mini', () => { txt.value = txt.value.trim() ? `${txt.value.replace(/\n+$/, '')}\n${t}` : t; });
     box.appendChild(q);
     dlgButton(box, '📤 Senden', 'primary', () => {
       const keys = [...box.querySelectorAll('.elw-pick:checked')].map((c) => c.value);
@@ -6635,9 +6799,74 @@ async function sendElw() {
   const waiting = proj.live.outbox.some((m) => ids.has(m.id));
   if (!waiting && !ok.every(Boolean)) return; // abgelehnt: flushStatus hat schon gewarnt
   proj.elwSent = Date.now();
+  // v130.23: zum Nachsehen in „📨 Gesendete Aufträge“ merken, ob/wann der Empfänger ihn geöffnet hat
+  proj.elwOut = proj.elwOut || [];
+  proj.elwOut.push({ id: order.id, to: res.to || '', txt: res.txt, t: Date.now(), n: items.length, ack: 0, ackBy: '' });
+  proj.elwOut = proj.elwOut.slice(-50);
   saveNow();
   const wohin = res.to || 'alle EL-Geräte';
   toast(waiting ? `⏳ Auftrag an ${wohin} wartet auf Netz – wird automatisch nachgesendet` : `✓ Auftrag an ${wohin} gesendet ${hhmm(Date.now())}${parts.length > 1 ? ` (${parts.length} Teile)` : ''}`, 5000);
+}
+// v130.23: eigene gesendete ELW-Aufträge mit Lesestatus ansehen
+async function elwOutList() {
+  const list = (P.elwOut || []).slice().reverse();
+  if (!list.length) return toast('Noch keine Aufträge gesendet');
+  await openDlg((box, close) => {
+    dlgHead(box, `📨 Gesendete Aufträge (${list.length})`, 'Ob/wann der Empfänger den Auftrag geöffnet hat und welche To-do-Punkte er abgehakt hat.');
+    for (const x of list) {
+      const status = x.ack ? `✓ gesehen ${hhmm(x.ack)}${x.ackBy ? ` (${esc(x.ackBy)})` : ''}` : '… noch nicht gesehen';
+      const p = document.createElement('p');
+      p.className = 'small';
+      const lines = String(x.txt || '').split('\n').map((s) => s.trim()).filter(Boolean);
+      // v130.26: Haken des Empfängers (x.todoDone), nur zum Ansehen – hier nicht änderbar
+      const todo = lines.length
+        ? lines.map((line, i) => `${(x.todoDone || [])[i] ? '☑' : '☐'} ${esc(line)}`).join('<br>')
+        : esc(x.txt || '–');
+      p.innerHTML = `<b>${esc(x.to || 'alle EL-Geräte')}</b> ${hhmm(x.t)}<br>${todo}<br>${status}`;
+      box.appendChild(p);
+    }
+    dlgButton(box, 'Schließen', 'primary', () => close(null));
+  });
+}
+
+// v130.19: Übersicht der für diesen Einsatz registrierten Geräte (role aus v130.17: handover/device/ua) – zum Entfernen
+const PEER_ROLE_LABEL = { handover: 'Übergabe', device: 'Weiteres Gerät / ELW', ua: 'UA' };
+$('more-devices').addEventListener('click', () => { closePanels(); openDeviceList(); });
+function openDeviceList() {
+  openDlg((box, close) => {
+    const render = () => {
+      box.innerHTML = '';
+      dlgHead(box, '📟 Geräte', `Für „${P.title || 'diesen Einsatz'}“ registrierte Geräte.`);
+      const peers = P.peers || [];
+      if (!peers.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = 'Noch keine Geräte registriert.'; box.appendChild(p); }
+      for (const x of peers) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const lab = document.createElement('span');
+        lab.textContent = `${x.name}${PEER_ROLE_LABEL[x.role] ? ` (${PEER_ROLE_LABEL[x.role]})` : ''}`;
+        row.appendChild(lab);
+        dlgButton(row, '🗑️ Entfernen', 'mini', async () => {
+          // v130.22: erst nachfragen – ein versehentlicher Tipp hätte sonst sofort das Gerät (samt Live-Verbindung) entfernt
+          const ok = await openDlg((box2, close2) => {
+            dlgHead(box2, '🗑️ Gerät entfernen?', `„${x.name}“ wirklich aus der Geräteliste entfernen?`);
+            dlgButton(box2, 'Entfernen', 'primary', () => close2(true));
+            dlgButton(box2, 'Abbrechen', '', () => close2(false));
+          });
+          if (!ok) return render();
+          P.peers = (P.peers || []).filter((p2) => p2 !== x);
+          // v130.21: steht gerade eine Live-Verbindung (WebRTC) zu genau diesem Gerät, auch trennen – sonst
+          // legt rtcSendProgress den Peer beim nächsten Abgleich automatisch wieder an (die Verbindung besteht ja noch)
+          if (rtcPC && (rtcPeerId === x.id || (!x.id && rtcPeerName === x.name))) rtcReset();
+          changed();
+          saveNow();
+          render();
+        });
+        box.appendChild(row);
+      }
+      dlgButton(box, 'Fertig', 'primary', () => close(true));
+    };
+    render();
+  });
 }
 
 // Anzeigen
@@ -6657,13 +6886,46 @@ async function elwList(all) {
 async function elwOpenOrder(o) {
   const proj = P;
   elwPreview(o);
+  // v130.23: Lesebestätigung – einmal je Auftrag, geht an den Absender zurück
+  if (!o.ackSent && o.from && proj.live) {
+    o.ackSent = true;
+    elSend(buildElwAck({ ref: o.id, to: o.from, from: devBy() }));
+    saveNow();
+  }
   const had = proj.items.filter((i) => i.elw === o.id).length;
   const r = await openDlg((box, close) => {
     dlgHead(box, `📥 Auftrag von ${o.from || 'EL'} · ${hhmm(o.t)}${o.done ? ' · erledigt' : ''}`, `${elwCounts(o.items)} – auf der Karte gestrichelt (lila).`);
-    const t = document.createElement('div');
-    t.className = 'elw-txt';
-    t.textContent = o.txt || '(ohne Text)';
-    box.appendChild(t);
+    // v130.25: txt ist eine To-do-Liste (ein Punkt pro Zeile) – zum Abhaken nur zur eigenen Übersicht, geht nicht an den Absender zurück
+    const lines = String(o.txt || '').split('\n').map((s) => s.trim()).filter(Boolean);
+    if (lines.length) {
+      o.todoDone = Array.isArray(o.todoDone) ? o.todoDone : [];
+      const list = document.createElement('div');
+      list.className = 'elw-txt st-list';
+      lines.forEach((line, i) => {
+        const lb = document.createElement('label');
+        lb.className = 'check';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = !!o.todoDone[i];
+        // v130.26: Haken gehen (gebündelt) an den Absender zurück, damit der in „📨 Gesendete Aufträge“ den Fortschritt sieht
+        cb.addEventListener('change', () => {
+          o.todoDone[i] = cb.checked;
+          saveNow();
+          clearTimeout(elwTodoSendTimer);
+          elwTodoSendTimer = setTimeout(() => {
+            if (o.from && proj.live) elSend(buildElwAck({ ref: o.id, to: o.from, from: devBy(), todo: o.todoDone }));
+          }, 1500);
+        });
+        lb.append(cb, ` ${line}`);
+        list.appendChild(lb);
+      });
+      box.appendChild(list);
+    } else {
+      const t = document.createElement('div');
+      t.className = 'elw-txt';
+      t.textContent = '(ohne Text)';
+      box.appendChild(t);
+    }
     dlgButton(box, `➕ In laufenden Einsatz einfügen${had ? ` <small>schon ${had} eingefügt – ergänzt nur Fehlendes</small>` : ''}`, 'primary', () => close('insert'));
     if (!bridge) dlgButton(box, '🗺️ In BaseCamp öffnen', '', () => close('bc'));
     dlgButton(box, '👁 Zeigen', '', () => close('show'));
@@ -7124,9 +7386,42 @@ $('handed').addEventListener('click', async () => {
   });
   if (ok) { delete P.handedOver; changed(); }
 });
-$('ho-send').addEventListener('click', () => handoverQr(P, true));
-// Einsatz (ganz oder Unterabschnitt aus „Weitergeben“) per QR-Code an ein Gerät der Einsatzleitung
-async function handoverQr(proj, whole) {
+$('ho-send').addEventListener('click', () => handoverQr(P, 'handover'));
+// v130.18: Name des Geräts (bzw. UA), an das übergeben/geteilt wird, gleich beim Teilen abfragen – statt des
+// bisherigen „Gerät HH:MM“-Platzhalters. Hilft später beim Zuordnen von Rückmeldungen und beim gezielten Senden.
+const PEER_NAME_SUGG = { handover: ['Tablet EL', 'Handy EL', 'PC EL'], device: ['ELW', 'EL 2', 'Tablet EL'], ua: ['UA'] };
+async function askPeerName(mode, fallback) {
+  const title = mode === 'device' ? '📛 Name des weiteren Geräts' : mode === 'ua' ? '📛 Name des Unterabschnitts (UA)' : '📛 Name des übernehmenden Geräts';
+  const hint = mode === 'device' ? 'Wie soll das zusätzliche, dauerhaft aktive Gerät heißen (z. B. der ELW)? Hilft später beim gezielten Senden von Aufträgen/Zeichnungen.'
+    : mode === 'ua' ? 'Wie soll dieser Unterabschnitt bzw. das Gerät dort heißen?'
+      : 'Wie soll das Gerät heißen, das den Einsatz übernimmt? Hilft später beim Zuordnen von Rückmeldungen.';
+  const sugg = PEER_NAME_SUGG[mode] || [];
+  return openDlg((box, close) => {
+    dlgHead(box, title, hint);
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.placeholder = sugg[0] || 'Name';
+    inp.value = fallback || '';
+    inp.setAttribute('list', 'peer-name-sugg');
+    const dl = document.createElement('datalist');
+    dl.id = 'peer-name-sugg';
+    for (const v of sugg) { const o = document.createElement('option'); o.value = v; dl.appendChild(o); }
+    box.append(inp, dl);
+    const go = () => close(inp.value.trim() || fallback || null);
+    inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') go(); });
+    dlgButton(box, 'Weiter', 'primary', go);
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+    setTimeout(() => { inp.focus(); inp.select(); }, 50);
+  });
+}
+// Einsatz (ganz oder Unterabschnitt aus „Weitergeben“) per QR-Code an ein Gerät der Einsatzleitung.
+// mode: 'handover' (dieses Gerät gibt ab, z. B. Handy -> Tablet), 'device' (bleibt zusätzlich aktiv, z. B. ELW),
+// 'ua' (Unterabschnitt). 'handover' und 'device' geben den ganzen Einsatz weiter, nur 'ua' einen Ausschnitt.
+async function handoverQr(proj, mode) {
+  const whole = mode !== 'ua';
+  const defName = mode === 'device' ? 'ELW' : mode === 'ua' ? (proj.title || 'UA') : '';
+  const peerName = await askPeerName(mode, defName);
+  if (!peerName) return;
   stamp();
   saveNow();
   // erst ein QR-Code mit wenig Vereinfachung, sonst mehrere im Wechsel
@@ -7154,12 +7449,17 @@ async function handoverQr(proj, whole) {
     : 'Auf dem anderen Gerät „Einsätze → 📷 Einsatz übernehmen“ antippen oder den Code mit der Kamera scannen.';
   const pc = ' Zum PC: „Teilen“ oder „Link kopieren“ (z. B. WhatsApp Web, Mail).';
   const lost = miss.length ? ` Nicht dabei: ${miss.join(', ')} – dafür „Suchgebiet als Datei senden“.` : '';
-  // das neue Gerät gleich als Empfänger für „Fortschritt senden“ merken (Name lässt sich dort ändern bzw. neu eintragen)
+  // das neue Gerät gleich als Empfänger für „Fortschritt senden“ merken (Name lässt sich bei „An ELW senden“ ändern);
+  // v130.17: role merkt, ob es eine Übergabe (löst ab) oder ein zusätzliches, dauerhaft aktives Gerät (z. B. ELW) ist
   const now = Date.now();
-  setPeer(P, `Gerät ${hhmm(now)}${whole ? '' : ' (UA)'}`, now);
+  const peer = setPeer(P, peerName, now);
+  peer.role = mode;
   touch();
-  if (whole) qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
-  showQr(link, `📲 ${whole ? 'Einsatz' : 'Unterabschnitt'} „${proj.title || 'Suchgebiet'}“ übergeben`, how + pc + lost, parts);
+  if (mode === 'handover') qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
+  const title = mode === 'handover' ? `📲 Einsatz „${proj.title || 'Suchgebiet'}“ übergeben`
+    : mode === 'device' ? `➕ Einsatz „${proj.title || 'Suchgebiet'}“ an weiteres Gerät freigeben`
+      : `📲 Unterabschnitt „${proj.title || 'Suchgebiet'}“ übergeben`;
+  showQr(link, title, how + pc + lost, parts);
 }
 $('ho-scan').addEventListener('click', () => { closePanels(); startScan(); });
 
@@ -8004,6 +8304,7 @@ function switchProject(id) {
   if (recWatch !== null) stopRec(); // Aufzeichnung gehört zum alten Einsatz
   endGridFit();
   endVertex();
+  rtcReset(); // v130.15: Live-Verbindung gehört zum alten Einsatz – für den neuen baut sich bei Bedarf eine eigene auf
   saveNow();
   db.currentId = id;
   P = db.projects[id];
@@ -8898,10 +9199,11 @@ function openExport() {
 }
 
 // ---------- Teilen: „An wen?“ (Empfänger), „Was?“ (Umfang) und „Wie?“ (Weg) ----------
-const SHARE_TO = ['ua', 'el', 'other'];
+const SHARE_TO = ['ua', 'el', 'elw', 'other'];
 const SHARE_HINT = {
   ua: 'Unterabschnitt: bearbeitbar ist nur das ausgewählte Gebiet, der Rest ist nur zum Ansehen (QR-Code an ein Gerät mit dieser App).',
-  el: 'Weiteres EL-Tablet / Einsatzleitwagen: bekommt den ganzen Einsatz, Rückmeldungen laufen dann dort ein (QR-Code).',
+  el: 'Übergabe (dieses Gerät gibt ab, z. B. Handy → Tablet): bekommt den ganzen Einsatz, Rückmeldungen laufen dann dort ein (QR-Code).',
+  elw: 'Weiteres Gerät, z. B. ELW (bleibt zusätzlich aktiv): bekommt den ganzen Einsatz dazu, dieses Gerät läuft normal weiter (QR-Code).',
   other: 'Stellen ohne die App (Polizei, Feuerwehr, Druck, Garmin, Mail …): Datei oder PDF, kein QR-Code.',
 };
 let shareScope = 'all';
@@ -8920,26 +9222,26 @@ function openShare() {
   }
   // Rückkehr von der Kartenauswahl ohne passenden Empfänger -> „Sonstige“ (alle Wege außer QR)
   if (!shareTo && (shareScope === 'pick' || shareScope === 'area' || shareScope === 'areas') && shareSel) shareTo = 'other';
-  if (shareTo === 'el' || shareScope === 'all') { if (shareTo) shareSel = selectAll(P); }
+  if (shareTo === 'el' || shareTo === 'elw' || shareScope === 'all') { if (shareTo) shareSel = selectAll(P); }
   renderShare();
   openPanel('panel-share');
 }
 // Empfänger setzen und den Umfang dazu sinnvoll vorbelegen
 function applyShareTo(to) {
   shareTo = to;
-  if (to === 'el') { shareScope = 'all'; shareSel = selectAll(P); }
+  if (to === 'el' || to === 'elw') { shareScope = 'all'; shareSel = selectAll(P); }
   else if (to === 'ua') {
     if (shareScope === 'all' || !shareSel) { shareScope = 'pick'; shareName = 'Auswahl'; shareSel = emptySel(); }
   } else if (!shareSel) { shareScope = 'all'; shareSel = selectAll(P); }
 }
 function renderShare() {
   const to = shareTo;
-  const app = to === 'ua' || to === 'el'; // nur QR-Übergabe
+  const app = to === 'ua' || to === 'el' || to === 'elw'; // nur QR-Übergabe
   document.querySelectorAll('#share-to button').forEach((b) => b.classList.toggle('active', b.dataset.to === to));
   document.querySelectorAll('#share-scopes button').forEach((b) => b.classList.toggle('active', b.dataset.scope === shareScope));
   document.querySelector('#share-scopes [data-scope=all]').hidden = to === 'ua';
   $('share-tohint').textContent = to ? SHARE_HINT[to] : 'Zuerst wählen, an wen es geht – dann kommen die passenden Wege.';
-  $('share-what').hidden = !to || to === 'el';
+  $('share-what').hidden = !to || to === 'el' || to === 'elw';
   $('share-how').hidden = !to;
   const sum = shareSel ? selSummary(P, shareSel) : '';
   $('share-summary').textContent = `${shareScope === 'all' ? 'Ganzer Einsatz' : shareLabel()}: ${sum || 'nichts ausgewählt'}`;
@@ -9015,9 +9317,10 @@ $('share-save').addEventListener('click', () => shareRun(async () => { const f =
 $('share-file').addEventListener('click', () => $('proj-share').click());
 $('share-qr').addEventListener('click', () => shareRun(async () => {
   stamp(); // feste IDs vor dem Ausschneiden eines Unterabschnitts
-  if (shareTo === 'el') return handoverQr(P, true);
+  if (shareTo === 'el') return handoverQr(P, 'handover');
+  if (shareTo === 'elw') return handoverQr(P, 'device'); // v130.17: zusätzliches, dauerhaft aktives Gerät (z. B. ELW)
   if (shareTo === 'ua') ensureLive(P, liveUrlNow()); // v127: der UA bekommt den Live-Kanal des Grund-Einsatzes mit
-  if (shareTo === 'ua') return handoverQr(subsetProject(P, shareSel, uaTitle(P.title, shareLabel()), { base: true }), false); // v128: nie „UA UA …“
+  if (shareTo === 'ua') return handoverQr(subsetProject(P, shareSel, uaTitle(P.title, shareLabel()), { base: true }), 'ua'); // v128: nie „UA UA …“
 }));
 $('share-pdf').addEventListener('click', () => shareRun(async () => {
   if (shareScope === 'all') return openExport();
