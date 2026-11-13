@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.23';
+const APP_VERSION = 'v130.24';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -6716,7 +6716,7 @@ async function sendElw() {
   if (!db.deviceName) await askDeviceName(false);
   stamp();
   const proj = P;
-  // wählbar: Umrisse (je einer) und Stift-Zeichnungen (je Gruppe)
+  // wählbar: Umrisse (je einer), Stift-Zeichnungen (je Gruppe) und v130.24: einzelne Punkte/Markierungen (📍)
   const rows = [];
   const byGroup = new Map();
   for (const it of proj.items) {
@@ -6727,9 +6727,11 @@ async function sendElw() {
       const r = byGroup.get(k);
       r.items.push(it);
       r.t = Math.max(r.t, it.t || 0);
+    } else if (it.kind === 'text' && Number.isFinite(it.lat) && Number.isFinite(it.lon)) {
+      rows.push({ key: it.id, label: `📍 ${it.text || 'Markierung'}`, items: [it], t: it.t || 0 });
     }
   }
-  if (!rows.length) return toast('Keine Umrisse oder Stift-Zeichnungen vorhanden');
+  if (!rows.length) return toast('Keine Umrisse, Zeichnungen oder Markierungen vorhanden');
   const since = proj.elwSent || 0;
   const newer = since ? rows.filter((r) => r.t > since) : [];
   const pre = new Set((newer.length ? newer : rows).map((r) => r.key)); // neu/geändert seit dem letzten Senden, sonst alles
