@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.24';
+const APP_VERSION = 'v130.25';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -6765,16 +6765,16 @@ async function sendElw() {
     nn.id = 'elw-to-new';
     nn.placeholder = 'oder anderes Gerät: Name';
     box.appendChild(nn);
-    lab('Auftrag an den Empfänger:');
-    const txt = document.createElement('input');
-    txt.type = 'text';
+    lab('Auftrag an den Empfänger – als To-do-Liste, ein Punkt pro Zeile:');
+    const txt = document.createElement('textarea');
     txt.id = 'elw-txt';
-    txt.maxLength = 300;
-    txt.placeholder = 'Auftrag (z. B. In 2 Gebiete aufteilen)';
+    txt.maxLength = 600;
+    txt.rows = 4;
+    txt.placeholder = 'z. B.:\nIn 4 gleich große Gebiete aufteilen\nAn JUH1-3 und DRK5 verteilen\nMit Polizei klären, ob absuchbar';
     box.appendChild(txt);
     const q = document.createElement('div');
     q.className = 'elw-tpl';
-    for (const t of elwTemplates) dlgButton(q, esc(t), 'mini', () => { txt.value = t; });
+    for (const t of elwTemplates) dlgButton(q, esc(t), 'mini', () => { txt.value = txt.value.trim() ? `${txt.value.replace(/\n+$/, '')}\n${t}` : t; });
     box.appendChild(q);
     dlgButton(box, '📤 Senden', 'primary', () => {
       const keys = [...box.querySelectorAll('.elw-pick:checked')].map((c) => c.value);
@@ -6884,10 +6884,29 @@ async function elwOpenOrder(o) {
   const had = proj.items.filter((i) => i.elw === o.id).length;
   const r = await openDlg((box, close) => {
     dlgHead(box, `📥 Auftrag von ${o.from || 'EL'} · ${hhmm(o.t)}${o.done ? ' · erledigt' : ''}`, `${elwCounts(o.items)} – auf der Karte gestrichelt (lila).`);
-    const t = document.createElement('div');
-    t.className = 'elw-txt';
-    t.textContent = o.txt || '(ohne Text)';
-    box.appendChild(t);
+    // v130.25: txt ist eine To-do-Liste (ein Punkt pro Zeile) – zum Abhaken nur zur eigenen Übersicht, geht nicht an den Absender zurück
+    const lines = String(o.txt || '').split('\n').map((s) => s.trim()).filter(Boolean);
+    if (lines.length) {
+      o.todoDone = Array.isArray(o.todoDone) ? o.todoDone : [];
+      const list = document.createElement('div');
+      list.className = 'elw-txt st-list';
+      lines.forEach((line, i) => {
+        const lb = document.createElement('label');
+        lb.className = 'check';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = !!o.todoDone[i];
+        cb.addEventListener('change', () => { o.todoDone[i] = cb.checked; saveNow(); });
+        lb.append(cb, ` ${line}`);
+        list.appendChild(lb);
+      });
+      box.appendChild(list);
+    } else {
+      const t = document.createElement('div');
+      t.className = 'elw-txt';
+      t.textContent = '(ohne Text)';
+      box.appendChild(t);
+    }
     dlgButton(box, `➕ In laufenden Einsatz einfügen${had ? ` <small>schon ${had} eingefügt – ergänzt nur Fehlendes</small>` : ''}`, 'primary', () => close('insert'));
     if (!bridge) dlgButton(box, '🗺️ In BaseCamp öffnen', '', () => close('bc'));
     dlgButton(box, '👁 Zeigen', '', () => close('show'));

@@ -16,6 +16,12 @@ test('buildElwOrder: Form, Rundung, keine internen Felder', () => {
   for (const k of ['id', 't', 'by', 'lock']) assert.ok(!(k in t));
   assert.equal(elwCounts(m.items), '1 Umriss, 1 Zeichnung, 1 Text');
 });
+test('v130.25: txt (To-do-Liste, ein Punkt pro Zeile) bis 600 Zeichen statt 300', () => {
+  const todo = ['In 4 gleich große Gebiete aufteilen', 'An JUH1-3 und DRK5 verteilen', 'Mit Polizei klären, ob absuchbar', 'a'.repeat(600)].join('\n');
+  const m = buildElwOrder({ from: 'A', txt: todo, items: [track()] });
+  assert.equal(m.txt.length, 600);
+  assert.ok(m.txt.startsWith('In 4 gleich große Gebiete aufteilen\n'));
+});
 test('v130.23: buildElwAck/isElwAck – Lesebestätigung referenziert den Auftrag', () => {
   const ack = buildElwAck({ ref: 'O1', to: 'Handy EL', from: 'ELW', t: 9 });
   assert.equal(ack.s, 'elwq'); assert.equal(ack.ref, 'O1'); assert.equal(ack.to, 'Handy EL'); assert.equal(ack.from, 'ELW');

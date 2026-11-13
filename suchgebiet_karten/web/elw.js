@@ -47,7 +47,7 @@ export function buildElwOrder({ from, to = '', txt = '', items = [], marks = [],
   const its = (items || []).map((x) => packElwItem(x, marks)).filter(Boolean);
   return {
     s: ELW_KIND, a: 'EL', tm: 'Einsatzleitung', v: 1, id: id || uid(), t,
-    from: str(from, 60), to: !to || to === ELW_ALL ? '' : str(to, 60), txt: str(txt, 300), items: its,
+    from: str(from, 60), to: !to || to === ELW_ALL ? '' : str(to, 60), txt: str(txt, 600), items: its, // v130.25: txt kann eine To-do-Liste sein (ein Punkt pro Zeile)
   };
 }
 
