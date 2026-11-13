@@ -51,10 +51,13 @@ export function buildElwOrder({ from, to = '', txt = '', items = [], marks = [],
   };
 }
 
-// v130.23: Lesebestätigung für einen Auftrag (ref = dessen ID) – geht beim Öffnen automatisch zurück an „from“
+// v130.23: Lesebestätigung für einen Auftrag (ref = dessen ID) – geht beim Öffnen automatisch zurück an „from“.
+// v130.26: optional todo = Haken-Zustand der To-do-Liste (ein Eintrag je Zeile) – geht bei jeder Änderung erneut zurück.
 export const ELW_ACK = 'elwq';
-export function buildElwAck({ ref, to, from, t = Date.now(), id } = {}) {
-  return { s: ELW_ACK, a: 'EL', tm: 'Einsatzleitung', v: 1, id: id || uid(), t, ref: str(ref, 40), to: str(to, 60), from: str(from, 60) };
+export function buildElwAck({ ref, to, from, todo, t = Date.now(), id } = {}) {
+  const m = { s: ELW_ACK, a: 'EL', tm: 'Einsatzleitung', v: 1, id: id || uid(), t, ref: str(ref, 40), to: str(to, 60), from: str(from, 60) };
+  if (Array.isArray(todo)) m.todo = todo.slice(0, 50).map((x) => !!x);
+  return m;
 }
 export const isElwAck = (m) => !!m && m.s === ELW_ACK && typeof m.ref === 'string';
 

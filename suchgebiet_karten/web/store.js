@@ -144,8 +144,10 @@ export function normalizeProject(p) {
   out.elwIn = Array.isArray(out.elwIn) ? out.elwIn.filter((m) => m && typeof m.id === 'string' && Array.isArray(m.items)).slice(0, 50) : [];
   out.elwSent = Number(out.elwSent) || 0;
   // v130.23: eigene gesendete ELW-Aufträge mit Lesestatus (ack = Zeit, 0 = noch nicht gesehen)
+  // v130.26: todoDone = Haken-Zustand der To-do-Liste beim Empfänger (nachgereicht über buildElwAck)
   out.elwOut = Array.isArray(out.elwOut) ? out.elwOut.filter((x) => x && typeof x.id === 'string').slice(-50).map((x) => ({
     id: x.id, to: String(x.to || '').slice(0, 60), txt: String(x.txt || '').slice(0, 600), t: Number(x.t) || 0, n: Number(x.n) || 0, ack: Number(x.ack) || 0, ackBy: String(x.ackBy || '').slice(0, 60),
+    ...(Array.isArray(x.todoDone) ? { todoDone: x.todoDone.slice(0, 50).map((v) => !!v) } : {}),
   })) : [];
   out.qmsgs = Array.isArray(out.qmsgs) ? out.qmsgs.slice(-500) : []; // Status-Meldungen aus QR-Rückmeldungen
   if (out.hf && typeof out.hf === 'object') {

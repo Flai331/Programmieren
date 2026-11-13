@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.25';
+const APP_VERSION = 'v130.26';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -122,6 +122,7 @@ let pendingMove = null; // „📍 Verlegen“ mit Tippen auf die Karte: { msg: 
 const NO_RP_HF = 'Die Einsatzleitung hat keine Rettungspunkte mitgeschickt.';
 let pendingSpot = null; // „Standort melden“ mit Tippen auf die Karte (Hundeführer): { cat, txt }
 let elwPollBusy = false; // v124: Abholen der Aufträge an den ELW läuft
+let elwTodoSendTimer = null; // v130.26: Debounce fürs Zurücksenden der To-do-Haken
 let elwLayer = null; // v124: Vorschau eines Auftrags auf der Karte
 let elwShown = ''; // v124: ID des Auftrags, dessen Vorschau steht
 let liveBusy = false; // Abholen der Status-Meldungen läuft
@@ -6671,16 +6672,21 @@ function takeElw(proj, msgs) {
   const tb = $('toast');
   tb.onclick = () => { if (tb.textContent === msg) { tb.hidden = true; elwOpenOrder(o); } };
 }
-// v130.23: Lesebestätigung für eigene gesendete ELW-Aufträge einarbeiten (proj.elwOut, siehe sendElw)
+// v130.23: Lesebestätigung für eigene gesendete ELW-Aufträge einarbeiten (proj.elwOut, siehe sendElw).
+// v130.26: trägt jetzt auch laufend den Haken-Zustand der To-do-Liste nach (m.todo), nicht nur einmalig das „gesehen“.
 function takeElwAcks(proj, msgs) {
   const acks = (msgs || []).filter((m) => isElwAck(m) && m.to === devBy());
   if (!acks.length || !proj.elwOut || !proj.elwOut.length) return;
-  let changedAny = false;
+  let firstSeen = false;
   for (const a of acks) {
     const x = proj.elwOut.find((o) => o.id === a.ref);
-    if (x && !x.ack) { x.ack = a.t; x.ackBy = a.from || ''; changedAny = true; }
+    if (!x) continue;
+    if (!x.ack) { x.ack = a.t; x.ackBy = a.from || ''; firstSeen = true; }
+    if (Array.isArray(a.todo)) x.todoDone = a.todo;
   }
-  if (changedAny) { proj.updated = Date.now(); saveNow(); if (proj === P) toast(`✓ Auftrag gesehen${acks[0].from ? ` (${acks[0].from})` : ''}`, 4000); }
+  proj.updated = Date.now();
+  saveNow();
+  if (proj === P && firstSeen) toast(`✓ Auftrag gesehen${acks[0].from ? ` (${acks[0].from})` : ''}`, 4000);
 }
 async function pollElw() {
   const proj = P;
@@ -6806,12 +6812,17 @@ async function elwOutList() {
   const list = (P.elwOut || []).slice().reverse();
   if (!list.length) return toast('Noch keine Aufträge gesendet');
   await openDlg((box, close) => {
-    dlgHead(box, `📨 Gesendete Aufträge (${list.length})`, 'Ob und wann der Empfänger den Auftrag geöffnet hat.');
+    dlgHead(box, `📨 Gesendete Aufträge (${list.length})`, 'Ob/wann der Empfänger den Auftrag geöffnet hat und welche To-do-Punkte er abgehakt hat.');
     for (const x of list) {
       const status = x.ack ? `✓ gesehen ${hhmm(x.ack)}${x.ackBy ? ` (${esc(x.ackBy)})` : ''}` : '… noch nicht gesehen';
       const p = document.createElement('p');
       p.className = 'small';
-      p.innerHTML = `<b>${esc(x.to || 'alle EL-Geräte')}</b> ${hhmm(x.t)}<br>${esc(x.txt || '–')}<br>${status}`;
+      const lines = String(x.txt || '').split('\n').map((s) => s.trim()).filter(Boolean);
+      // v130.26: Haken des Empfängers (x.todoDone), nur zum Ansehen – hier nicht änderbar
+      const todo = lines.length
+        ? lines.map((line, i) => `${(x.todoDone || [])[i] ? '☑' : '☐'} ${esc(line)}`).join('<br>')
+        : esc(x.txt || '–');
+      p.innerHTML = `<b>${esc(x.to || 'alle EL-Geräte')}</b> ${hhmm(x.t)}<br>${todo}<br>${status}`;
       box.appendChild(p);
     }
     dlgButton(box, 'Schließen', 'primary', () => close(null));
@@ -6896,7 +6907,15 @@ async function elwOpenOrder(o) {
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = !!o.todoDone[i];
-        cb.addEventListener('change', () => { o.todoDone[i] = cb.checked; saveNow(); });
+        // v130.26: Haken gehen (gebündelt) an den Absender zurück, damit der in „📨 Gesendete Aufträge“ den Fortschritt sieht
+        cb.addEventListener('change', () => {
+          o.todoDone[i] = cb.checked;
+          saveNow();
+          clearTimeout(elwTodoSendTimer);
+          elwTodoSendTimer = setTimeout(() => {
+            if (o.from && proj.live) elSend(buildElwAck({ ref: o.id, to: o.from, from: devBy(), todo: o.todoDone }));
+          }, 1500);
+        });
         lb.append(cb, ` ${line}`);
         list.appendChild(lb);
       });

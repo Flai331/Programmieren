@@ -29,6 +29,12 @@ test('v130.23: buildElwAck/isElwAck – Lesebestätigung referenziert den Auftra
   assert.ok(!isElwAck(buildElwOrder({ from: 'A' })));
   assert.ok(!isElwAck(null));
 });
+test('v130.26: buildElwAck trägt optional den Haken-Zustand der To-do-Liste (todo)', () => {
+  const noTodo = buildElwAck({ ref: 'O1', to: 'A', from: 'B' });
+  assert.equal(noTodo.todo, undefined);
+  const withTodo = buildElwAck({ ref: 'O1', to: 'A', from: 'B', todo: [true, 0, 'x', undefined] });
+  assert.deepEqual(withTodo.todo, [true, false, true, false]);
+});
 test('buildElwOrder: Team nur als Name', () => {
   const m = buildElwOrder({ from: 'A', items: [track(3, { to: 'T9' })], marks: [{ id: 'T9', label: 'DRK 1' }] });
   assert.equal(m.items[0].toName, 'DRK 1'); assert.ok(!('to' in m.items[0]));
