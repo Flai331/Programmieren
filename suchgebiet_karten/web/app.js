@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.26';
+const APP_VERSION = 'v130.27';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -7381,8 +7381,8 @@ $('closed-bar').addEventListener('click', () => (isFree() ? $('proj-new').click(
 $('handed').addEventListener('click', async () => {
   const ok = await openDlg((box, close) => {
     dlgHead(box, '📲 Übergeben', `Dieser Einsatz wurde um ${hhmm(P.handedOver)} an ein weiteres Gerät übergeben. Dort laufen jetzt die Rückmeldungen ein. Hier geht alles weiter, wird aber nicht mehr abgeglichen.`);
-    dlgButton(box, 'Hinweis ausblenden', '', () => close(true));
-    dlgButton(box, 'OK', 'primary', () => close(false));
+    dlgButton(box, 'Hinweis ausblenden', 'primary', () => close(false));
+    dlgButton(box, 'Hier wieder weiterarbeiten', '', () => close(true));
   });
   if (ok) { delete P.handedOver; changed(); }
 });
@@ -9165,7 +9165,10 @@ for (const btn of ['btn-mission', 'btn-notes', 'btn-grid', 'btn-teams']) {
 // Seitenknopf nochmal antippen, während sein Fenster offen ist: Fenster schließen
 const SIDE_PANELS = {
   'btn-projects': 'panel-projects', 'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',
-  'btn-status': 'panel-status', 'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-more': 'panel-more', 'btn-hfmenu': 'panel-hfmenu', 'btn-pdf': 'panel-share', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
+  'btn-status': 'panel-status', 'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-more': 'panel-more', 'btn-hfmenu': 'panel-hfmenu', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
+  // v130.27: „Teilen“ (btn-pdf) bewusst NICHT hier – das Teilen-Fenster bleibt nach einem QR-Vorgang
+  // absichtlich im Hintergrund offen (zweiten Empfänger wählen); ein erneuter Klick soll es wieder
+  // vorne zeigen/auffrischen statt es überraschend zu schließen.
 };
 for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
   $(btn).addEventListener('click', (e) => {
