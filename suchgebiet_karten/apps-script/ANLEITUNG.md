@@ -36,7 +36,9 @@ Ohne Internet geht es weiter wie bisher: Hundeführer geben ihre Rückmeldung pe
    evtl. „Erweitert“ → „Status-Server (unsicher) öffnen“ → **„Zulassen“**. Das ist normal, weil
    das Programm von Ihnen selbst stammt und noch nicht von Google geprüft wurde.
 4. Fertig, wenn unten „Ausführung abgeschlossen“ steht. In der Tabelle gibt es jetzt ein
-   Blatt **„Meldungen“** (und ein tägliches Aufräumen ist eingerichtet).
+   Blatt **„Geräte“** (und ein tägliches Aufräumen ist eingerichtet). Die eigentlichen Meldungen
+   landen (ab dieser Code.gs-Version) in einem eigenen Blatt je Einsatz (siehe unten) – diese entstehen erst mit
+   der ersten Meldung, nicht schon bei `setup`.
 
 ## 4. Als Web-App bereitstellen
 
@@ -69,11 +71,16 @@ nichts eingetragen werden. Nur wer eine **eigene** Tabelle benutzen will: in der
 
 - Programmtext geändert (z. B. neue Version von `Code.gs`)? Im Apps-Script-Editor neu einfügen,
   speichern, dann **„Bereitstellen“ → „Bereitstellungen verwalten“ → Stift → Version: „Neue
-  Version“ → Bereitstellen**. Die URL bleibt gleich.
-- Meldungen löschen? In der Tabelle auf dem Blatt „Meldungen“ die Zeilen unter der Kopfzeile
-  löschen. Nichts weiter nötig.
-- Mehrere Einsätze gleichzeitig? Kein Problem: Jeder Einsatz hat seinen eigenen Schlüssel
-  und damit seinen eigenen „Raum“. Eine Tabelle genügt für alle.
+  Version“ → Bereitstellen**. Die URL bleibt gleich. Am besten zwischen zwei Einsätzen machen:
+  Meldungen, die in den Minuten rund ums Umstellen unterwegs sind, könnten sonst einmal nicht
+  ankommen (sie werden aber ohnehin automatisch nachgesendet, sobald wieder Netz da ist).
+- Meldungen löschen? Jeder Einsatz hat (ab dieser Code.gs-Version) sein **eigenes Blatt** (Reiter-Name beginnt
+  mit „R_“ – das ist der Raum-Code). Einfach den passenden Reiter löschen. Nichts weiter nötig;
+  alte, abgeschlossene Einsätze räumt das tägliche Aufräumen ohnehin automatisch weg.
+- Mehrere Einsätze gleichzeitig? Kein Problem: Jeder Einsatz hat seinen eigenen Schlüssel,
+  seinen eigenen „Raum“ und (ab dieser Code.gs-Version) sein eigenes Blatt in der Tabelle. Eine Tabelle
+  genügt für alle, und jede Abfrage durchsucht nur noch das Blatt des eigenen Einsatzes – das
+  bleibt auch bei vielen gleichzeitigen Einsätzen/Geräten (z. B. EL ↔ ELW-Austausch) schnell.
 
 ## Geräte freigeben und sperren (seit v113)
 

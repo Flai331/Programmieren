@@ -47,9 +47,19 @@ export function buildElwOrder({ from, to = '', txt = '', items = [], marks = [],
   const its = (items || []).map((x) => packElwItem(x, marks)).filter(Boolean);
   return {
     s: ELW_KIND, a: 'EL', tm: 'Einsatzleitung', v: 1, id: id || uid(), t,
-    from: str(from, 60), to: !to || to === ELW_ALL ? '' : str(to, 60), txt: str(txt, 300), items: its,
+    from: str(from, 60), to: !to || to === ELW_ALL ? '' : str(to, 60), txt: str(txt, 600), items: its, // v130.25: txt kann eine To-do-Liste sein (ein Punkt pro Zeile)
   };
 }
+
+// v130.23: Lesebestätigung für einen Auftrag (ref = dessen ID) – geht beim Öffnen automatisch zurück an „from“.
+// v130.26: optional todo = Haken-Zustand der To-do-Liste (ein Eintrag je Zeile) – geht bei jeder Änderung erneut zurück.
+export const ELW_ACK = 'elwq';
+export function buildElwAck({ ref, to, from, todo, t = Date.now(), id } = {}) {
+  const m = { s: ELW_ACK, a: 'EL', tm: 'Einsatzleitung', v: 1, id: id || uid(), t, ref: str(ref, 40), to: str(to, 60), from: str(from, 60) };
+  if (Array.isArray(todo)) m.todo = todo.slice(0, 50).map((x) => !!x);
+  return m;
+}
+export const isElwAck = (m) => !!m && m.s === ELW_ACK && typeof m.ref === 'string';
 
 // Sonderzeichen als \uXXXX, damit die Länge in Zeichen der Länge in Bytes entspricht
 const asciiJson = (o) => JSON.stringify(o).replace(/[\u0080-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);

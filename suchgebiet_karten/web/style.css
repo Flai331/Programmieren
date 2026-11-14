@@ -857,6 +857,9 @@ html.night #dlg-box .close-open:not(.st-urgent) { background: transparent; color
 /* v124: Aufträge an den ELW */
 .elw-bar { position: fixed; top: 92px; left: 50%; transform: translateX(-50%); z-index: 1001; display: flex; gap: 6px; }
 .elw-bar button { background: #ede7f6; color: #4a148c; border: 1px solid #b39ddb; padding: 4px 10px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+/* v130.15: Live-Abgleich-Anzeige (WebRTC) – klein, unauffällig, nur Hinweis */
+.rtc-status { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); z-index: 990; background: rgba(255,255,255,0.95); color: #555; border-radius: 10px; padding: 3px 10px; font-size: 11px; box-shadow: 0 1px 4px rgba(0,0,0,0.2); pointer-events: none; }
+.rtc-status.on { color: #1b5e20; font-weight: 600; }
 .elw-txt { font-size: 22px; font-weight: 700; margin: 8px 0 12px; word-break: break-word; }
 .elw-tpl { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .elw-tpl button { width: auto; flex: none; }

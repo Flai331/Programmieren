@@ -49,6 +49,8 @@
   <div id="closed-bar" class="handed closed-bar" hidden></div>
   <!-- v124: Aufträge an den ELW -->
   <div id="elw-bar" class="elw-bar" hidden><button id="elw-list" class="el-only"></button><button id="elw-off" hidden>✕ Vorschau</button></div>
+  <!-- v130.15: automatischer Live-Abgleich per WebRTC mit einem anderen EL-Gerät (EL/ELW/UA) -->
+  <div id="rtc-status" class="rtc-status" hidden></div>
 
   <!-- Wetter-Overlay (zuschaltbar): DWD-Wind + gemessener Wind, Ansatz, Vorhersage -->
   <div id="wx" class="wx" hidden>
@@ -320,7 +322,8 @@
     <h2 class="sub first">1. An wen?</h2>
     <div class="share-grid" id="share-to">
       <button data-to="ua"><span>🧭</span><b>Unterabschnitt (UA)</b><small>ein Gebiet bearbeiten</small></button>
-      <button data-to="el"><span>🚐</span><b>EL / ELW</b><small>ganzer Einsatz</small></button>
+      <button data-to="el"><span>📲</span><b>Übergabe</b><small>gibt ab, z. B. Handy → Tablet</small></button>
+      <button data-to="elw"><span>🚐</span><b>Weiteres Gerät / ELW</b><small>bleibt zusätzlich aktiv</small></button>
       <button data-to="other"><span>👥</span><b>Sonstige</b><small>ohne App: Polizei, Druck, Garmin …</small></button>
     </div>
     <p id="share-tohint" class="small"></p>
@@ -384,7 +387,12 @@
     <div class="el-only">
     <h2 class="sub">📤 Aufträge an den ELW</h2>
     <p class="small">Umrisse und Zeichnungen mit Auftragstext (z. B. „In 2 Gebiete aufteilen“) an ein anderes EL-Gerät schicken – über den Live-Kanal des Einsatzes, verschlüsselt. Der Empfänger sieht sie nur an und entscheidet selbst.</p>
-    <div class="row"><button id="more-elw">📤 An ELW senden</button><button id="more-elw-in">📥 Empfangene Aufträge</button></div>
+    <div class="row"><button id="more-elw">📤 An ELW senden</button><button id="more-elw-in">📥 Empfangene Aufträge</button><button id="more-elw-out">📨 Gesendete Aufträge</button></div>
+    </div>
+    <div class="el-only">
+    <h2 class="sub">📟 Geräte</h2>
+    <p class="small">Für diesen Einsatz registrierte Geräte (durch „Übergabe“, „Weiteres Gerät/ELW“ oder UA-Teilen) – zum Entfernen, falls nicht mehr gebraucht.</p>
+    <div class="row"><button id="more-devices">📟 Geräte verwalten</button></div>
     </div>
     <div class="el-only">
     <h2 class="sub">🧭 Navigation</h2>

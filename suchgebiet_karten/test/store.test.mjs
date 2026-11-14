@@ -142,3 +142,16 @@ test('Namen von Geräten werden auf 60 Zeichen gekürzt', () => {
   const p = normalizeProject({ ...newProject('X'), peers: [{ name: 'a'.repeat(100), lastSent: 1 }] });
   assert.equal(p.peers[0].name.length, 60);
 });
+
+test('Rolle eines Geräts (Übergabe/weiteres Gerät/UA) bleibt beim Normalisieren erhalten', () => {
+  const q = normalizeProject({ ...newProject('X'), peers: [{ name: 'ELW', lastSent: 1, role: 'device' }, { name: 'Tablet', lastSent: 1, role: 'müll' }] });
+  assert.equal(q.peers[0].role, 'device');
+  assert.equal(q.peers[1].role, undefined); // unbekannte Rolle wird verworfen, nicht übernommen
+});
+
+test('Gesendete ELW-Aufträge (elwOut) bleiben erhalten, mit Lesestatus', () => {
+  const q = normalizeProject({ ...newProject('X'), elwOut: [{ id: 'a1', to: 'ELW', txt: 'Test', t: 123, n: 2, ack: 0, ackBy: '' }] });
+  assert.equal(q.elwOut.length, 1);
+  assert.equal(q.elwOut[0].to, 'ELW');
+  assert.equal(q.elwOut[0].ack, 0);
+});
