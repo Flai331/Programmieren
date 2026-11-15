@@ -40,20 +40,22 @@ function pill(ctx, text, cx, cy, s) {
 //          fillLabels: "c,r" -> Text, items, meet }
 // state.others: weitere Rastergebiete [{ grid, name, fills, status, fillLabels, statusLabels }],
 // state.gridName: Name des Hauptrasters (steht nur da, wenn es mehrere Gebiete gibt)
-// Beschriftungen je nach Zoomstufe: 0 = keine (bis 14, dann auch keine Markierungen – nur Umrandungen), 1 = nur Namen (15, Texte gekürzt),
-// 2 = Gebietsname und Team untereinander (16), 3 = dazu Fläche und Notiz (ab 17)
+// Beschriftungen je nach Zoomstufe: 0 = keine (bis 14, dann auch keine Markierungen – nur Umrandungen), 1 = Name und Fläche (15, Texte gekürzt),
+// 2 = dazu Team untereinander (16), 3 = dazu Notiz (ab 17)
 export function labelDetail(zoom) {
   if (zoom == null) return 3;
   zoom = Math.round(zoom);
   return zoom <= 14 ? 0 : zoom === 15 ? 1 : zoom === 16 ? 2 : 3;
 }
 export { isNoTeamOutline, outlineColor };
-// Text am Umriss je nach Stufe (Zeilen mit \n getrennt)
+// Text am Umriss je nach Stufe (Zeilen mit \n getrennt). Die Fläche steht (v130.33) schon ab
+// Stufe 1 dabei – klein, aber gut lesbar, nicht erst beim tiefsten Zoom.
 export function trackLabel(it, who, d = 3) {
   if (d <= 0) return '';
   const name = (it.name || '').trim();
-  if (d === 1) return name;
-  const second = [who ? `→ ${who}` : '', d >= 3 && hasArea(it) ? formatArea(polygonArea(it.pts)) : ''].filter(Boolean).join(' · ');
+  const area = hasArea(it) ? formatArea(polygonArea(it.pts)) : '';
+  if (d === 1) return [name, area].filter(Boolean).join(' · ');
+  const second = [who ? `→ ${who}` : '', area].filter(Boolean).join(' · ');
   return [name, second].filter(Boolean).join('\n');
 }
 const shortText = (t, d) => (d >= 3 || t.length <= 16 ? t : `${t.slice(0, 15)}…`);

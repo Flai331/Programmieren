@@ -146,6 +146,76 @@ export function forestInLasso(forests, lasso, o = originOf(lasso)) {
   }
 }
 
+// ---------- v130.32: Wald automatisch auch über die Landbedeckungs-Karte erkennen ----------
+// (BKG wms_lb-de, zeigt Wald/Gehölz per KI aus Sentinel-2 + Orthophotos, unabhängig von
+// OSM-Tags – siehe v130.30). Fällt die reine OSM-Abfrage leer aus (Wald dort nicht getaggt),
+// probiert forestLassoDone (app.js) zusätzlich diesen Weg, bevor sie den Nutzer fragt.
+const LANDCOVER_WMS = 'https://sgx.geodatenzentrum.de/wms_lb-de';
+const LANDCOVER_LAYER = '2024_lb_de';
+export const LANDCOVER_NOTE = 'Landbedeckung © GeoBasis-DE / BKG, Contains modified Copernicus Sentinel data';
+
+// WMS-GetMap-URL (EPSG:4326, PNG) für ein rechteckiges Gebiet in fester Pixelgröße.
+export function landcoverUrl(bbox, w, h) {
+  const b = [bbox.south, bbox.west, bbox.north, bbox.east].map((v) => Number(v).toFixed(6)).join(',');
+  return `${LANDCOVER_WMS}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${LANDCOVER_LAYER}`
+    + `&STYLES=&CRS=EPSG:4326&WIDTH=${w}&HEIGHT=${h}&FORMAT=image/png&BBOX=${b}`;
+}
+
+// „Holzige Vegetation“ (Bäume Laub/Nadel, Gehölz, Büsche) ist im LBM-DE reines bis oliv-Grün
+// (Rot und Blau klein, Grün deutlich höher) – anders als „Krautige Vegetation“ (Gras/Acker:
+// Rot ebenfalls hoch, gelb-grün) oder Röhricht/Schilf (Blauanteil hoch, türkis). Kalibriert
+// an den echten Legenden-/WMS-Pixelfarben (0,220,0 / 68,150,0 Wald, 255,255,168 Gras/Acker).
+export function isForestColor(r, g, b) {
+  return r < 90 && b < 60 && g > 60 && (g - r) > 40;
+}
+
+// Zeilenweise zusammenhängende Wald-Pixel zu Rechtecken zusammenfassen (weit weniger Polygone als
+// 1 je Pixel). mask: Uint8Array/Array der Länge w*h (1 = Wald), Reihenfolge zeilenweise von oben.
+function forestRuns(mask, w, h) {
+  const runs = [];
+  for (let y = 0; y < h; y++) {
+    let x0 = -1;
+    for (let x = 0; x <= w; x++) {
+      const v = x < w && mask[y * w + x];
+      if (v && x0 < 0) x0 = x;
+      else if (!v && x0 >= 0) { runs.push([y, x0, x]); x0 = -1; }
+    }
+  }
+  return runs;
+}
+
+// Wald-Maske (Raster-Pixel) -> bereinigtes MultiPolygon in Metern (gleiches System wie forestInLasso).
+export function maskPolygon(mask, w, h, bbox, o) {
+  const runs = forestRuns(mask, w, h);
+  if (!runs.length) return [];
+  const latAt = (y) => bbox.north - (y / h) * (bbox.north - bbox.south);
+  const lonAt = (x) => bbox.west + (x / w) * (bbox.east - bbox.west);
+  const rects = runs.map(([y, x0, x1]) => {
+    const yA = latAt(y);
+    const yB = latAt(y + 1);
+    const xA = lonAt(x0);
+    const xB = lonAt(x1);
+    return [[[yA, xA], [yA, xB], [yB, xB], [yB, xA], [yA, xA]].map((p) => toXY(p, o))];
+  });
+  try {
+    return dropSmall(solid(rects.length > 1 ? pc.union(...rects) : rects));
+  } catch {
+    return [];
+  }
+}
+
+// Wald-Maske -> Anteil innerhalb der Umkreisung (wie forestInLasso, nur Raster statt OSM-Ringe).
+export function landcoverInLasso(mask, w, h, bbox, lasso, o = originOf(lasso)) {
+  const L = lassoPolygon(lasso, o);
+  const fc = maskPolygon(mask, w, h, bbox, o);
+  if (!L.length || !fc.length) return [];
+  try {
+    return dropSmall(solid(pc.intersection(fc, L)));
+  } catch {
+    return [];
+  }
+}
+
 // ---------- Anteile ----------
 // parts: [{ size: 'gleich' | 'kleiner' | 'größer', pct }] -> { shares: [Summe 1] } oder { error: 'Text' }
 export function shares(parts) {

@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  newLiveKey, buildMsg, buildAck, buildElMsg, buildReadAck, needsAck, forHf, ackedIds, readBy, mergeReads, splitIncoming, elTargets, readSummary,
+  newLiveKey, buildMsg, buildAck, buildElMsg, buildReadAck, needsAck, forHf, ackedIds, readBy, mergeReads, splitIncoming, elTargets, zusatzTargets, readSummary,
   statusLabel, msgLabel, msgIcon, headMsg, latestFor, mergeStatus, flushOutbox, pollMessages, EL_ALL,
 } from '../web/status.js';
 import { openPoints } from '../web/closeout.js';
@@ -90,6 +90,22 @@ test('elTargets: je Team der neueste laufende Auftrag mit Live-Kanal', () => {
   const marks = [{ id: 'T1', label: 'Team Alpha' }];
   assert.deepEqual(elTargets(sent, marks), [{ a: 'A2', teamId: 'T1', label: 'Team Alpha' }, { a: 'D1', teamId: '', label: 'Delta' }]);
   assert.deepEqual(elTargets([], []), []);
+});
+
+// v130.36: wie elTargets, aber auch Aufträge ohne Live-Kanal (für den Zusatz-QR) – mit live: false markiert
+test('zusatzTargets: wie elTargets, aber auch ohne Live-Kanal (für den Zusatz-QR)', () => {
+  const sent = [
+    { id: 'A1', teamId: 'T1', team: 'Alpha', at: 1, live: true }, { id: 'A2', teamId: 'T1', team: 'Alpha', at: 5, live: true },
+    { id: 'B1', teamId: 'T2', team: 'Bravo', at: 2, live: true, done: 99 }, { id: 'C1', teamId: 'T3', team: 'Charlie', at: 3 },
+    { id: 'D1', team: 'Delta', at: 4, live: true },
+  ];
+  const marks = [{ id: 'T1', label: 'Team Alpha' }];
+  assert.deepEqual(zusatzTargets(sent, marks), [
+    { a: 'A2', teamId: 'T1', label: 'Team Alpha', live: true },
+    { a: 'C1', teamId: 'T3', label: 'Charlie', live: false },
+    { a: 'D1', teamId: '', label: 'Delta', live: true },
+  ]);
+  assert.deepEqual(zusatzTargets([], []), []);
 });
 
 test('readSummary: gelesen / offen, bei „alle“ über alle Ziele', () => {

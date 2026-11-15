@@ -29,10 +29,11 @@ test('Beschriftung je Zoomstufe: weit weg nichts, nah alles', () => {
   assert.equal(labelDetail(undefined), 3); // PDF: immer alles
   const it = { kind: 'track', name: 'Ost 1', open: false, pts: [[52, 10], [52, 10.001], [51.999, 10.001]] };
   assert.equal(trackLabel(it, 'Team 1', 0), '');
-  assert.equal(trackLabel(it, 'Team 1', 1), 'Ost 1');
-  assert.equal(trackLabel(it, 'Team 1', 2), 'Ost 1\n→ Team 1');
+  // v130.33: die Fläche steht schon ab Stufe 1 dabei, nicht erst beim tiefsten Zoom
+  assert.match(trackLabel(it, 'Team 1', 1), /^Ost 1 · .+ha$/);
+  assert.match(trackLabel(it, 'Team 1', 2), /^Ost 1\n→ Team 1 · .+ha$/);
   assert.match(trackLabel(it, 'Team 1', 3), /^Ost 1\n→ Team 1 · .+ha$/);
-  assert.equal(trackLabel({ ...it, name: '' }, 'Team 1', 2), '→ Team 1');
+  assert.match(trackLabel({ ...it, name: '' }, 'Team 1', 2), /^→ Team 1 · .+ha$/);
 });
 
 test('weit herausgezoomt: Texte nicht antippbar, Umrisse schon', () => {

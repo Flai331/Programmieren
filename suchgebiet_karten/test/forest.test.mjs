@@ -3,6 +3,7 @@ import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   forestQuery, linesQuery, parseForest, forestInLasso, shares, splitArea, toTracks, makeOrigin, toLL, toXY, mpArea, chainLines, mainAxis, lassoPolygon,
+  isForestColor, landcoverUrl, maskPolygon, landcoverInLasso,
 } from '../web/forest.js';
 import { polygonArea } from '../web/gpx.js';
 import { overpass } from '../web/search.js';
@@ -34,6 +35,43 @@ test('v130.29: linesQuery – nur Wege/Bäche, keine Wald-Abfrage (fürs Aufteil
   assert.doesNotMatch(q, /"landuse"="forest"/);
   assert.doesNotMatch(q, /"natural"="wood"/);
   assert.match(q, /out geom;$/);
+});
+
+test('v130.32: isForestColor – Holzige Vegetation (Wald/Gehölz) erkannt, Gras/Wasser/Röhricht/Bebauung nicht', () => {
+  assert.ok(isForestColor(0, 220, 0)); // Bäume (Legende)
+  assert.ok(isForestColor(68, 150, 0)); // Gehölz/Büsche (Legende)
+  assert.ok(isForestColor(0, 64, 0)); // echte WMS-Pixelfarbe (JPEG-Rauschen im Wald)
+  assert.ok(!isForestColor(255, 255, 168)); // Krautige Vegetation (Gras/Acker)
+  assert.ok(!isForestColor(202, 242, 77)); // Krautige Vegetation, anderer Farbton
+  assert.ok(!isForestColor(9, 169, 142)); // Röhricht/Schilf (Blauanteil hoch)
+  assert.ok(!isForestColor(0, 190, 255)); // Wasser
+  assert.ok(!isForestColor(249, 77, 71)); // Hochbau
+});
+
+test('v130.32: landcoverUrl – WMS-GetMap, EPSG:4326, PNG, feste Größe', () => {
+  const u = landcoverUrl({ south: 52, west: 10, north: 52.01, east: 10.02 }, 400, 300);
+  assert.match(u, /^https:\/\/sgx\.geodatenzentrum\.de\/wms_lb-de\?/);
+  assert.match(u, /LAYERS=2024_lb_de/);
+  assert.match(u, /CRS=EPSG:4326/);
+  assert.match(u, /WIDTH=400&HEIGHT=300/);
+  assert.match(u, /FORMAT=image\/png/);
+  assert.match(u, /BBOX=52\.000000,10\.000000,52\.010000,10\.020000/);
+});
+
+test('v130.32: maskPolygon/landcoverInLasso – Raster-Pixel zu Fläche (nur linke Hälfte ist Wald)', () => {
+  const bbox = { south: 52, west: 10, north: 52.01, east: 10.02 };
+  const o = makeOrigin(52.005, 10.01);
+  const w = 10;
+  const h = 10;
+  const mask = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x < 5) mask[y * w + x] = 1;
+  const mp = maskPolygon(mask, w, h, bbox, o);
+  near(mpArea(mp), 750000, 0.15, 'Waldfläche (halbe Bbox)');
+
+  const lasso = [[bbox.south, bbox.west], [bbox.south, bbox.east], [bbox.north, bbox.east], [bbox.north, bbox.west], [bbox.south, bbox.west]];
+  near(mpArea(landcoverInLasso(mask, w, h, bbox, lasso, o)), 750000, 0.15, 'Wald in Umkreisung');
+  assert.deepEqual(landcoverInLasso(new Uint8Array(w * h), w, h, bbox, lasso, o), []); // keine Wald-Pixel -> nichts
+  assert.deepEqual(maskPolygon(new Uint8Array(w * h), w, h, bbox, o), []);
 });
 
 test('parseForest: Way-Wald, Multipolygon aus gestückelten outer-Ways, Linien', () => {

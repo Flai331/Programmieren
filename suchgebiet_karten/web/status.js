@@ -268,6 +268,21 @@ export function elTargets(sent, marks) {
     return { a: x.id, teamId: x.teamId || '', label: t ? t.label : x.team || 'Team' };
   });
 }
+// v130.36: wie elTargets, aber auch laufende Aufträge OHNE Status-Server (dann per Zusatz-QR-Code statt live) –
+// je Eintrag .live, damit die Oberfläche weiß, ob es sofort geht oder ein QR-Code zum Scannen nötig ist
+export function zusatzTargets(sent, marks) {
+  const by = new Map();
+  for (const x of sent || []) {
+    if (Number(x.done) > 0) continue;
+    const k = x.teamId || `n:${x.team || ''}`;
+    const prev = by.get(k);
+    if (!prev || (x.at || 0) >= (prev.at || 0)) by.set(k, x);
+  }
+  return [...by.values()].map((x) => {
+    const t = (marks || []).find((q) => q.id === x.teamId);
+    return { a: x.id, teamId: x.teamId || '', label: t ? t.label : x.team || 'Team', live: !!x.live };
+  });
+}
 // Lesestand einer EL-Nachricht: Empfänger (Aufträge, bei '*' alle Ziele) in gelesen / offen; reads = { elId: { a: Zeit } }
 export function readSummary(m, reads, targets) {
   const got = Object.keys((reads || {})[m.id] || {});

@@ -46,6 +46,17 @@ export function teamsWithoutOrder(p) {
   return out;
 }
 
+// v130.35: dieselbe Liste wie teamsWithoutOrder, aber in zwei Stufen getrennt – „ohne Gebiet“ (noch nichts
+// zugeteilt, zuerst ein Feld/Umriss nötig) und „mit Gebiet, ohne Auftrag“ (zugeteilt, kann gleich losgeschickt
+// werden). Teams mit Gebiet UND laufendem Auftrag stehen schon in der normalen Aufträge-Liste (p.sent).
+export function teamsStaged(p) {
+  const all = teamsWithoutOrder(p);
+  return {
+    noArea: all.filter((w) => !w.cells && !w.areas),
+    withArea: all.filter((w) => w.cells || w.areas),
+  };
+}
+
 // v130.4: Einsatzzeit eines Teams – Auftragszeit (seit „Auftrag angenommen“, x.acc) und Pausenzeit (seit dem letzten
 // Abschluss, x.done), dazu Anzahl und Gesamtzeit aller abgeschlossenen Aufträge dieses Teams. Rein aus P.sent
 // abgeleitet (nichts extra gespeichert): wird ein Abschluss rückgängig gemacht („↩ Wieder öffnen“ oder die
