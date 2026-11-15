@@ -8,7 +8,7 @@ import {
   LAYERS, OVERLAYS, DEFAULT_OVERLAYS, layerById, layerStack, tileUrl, FALLBACK, isBkg,
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
-import { formatMgrs } from './utm.js';
+import { formatMgrs, formatUtm } from './utm.js';
 import { areaBounds, navTargets, navTargetsAll, navUrl, boxCenter, cellCenter as navCellCenter, navNeedleDeg, fmtDist, areaBorderList, triangulate } from './hfnav.js';
 import { buildGpx, mergeGpx, parseGpx, dedupeImport, parseKml, pointInPolygon, selectionGpx, gridWithLabels, gridPath, labelTracks, cellComponents, cellOutlines, hasArea, polygonArea, formatArea, trackDesc, trackLength, outlineName, msgWaypoints, msgRows } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.38';
+const APP_VERSION = 'v130.39';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -3627,7 +3627,7 @@ async function triangulateDialog(areas) {
   if (!pt) return toast('Nicht berechenbar – die beiden Grenzen stehen (fast) parallel oder die Entfernung ist ungültig');
   closePanels();
   map.setView([pt.lat, pt.lon], Math.max(map.getZoom(), 17));
-  toast(`📐 Triangulierte Position: ${pt.lat.toFixed(5)}, ${pt.lon.toFixed(5)}${P.showUtm ? ` · ${formatMgrs(pt.lat, pt.lon)}` : ''}`, 12000);
+  toast(`📐 Triangulierte Position: ${pt.lat.toFixed(5)}, ${pt.lon.toFixed(5)}${P.showUtm ? ` · ${formatMgrs(pt.lat, pt.lon)} · ${formatUtm(pt.lat, pt.lon)}` : ''}`, 12000);
 }
 // Externen Link öffnen: in der Android-App über die WebView (die reicht https-Adressen an die Maps-App weiter), sonst neuer Tab
 function openLink(url) {
@@ -8473,7 +8473,8 @@ function updateStatus() {
     const c = hitGrid(lat, lon);
     parts.push(c ? `📍 ${c.label}${cellLabel(c.c, c.r)}` : '📍 außerhalb');
   }
-  if (P.showUtm) parts.push(formatMgrs(lat, lon));
+  // v130.39: neben der MGRS-Kurzform (Klaas' Rückmeldung) auch die vollständige UTM-Koordinate des Standorts
+  if (P.showUtm) parts.push(formatMgrs(lat, lon), formatUtm(lat, lon));
   $('status').textContent = parts.join(' · ') || '📍';
 }
 
