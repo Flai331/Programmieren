@@ -155,10 +155,56 @@ function distToSegment(lat, lon, a, b) {
   return Math.hypot(ax + t * dx, ay + t * dy);
 }
 
-// Grenzen eines Rings mit Entfernung (m) vom Standort -> [{ label, dist }]; dist = null ohne Standort
+// Grenzen eines Rings mit Entfernung (m) vom Standort -> [{ label, segs, dist }]; dist = null ohne Standort
+// (segs bleibt dabei, damit sich daraus per triangulate() die eigene Position bestimmen lässt)
 export function borderDistances(ring, lat, lon) {
   const has = Number.isFinite(lat) && Number.isFinite(lon);
-  return borderSegments(ring).map((g) => ({ label: g.label, dist: has ? Math.min(...g.segs.map(([a, b]) => distToSegment(lat, lon, a, b))) : null }));
+  return borderSegments(ring).map((g) => ({ label: g.label, segs: g.segs, dist: has ? Math.min(...g.segs.map(([a, b]) => distToSegment(lat, lon, a, b))) : null }));
+}
+
+// v130.38: eigene Position aus der gemessenen Entfernung zu zwei nicht parallelen Grenzen triangulieren – nützlich
+// bei schwachem/fehlendem GPS. borders = Ergebnis von borderDistances()/areaBorderList() (mit .segs); label1/label2
+// = deren Bezeichner (z. B. 'N', 'O'); dist1/dist2 = gemessene Entfernung (m) zur jeweiligen Grenze; lat0/lon0 =
+// grober eigener Standort (GPS), löst die Mehrdeutigkeit auf (von bis zu 4 möglichen Schnittpunkten wird der dem
+// Standort nächste gewählt) -> { lat, lon } oder null (Grenze unbekannt, parallel, oder kein grober Standort)
+export function triangulate(borders, label1, dist1, label2, dist2, lat0, lon0) {
+  const b1 = (borders || []).find((b) => b.label === label1);
+  const b2 = (borders || []).find((b) => b.label === label2);
+  if (!b1 || !b2 || !Number.isFinite(dist1) || !Number.isFinite(dist2) || !Number.isFinite(lat0) || !Number.isFinite(lon0)) return null;
+  const mLat = 111320;
+  const mLon = 111320 * Math.cos((lat0 * Math.PI) / 180);
+  const toXY = ([la, lo]) => [(lo - lon0) * mLon, (la - lat0) * mLat];
+  const lineOf = (b) => {
+    const a = toXY(b.segs[0][0]);
+    const e = toXY(b.segs[b.segs.length - 1][1]);
+    return { p: a, d: [e[0] - a[0], e[1] - a[1]] };
+  };
+  const l1 = lineOf(b1);
+  const l2 = lineOf(b2);
+  if (Math.hypot(...l1.d) < 1e-6 || Math.hypot(...l2.d) < 1e-6) return null;
+  // zwei zur Linie parallele Linien im Abstand dist (eine je Seite) – die eigene Position liegt auf einer davon
+  const offsetLines = (p, d, dist) => {
+    const len = Math.hypot(d[0], d[1]);
+    const n = [-d[1] / len, d[0] / len];
+    return [{ p: [p[0] + n[0] * dist, p[1] + n[1] * dist], d }, { p: [p[0] - n[0] * dist, p[1] - n[1] * dist], d }];
+  };
+  const intersect = (a, b) => {
+    const denom = a.d[0] * b.d[1] - a.d[1] * b.d[0];
+    if (Math.abs(denom) < 1e-9) return null;
+    const t = ((b.p[0] - a.p[0]) * b.d[1] - (b.p[1] - a.p[1]) * b.d[0]) / denom;
+    return [a.p[0] + t * a.d[0], a.p[1] + t * a.d[1]];
+  };
+  let best = null;
+  let bestD = Infinity;
+  for (const o1 of offsetLines(l1.p, l1.d, dist1)) {
+    for (const o2 of offsetLines(l2.p, l2.d, dist2)) {
+      const pt = intersect(o1, o2);
+      if (!pt) continue;
+      const d = Math.hypot(pt[0], pt[1]); // Entfernung vom groben Standort (Ursprung) – wählt die richtige Seite
+      if (d < bestD) { bestD = d; best = pt; }
+    }
+  }
+  return best ? { lat: lat0 + best[1] / mLat, lon: lon0 + best[0] / mLon } : null;
 }
 
 // Alle Gebiete des Auftrags (Rasterfelder des Teams bzw. ganzes Raster, geschlossene Umrisse der EL) mit ihren

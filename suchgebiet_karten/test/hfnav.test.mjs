@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { areaBounds, areaPoints, navTargets, navUrl, navNeedleDeg, fmtDist, borderSegments, borderDistances, areaBorderList } from '../web/hfnav.js';
+import { areaBounds, areaPoints, navTargets, navUrl, navNeedleDeg, fmtDist, borderSegments, borderDistances, areaBorderList, triangulate } from '../web/hfnav.js';
 import { newProject } from '../web/store.js';
 
 const base = () => {
@@ -86,6 +86,28 @@ test('borderDistances: Entfernung vom Standort zur jeweiligen Grenze (Luftlinie,
   assert.ok(Math.abs(by.N - 1113) < 5 && Math.abs(by.S - 1113) < 5);
   assert.ok(by.O > 600 && by.O < 750 && by.W > 600 && by.W < 750);
   assert.deepEqual(borderDistances(ring, null, null).map((x) => x.dist), [null, null, null, null]); // ohne Standort
+});
+
+// v130.38: eigene Position aus der Entfernung zu zwei nicht parallelen Grenzen triangulieren (ohne/bei schwachem GPS)
+test('triangulate: eigene Position aus Entfernung zu zwei nicht parallelen Grenzen berechnen', () => {
+  const ring = [[52.52, 9.7], [52.52, 9.72], [52.5, 9.72], [52.5, 9.7]];
+  const trueLat = 52.515;
+  const trueLon = 9.705;
+  const borders = borderDistances(ring, trueLat, trueLon);
+  const n = borders.find((b) => b.label === 'N');
+  const w = borders.find((b) => b.label === 'W');
+  const pt = triangulate(borders, 'N', n.dist, 'W', w.dist, trueLat, trueLon);
+  assert.ok(pt);
+  assert.ok(Math.abs(pt.lat - trueLat) < 1e-6);
+  assert.ok(Math.abs(pt.lon - trueLon) < 1e-6);
+});
+
+test('triangulate: parallele/unbekannte Grenzen oder kein Standort -> null', () => {
+  const ring = [[52.52, 9.7], [52.52, 9.72], [52.5, 9.72], [52.5, 9.7]];
+  const borders = borderDistances(ring, 52.51, 9.71);
+  assert.equal(triangulate(borders, 'N', 100, 'S', 100, 52.51, 9.71), null); // N/S parallel
+  assert.equal(triangulate(borders, 'N', 100, 'X', 100, 52.51, 9.71), null); // Grenze unbekannt
+  assert.equal(triangulate(borders, 'N', 100, 'O', 100, null, null), null); // kein Standort
 });
 
 test('areaBorderList: Rasterfelder des Teams (nicht das ganze Raster) und Umrisse der EL je mit eigenen Grenzen', () => {
