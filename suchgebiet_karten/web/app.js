@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.40';
+const APP_VERSION = 'v130.41';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -3580,21 +3580,41 @@ function showMyArea() {
 $('hfm-area').addEventListener('click', showMyArea);
 $('hfi-area').addEventListener('click', (e) => { e.stopPropagation(); showMyArea(); }); // der Tipp auf die Karte klappt sonst die Auftragskarte zu
 // v130.37: 📏 Grenzen – wie weit ist die Nord-/Süd-/…-Grenze meines Gebiets vom aktuellen Standort entfernt?
+// v130.40: Ergebnis einer Triangulation anzeigen (Karte hinspringen + Toast mit Koordinate)
+function showTriangulated(pt) {
+  closePanels();
+  map.setView([pt.lat, pt.lon], Math.max(map.getZoom(), 17));
+  toast(`📐 Triangulierte Position: ${pt.lat.toFixed(5)}, ${pt.lon.toFixed(5)}${P.showUtm ? ` · ${formatMgrs(pt.lat, pt.lon)} · ${formatUtm(pt.lat, pt.lon)}` : ''}`, 12000);
+}
 async function showAreaBorders() {
   const areas = areaBorderList(P, lastPos ? lastPos[0] : null, lastPos ? lastPos[1] : null);
   if (!areas.length) return toast('Im Auftrag ist kein Gebiet eingetragen');
+  // v130.40: zwei Grenzen antippen (statt Fenster mit Auswahlfeldern) -> sofort triangulieren,
+  // mit der schon angezeigten (GPS-)Entfernung zu beiden angetippten Grenzen.
+  let picked = null; // { area, bd }
   const r = await openDlg((box, close) => {
-    dlgHead(box, '📏 Grenzen meines Gebiets', lastPos ? 'Entfernung vom aktuellen Standort zur jeweiligen Grenze (Luftlinie).' : 'Ohne GPS-Standort keine Entfernung – „📍 Standort“ einschalten.');
+    dlgHead(box, '📏 Grenzen meines Gebiets', lastPos ? 'Entfernung vom aktuellen Standort zur jeweiligen Grenze (Luftlinie). Zwei Grenzen antippen, um den Standort daraus zu berechnen.' : 'Ohne GPS-Standort keine Entfernung – „📍 Standort“ einschalten.');
     for (const a of areas) {
       if (areas.length > 1) { const h = document.createElement('h3'); h.className = 'zus-h'; h.textContent = a.name; box.appendChild(h); }
       for (const bd of a.borders) {
-        const d = document.createElement('div');
-        d.className = 'st-row';
+        const d = document.createElement('button');
+        d.className = 'st-row loc';
         d.textContent = `${bd.label}-Grenze: ${bd.dist == null ? '–' : fmtDist(bd.dist)}`;
+        if (bd.dist != null) {
+          d.addEventListener('click', () => {
+            if (picked && picked.area === a && picked.bd === bd) { picked = null; d.classList.remove('picked'); return; }
+            if (!picked) { picked = { area: a, bd }; d.classList.add('picked'); return; }
+            if (picked.area !== a) { toast('Bitte zwei Grenzen desselben Gebiets antippen'); return; }
+            const pt = triangulate(a.borders, picked.bd.label, picked.bd.dist, bd.label, bd.dist, lastPos[0], lastPos[1]);
+            close(null);
+            if (!pt) return toast('Nicht berechenbar – die beiden Grenzen stehen (fast) parallel');
+            showTriangulated(pt);
+          });
+        } else d.disabled = true;
         box.appendChild(d);
       }
     }
-    dlgButton(box, '📐 Standort triangulieren', '', () => close(true));
+    dlgButton(box, '📐 Von Hand messen & triangulieren', '', () => close(true));
     dlgButton(box, 'Schließen', 'primary', () => close(false));
   });
   if (r) triangulateDialog(areas);
@@ -3625,9 +3645,7 @@ async function triangulateDialog(areas) {
   if (!lastPos) return toast('Ohne (groben) GPS-Standort nicht möglich – „📍 GPS“ einschalten');
   const pt = triangulate(r.area.borders, r.b1, r.d1, r.b2, r.d2, lastPos[0], lastPos[1]);
   if (!pt) return toast('Nicht berechenbar – die beiden Grenzen stehen (fast) parallel oder die Entfernung ist ungültig');
-  closePanels();
-  map.setView([pt.lat, pt.lon], Math.max(map.getZoom(), 17));
-  toast(`📐 Triangulierte Position: ${pt.lat.toFixed(5)}, ${pt.lon.toFixed(5)}${P.showUtm ? ` · ${formatMgrs(pt.lat, pt.lon)} · ${formatUtm(pt.lat, pt.lon)}` : ''}`, 12000);
+  showTriangulated(pt);
 }
 // Externen Link öffnen: in der Android-App über die WebView (die reicht https-Adressen an die Maps-App weiter), sonst neuer Tab
 function openLink(url) {
