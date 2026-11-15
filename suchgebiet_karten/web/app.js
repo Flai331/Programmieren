@@ -73,7 +73,7 @@ import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { placeBadges, boxOf } from './badgeplace.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner, overpass } from './search.js';
-import { OSM_NOTE, MAX_PARTS, MAX_AREA_M2, MIN_OUTLINE_M, forestQuery, parseForest, originOf, toXY, toLL, forestInLasso, lassoPolygon, shares as forestShares, splitArea, toTracks, mpArea } from './forest.js';
+import { OSM_NOTE, MAX_PARTS, MAX_AREA_M2, MIN_OUTLINE_M, forestQuery, linesQuery, parseForest, originOf, toXY, toLL, forestInLasso, lassoPolygon, shares as forestShares, splitArea, toTracks, mpArea } from './forest.js';
 import {
   newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor, cellsText,
   exportProject, importProject, uid, reorderMarks, MARK_COLORS, NO_TEAM, NO_TEAM_COLOR, assignTargets, assigneeName,
@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.28';
+const APP_VERSION = 'v130.29';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1233,6 +1233,7 @@ function renameItem(i) {
       if (r.del) return deleteOutline(it);
       if (r.vtx) return startVertex(it);
       if (r.zus) return zusatzDialog({ itemIdx: [P.items.indexOf(it)] });
+      if (r.split) return splitOutlineStart(it);
       snapshot();
       applyOutline(it, { ...r, name: r.name || it.name });
       changed();
@@ -1308,6 +1309,7 @@ function outlineDialog(it, title, opts = {}) {
       const ctr = boxCenter(it.pts);
       if (!it.open && (it.pts || []).length > 2 && ctr) dlgNavButton(box, close, null, it.name || 'Umriss', ctr[0], ctr[1]); // v123: nur gespeicherte, geschlossene Umrisse
       if (db.mode === 'el' && P.live && elTargets(P.sent, P.marks).length) dlgButton(box, '📤 An Team senden', '', () => close({ zus: true })); // v130
+      if (!it.open && (it.pts || []).length > 2) dlgButton(box, '✂️ Aufteilen', '', () => close({ split: true })); // v130.29
       dlgButton(box, '✋ Punkte bearbeiten', '', () => close({ vtx: true }));
       dlgButton(box, '🗑 Löschen', 'urgent', () => close({ del: true }));
     }
@@ -1608,10 +1610,44 @@ async function forestLassoDone(raw) {
   await forestPlan({ mp, lines, o, forest, pts });
 }
 
+// v130.29: von Hand gezeichneten (bereits gespeicherten) Umriss direkt aufteilen – wie „🌲 Wald“,
+// nur ohne eigenes Umkreisen und ohne Wald-Abfrage (nur Wege/Bäche für „an Wegen ausrichten“).
+async function splitOutlineStart(it) {
+  if (isLocked()) return lockedToast();
+  if (blocked(it) || guardAssigned(assignedOf(P, it))) return;
+  const pts = it.pts || [];
+  if (it.open || pts.length < 3) return toast('Nur geschlossene Umrisse lassen sich aufteilen');
+  const o = originOf(pts);
+  const mp = lassoPolygon(pts, o);
+  const total = mpArea(mp);
+  if (!mp.length || total < 1) return toast('Umriss zu klein zum Aufteilen');
+  if (total > MAX_AREA_M2) return toast('Umriss zu groß zum Aufteilen (höchstens 25 km²)', 5000);
+  const la = pts.map((q) => q[0]);
+  const lo = pts.map((q) => q[1]);
+  const bbox = { south: Math.min(...la) - 0.0005, north: Math.max(...la) + 0.0005, west: Math.min(...lo) - 0.0008, east: Math.max(...lo) + 0.0008 };
+  const ctl = new AbortController();
+  let closeLoad = null;
+  openDlg((box, close) => {
+    closeLoad = close;
+    dlgHead(box, '✂️ Wege werden geladen …', OSM_NOTE);
+    dlgButton(box, 'Abbrechen', '', () => { ctl.abort(); close(null); });
+  }, { keep: true });
+  let lines = [];
+  try {
+    const data = parseForest(await overpass(linesQuery(bbox), ctl.signal, 'Wegesuche'));
+    lines = data.lines.map((l) => l.map((q) => toXY(q, o)));
+  } catch (err) {
+    if (ctl.signal.aborted) { forestClear(); return; }
+    toast(`Wege konnten nicht geladen werden (${(err && err.message) || 'kein Netz'}) – Aufteilen geht trotzdem, nur ohne Wegorientierung.`, 6000);
+  }
+  if (closeLoad) closeLoad(null);
+  await forestPlan({ mp, lines, o, pts, source: 'outline', baseName: it.name, replace: it });
+}
+
 // Fenster „Wald aufteilen“, Vorschau und Übernehmen
 async function forestPlan(ctx) {
   const total = mpArea(ctx.mp);
-  const st = { n: 2, follow: true, rows: [], base: outlineName(P.items, P.meet, ctx.pts) };
+  const st = { n: 2, follow: true, rows: [], base: ctx.baseName || outlineName(P.items, P.meet, ctx.pts) };
   for (;;) {
     while (st.rows.length < st.n) st.rows.push({ size: 'gleich', pct: '', name: `${st.base} ${FOREST_LETTERS[st.rows.length]}`, to: '' });
     const act = await forestDialog(st, ctx, total);
@@ -1619,10 +1655,10 @@ async function forestPlan(ctx) {
     if (isLocked()) { forestClear(); return lockedToast(); }
     const res = await forestCompute(st, ctx, total);
     if (!res) continue;
-    if (act === 'apply') { forestClear(); return forestCommit(res.tracks); }
+    if (act === 'apply') { forestClear(); return forestCommit(res.tracks, ctx); }
     forestShow(st, ctx, res);
     const a = await forestBarWait();
-    if (a === 'apply') { forestClear(); return forestCommit(res.tracks); }
+    if (a === 'apply') { forestClear(); return forestCommit(res.tracks, ctx); }
     if (a !== 'edit') { forestClear(); return; }
     forestPreview.clearLayers();
     forestPreview.addLayer(forestLassoLayer(ctx.pts));
@@ -1633,7 +1669,10 @@ function forestDialog(st, ctx, total) {
   const teams = assignTargets(P);
   return openDlg((box, close) => {
     const n0 = ctx.mp.length;
-    dlgHead(box, '🌲 Wald aufteilen', ctx.forest ? `Erkannt: ${forestHa(total)} ha Wald (${n0} Stück${n0 === 1 ? '' : 'e'})` : `Umkreiste Fläche: ${forestHa(total)} ha`);
+    const head = ctx.source === 'outline'
+      ? `„${ctx.baseName || 'Umriss'}“: ${forestHa(total)} ha`
+      : ctx.forest ? `Erkannt: ${forestHa(total)} ha Wald (${n0} Stück${n0 === 1 ? '' : 'e'})` : `Umkreiste Fläche: ${forestHa(total)} ha`;
+    dlgHead(box, ctx.source === 'outline' ? '✂️ Umriss aufteilen' : '🌲 Wald aufteilen', head);
     const src = document.createElement('p');
     src.className = 'small';
     src.textContent = OSM_NOTE;
@@ -1795,8 +1834,12 @@ function forestShow(st, ctx, res) {
   $('forest-info').textContent = `Vorschau (ha): ${infos.join(' · ')}`;
 }
 
-function forestCommit(tracks) {
+function forestCommit(tracks, ctx) {
   snapshot();
+  if (ctx && ctx.replace) {
+    const ri = P.items.indexOf(ctx.replace);
+    if (ri >= 0) P.items.splice(ri, 1);
+  }
   for (const t of tracks) {
     const m = t.to ? P.marks.find((x) => x.id === t.to) : null;
     const it = { kind: 'track', name: t.name, color: m ? m.color : db.color, w: 4, pts: t.pts };
@@ -1804,7 +1847,7 @@ function forestCommit(tracks) {
     P.items.push(it);
   }
   changed();
-  toast(`🌲 ${tracks.length} Umriss${tracks.length === 1 ? '' : 'e'} gespeichert (↶ macht es rückgängig) · ${OSM_NOTE}`, 6000);
+  toast(`${ctx && ctx.source === 'outline' ? '✂️' : '🌲'} ${tracks.length} Umriss${tracks.length === 1 ? '' : 'e'} gespeichert (↶ macht es rückgängig) · ${OSM_NOTE}`, 6000);
 }
 
 // Palette

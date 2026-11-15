@@ -24,14 +24,21 @@ const HIGHWAYS = 'track|path|footway|bridleway|cycleway|service|unclassified|res
 
 // ---------- Overpass ----------
 // bbox: { south, west, north, east }
+function linesPart(b) {
+  return `way["highway"~"^(${HIGHWAYS})$"](${b});way["waterway"~"^(stream|river|ditch|canal)$"](${b});`;
+}
 export function forestQuery(bbox) {
   const b = [bbox.south, bbox.west, bbox.north, bbox.east].map((v) => Number(v).toFixed(6)).join(',');
   return `[out:json][timeout:25];(`
     + `way["landuse"="forest"](${b});relation["landuse"="forest"](${b});`
     + `way["natural"="wood"](${b});relation["natural"="wood"](${b});`
-    + `way["highway"~"^(${HIGHWAYS})$"](${b});`
-    + `way["waterway"~"^(stream|river|ditch|canal)$"](${b});`
+    + linesPart(b)
     + `);out geom;`;
+}
+// Nur Wege/Bäche (ohne Wald-Abfrage) – fürs Aufteilen eines schon vorhandenen, von Hand gezeichneten Umrisses.
+export function linesQuery(bbox) {
+  const b = [bbox.south, bbox.west, bbox.north, bbox.east].map((v) => Number(v).toFixed(6)).join(',');
+  return `[out:json][timeout:25];(${linesPart(b)});out geom;`;
 }
 
 const sameKey = (p) => `${p[0]},${p[1]}`;
