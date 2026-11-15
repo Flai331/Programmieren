@@ -58,7 +58,7 @@ import {
 } from './share.js';
 import {
   STATUS_LIST, CLOSE_STATUS, RELIEF_STATUS, SPOT_LIST, SPOT_HINTS, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, buildKor, applyKor, mergeStatus, withoutDeleted, latestFor, headMsg, flushOutbox, pollMessages, coverageGaps, areaShapes,
-  EL_ALL, EL_KINDS, buildAck, buildElMsg, buildReadAck, buildReply, replyContext, QUICK_REPLIES, needsAck, forHf, ackedIds, mergeReads, splitIncoming, elTargets, readSummary,
+  EL_ALL, EL_KINDS, buildAck, buildElMsg, buildReadAck, buildReply, replyContext, QUICK_REPLIES, needsAck, forHf, ackedIds, mergeReads, splitIncoming, elTargets, zusatzTargets, readSummary,
 } from './status.js';
 import {
   teamChips, teamOrder, todoFirst, chipText, teamAssignments, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, unreadAge, bannerText, parseSnooze,
@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.35';
+const APP_VERSION = 'v130.36';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -6255,8 +6255,10 @@ $('teams-zusatz').addEventListener('click', () => zusatzDialog()); // v130.9: zw
 async function zusatzDialog(pre = {}) {
   if (!canEnter()) return;
   if (!P.live) ensureLive(P, liveUrlNow());
-  const tg = elTargets(P.sent, P.marks);
-  if (!P.live || !tg.length) return toast('Kein laufender Auftrag mit Status-Server – erst unter „Teams“ einen Auftrag per QR-Code vergeben', 7000);
+  // v130.36: auch Aufträge ohne Status-Server stehen zur Auswahl – dafür gibt es statt des sofortigen Versands
+  // einen Zusatz-QR-Code zum Scannen (ohne den laufenden Auftrag neu anzunehmen)
+  const tg = zusatzTargets(P.sent, P.marks);
+  if (!tg.length) return toast('Kein laufender Auftrag – erst unter „Teams“ einen Auftrag per QR-Code vergeben', 7000);
   const st = {
     to: pre.to || (tg.length === 1 ? tg[0].a : ''), task: pre.task || '', prio: !!pre.prio,
     items: new Set(pre.itemIdx || []), pois: new Set(pre.poiIds || []), grids: new Set(pre.gridIds || []), meet: !!pre.meet,
@@ -6266,12 +6268,12 @@ async function zusatzDialog(pre = {}) {
   const spots = (P.live.msgs || []).filter((m) => Number.isFinite(m.lat) && Number.isFinite(m.lon) && !m.gone).slice(-30).reverse();
   for (;;) {
     const r = await openDlg((box, close) => {
-      dlgHead(box, '📍 Ort/Gebiet an Team senden', 'Kommt zusätzlich zum laufenden Auftrag auf die Karte des Hundeführers – über den Status-Server, ohne neuen QR-Code.');
+      dlgHead(box, '📍 Ort/Gebiet an Team senden', 'Kommt zusätzlich zum laufenden Auftrag auf die Karte des Hundeführers – bei Teams mit Status-Server sofort (ohne neuen QR-Code), sonst als kleiner Zusatz-QR-Code zum Scannen.');
       const sel = dlgField(box, 'An', document.createElement('select'));
       sel.id = 'zus-to';
       sel.add(new Option('– Team wählen –', ''));
-      for (const t of tg) sel.add(new Option(t.label, t.a));
-      sel.add(new Option('📢 Alle Teams', EL_ALL));
+      for (const t of tg) sel.add(new Option(t.live ? t.label : `${t.label} (ohne Link – als QR-Code)`, t.a));
+      if (tg.some((t) => t.live)) sel.add(new Option('📢 Alle Teams (mit Status-Server)', EL_ALL));
       sel.value = st.to;
       sel.addEventListener('change', () => { st.to = sel.value; });
       const task = dlgField(box, 'Was soll dort geschehen?', Object.assign(document.createElement('textarea'), { id: 'zus-task', rows: 2, maxLength: 200, value: st.task, placeholder: 'z. B. Bitte Böschung mit Hund prüfen und Stand melden' }));
@@ -6388,9 +6390,18 @@ async function zusatzDialog(pre = {}) {
       redraw();
       if (!$('panel-teams').hidden) renderMarks();
     }
+    const who = st.to === EL_ALL ? 'alle Teams' : t ? t.label : 'das Team';
+    // v130.36: Team ohne laufenden Status-Server-Kanal (Auftrag ohne Link) – als QR-Code statt per Live-Kanal senden
+    if (t && !t.live) {
+      const data = { k: 'z', to: out.msg.to, tm: out.msg.tm, txt: out.msg.txt, prio: out.msg.prio, t: out.msg.t, id: out.msg.id, z: out.msg.z };
+      const packed = await pack(data);
+      const link = shareLink('z', packed, PUBLIC_URL);
+      const parts = link.length > QR_MAX ? splitParts(packed, 800).map((x) => shareLink('m', x, PUBLIC_URL)) : null;
+      showQr(link, `📍 Zusatz an ${who}`, `${who} hat keinen laufenden Status-Server-Kanal – dieser Code muss auf dem Gerät von ${who} eingescannt werden (📷 Code einlesen)${parts ? ' (mehrere Codes wechseln sich ab, Kamera ruhig halten)' : ''}.`, parts);
+      return;
+    }
     const ok = await elSend(out.msg);
     if ($('panel-status').hidden === false) renderStatusPanel();
-    const who = st.to === EL_ALL ? 'alle Teams' : t ? t.label : 'das Team';
     toast(ok ? `📤 An ${who} gesendet: ${out.parts.join(', ')}` : `📤 Wartet auf Netz – geht automatisch an ${who}`, 6000);
     return;
   }
@@ -7222,6 +7233,7 @@ async function handleShared1(text) {
   if (data.k === 'e') return takeHandover(data);
   if (data.k === 'i') return takeInfos(data);
   if (data.k === 'f') return takeProgress(data);
+  if (data.k === 'z') return takeZusatz(data);
   if (data.k !== 'r') return toast('Unbekannter Inhalt');
   // Rückmeldungen gehören zur Einsatzleitung: Modus umschalten (vom Hundeführer-Modus nur mit PIN)
   if (db.mode === 'hf' && !(await toElMode())) return;
@@ -7808,6 +7820,23 @@ async function takeProgress(f) {
   const others = sum ? P.peers.filter((x) => x.name !== from) : [];
   if (others.length) toastAction(`${msg} – weiterleiten?`, 'Weiterleiten', () => sendProgress(), 15000);
   else toast(msg, 8000);
+}
+// v130.36: Zusatz zum laufenden Auftrag, per QR-Code statt Status-Server (Auftrag ohne Link) – beim Hundeführer übernehmen
+async function takeZusatz(data) {
+  const target = P && P.hf && (P.hf.id === data.to || data.to === EL_ALL) ? P
+    : Object.values(db.projects).find((p) => p.hf && (p.hf.id === data.to || data.to === EL_ALL));
+  if (!target) return toast('Kein passender laufender Auftrag auf diesem Gerät gefunden – erst den Auftrag hier einscannen', 8000);
+  if (db.mode !== 'hf') { db.mode = 'hf'; applyMode(); }
+  if (target !== P) switchProject(target.id);
+  const proj = P;
+  const m = buildElMsg({ to: data.to, txt: data.txt, prio: data.prio, t: data.t, id: data.id });
+  m.z = data.z;
+  proj.hf.inbox = mergeStatus(proj.hf.inbox || [], [m]).slice(-200);
+  const r = isZusatz(m) && applyZusatz(proj, m);
+  if (proj === P) { redraw(); renderPois(); renderMeet(); renderHfMsgBtn(); }
+  saveNow();
+  if (r) toastAction(`📍 Einsatzleitung: ${m.txt || ''}`, '🗺️ Zeigen', () => showPts(r.pts), 15000);
+  else toast(`✉️ Einsatzleitung: ${m.txt || ''}`, 8000);
 }
 
 // Name dieses Geräts (z. B. „ELW 11-1“, „Tablet EL“) – wird beim Übernehmen eines Einsatzes abgefragt

@@ -2,9 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildZusatz, applyZusatz, isZusatz, zusatzText, ZUSATZ_MAX } from '../web/zusatz.js';
-import { forHf, EL_ALL } from '../web/status.js';
+import { forHf, EL_ALL, buildElMsg } from '../web/status.js';
 import { newProject, normalizeProject } from '../web/store.js';
-import { buildResult } from '../web/share.js';
+import { buildResult, pack, unpack, parseShared, shareLink } from '../web/share.js';
 
 function elProject() {
   const p = normalizeProject(newProject('Test'));
@@ -92,6 +92,32 @@ test('Zusatz geht nicht mit der Rückmeldung des HF zurück', () => {
   const hf = hfProject();
   applyZusatz(hf, buildZusatz(el, { to: 'auftrag-1', itemIdx: [0, 1] }).msg);
   assert.equal(buildResult(hf).i.length, 0);
+});
+
+// v130.36: Team ohne Live-Kanal – Zusatz als QR-Code statt Status-Server (takeZusatz rekonstruiert die Nachricht
+// per buildElMsg genauso wie buildZusatz, nur über den gescannten QR-Inhalt statt eine neue Nachricht zu bauen)
+test('Zusatz-QR: Pack/Entpacken des QR-Inhalts und Übernahme beim HF wie über den Status-Server', async () => {
+  const el = elProject();
+  const out = buildZusatz(el, { to: 'auftrag-1', itemIdx: [1], poiIds: ['poi1'], task: 'Bitte prüfen', prio: true });
+  const data = { k: 'z', to: out.msg.to, tm: out.msg.tm, txt: out.msg.txt, prio: out.msg.prio, t: out.msg.t, id: out.msg.id, z: out.msg.z };
+  const link = shareLink('z', await pack(data));
+  const sh = parseShared(link);
+  assert.equal(sh.kind, 'z');
+  const got = await unpack(sh.data);
+  assert.deepEqual(got, data);
+  const m = buildElMsg({ to: got.to, txt: got.txt, prio: got.prio, t: got.t, id: got.id });
+  m.z = got.z;
+  assert.ok(isZusatz(m));
+  const hf = hfProject();
+  const r = applyZusatz(hf, m);
+  assert.equal(r.added, 2); // Text-Markierung + Lage-Ort
+  assert.equal(hf.items.find((it) => it.kind === 'text').text, 'Hütte');
+  assert.equal(hf.pois[0].name, 'Parkplatz Süd');
+  // zweimal einscannen schadet nicht (zid-Schutz bei der Zeichnung, gleiche ID = Aktualisieren beim Lage-Ort – wie beim Status-Server-Weg)
+  const r2 = applyZusatz(hf, m);
+  assert.equal(r2.added, 0);
+  assert.equal(hf.items.filter((it) => it.kind === 'text' && it.text === 'Hütte').length, 1);
+  assert.equal(hf.pois.length, 1);
 });
 
 test('normale Nachricht ist kein Zusatz; Text wird gekürzt', () => {

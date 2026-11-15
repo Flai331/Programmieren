@@ -28,6 +28,8 @@ test('packen/entpacken, Link erkennen', async () => {
   const link = shareLink('a', s);
   assert.deepEqual(parseShared(`Hallo, hier dein Auftrag: ${link} !`), { kind: 'a', data: s });
   assert.equal(parseShared('kein Link'), null);
+  // v130.36: Zusatz-QR (Team ohne Status-Server-Kanal)
+  assert.deepEqual(parseShared(shareLink('z', s)), { kind: 'z', data: s });
 });
 
 test('Punkte kompakt und vereinfacht', () => {
