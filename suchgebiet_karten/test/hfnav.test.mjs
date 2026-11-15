@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { areaBounds, areaPoints, navTargets, navUrl, navNeedleDeg, fmtDist } from '../web/hfnav.js';
+import { areaBounds, areaPoints, navTargets, navUrl, navNeedleDeg, fmtDist, borderSegments, borderDistances, areaBorderList } from '../web/hfnav.js';
 import { newProject } from '../web/store.js';
 
 const base = () => {
@@ -70,4 +70,33 @@ test('fmtDist: Meter bzw. Kilometer, deutsches Komma', () => {
   assert.equal(fmtDist(1000), '1 km');
   assert.equal(fmtDist(1340), '1,3 km');
   assert.equal(fmtDist(NaN), '');
+});
+
+// v130.37: Grenzen nach Himmelsrichtung (N/O/S/W bei einem Rechteck), mit Entfernung vom Standort
+test('borderSegments: Rechteck ergibt genau 4 Grenzen N, O, S, W', () => {
+  const ring = [[52.52, 9.7], [52.52, 9.72], [52.5, 9.72], [52.5, 9.7]];
+  assert.deepEqual(borderSegments(ring).map((g) => g.label), ['N', 'O', 'S', 'W']);
+  assert.equal(borderSegments([[1, 1], [2, 2]]).length, 0); // zu wenig Punkte
+});
+
+test('borderDistances: Entfernung vom Standort zur jeweiligen Grenze (Luftlinie, Rechteck)', () => {
+  const ring = [[52.52, 9.7], [52.52, 9.72], [52.5, 9.72], [52.5, 9.7]];
+  const d = borderDistances(ring, 52.51, 9.71); // Mitte des Rechtecks
+  const by = Object.fromEntries(d.map((x) => [x.label, x.dist]));
+  assert.ok(Math.abs(by.N - 1113) < 5 && Math.abs(by.S - 1113) < 5);
+  assert.ok(by.O > 600 && by.O < 750 && by.W > 600 && by.W < 750);
+  assert.deepEqual(borderDistances(ring, null, null).map((x) => x.dist), [null, null, null, null]); // ohne Standort
+});
+
+test('areaBorderList: Rasterfelder des Teams (nicht das ganze Raster) und Umrisse der EL je mit eigenen Grenzen', () => {
+  const p = base();
+  p.fills = { '0,0': 'team', '1,0': 'team' };
+  let areas = areaBorderList(p, 52.51, 9.71);
+  assert.equal(areas.length, 1);
+  assert.deepEqual(areas[0].borders.map((b) => b.label), ['N', 'O', 'S', 'W']);
+  p.items = [{ kind: 'track', fromEl: true, name: 'Waldstück', pts: [[52.6, 9.8], [52.6, 9.9], [52.7, 9.85]] }];
+  areas = areaBorderList(p, 52.51, 9.71);
+  assert.equal(areas.length, 2);
+  assert.equal(areas[1].name, 'Waldstück');
+  assert.ok(areas[1].borders.length >= 3);
 });

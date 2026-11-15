@@ -9,7 +9,7 @@ import {
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
 import { formatMgrs } from './utm.js';
-import { areaBounds, navTargets, navTargetsAll, navUrl, boxCenter, cellCenter as navCellCenter, navNeedleDeg, fmtDist } from './hfnav.js';
+import { areaBounds, navTargets, navTargetsAll, navUrl, boxCenter, cellCenter as navCellCenter, navNeedleDeg, fmtDist, areaBorderList } from './hfnav.js';
 import { buildGpx, mergeGpx, parseGpx, dedupeImport, parseKml, pointInPolygon, selectionGpx, gridWithLabels, gridPath, labelTracks, cellComponents, cellOutlines, hasArea, polygonArea, formatArea, trackDesc, trackLength, outlineName, msgWaypoints, msgRows } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import { buildReport, describeTarget, makeDedup, makeLog, validReportUrl } from './report.js';
@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.36';
+const APP_VERSION = 'v130.37';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -3551,6 +3551,7 @@ function renderHfInfo() {
   $('hfm-meet').disabled = !P.meet;
   const hasArea = !!h && !!areaBounds(P);
   $('hfm-area').disabled = !hasArea;
+  $('hfm-borders').disabled = !hasArea;
   $('hfi-area').hidden = !hasArea;
   $('hfm-nav').disabled = !h; // v123: auch ohne Ziel gibt es die Kartenmitte
   $('hfm-contacts').hidden = !P.contacts.length;
@@ -3578,6 +3579,25 @@ function showMyArea() {
 }
 $('hfm-area').addEventListener('click', showMyArea);
 $('hfi-area').addEventListener('click', (e) => { e.stopPropagation(); showMyArea(); }); // der Tipp auf die Karte klappt sonst die Auftragskarte zu
+// v130.37: 📏 Grenzen – wie weit ist die Nord-/Süd-/…-Grenze meines Gebiets vom aktuellen Standort entfernt?
+function showAreaBorders() {
+  const areas = areaBorderList(P, lastPos ? lastPos[0] : null, lastPos ? lastPos[1] : null);
+  if (!areas.length) return toast('Im Auftrag ist kein Gebiet eingetragen');
+  openDlg((box, close) => {
+    dlgHead(box, '📏 Grenzen meines Gebiets', lastPos ? 'Entfernung vom aktuellen Standort zur jeweiligen Grenze (Luftlinie).' : 'Ohne GPS-Standort keine Entfernung – „📍 Standort“ einschalten.');
+    for (const a of areas) {
+      if (areas.length > 1) { const h = document.createElement('h3'); h.className = 'zus-h'; h.textContent = a.name; box.appendChild(h); }
+      for (const bd of a.borders) {
+        const d = document.createElement('div');
+        d.className = 'st-row';
+        d.textContent = `${bd.label}-Grenze: ${bd.dist == null ? '–' : fmtDist(bd.dist)}`;
+        box.appendChild(d);
+      }
+    }
+    dlgButton(box, 'Schließen', 'primary', () => close(null));
+  });
+}
+$('hfm-borders').addEventListener('click', showAreaBorders);
 // Externen Link öffnen: in der Android-App über die WebView (die reicht https-Adressen an die Maps-App weiter), sonst neuer Tab
 function openLink(url) {
   if (bridge) location.href = url;
@@ -6391,7 +6411,11 @@ async function zusatzDialog(pre = {}) {
       if (!$('panel-teams').hidden) renderMarks();
     }
     const who = st.to === EL_ALL ? 'alle Teams' : t ? t.label : 'das Team';
-    // v130.36: Team ohne laufenden Status-Server-Kanal (Auftrag ohne Link) – als QR-Code statt per Live-Kanal senden
+    // v130.36: Nachricht immer absenden (geht unter „Status“ in den Verlauf ein, auch wenn das Team den Kanal
+    // gleich nicht abrufen kann) – v130.37: Status zeigt sie damit jetzt auch dem laufenden Auftrag zugeordnet an.
+    const ok = await elSend(out.msg);
+    if ($('panel-status').hidden === false) renderStatusPanel();
+    // v130.36: Team ohne laufenden Status-Server-Kanal (Auftrag ohne Link) – zusätzlich als QR-Code zum Scannen
     if (t && !t.live) {
       const data = { k: 'z', to: out.msg.to, tm: out.msg.tm, txt: out.msg.txt, prio: out.msg.prio, t: out.msg.t, id: out.msg.id, z: out.msg.z };
       const packed = await pack(data);
@@ -6400,8 +6424,6 @@ async function zusatzDialog(pre = {}) {
       showQr(link, `📍 Zusatz an ${who}`, `${who} hat keinen laufenden Status-Server-Kanal – dieser Code muss auf dem Gerät von ${who} eingescannt werden (📷 Code einlesen)${parts ? ' (mehrere Codes wechseln sich ab, Kamera ruhig halten)' : ''}.`, parts);
       return;
     }
-    const ok = await elSend(out.msg);
-    if ($('panel-status').hidden === false) renderStatusPanel();
     toast(ok ? `📤 An ${who} gesendet: ${out.parts.join(', ')}` : `📤 Wartet auf Netz – geht automatisch an ${who}`, 6000);
     return;
   }
