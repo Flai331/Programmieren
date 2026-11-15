@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.27';
+const APP_VERSION = 'v130.28';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -8433,7 +8433,7 @@ $('proj-new').addEventListener('click', async () => {
   });
   if (!how) return;
   if (how === 'plain') {
-    const t = prompt('Name des neuen Suchgebiets:', '');
+    const t = prompt('Name des neuen Suchgebiets:', wizTitle());
     if (t !== null) createProject(t.trim() || wizTitle());
     return;
   }
