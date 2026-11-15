@@ -73,7 +73,7 @@ import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { placeBadges, boxOf } from './badgeplace.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner, overpass } from './search.js';
-import { OSM_NOTE, MAX_PARTS, MAX_AREA_M2, MIN_OUTLINE_M, forestQuery, linesQuery, parseForest, originOf, toXY, toLL, forestInLasso, lassoPolygon, shares as forestShares, splitArea, toTracks, mpArea, landcoverUrl, isForestColor, landcoverInLasso, LANDCOVER_NOTE } from './forest.js';
+import { OSM_NOTE, MAX_PARTS, MAX_AREA_M2, MIN_OUTLINE_M, forestQuery, linesQuery, parseForest, parseLines, originOf, toXY, toLL, forestInLasso, lassoPolygon, shares as forestShares, splitArea, toTracks, mpArea, landcoverUrl, isForestColor, landcoverInLasso, LANDCOVER_NOTE } from './forest.js';
 import {
   newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor, cellsText,
   exportProject, importProject, uid, reorderMarks, MARK_COLORS, NO_TEAM, NO_TEAM_COLOR, assignTargets, assigneeName,
@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.41';
+const APP_VERSION = 'v130.42';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1567,6 +1567,57 @@ for (const [id, v] of [['forest-edit', 'edit'], ['forest-ok', 'apply'], ['forest
   $(id).addEventListener('click', () => { const f = forestBarDone; forestBarDone = null; $('forestbar').hidden = true; if (f) f(v); });
 }
 const forestLassoLayer = (pts) => L.polygon(pts, { color: '#2e7d32', weight: 3, dashArray: '2 6', fill: false, interactive: false });
+
+// v130.42: Wege/Bäche aus OpenStreetMap als eigenes Overlay – zeigt genau die Daten, die auch beim
+// Ausrichten an Wegen (✂️ Aufteilen/🌲 Wald) abgefragt werden. Lädt nur den sichtbaren Kartenausschnitt
+// (mit etwas Rand) und nur auf ausdrücklichen Wunsch (Knopf „Wege“) – kein automatischer Dauerabruf.
+const waysLayer = L.layerGroup().addTo(map);
+let waysCtl = null;
+let waysBounds = null; // zuletzt geladener Bereich (mit Rand) – solange die Sicht darin liegt, nicht neu laden
+let waysTimer = null;
+function waysClear() {
+  waysLayer.clearLayers();
+  waysBounds = null;
+  if (waysCtl) { waysCtl.abort(); waysCtl = null; }
+  map.attributionControl.removeAttribution(OSM_NOTE);
+}
+async function loadWays() {
+  if (!db.waysOn) return;
+  const b = map.getBounds();
+  if (waysBounds && waysBounds.contains(b)) return;
+  if (map.getZoom() < 14) { waysLayer.clearLayers(); return toast('Wege-Overlay: bitte näher heranzoomen', 4000); }
+  if (waysCtl) waysCtl.abort();
+  const ctl = new AbortController();
+  waysCtl = ctl;
+  const pad = b.pad(0.3); // Rand, damit nicht schon bei kleinen Schwenks neu geladen wird
+  const bbox = { south: pad.getSouth(), west: pad.getWest(), north: pad.getNorth(), east: pad.getEast() };
+  try {
+    const data = parseLines(await overpass(linesQuery(bbox), ctl.signal, 'Wege-Overlay'));
+    if (ctl.signal.aborted || !db.waysOn) return;
+    waysLayer.clearLayers();
+    for (const p of data.paths) L.polyline(p, { color: '#8d6e63', weight: 3, opacity: 0.85, interactive: false }).addTo(waysLayer);
+    for (const w of data.waters) L.polyline(w, { color: '#1565c0', weight: 3, opacity: 0.85, interactive: false }).addTo(waysLayer);
+    waysBounds = pad;
+    map.attributionControl.addAttribution(OSM_NOTE);
+  } catch (err) {
+    if (!ctl.signal.aborted) toast(`Wege-Overlay: ${(err && err.message) || 'kein Netz'}`, 5000);
+  } finally {
+    if (waysCtl === ctl) waysCtl = null;
+  }
+}
+$('quick-ways').addEventListener('click', () => {
+  db.waysOn = !db.waysOn;
+  saveNow();
+  $('quick-ways').classList.toggle('on', !!db.waysOn);
+  if (db.waysOn) loadWays(); else waysClear();
+});
+map.on('moveend zoomend', () => {
+  if (!db.waysOn) return;
+  clearTimeout(waysTimer);
+  waysTimer = setTimeout(loadWays, 600);
+});
+$('quick-ways').classList.toggle('on', !!db.waysOn);
+if (db.waysOn) loadWays();
 
 async function forestLassoDone(raw) {
   // Punkte ausdünnen (ca. alle 3 m)

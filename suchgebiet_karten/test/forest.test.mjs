@@ -2,7 +2,7 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  forestQuery, linesQuery, parseForest, forestInLasso, shares, splitArea, toTracks, makeOrigin, toLL, toXY, mpArea, chainLines, mainAxis, lassoPolygon,
+  forestQuery, linesQuery, parseForest, parseLines, forestInLasso, shares, splitArea, toTracks, makeOrigin, toLL, toXY, mpArea, chainLines, mainAxis, lassoPolygon,
   isForestColor, landcoverUrl, maskPolygon, landcoverInLasso,
 } from '../web/forest.js';
 import { polygonArea } from '../web/gpx.js';
@@ -100,6 +100,23 @@ test('parseForest: Way-Wald, Multipolygon aus gestückelten outer-Ways, Linien',
   assert.equal(rel[0][0], rel[rel.length - 1][0]);
   near(polygonArea(rel), 10000, 0.01, 'Fläche des gestückelten Rings');
   assert.deepEqual(parseForest(null), { forests: [], lines: [] });
+});
+
+// v130.42: fürs Wege-Overlay – Wege und Gewässer getrennt, unabhängig von Wald-Tags
+test('parseLines: Wege und Gewässer getrennt, Wald-Flächen/zu kurze Wege nicht', () => {
+  const json = {
+    elements: [
+      { type: 'way', tags: { highway: 'track' }, geometry: geom([[52, 10], [52.001, 10.001]]) },
+      { type: 'way', tags: { waterway: 'stream' }, geometry: geom([[52, 10], [52.002, 10.001], [52.003, 10.002]]) },
+      { type: 'way', tags: { landuse: 'forest' }, geometry: geom(rectLL(0, 0, 500, 500)) },
+      { type: 'way', tags: { highway: 'track' }, geometry: geom([[52, 10]]) }, // nur 1 Punkt -> verworfen
+      { type: 'relation', tags: { landuse: 'forest' }, members: [] },
+    ],
+  };
+  const r = parseLines(json);
+  assert.equal(r.paths.length, 1);
+  assert.equal(r.waters.length, 1);
+  assert.deepEqual(parseLines(null), { paths: [], waters: [] });
 });
 
 test('forestInLasso: Quadrat 1 x 1 km, halbes Lasso -> ca. 50 ha', () => {

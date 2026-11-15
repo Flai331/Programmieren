@@ -83,6 +83,23 @@ export function parseForest(json) {
   return { forests, lines };
 }
 
+// v130.42: dieselben Wege/Bäche wie beim Ausrichten (linesQuery/parseForest), aber getrennt nach Art
+// fürs Anzeigen als eigenes Overlay – { paths: [[[lat,lon]…]…], waters: [[[lat,lon]…]…] }
+export function parseLines(json) {
+  const paths = [];
+  const waters = [];
+  const pts = (g) => (Array.isArray(g) ? g.filter((q) => q && Number.isFinite(q.lat) && Number.isFinite(q.lon)).map((q) => [q.lat, q.lon]) : []);
+  for (const el of (json && json.elements) || []) {
+    if (el.type !== 'way') continue;
+    const tags = el.tags || {};
+    const p = pts(el.geometry);
+    if (p.length < 2) continue;
+    if (tags.waterway) waters.push(p);
+    else if (tags.highway) paths.push(p);
+  }
+  return { paths, waters };
+}
+
 // ---------- Ebene in Metern ----------
 export function makeOrigin(lat, lon) {
   return { lat, lon, kx: KY * Math.cos(lat * Math.PI / 180) };
