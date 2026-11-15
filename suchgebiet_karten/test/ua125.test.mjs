@@ -193,7 +193,7 @@ test('Beim EL: Team mit schon benutztem Namen bekommt „ (UA Nord)“, gleiche 
 });
 
 // ---------- Punkt 4 + 5: QR erneut, Teams ohne Auftrag, Zuordnung beim Auftrag ----------
-import { selFromSent, rebuildAssignment, teamsWithoutOrder, planAssign, applyAssign, planCount, assignText, teamClock } from '../web/sentops.js';
+import { selFromSent, rebuildAssignment, teamsWithoutOrder, teamsStaged, planAssign, applyAssign, planCount, assignText, teamClock } from '../web/sentops.js';
 import { buildAssignment } from '../web/share.js';
 
 function mitAuftrag() {
@@ -234,6 +234,16 @@ test('Teams ohne Auftrag: jedes freie Team, auch ganz ohne zugeteilte Gebiete', 
   assert.deepEqual(teamsWithoutOrder(p).map((x) => [x.team.id, x.cells, x.areas]), [['T2', 1, 0]]);
   p.sent.push({ id: 'Z', teamId: 'T2' });
   assert.equal(teamsWithoutOrder(p).length, 0);
+});
+
+// v130.35: dieselbe Liste, zweistufig – „ohne Gebiet“ und „mit Gebiet, ohne Auftrag“ getrennt
+test('Teams ohne Auftrag, zweistufig: ohne Gebiet vs. mit Gebiet ohne Auftrag', () => {
+  const { p } = mitAuftrag();
+  assert.deepEqual(teamsStaged(p).noArea.map((x) => x.team.id), ['T2']);
+  assert.deepEqual(teamsStaged(p).withArea, []);
+  p.fills['5,5'] = 'T2';
+  assert.deepEqual(teamsStaged(p).noArea, []);
+  assert.deepEqual(teamsStaged(p).withArea.map((x) => [x.team.id, x.cells, x.areas]), [['T2', 1, 0]]);
 });
 
 // v130.3 Bugfix: nach Abschluss + Rückmeldung soll das Team wieder bei „Teams ohne Auftrag“ auftauchen

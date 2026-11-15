@@ -119,6 +119,17 @@ test('Einsatzzeiten: Start, Pause, Ablösung, Ende, Zurück; Personenstunden', (
   assert.equal(totalPersonHours(rows), 10.5);
 });
 
+// v130.35: Auftrag übernommen (acc gesetzt), aber noch keine eigene Meldung des Teams -> zählt trotzdem
+// schon als draußen, statt erst ab der ersten Meldung (z. B. „am Einsatzort“)
+test('Auftrag angenommen, noch keine eigene Meldung: Team gilt schon als draußen', () => {
+  const rows = teamTimes(sent(), [], marks(), T(18, 0));
+  const h = rows.find((x) => x.teamId === 'H'); // acc gesetzt
+  const k = rows.find((x) => x.teamId === 'K'); // acc: 0, noch nicht übernommen
+  assert.equal(h.state, 'angenommen'); assert.equal(h.outside, true);
+  assert.equal(k.state, 'none'); assert.equal(k.outside, false);
+  assert.deepEqual(outsideTeams(rows).map((x) => x.label), ['Team 1']);
+});
+
 test('Ablösung beendet die Einsatzzeit; wer noch draußen ist', () => {
   const msgs = [
     { id: 1, a: 'AH', s: 'start', t: T(18, 0) }, { id: 2, a: 'AH', s: 'abloes', t: T(19, 0) },

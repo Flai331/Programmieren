@@ -30,7 +30,7 @@ import { listTracks, trackInfo, importItems, noteImport, importTag, TRACK_KINDS,
 import { teamTimes, timeRows, outsideTeams, stateText, totalPersonHours, timeLine } from './times.js'; // v128
 import { uaOverview, levelIcon, agoText, hasUas, BASE_UA } from './uaover.js'; // v128
 import { CAM_KEY, backCameras, pickCamera, nextCamera, cameraConstraints, wantsContinuousFocus } from './camera.js';
-import { rebuildAssignment, teamsWithoutOrder, planAssign, applyAssign, planCount, assignText, teamClock } from './sentops.js';
+import { rebuildAssignment, teamsStaged, planAssign, applyAssign, planCount, assignText, teamClock } from './sentops.js';
 import { buildProgress, mergeProgress, progressSummary, progressPreview, progressTarget, snapshotBase, stampChanges, setPeer, setPeerId, peerOf } from './progress.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.34';
+const APP_VERSION = 'v130.35';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1305,7 +1305,7 @@ function outlineDialog(it, title, opts = {}) {
     p.textContent = 'Teams unter „Teams“, weitere Einheiten (Feuerwehr, Polizei …) unter „Einsatz → Kräfte“.';
     box.appendChild(p);
     dlgButton(box, 'Speichern', 'primary', () => close({ name: name.value.trim(), to: sel.value, note: note.value.trim() }));
-    // v130.34: Aufteilen geht auch schon beim Anlegen, nicht erst wenn der Umriss schon gespeichert ist
+    // v130.35: Aufteilen geht auch schon beim Anlegen, nicht erst wenn der Umriss schon gespeichert ist
     if (!it.open && (it.pts || []).length > 2) dlgButton(box, '✂️ Aufteilen', '', () => close({ name: name.value.trim(), split: true }));
     if (opts.edit) {
       const ctr = boxCenter(it.pts);
@@ -1501,7 +1501,7 @@ async function finishTrack(auto) {
     if (!r || draftTrack !== d) return;
     name = r.name || name;
     if (r.split) {
-      // v130.34: erst normal speichern (wie gewohnt rückgängig machbar), dann direkt aufteilen –
+      // v130.35: erst normal speichern (wie gewohnt rückgängig machbar), dann direkt aufteilen –
       // bricht der Nutzer das Aufteilen später ab, bleibt der gezeichnete Umriss einfach gespeichert.
       draftTrack = null;
       snapshot();
@@ -4377,28 +4377,37 @@ function renderSentList() {
   const box = $('sent-list');
   box.innerHTML = '';
   const list = teamOrder([...(P.sent || [])].reverse(), P.marks); // feste Team-Reihenfolge, je Team neueste zuerst
-  // v125: Teams mit Gebieten, aber noch ohne Auftrag
-  const wo = db.mode === 'el' && !P.closed ? teamsWithoutOrder(P) : [];
-  if (wo.length) {
+  // v125/v130.35: Teams ohne laufenden Auftrag – zweistufig: noch ganz ohne Gebiet (erst zuteilen),
+  // dann mit Gebiet, aber noch ohne Auftrag (kann gleich losgeschickt werden)
+  const staged = db.mode === 'el' && !P.closed ? teamsStaged(P) : { noArea: [], withArea: [] };
+  const woCard = (w) => {
+    const d = document.createElement('div');
+    d.className = 'sent-card wait';
+    d.innerHTML = '<b><i></i><span></span></b><div class="what"></div><div class="tclock"></div>';
+    d.querySelector('i').style.background = w.team.color;
+    d.querySelector('b span').textContent = `${typeIcon(w.team)} ${w.team.label}${w.team.dog ? ` – ${w.team.dog}` : ''}`;
+    d.querySelector('.what').textContent = [w.cells && `${w.cells} Feld${w.cells === 1 ? '' : 'er'}`, w.areas && `${w.areas} Umriss${w.areas === 1 ? '' : 'e'}`].filter(Boolean).join(' · ') || 'Noch kein Gebiet zugeteilt';
+    d.querySelector('.tclock').textContent = teamClockText(w.team.id); // v130.4: Pausenzeit bzw. „noch kein Auftrag“, Anzahl/Gesamtzeit
+    const nb = document.createElement('button');
+    nb.className = 'mini';
+    nb.textContent = '📲 Auftrag erstellen';
+    nb.addEventListener('click', () => openSendFor(w.team.id));
+    d.appendChild(nb);
+    return d;
+  };
+  if (staged.noArea.length) {
     const wh = document.createElement('h2');
     wh.className = 'sub';
-    wh.textContent = `🕓 Teams ohne Auftrag (${wo.length})`;
+    wh.textContent = `🗺️ Teams ohne Gebiet (${staged.noArea.length})`;
     box.appendChild(wh);
-    for (const w of wo) {
-      const d = document.createElement('div');
-      d.className = 'sent-card wait';
-      d.innerHTML = '<b><i></i><span></span></b><div class="what"></div><div class="tclock"></div>';
-      d.querySelector('i').style.background = w.team.color;
-      d.querySelector('b span').textContent = `${typeIcon(w.team)} ${w.team.label}${w.team.dog ? ` – ${w.team.dog}` : ''}`;
-      d.querySelector('.what').textContent = [w.cells && `${w.cells} Feld${w.cells === 1 ? '' : 'er'}`, w.areas && `${w.areas} Umriss${w.areas === 1 ? '' : 'e'}`].filter(Boolean).join(' · ');
-      d.querySelector('.tclock').textContent = teamClockText(w.team.id); // v130.4: Pausenzeit bzw. „noch kein Auftrag“, Anzahl/Gesamtzeit
-      const nb = document.createElement('button');
-      nb.className = 'mini';
-      nb.textContent = '📲 Auftrag erstellen';
-      nb.addEventListener('click', () => openSendFor(w.team.id));
-      d.appendChild(nb);
-      box.appendChild(d);
-    }
+    for (const w of staged.noArea) box.appendChild(woCard(w));
+  }
+  if (staged.withArea.length) {
+    const wh = document.createElement('h2');
+    wh.className = 'sub';
+    wh.textContent = `🕓 Teams mit Gebiet, ohne Auftrag (${staged.withArea.length})`;
+    box.appendChild(wh);
+    for (const w of staged.withArea) box.appendChild(woCard(w));
   }
   if (!list.length) return;
   const open = list.filter((x) => !isDone(x));
@@ -5191,6 +5200,12 @@ async function showElPrio() {
   const proj = P;
   beep();
   const beeper = setInterval(beepShort, 15000);
+  // v130.35: Zusatz (Punkt, Umriss, Ort …) schon hier auf die Karte übernehmen – nicht erst, wenn später
+  // zufällig „🗺️ Zeigen“ in der Nachrichtenliste angetippt wird. Bugfix: bisher zeigte dieses (wichtige,
+  // blockierende) Fenster nur den Text, der Punkt/Ort selbst blieb unauffindbar irgendwo auf der Karte.
+  const zpts = [];
+  for (const m of todo) { const r = isZusatz(m) && applyZusatz(proj, m); if (r) zpts.push(...r.pts); }
+  if (zpts.length && proj === P) { redraw(); renderPois(); renderMeet(); }
   await openDlg((box, close) => {
     dlgHead(box, `✉️ Wichtig von der Einsatzleitung (${todo.length})`, 'Diese Nachricht bleibt, bis du sie als verstanden bestätigst.');
     for (const m of todo) {
@@ -5198,6 +5213,11 @@ async function showElPrio() {
       d.className = 'st-urgent';
       d.textContent = `${hhmm(m.t)}${m.to === EL_ALL ? ' (an alle)' : ''}: ${m.txt || ''}`;
       box.appendChild(d);
+      if (isZusatz(m)) {
+        const zb = Object.assign(document.createElement('button'), { type: 'button', className: 'mini', textContent: '🗺️ Zeigen' });
+        zb.addEventListener('click', () => { const r = applyZusatz(proj, m); if (r) { if (proj === P) { redraw(); renderPois(); renderMeet(); } showPts(r.pts); } });
+        d.appendChild(zb);
+      }
     }
     dlgButton(box, '✓ Verstanden', 'primary', () => close(true));
   });
@@ -6427,20 +6447,38 @@ function renderUaOverview() {
       body.appendChild(d);
     }
   }
-  // wer ist noch draußen?
+  // wer ist noch draußen? (v130.35: zählt schon ab Annahme des Auftrags, nicht erst ab der ersten eigenen Meldung)
   const out = $('st-out');
   const tt = db.mode === 'el' && P ? teamTimes(P.sent, allMsgs(), P.marks) : [];
   const ob = $('st-out-body');
   ob.innerHTML = '';
   const outside = outsideTeams(tt);
-  out.hidden = !tt.some((r) => r.msgs);
+  out.hidden = !tt.some((r) => r.msgs || r.outside);
   if (!out.hidden) {
     $('st-out-sum').textContent = `🚶 Wer ist noch draußen? (${outside.length})`;
-    for (const r of tt.filter((q) => q.msgs)) {
+    for (const r of tt.filter((q) => q.msgs || q.outside)) {
       const d = document.createElement('div');
       d.className = `ua-team${r.outside ? ' out' : ''}`;
       d.textContent = `${r.outside ? '🔶' : '✅'} ${r.mark ? typeIcon(r.mark) : '🐕'} ${r.label}: ${stateText(r)}${r.start ? ` (seit ${hhmm(r.start)})` : ''}`;
       ob.appendChild(d);
+    }
+  }
+  // v130.35: wie viele Teams sind noch drinnen (kein laufender Auftrag) und haben schon mindestens
+  // einen Auftrag erledigt? Mit Pausenzeit – wie bei „Teams ohne Auftrag“, nur hier als Überblick für die EL.
+  const inn = $('st-in');
+  const ib = $('st-in-body');
+  ib.innerHTML = '';
+  const inside = db.mode === 'el' && P
+    ? (P.marks || []).filter((m) => m.kind === 'team').map((m) => ({ m, c: teamClock(P, m.id) })).filter(({ c }) => c.state === 'pause')
+    : [];
+  inn.hidden = !inside.length;
+  if (!inn.hidden) {
+    $('st-in-sum').textContent = `🏠 Wer ist noch drinnen? (${inside.length})`;
+    for (const { m, c } of inside) {
+      const d = document.createElement('div');
+      d.className = 'ua-team';
+      d.textContent = `🏠 ${typeIcon(m)} ${m.label}${m.dog ? ` – ${m.dog}` : ''}: ${teamClockText(m.id)}`;
+      ib.appendChild(d);
     }
   }
 }
