@@ -83,6 +83,23 @@ export function parseForest(json) {
   return { forests, lines };
 }
 
+// v130.42: dieselben Wege/Bäche wie beim Ausrichten (linesQuery/parseForest), aber getrennt nach Art
+// fürs Anzeigen als eigenes Overlay – { paths: [[[lat,lon]…]…], waters: [[[lat,lon]…]…] }
+export function parseLines(json) {
+  const paths = [];
+  const waters = [];
+  const pts = (g) => (Array.isArray(g) ? g.filter((q) => q && Number.isFinite(q.lat) && Number.isFinite(q.lon)).map((q) => [q.lat, q.lon]) : []);
+  for (const el of (json && json.elements) || []) {
+    if (el.type !== 'way') continue;
+    const tags = el.tags || {};
+    const p = pts(el.geometry);
+    if (p.length < 2) continue;
+    if (tags.waterway) waters.push(p);
+    else if (tags.highway) paths.push(p);
+  }
+  return { paths, waters };
+}
+
 // ---------- Ebene in Metern ----------
 export function makeOrigin(lat, lon) {
   return { lat, lon, kx: KY * Math.cos(lat * Math.PI / 180) };
@@ -575,13 +592,31 @@ export function splitArea(mp, sh, lines = [], opts = {}) {
     R = rest;
   }
   pieces.push(R);
-  return pieces.map((m, i) => {
+  const raw = pieces.map((m) => {
     let polys = solid(m).map((p) => closeRing(p[0]));
     const big = polys.filter((r) => Math.abs(ringArea(r)) >= SLIVER_M2);
     if (big.length) polys = big;
     polys.sort((x, y) => Math.abs(ringArea(y)) - Math.abs(ringArea(x))); // größtes Stück zuerst
-    return { polys, area: polys.reduce((s, r) => s + Math.abs(ringArea(r)), 0), onWay: !!(cutWay[i - 1] || cutWay[i]) };
+    return polys;
   });
+  // v130.40: getrennte Nebenstücke eines Teils (z. B. eine Lichtung mitten im Wald) gehören zum
+  // geometrisch nächsten Hauptstück – meist das eigene, manchmal aber ein Nachbarteil. So entsteht
+  // kein eigener kleiner Umriss, sondern die Fläche zählt zum nächstgelegenen großen Teil dazu.
+  const mains = raw.map((polys) => (polys[0] ? centroid([polys[0]]) : null));
+  const merged = raw.map((polys) => (polys[0] ? [polys[0]] : []));
+  raw.forEach((polys, i) => {
+    for (let k = 1; k < polys.length; k++) {
+      const c = centroid([polys[k]]);
+      let best = i; let bestD = Infinity;
+      mains.forEach((m, j) => {
+        if (!m) return;
+        const d = Math.hypot(c[0] - m[0], c[1] - m[1]);
+        if (d < bestD) { bestD = d; best = j; }
+      });
+      merged[best].push(polys[k]);
+    }
+  });
+  return merged.map((polys, i) => ({ polys, area: polys.reduce((s, r) => s + Math.abs(ringArea(r)), 0), onWay: !!(cutWay[i - 1] || cutWay[i]) }));
 }
 
 // Soll-Flächen in m²

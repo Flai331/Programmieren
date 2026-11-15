@@ -2,7 +2,7 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  forestQuery, linesQuery, parseForest, forestInLasso, shares, splitArea, toTracks, makeOrigin, toLL, toXY, mpArea, chainLines, mainAxis, lassoPolygon,
+  forestQuery, linesQuery, parseForest, parseLines, forestInLasso, shares, splitArea, toTracks, makeOrigin, toLL, toXY, mpArea, chainLines, mainAxis, lassoPolygon,
   isForestColor, landcoverUrl, maskPolygon, landcoverInLasso,
 } from '../web/forest.js';
 import { polygonArea } from '../web/gpx.js';
@@ -100,6 +100,23 @@ test('parseForest: Way-Wald, Multipolygon aus gestückelten outer-Ways, Linien',
   assert.equal(rel[0][0], rel[rel.length - 1][0]);
   near(polygonArea(rel), 10000, 0.01, 'Fläche des gestückelten Rings');
   assert.deepEqual(parseForest(null), { forests: [], lines: [] });
+});
+
+// v130.42: fürs Wege-Overlay – Wege und Gewässer getrennt, unabhängig von Wald-Tags
+test('parseLines: Wege und Gewässer getrennt, Wald-Flächen/zu kurze Wege nicht', () => {
+  const json = {
+    elements: [
+      { type: 'way', tags: { highway: 'track' }, geometry: geom([[52, 10], [52.001, 10.001]]) },
+      { type: 'way', tags: { waterway: 'stream' }, geometry: geom([[52, 10], [52.002, 10.001], [52.003, 10.002]]) },
+      { type: 'way', tags: { landuse: 'forest' }, geometry: geom(rectLL(0, 0, 500, 500)) },
+      { type: 'way', tags: { highway: 'track' }, geometry: geom([[52, 10]]) }, // nur 1 Punkt -> verworfen
+      { type: 'relation', tags: { landuse: 'forest' }, members: [] },
+    ],
+  };
+  const r = parseLines(json);
+  assert.equal(r.paths.length, 1);
+  assert.equal(r.waters.length, 1);
+  assert.deepEqual(parseLines(null), { paths: [], waters: [] });
 });
 
 test('forestInLasso: Quadrat 1 x 1 km, halbes Lasso -> ca. 50 ha', () => {
@@ -203,6 +220,22 @@ test('splitArea: Wald aus zwei getrennten Stücken, 2 Teile', () => {
   const parts = splitArea(mp, [0.5, 0.5], []);
   near(parts[0].area, 1e6, 0.01);
   near(parts[1].area, 1e6, 0.01);
+});
+
+// v130.40: ein kleines, getrenntes Reststück (z. B. eine Lichtung mitten im Wald) soll nicht als
+// eigener kleiner Umriss erscheinen, sondern zum geometrisch nächsten großen Teil dazugerechnet
+// werden – auch wenn der gerade Schnitt es ursprünglich dem anderen (weiter entfernten) Teil zuordnet.
+test('splitArea: kleines Nebenstück zählt zum geometrisch nächsten, nicht zum eigenen Teil', () => {
+  const mp = [
+    [[[0, 0], [900, 0], [900, 1000], [0, 1000], [0, 0]]], // A-Hauptstück
+    [[[800, 5000], [900, 5000], [900, 5100], [800, 5100], [800, 5000]]], // Nebenstück: liegt (x) auf A-Seite, aber (y) weit weg
+    [[[1100, 4800], [2000, 4800], [2000, 5300], [1100, 5300], [1100, 4800]]], // B-Hauptstück: geometrisch am nächsten zum Nebenstück
+  ];
+  const parts = splitArea(mp, [0.5, 0.5], [], { followWays: false });
+  const withFragment = parts.find((p) => p.polys.length === 2);
+  assert.ok(withFragment, 'ein Teil hat das Nebenstück aufgenommen');
+  near(withFragment.area, 460000, 0.001); // 450.000 (B) + 10.000 (Nebenstück)
+  assert.ok(parts.every((p) => p.polys.length <= 2));
 });
 
 test('mainAxis: längere Seite', () => {
