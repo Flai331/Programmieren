@@ -2,7 +2,7 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  forestQuery, parseForest, forestInLasso, shares, splitArea, toTracks, makeOrigin, toLL, toXY, mpArea, chainLines, mainAxis, lassoPolygon,
+  forestQuery, linesQuery, parseForest, forestInLasso, shares, splitArea, toTracks, makeOrigin, toLL, toXY, mpArea, chainLines, mainAxis, lassoPolygon,
 } from '../web/forest.js';
 import { polygonArea } from '../web/gpx.js';
 import { overpass } from '../web/search.js';
@@ -23,6 +23,16 @@ test('forestQuery: Wald, Wege und Gewässer in einer Abfrage', () => {
   assert.match(q, /"highway"~"\^\(track\|path/);
   assert.match(q, /"waterway"~"\^\(stream\|river\|ditch\|canal\)\$"/);
   assert.match(q, /\(52\.000000,10\.000000,52\.010000,10\.020000\)/);
+  assert.match(q, /out geom;$/);
+});
+
+test('v130.29: linesQuery – nur Wege/Bäche, keine Wald-Abfrage (fürs Aufteilen eines vorhandenen Umrisses)', () => {
+  const q = linesQuery({ south: 52, west: 10, north: 52.01, east: 10.02 });
+  assert.match(q, /^\[out:json\]\[timeout:25\]/);
+  assert.match(q, /"highway"~"\^\(track\|path/);
+  assert.match(q, /"waterway"~"\^\(stream\|river\|ditch\|canal\)\$"/);
+  assert.doesNotMatch(q, /"landuse"="forest"/);
+  assert.doesNotMatch(q, /"natural"="wood"/);
   assert.match(q, /out geom;$/);
 });
 
