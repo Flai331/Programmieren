@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.33';
+const APP_VERSION = 'v130.34';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1305,11 +1305,12 @@ function outlineDialog(it, title, opts = {}) {
     p.textContent = 'Teams unter „Teams“, weitere Einheiten (Feuerwehr, Polizei …) unter „Einsatz → Kräfte“.';
     box.appendChild(p);
     dlgButton(box, 'Speichern', 'primary', () => close({ name: name.value.trim(), to: sel.value, note: note.value.trim() }));
+    // v130.34: Aufteilen geht auch schon beim Anlegen, nicht erst wenn der Umriss schon gespeichert ist
+    if (!it.open && (it.pts || []).length > 2) dlgButton(box, '✂️ Aufteilen', '', () => close({ name: name.value.trim(), split: true }));
     if (opts.edit) {
       const ctr = boxCenter(it.pts);
       if (!it.open && (it.pts || []).length > 2 && ctr) dlgNavButton(box, close, null, it.name || 'Umriss', ctr[0], ctr[1]); // v123: nur gespeicherte, geschlossene Umrisse
       if (db.mode === 'el' && P.live && elTargets(P.sent, P.marks).length) dlgButton(box, '📤 An Team senden', '', () => close({ zus: true })); // v130
-      if (!it.open && (it.pts || []).length > 2) dlgButton(box, '✂️ Aufteilen', '', () => close({ split: true })); // v130.29
       dlgButton(box, '✋ Punkte bearbeiten', '', () => close({ vtx: true }));
       dlgButton(box, '🗑 Löschen', 'urgent', () => close({ del: true }));
     }
@@ -1499,6 +1500,16 @@ async function finishTrack(auto) {
     r = await outlineDialog({ ...d, name }, '📐 Umriss speichern');
     if (!r || draftTrack !== d) return;
     name = r.name || name;
+    if (r.split) {
+      // v130.34: erst normal speichern (wie gewohnt rückgängig machbar), dann direkt aufteilen –
+      // bricht der Nutzer das Aufteilen später ab, bleibt der gezeichnete Umriss einfach gespeichert.
+      draftTrack = null;
+      snapshot();
+      d.name = name;
+      P.items.push(d);
+      changed();
+      return splitOutlineStart(d);
+    }
   }
   draftTrack = null;
   snapshot();
