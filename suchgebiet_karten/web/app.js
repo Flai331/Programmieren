@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.29';
+const APP_VERSION = 'v130.30';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -8248,6 +8248,8 @@ function renderLayerList() {
     b.addEventListener('click', () => setLayer(l.id, true));
     box.appendChild(b);
   }
+  const cur = layerById(P.layerId);
+  $('layer-legend').hidden = !cur.legend;
   const ovBox = $('overlay-list');
   ovBox.innerHTML = '';
   for (const o of OVERLAYS) {
@@ -9230,6 +9232,21 @@ $('btn-layers').addEventListener('click', () => {
 });
 $('msg-show').addEventListener('change', () => { db.msgOff = !$('msg-show').checked; saveNow(); redraw(); });
 $('layers-offline').addEventListener('click', () => { renderOfflineForm(); openPanel('panel-offline'); });
+// v130.30: Legende der Landbedeckungs-Karte (Wald/Gehölz-Farben) als Bild anzeigen
+$('layer-legend').addEventListener('click', () => {
+  const cur = layerById(P.layerId);
+  if (!cur.legend) return;
+  openDlg((box, close) => {
+    dlgHead(box, '🖼 Legende', cur.name);
+    const img = document.createElement('img');
+    img.src = cur.legend;
+    img.alt = 'Legende';
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    box.appendChild(img);
+    dlgButton(box, 'Schließen', 'primary', () => close(true));
+  });
+});
 $('btn-more').addEventListener('click', () => { renderDeviceName(); openPanel('panel-more'); });
 $('app-version').textContent = `Version ${APP_VERSION}`;
 $('btn-pdf').addEventListener('click', () => openShare());
