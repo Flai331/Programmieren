@@ -73,7 +73,7 @@ import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { placeBadges, boxOf } from './badgeplace.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner, overpass } from './search.js';
-import { OSM_NOTE, MAX_PARTS, MAX_AREA_M2, MIN_OUTLINE_M, forestQuery, linesQuery, parseForest, originOf, toXY, toLL, forestInLasso, lassoPolygon, shares as forestShares, splitArea, toTracks, mpArea } from './forest.js';
+import { OSM_NOTE, MAX_PARTS, MAX_AREA_M2, MIN_OUTLINE_M, forestQuery, linesQuery, parseForest, originOf, toXY, toLL, forestInLasso, lassoPolygon, shares as forestShares, splitArea, toTracks, mpArea, landcoverUrl, isForestColor, landcoverInLasso, LANDCOVER_NOTE } from './forest.js';
 import {
   newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor, cellsText,
   exportProject, importProject, uid, reorderMarks, MARK_COLORS, NO_TEAM, NO_TEAM_COLOR, assignTargets, assigneeName,
@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.31';
+const APP_VERSION = 'v130.32';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1595,19 +1595,66 @@ async function forestLassoDone(raw) {
   if (closeLoad) closeLoad(null);
   let mp = data ? forestInLasso(data.forests, pts, o) : [];
   const lines = data ? data.lines.map((l) => l.map((q) => toXY(q, o))) : [];
-  let forest = true;
+  let source = mp.length ? 'osm' : null;
+  // v130.32: OSM hat dort nichts getaggt -> zusätzlich die Landbedeckungs-Karte (BKG, v130.30)
+  // probieren, bevor der Nutzer gefragt wird. Die zeigt Wald/Gehölz unabhängig von OSM-Tags.
+  if (!mp.length && !ctl.signal.aborted) {
+    const lcCtl = new AbortController();
+    let closeLc = null;
+    openDlg((box, close) => {
+      closeLc = close;
+      dlgHead(box, '🌲 Landbedeckung wird geprüft …', 'In OpenStreetMap kein Wald getaggt – zusätzlich die Landbedeckungs-Karte (BKG) prüfen.');
+      dlgButton(box, 'Abbrechen', '', () => { lcCtl.abort(); close(null); });
+    }, { keep: true });
+    try {
+      const lc = await landcoverForest(pts, bbox, o, lcCtl.signal);
+      if (lc.length) { mp = lc; source = 'landcover'; }
+    } catch { /* kein Netz o.ä. -> fällt durch zur Rückfrage unten */ }
+    if (closeLc) closeLc(null);
+    if (lcCtl.signal.aborted) { forestClear(); return; }
+  }
   if (!mp.length) {
-    // v121: kein Wald erkannt oder Netzfehler -> die umkreiste Fläche selbst aufteilen?
+    // v121: kein Wald erkannt (auch nicht über die Landbedeckung) oder Netzfehler ->
+    // die umkreiste Fläche selbst aufteilen?
     const ok = await openDlg((box, close) => {
-      dlgHead(box, reason ? '🌲 Waldsuche fehlgeschlagen' : '🌲 Kein Wald erkannt', reason ? `${reason}. Die umkreiste Fläche selbst aufteilen?` : 'Kein Wald erkannt – die umkreiste Fläche selbst aufteilen?');
+      dlgHead(box, reason ? '🌲 Waldsuche fehlgeschlagen' : '🌲 Kein Wald erkannt', reason ? `${reason}. Die umkreiste Fläche selbst aufteilen?` : 'Kein Wald erkannt (auch nicht über die Landbedeckungs-Karte) – die umkreiste Fläche selbst aufteilen?');
       dlgButton(box, 'Umkreiste Fläche aufteilen', 'primary', () => close(true));
       dlgButton(box, 'Abbrechen', '', () => close(false));
     });
     if (!ok) { forestClear(); return; }
     mp = lassoMp;
-    forest = false;
+    source = 'lasso';
   }
-  await forestPlan({ mp, lines, o, forest, pts });
+  await forestPlan({ mp, lines, o, source, pts });
+}
+function loadImage(url, signal) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Bild konnte nicht geladen werden'));
+    if (signal) signal.addEventListener('abort', () => reject(new Error('abgebrochen')), { once: true });
+    img.src = url;
+  });
+}
+// v130.32: Landbedeckungs-Raster (BKG) laden, Wald/Gehölz-Pixel (isForestColor) zu einer Fläche
+// zusammenfassen und mit der Umkreisung schneiden – wie forestInLasso, nur aus Bildpunkten statt OSM.
+async function landcoverForest(pts, bbox, o, signal) {
+  const w = 400;
+  const h = Math.max(1, Math.round(w * ((bbox.north - bbox.south) / (bbox.east - bbox.west)) / Math.cos((bbox.south * Math.PI) / 180)));
+  const img = await loadImage(landcoverUrl(bbox, w, h), signal);
+  if (signal && signal.aborted) return [];
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const cx = c.getContext('2d');
+  cx.drawImage(img, 0, 0, w, h);
+  const data = cx.getImageData(0, 0, w, h).data;
+  const mask = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const j = i * 4;
+    if (data[j + 3] > 0 && isForestColor(data[j], data[j + 1], data[j + 2])) mask[i] = 1;
+  }
+  return landcoverInLasso(mask, w, h, bbox, pts, o);
 }
 
 // v130.29: von Hand gezeichneten (bereits gespeicherten) Umriss direkt aufteilen – wie „🌲 Wald“,
@@ -1669,13 +1716,14 @@ function forestDialog(st, ctx, total) {
   const teams = assignTargets(P);
   return openDlg((box, close) => {
     const n0 = ctx.mp.length;
-    const head = ctx.source === 'outline'
-      ? `„${ctx.baseName || 'Umriss'}“: ${forestHa(total)} ha`
-      : ctx.forest ? `Erkannt: ${forestHa(total)} ha Wald (${n0} Stück${n0 === 1 ? '' : 'e'})` : `Umkreiste Fläche: ${forestHa(total)} ha`;
+    const head = ctx.source === 'outline' ? `„${ctx.baseName || 'Umriss'}“: ${forestHa(total)} ha`
+      : ctx.source === 'osm' ? `Erkannt: ${forestHa(total)} ha Wald (${n0} Stück${n0 === 1 ? '' : 'e'})`
+        : ctx.source === 'landcover' ? `Erkannt über Landbedeckung: ${forestHa(total)} ha Wald/Gehölz`
+          : `Umkreiste Fläche: ${forestHa(total)} ha`;
     dlgHead(box, ctx.source === 'outline' ? '✂️ Umriss aufteilen' : '🌲 Wald aufteilen', head);
     const src = document.createElement('p');
     src.className = 'small';
-    src.textContent = OSM_NOTE;
+    src.textContent = ctx.source === 'landcover' ? `${OSM_NOTE} (Wege) · ${LANDCOVER_NOTE}` : OSM_NOTE;
     box.appendChild(src);
     const lab = document.createElement('label');
     lab.textContent = 'Anzahl Teile';
@@ -1847,7 +1895,8 @@ function forestCommit(tracks, ctx) {
     P.items.push(it);
   }
   changed();
-  toast(`${ctx && ctx.source === 'outline' ? '✂️' : '🌲'} ${tracks.length} Umriss${tracks.length === 1 ? '' : 'e'} gespeichert (↶ macht es rückgängig) · ${OSM_NOTE}`, 6000);
+  const note = ctx && ctx.source === 'landcover' ? LANDCOVER_NOTE : OSM_NOTE;
+  toast(`${ctx && ctx.source === 'outline' ? '✂️' : '🌲'} ${tracks.length} Umriss${tracks.length === 1 ? '' : 'e'} gespeichert (↶ macht es rückgängig) · ${note}`, 6000);
 }
 
 // Palette
