@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.30';
+const APP_VERSION = 'v130.31';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1986,6 +1986,11 @@ function makeSortable(list, onDone) {
     });
   });
 }
+// v130.31: Team-Farbe geändert -> Umrisse, die diesem Team zugeteilt sind, gleich mitfärben
+// (die Rasterfelder holen sich die Teamfarbe ohnehin live, nur Umrisse tragen eine Kopie in it.color)
+function syncOutlineColor(m) {
+  for (const it of P.items) if (it.kind === 'track' && it.to === m.id) it.color = m.color;
+}
 function renderMarks() {
   const box = $('mark-list');
   box.innerHTML = '';
@@ -2079,7 +2084,7 @@ function renderMarks() {
       el.querySelector('.dog').addEventListener('input', (e) => { m.dog = e.target.value; save(); });
       el.querySelector('.helpers').addEventListener('input', (e) => { const n = parseInt(e.target.value, 10); if (n > 0) m.helpers = n; else delete m.helpers; save(); });
     }
-    sel.addEventListener('change', () => { m.color = sel.value; changed(); renderMarks(); });
+    sel.addEventListener('change', () => { m.color = sel.value; if (m.kind === 'team') syncOutlineColor(m); changed(); renderMarks(); });
     el.querySelector('.del').addEventListener('click', () => { if (deleteMark(m, a ? a.count : 0)) renderMarks(); });
     box.appendChild(el);
   }
@@ -2483,6 +2488,7 @@ function markDialog() {
           snapshot();
           m.label = inp.value.trim() || m.label;
           m.color = sel.value;
+          if (m.kind === 'team') syncOutlineColor(m);
           changed();
           renderPalette();
           edit = null;
