@@ -559,6 +559,54 @@ function wayCut(R, runs, u, target, total) {
   return best;
 }
 
+// ---------- v130.4x: Nebenstücke anbinden statt nur benennen ----------
+const BRIDGE_HALF_M = 4; // Korridorbreite 8 m – schmal, aber breit genug, dass die Vereinigung sicher zusammenhängt
+// Nächstes Punktpaar zwischen zwei (offenen oder geschlossenen) Ringen
+function closestPoints(ringA, ringB) {
+  let best = null;
+  for (const a of ringA) {
+    for (const b of ringB) {
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (!best || d < best.d) best = { d, a, b };
+    }
+  }
+  return best;
+}
+// Schmales Rechteck zwischen zwei Punkten, quer zur Verbindungslinie. An beiden Enden ein Stück über
+// a/b hinaus verlängert (BRIDGE_EXTEND_M) – sonst träfe der Korridor die Ringe oft genau auf einer
+// (konvexen) Ecke, wo sich keine echte Fläche überlappt und die Vereinigung getrennt bliebe.
+const BRIDGE_EXTEND_M = 2;
+function bridge(a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy) || 1;
+  const dirx = dx / len;
+  const diry = dy / len;
+  const a2 = [a[0] - dirx * BRIDGE_EXTEND_M, a[1] - diry * BRIDGE_EXTEND_M];
+  const b2 = [b[0] + dirx * BRIDGE_EXTEND_M, b[1] + diry * BRIDGE_EXTEND_M];
+  const ux = -diry * BRIDGE_HALF_M;
+  const uy = dirx * BRIDGE_HALF_M;
+  return [[[a2[0] + ux, a2[1] + uy], [b2[0] + ux, b2[1] + uy], [b2[0] - ux, b2[1] - uy], [a2[0] - ux, a2[1] - uy], [a2[0] + ux, a2[1] + uy]]];
+}
+// Ein Nebenstück (ring) per Korridor mit dem nächstgelegenen Ring aus mainPolys verschmelzen,
+// so dass am Ende ein einziger zusammenhängender Umriss entsteht statt zweier getrennter.
+function absorb(mainPolys, ring) {
+  if (!mainPolys.length) return [ring];
+  let near = null;
+  mainPolys.forEach((m, i) => {
+    const hit = closestPoints(m, ring);
+    if (!near || hit.d < near.d) near = { ...hit, i };
+  });
+  try {
+    const u = pc.union([mainPolys[near.i]], [ring], bridge(near.a, near.b));
+    const polys = solid(u).map((p) => closeRing(p[0]));
+    polys.sort((x, y) => Math.abs(ringArea(y)) - Math.abs(ringArea(x)));
+    return mainPolys.filter((_, i) => i !== near.i).concat(polys[0] ? [polys[0]] : []).concat(polys.slice(1));
+  } catch {
+    return mainPolys.concat([ring]);
+  }
+}
+
 // Aufteilen: Teile werden entlang der Hauptachse nacheinander abgeschnitten, das letzte ist der Rest.
 // mp: MultiPolygon in Metern; sh: Anteile (Summe 1); lines: Wege/Bäche in Metern.
 // -> [{ polys: [Ring…], area, onWay }]; onWay: eine Grenze des Teils folgt einem Weg
@@ -599,9 +647,11 @@ export function splitArea(mp, sh, lines = [], opts = {}) {
     polys.sort((x, y) => Math.abs(ringArea(y)) - Math.abs(ringArea(x))); // größtes Stück zuerst
     return polys;
   });
-  // v130.40: getrennte Nebenstücke eines Teils (z. B. eine Lichtung mitten im Wald) gehören zum
-  // geometrisch nächsten Hauptstück – meist das eigene, manchmal aber ein Nachbarteil. So entsteht
-  // kein eigener kleiner Umriss, sondern die Fläche zählt zum nächstgelegenen großen Teil dazu.
+  // v130.4x: getrennte Nebenstücke eines Teils (z. B. ein Wald-Fleck jenseits einer Lichtung) gehören
+  // zum geometrisch nächsten Hauptstück – meist das eigene, manchmal aber ein Nachbarteil. Statt sie
+  // nur zuzuordnen (dann erscheinen sie trotzdem als eigener benannter Umriss „Name (2)“ …), werden sie
+  // per schmalem Korridor direkt angebunden: am Ende bekommt jedes Team genau EINEN zusammenhängenden
+  // Umriss – praxisnäher, keine verwirrenden Mini-Flächen abseits vom eigentlichen Gebiet.
   const mains = raw.map((polys) => (polys[0] ? centroid([polys[0]]) : null));
   const merged = raw.map((polys) => (polys[0] ? [polys[0]] : []));
   raw.forEach((polys, i) => {
@@ -613,7 +663,7 @@ export function splitArea(mp, sh, lines = [], opts = {}) {
         const d = Math.hypot(c[0] - m[0], c[1] - m[1]);
         if (d < bestD) { bestD = d; best = j; }
       });
-      merged[best].push(polys[k]);
+      merged[best] = absorb(merged[best], polys[k]);
     }
   });
   return merged.map((polys, i) => ({ polys, area: polys.reduce((s, r) => s + Math.abs(ringArea(r)), 0), onWay: !!(cutWay[i - 1] || cutWay[i]) }));
