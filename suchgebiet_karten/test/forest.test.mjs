@@ -15,12 +15,14 @@ const rectXY = (x0, y0, x1, y1) => [[[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x
 const geom = (ring) => ring.map(([lat, lon]) => ({ lat, lon }));
 const near = (a, b, relTol, msg) => assert.ok(Math.abs(a - b) <= relTol * b, `${msg || ''} ${a} vs ${b}`);
 
-test('forestQuery: Wald, Wege und Gewässer in einer Abfrage', () => {
+test('forestQuery: Wald/Wiese/Acker, Ausschluss (Garten/Wohngebiet), Wege und Gewässer in einer Abfrage', () => {
   const q = forestQuery({ south: 52, west: 10, north: 52.01, east: 10.02 });
   assert.match(q, /^\[out:json\]\[timeout:25\]/);
-  assert.match(q, /"landuse"="forest"/);
-  assert.match(q, /"natural"="wood"/);
-  assert.match(q, /relation\["landuse"="forest"\]/);
+  assert.match(q, /"landuse"~"\^\(forest\|meadow\|grass\|farmland\)\$"/);
+  assert.match(q, /"natural"~"\^\(wood\|grassland\)\$"/);
+  assert.match(q, /relation\["landuse"~"\^\(forest\|meadow\|grass\|farmland\)\$"\]/);
+  assert.match(q, /"landuse"~"\^\(residential\|garden\|allotments\)\$"/, 'Ausschluss-Flächen (Garten/Wohngebiet) mit abgefragt');
+  assert.match(q, /"leisure"="garden"/);
   assert.match(q, /"highway"~"\^\(track\|path/);
   assert.match(q, /"waterway"~"\^\(stream\|river\|ditch\|canal\)\$"/);
   assert.match(q, /\(52\.000000,10\.000000,52\.010000,10\.020000\)/);
@@ -99,7 +101,35 @@ test('parseForest: Way-Wald, Multipolygon aus gestückelten outer-Ways, Linien',
   const rel = r.forests[1];
   assert.equal(rel[0][0], rel[rel.length - 1][0]);
   near(polygonArea(rel), 10000, 0.01, 'Fläche des gestückelten Rings');
-  assert.deepEqual(parseForest(null), { forests: [], lines: [] });
+  assert.deepEqual(parseForest(null), { forests: [], excludes: [], lines: [] });
+});
+
+// v130.45: Klaas' Rückmeldung – nicht nur Wald, auch Wiese/Grünland/Acker automatisch erkennen;
+// Privatgärten und Wohngebiete landen separat in excludes (werden in forestInLasso abgezogen).
+test('parseForest: Wiese/Grünland/Acker zählen zur Fläche, Gärten/Wohngebiet in excludes', () => {
+  const json = {
+    elements: [
+      { type: 'way', tags: { landuse: 'meadow' }, geometry: geom(rectLL(0, 0, 100, 100)) },
+      { type: 'way', tags: { natural: 'grassland' }, geometry: geom(rectLL(200, 0, 300, 100)) },
+      { type: 'way', tags: { landuse: 'farmland' }, geometry: geom(rectLL(400, 0, 500, 100)) },
+      { type: 'way', tags: { landuse: 'garden' }, geometry: geom(rectLL(0, 200, 50, 250)) },
+      { type: 'way', tags: { leisure: 'garden' }, geometry: geom(rectLL(100, 200, 150, 250)) },
+      { type: 'way', tags: { landuse: 'residential' }, geometry: geom(rectLL(200, 200, 400, 400)) },
+    ],
+  };
+  const r = parseForest(json);
+  assert.equal(r.forests.length, 3, 'Wiese, Grünland, Acker zählen alle als Fläche');
+  assert.equal(r.excludes.length, 3, 'Garten, Garten (leisure), Wohngebiet landen in excludes');
+});
+
+test('forestInLasso: Privatgarten/Wohngebiet wird von der erkannten Fläche abgezogen', () => {
+  const meadow = rectLL(0, 0, 1000, 1000); // 100 ha Wiese
+  const garden = rectLL(800, 800, 1100, 1100); // Garten an der Ecke (3 ha liegen innerhalb der Wiese)
+  const lasso = rectLL(-100, -100, 1100, 1100);
+  const withoutExclude = forestInLasso([meadow], lasso, O);
+  near(mpArea(withoutExclude), 1e6, 0.001);
+  const withExclude = forestInLasso([meadow], lasso, O, [garden]);
+  near(mpArea(withExclude), 1e6 - 4e4, 0.01, 'Garten-Fläche (200 x 200 m Überlappung) abgezogen');
 });
 
 // v130.42: fürs Wege-Overlay – Wege und Gewässer getrennt, unabhängig von Wald-Tags

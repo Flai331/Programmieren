@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.44';
+const APP_VERSION = 'v130.45';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1626,11 +1626,11 @@ async function forestLassoDone(raw) {
     const l = pts[pts.length - 1];
     if (!l || distance(l[0], l[1], q[0], q[1]) >= 3) pts.push([Math.round(q[0] * 1e6) / 1e6, Math.round(q[1] * 1e6) / 1e6]);
   }
-  if (pts.length < 3 || pathLen(pts) < MIN_OUTLINE_M) return toast('Zu klein – nochmal „🌲 Wald“ und größer umkreisen');
+  if (pts.length < 3 || pathLen(pts) < MIN_OUTLINE_M) return toast('Zu klein – bitte größer umkreisen');
   const o = originOf(pts);
   const lassoMp = lassoPolygon(pts, o);
   const lassoM2 = mpArea(lassoMp);
-  if (lassoM2 < 1) return toast('Zu klein – nochmal „🌲 Wald“ und größer umkreisen');
+  if (lassoM2 < 1) return toast('Zu klein – bitte größer umkreisen');
   if (lassoM2 > MAX_AREA_M2) return toast('Bitte kleiner umkreisen (höchstens 25 km²)', 5000);
   $('toast').hidden = true;
   forestClear();
@@ -1643,7 +1643,7 @@ async function forestLassoDone(raw) {
   let closeLoad = null;
   openDlg((box, close) => {
     closeLoad = close;
-    dlgHead(box, '🌲 Waldflächen werden geladen …', OSM_NOTE);
+    dlgHead(box, '🌲 Flächen werden geladen …', OSM_NOTE);
     dlgButton(box, 'Abbrechen', '', () => { ctl.abort(); close(null); });
   }, { keep: true });
   let data = null;
@@ -1655,7 +1655,8 @@ async function forestLassoDone(raw) {
     reason = (err && err.message) || 'Keine Verbindung';
   }
   if (closeLoad) closeLoad(null);
-  let mp = data ? forestInLasso(data.forests, pts, o) : [];
+  // v130.45: nicht nur Wald, auch Wiese/Grünland und Acker – Privatgärten/Wohngebiet (data.excludes) werden abgezogen
+  let mp = data ? forestInLasso(data.forests, pts, o, data.excludes) : [];
   const lines = data ? data.lines.map((l) => l.map((q) => toXY(q, o))) : [];
   let source = mp.length ? 'osm' : null;
   // v130.32: OSM hat dort nichts getaggt -> zusätzlich die Landbedeckungs-Karte (BKG, v130.30)
@@ -1679,7 +1680,7 @@ async function forestLassoDone(raw) {
     // v121: kein Wald erkannt (auch nicht über die Landbedeckung) oder Netzfehler ->
     // die umkreiste Fläche selbst aufteilen?
     const ok = await openDlg((box, close) => {
-      dlgHead(box, reason ? '🌲 Waldsuche fehlgeschlagen' : '🌲 Kein Wald erkannt', reason ? `${reason}. Die umkreiste Fläche selbst aufteilen?` : 'Kein Wald erkannt (auch nicht über die Landbedeckungs-Karte) – die umkreiste Fläche selbst aufteilen?');
+      dlgHead(box, reason ? '🌲 Flächensuche fehlgeschlagen' : '🌲 Keine Fläche erkannt', reason ? `${reason}. Die umkreiste Fläche selbst aufteilen?` : 'Weder Wald noch Wiese/Acker erkannt (auch nicht über die Landbedeckungs-Karte) – die umkreiste Fläche selbst aufteilen?');
       dlgButton(box, 'Umkreiste Fläche aufteilen', 'primary', () => close(true));
       dlgButton(box, 'Abbrechen', '', () => close(false));
     });
