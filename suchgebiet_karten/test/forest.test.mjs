@@ -222,20 +222,21 @@ test('splitArea: Wald aus zwei getrennten Stücken, 2 Teile', () => {
   near(parts[1].area, 1e6, 0.01);
 });
 
-// v130.40: ein kleines, getrenntes Reststück (z. B. eine Lichtung mitten im Wald) soll nicht als
-// eigener kleiner Umriss erscheinen, sondern zum geometrisch nächsten großen Teil dazugerechnet
-// werden – auch wenn der gerade Schnitt es ursprünglich dem anderen (weiter entfernten) Teil zuordnet.
-test('splitArea: kleines Nebenstück zählt zum geometrisch nächsten, nicht zum eigenen Teil', () => {
+// v130.4x: ein kleines, getrenntes Reststück (z. B. eine Lichtung mitten im Wald) soll nicht als
+// eigener kleiner Umriss erscheinen, sondern per schmalem Korridor an den geometrisch nächsten großen
+// Teil angebunden (verschmolzen) werden – auch wenn der gerade Schnitt es ursprünglich dem anderen
+// (weiter entfernten) Teil zuordnet. Praxisnäher: ein Team bekommt genau EINEN zusammenhängenden Umriss.
+test('splitArea: kleines Nebenstück wird an den geometrisch nächsten Teil angebunden (ein Umriss)', () => {
   const mp = [
     [[[0, 0], [900, 0], [900, 1000], [0, 1000], [0, 0]]], // A-Hauptstück
     [[[800, 5000], [900, 5000], [900, 5100], [800, 5100], [800, 5000]]], // Nebenstück: liegt (x) auf A-Seite, aber (y) weit weg
     [[[1100, 4800], [2000, 4800], [2000, 5300], [1100, 5300], [1100, 4800]]], // B-Hauptstück: geometrisch am nächsten zum Nebenstück
   ];
   const parts = splitArea(mp, [0.5, 0.5], [], { followWays: false });
-  const withFragment = parts.find((p) => p.polys.length === 2);
-  assert.ok(withFragment, 'ein Teil hat das Nebenstück aufgenommen');
-  near(withFragment.area, 460000, 0.001); // 450.000 (B) + 10.000 (Nebenstück)
-  assert.ok(parts.every((p) => p.polys.length <= 2));
+  const withFragment = parts.find((p) => p.polys.length === 1 && p.area > 455000 && p.area < 470000);
+  assert.ok(withFragment, 'ein Teil hat das Nebenstück angebunden, als ein einziger Umriss');
+  near(withFragment.area, 460000, 0.01); // 450.000 (B) + 10.000 (Nebenstück) + schmaler Verbindungskorridor
+  assert.ok(parts.every((p) => p.polys.length === 1), 'kein Teil besteht mehr aus getrennten Umrissen');
 });
 
 test('mainAxis: längere Seite', () => {
