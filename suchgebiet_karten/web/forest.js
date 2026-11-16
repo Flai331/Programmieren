@@ -680,7 +680,10 @@ export function toTracks(parts, names, teams, o) {
     const rings = part.polys.slice().sort((a, b) => Math.abs(ringArea(b)) - Math.abs(ringArea(a)));
     rings.forEach((ring, k) => {
       let pts = ring.map((q) => toLL(q, o));
-      for (let tol = 3; ; tol = Math.ceil(tol * 1.6)) {
+      // v130.4x: deutlich gröber glätten als früher (3 m) – die Landbedeckungs-Karte liefert die Fläche
+      // pixelgenau (Stufen-/Treppenmuster), das als Grenze unnötig kleinteilig und krumm wirkt. Eine
+      // Such-Grenze braucht keine Meter-Genauigkeit; lieber eine praxisnahe, möglichst gerade Linie.
+      for (let tol = 15; ; tol = Math.ceil(tol * 1.6)) {
         const s = simplify(pts, tol);
         if (s.length <= 400 || tol > 200) { pts = s; break; }
       }
