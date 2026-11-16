@@ -16,7 +16,7 @@ const WAY_EXTEND_M = 60; // Wegenden bis zu 60 m vor dem Rand werden bis zum Ran
 const WAY_HALF_M = 0.25; // Schnittbreite entlang eines Wegs: 0,5 m
 const WAY_MIN_COS = Math.SQRT1_2; // Winkel zur Schnittrichtung unter 45°
 
-export const OSM_NOTE = 'Wald und Wege: © OpenStreetMap-Mitwirkende';
+export const OSM_NOTE = 'Wald, Wiese, Acker und Wege: © OpenStreetMap-Mitwirkende';
 export const MAX_PARTS = 8;
 export const MAX_AREA_M2 = 25e6; // 25 km²
 export const MIN_OUTLINE_M = 30;
@@ -27,11 +27,19 @@ const HIGHWAYS = 'track|path|footway|bridleway|cycleway|service|unclassified|res
 function linesPart(b) {
   return `way["highway"~"^(${HIGHWAYS})$"](${b});way["waterway"~"^(stream|river|ditch|canal)$"](${b});`;
 }
+// v130.45: Klaas' Rückmeldung – nicht nur Wald, auch Wiese/Grünland und Acker automatisch als
+// durchsuchbare Fläche nehmen. Privatgärten und ganze Wohngebiete werden dafür als eigene Flächen
+// mitgeladen (AREA_EXCLUDE_TAGS) und in forestInLasso von der erkannten Fläche abgezogen.
+const AREA_INCLUDE_LANDUSE = 'forest|meadow|grass|farmland';
+const AREA_INCLUDE_NATURAL = 'wood|grassland';
+const AREA_EXCLUDE_LANDUSE = 'residential|garden|allotments';
 export function forestQuery(bbox) {
   const b = [bbox.south, bbox.west, bbox.north, bbox.east].map((v) => Number(v).toFixed(6)).join(',');
   return `[out:json][timeout:25];(`
-    + `way["landuse"="forest"](${b});relation["landuse"="forest"](${b});`
-    + `way["natural"="wood"](${b});relation["natural"="wood"](${b});`
+    + `way["landuse"~"^(${AREA_INCLUDE_LANDUSE})$"](${b});relation["landuse"~"^(${AREA_INCLUDE_LANDUSE})$"](${b});`
+    + `way["natural"~"^(${AREA_INCLUDE_NATURAL})$"](${b});relation["natural"~"^(${AREA_INCLUDE_NATURAL})$"](${b});`
+    + `way["landuse"~"^(${AREA_EXCLUDE_LANDUSE})$"](${b});relation["landuse"~"^(${AREA_EXCLUDE_LANDUSE})$"](${b});`
+    + `way["leisure"="garden"](${b});relation["leisure"="garden"](${b});`
     + linesPart(b)
     + `);out geom;`;
 }
@@ -62,25 +70,34 @@ function stitch(segs) {
   return rings;
 }
 
-// Overpass-Antwort -> { forests: [Ring [lat,lon] (geschlossen)…], lines: [[[lat,lon]…]…] }
+const AREA_RE = new RegExp(`^(${AREA_INCLUDE_LANDUSE})$`);
+const NATURAL_RE = new RegExp(`^(${AREA_INCLUDE_NATURAL})$`);
+const EXCLUDE_RE = new RegExp(`^(${AREA_EXCLUDE_LANDUSE})$`);
+const isAreaTags = (tags) => AREA_RE.test(tags.landuse) || NATURAL_RE.test(tags.natural);
+const isExcludeTags = (tags) => EXCLUDE_RE.test(tags.landuse) || tags.leisure === 'garden';
+
+// Overpass-Antwort -> { forests: [Ring [lat,lon] (geschlossen)…] (Wald/Wiese/Acker),
+// excludes: [Ring…] (Privatgärten/Wohngebiet – wird davon abgezogen), lines: [[[lat,lon]…]…] }
 export function parseForest(json) {
   const forests = [];
+  const excludes = [];
   const lines = [];
   const pts = (g) => (Array.isArray(g) ? g.filter((q) => q && Number.isFinite(q.lat) && Number.isFinite(q.lon)).map((q) => [q.lat, q.lon]) : []);
   for (const el of (json && json.elements) || []) {
     const tags = el.tags || {};
-    const isForest = tags.landuse === 'forest' || tags.natural === 'wood';
+    const isArea = isAreaTags(tags);
+    const isExcl = !isArea && isExcludeTags(tags);
     if (el.type === 'way') {
       const p = pts(el.geometry);
-      if (isForest) {
-        if (p.length >= 4 && sameKey(p[0]) === sameKey(p[p.length - 1])) forests.push(p);
+      if (isArea || isExcl) {
+        if (p.length >= 4 && sameKey(p[0]) === sameKey(p[p.length - 1])) (isArea ? forests : excludes).push(p);
       } else if ((tags.highway || tags.waterway) && p.length >= 2) lines.push(p);
-    } else if (el.type === 'relation' && isForest) {
+    } else if (el.type === 'relation' && (isArea || isExcl)) {
       const outer = (el.members || []).filter((m) => m.type === 'way' && (m.role === 'outer' || m.role === '')).map((m) => pts(m.geometry));
-      forests.push(...stitch(outer));
+      (isArea ? forests : excludes).push(...stitch(outer));
     }
   }
-  return { forests, lines };
+  return { forests, excludes, lines };
 }
 
 // v130.42: dieselben Wege/Bäche wie beim Ausrichten (linesQuery/parseForest), aber getrennt nach Art
@@ -150,14 +167,22 @@ function dropSmall(mp) {
   return mp.filter((p) => polyArea(p) >= Math.max(MIN_PART_M2, total * MIN_PART_FRAC));
 }
 
-// Waldfläche innerhalb der Umkreisung -> MultiPolygon in Metern (Polygone ohne Löcher)
-export function forestInLasso(forests, lasso, o = originOf(lasso)) {
+// Wald-/Wiesen-/Ackerfläche innerhalb der Umkreisung -> MultiPolygon in Metern (Polygone ohne Löcher).
+// v130.45: excludes (Privatgärten/Wohngebiet) werden danach abgezogen – auch wenn eine Wiese bis an
+// ein Grundstück heranreicht, bleibt das Grundstück selbst außen vor.
+export function forestInLasso(forests, lasso, o = originOf(lasso), excludes = []) {
   const L = lassoPolygon(lasso, o);
   const rings = (forests || []).map((r) => closeRing(r.map((p) => toXY(p, o)))).filter((r) => r.length >= 4);
   if (!L.length || !rings.length) return [];
   try {
     const f = pc.union(...rings.map((r) => [r]));
-    return dropSmall(solid(pc.intersection(f, L)));
+    let area = solid(pc.intersection(f, L));
+    const exRings = (excludes || []).map((r) => closeRing(r.map((p) => toXY(p, o)))).filter((r) => r.length >= 4);
+    if (exRings.length) {
+      const ex = pc.union(...exRings.map((r) => [r]));
+      area = solid(pc.difference(area, ex));
+    }
+    return dropSmall(area);
   } catch {
     return [];
   }
