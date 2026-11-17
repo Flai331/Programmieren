@@ -189,7 +189,7 @@ export const withoutDeleted = (list, del) => (del && Object.keys(del).length ? (
 // 'qel' (Lesebestätigung des Hundeführers). Absender der EL ist fest a: 'EL'. Sie landen nie in der Meldungsliste der Teams.
 export const EL_A = 'EL';
 export const EL_ALL = '*';
-export const EL_KINDS = ['q', 'el', 'qel', 'elw', 'elwp']; // v124: elw/elwp = Zeichnung mit Auftrag an den ELW (elw.js)
+export const EL_KINDS = ['q', 'el', 'qel', 'elw', 'elwp', 'rtc']; // v124: elw/elwp = Zeichnung mit Auftrag an den ELW (elw.js); v130.15: rtc = WebRTC-Signalisierung (rtc.js)
 // Quittung: ref = ID der HF-Meldung, to = Auftrag (m.a der Meldung)
 export function buildAck({ ref, to, t, id }) {
   const m = buildMsg({ a: EL_A, tm: 'Einsatzleitung', s: 'q', t, id });
@@ -266,6 +266,21 @@ export function elTargets(sent, marks) {
   return [...by.values()].map((x) => {
     const t = (marks || []).find((q) => q.id === x.teamId);
     return { a: x.id, teamId: x.teamId || '', label: t ? t.label : x.team || 'Team' };
+  });
+}
+// v130.36: wie elTargets, aber auch laufende Aufträge OHNE Status-Server (dann per Zusatz-QR-Code statt live) –
+// je Eintrag .live, damit die Oberfläche weiß, ob es sofort geht oder ein QR-Code zum Scannen nötig ist
+export function zusatzTargets(sent, marks) {
+  const by = new Map();
+  for (const x of sent || []) {
+    if (Number(x.done) > 0) continue;
+    const k = x.teamId || `n:${x.team || ''}`;
+    const prev = by.get(k);
+    if (!prev || (x.at || 0) >= (prev.at || 0)) by.set(k, x);
+  }
+  return [...by.values()].map((x) => {
+    const t = (marks || []).find((q) => q.id === x.teamId);
+    return { a: x.id, teamId: x.teamId || '', label: t ? t.label : x.team || 'Team', live: !!x.live };
   });
 }
 // Lesestand einer EL-Nachricht: Empfänger (Aufträge, bei '*' alle Ziele) in gelesen / offen; reads = { elId: { a: Zeit } }

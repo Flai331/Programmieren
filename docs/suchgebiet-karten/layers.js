@@ -51,6 +51,20 @@ export const LAYERS = [
     maxNative: 19,
     attribution: `Luftbild © Geobasis NRW (${YEAR}) dl-de/zero-2-0`,
   },
+  {
+    // v130.30: Wald/Gehölz unabhängig von OSM-Tags erkennbar – Flächenfarben aus Sentinel-2 +
+    // Orthophotos (KI-Klassifikation), bundesweit. `aerial: true` nur wegen der Wege/Namen-Ebene
+    // darüber (Legende: Bäume/Gehölz in Grüntönen, siehe „ⓘ Legende“ auf der Karte).
+    id: 'landbedeckung',
+    aerial: true,
+    name: 'Landbedeckung (Wald/Gehölz-Legende, BKG)',
+    wms: 'https://sgx.geodatenzentrum.de/wms_lb-de',
+    wmsLayer: '2024_lb_de',
+    legend: 'https://sgx.geodatenzentrum.de/wms_lb-de?format=image%2Fpng&layer=2024_lb_de&sld_version=1.1.0&request=GetLegendGraphic&service=WMS&version=1.1.1&styles=',
+    tileSize: 512,
+    maxNative: 18,
+    attribution: `Landbedeckung © GeoBasis-DE / BKG (${YEAR}) CC BY 4.0, Contains modified Copernicus Sentinel data (${YEAR})`,
+  },
 ];
 
 // Ebenen über Luftbildern: TopPlusOpen hell, „multipliziert“ – Weiß wird durchsichtig,
