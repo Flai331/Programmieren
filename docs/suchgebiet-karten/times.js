@@ -2,6 +2,8 @@
 // Reine Logik ohne DOM, testbar. Quelle sind die Meldungen der Teams (HF-App und Funkmeldungen der Einsatzleitung).
 import { persons, unitLine } from './units.js';
 import { durText } from './tracks.js';
+import { isAccepted } from './locks.js';
+import { isDone } from './closeout.js';
 
 const hm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 const PRESENT = ['da', 'start', 'pause', 'fertig', 'ende', 'zu', 'ort'];
@@ -50,14 +52,19 @@ export function teamTimes(sent, msgs, marks, now = Date.now()) {
   const ids = new Map();
   for (const x of sent || []) {
     const k = x.teamId || `n:${x.team || ''}`;
-    if (!ids.has(k)) ids.set(k, { teamId: x.teamId || '', label: x.team || 'Team', orders: new Set() });
-    ids.get(k).orders.add(x.id);
+    if (!ids.has(k)) ids.set(k, { teamId: x.teamId || '', label: x.team || 'Team', orders: new Set(), accepted: false });
+    const g = ids.get(k);
+    g.orders.add(x.id);
+    if (isAccepted(x) && !isDone(x)) g.accepted = true; // v130.35: angenommen, aber noch keine eigene Meldung
   }
   const out = [];
   for (const [, g] of ids) {
     const mark = (marks || []).find((m) => m.id === g.teamId) || null;
     const mine = (msgs || []).filter((m) => g.orders.has(m.a));
     const t = timesOf(mine, now);
+    // v130.35: der Auftrag wurde schon übernommen, aber das Team hat noch keine eigene Meldung geschickt ->
+    // gilt trotzdem schon als draußen (statt erst ab der ersten Meldung, z. B. „am Einsatzort“)
+    if (t.state === 'none' && g.accepted) { t.state = 'angenommen'; t.outside = true; }
     const n = Math.max(1, persons(mark));
     out.push({ ...t, teamId: g.teamId, label: mark ? mark.label : g.label, mark, msgs: mine.length, persons: n, personMs: t.activeMs * n });
   }
@@ -68,7 +75,7 @@ export const personHours = (ms) => Math.round((ms / 3600e3) * 10) / 10;
 
 // Wer ist noch draußen? (Teams, die am Einsatzort waren und nicht zurück/abgelöst sind)
 export const outsideTeams = (rows) => (rows || []).filter((r) => r.outside);
-const STATE_TEXT = { none: 'noch nicht gemeldet', da: 'am Einsatzort', aktiv: 'sucht', pause: 'Pause', ende: 'Suche beendet, noch draußen', zurueck: 'zurück am B-Ort', abgeloest: 'abgelöst' };
+const STATE_TEXT = { none: 'noch nicht gemeldet', angenommen: 'Auftrag angenommen', da: 'am Einsatzort', aktiv: 'sucht', pause: 'Pause', ende: 'Suche beendet, noch draußen', zurueck: 'zurück am B-Ort', abgeloest: 'abgelöst' };
 export const stateText = (r) => STATE_TEXT[r.state] || '';
 
 // Zeile für den Bericht: { team, text } – Start, Pausen, Ablösung, Ende/zurück, Einsatzzeit, Personenstunden

@@ -27,10 +27,17 @@ export function rankCameras(devices) {
 // Rückkameras (ohne Front), beste zuerst – Auswahlliste für „🔄 Kamera wechseln“
 export const backCameras = (devices) => rankCameras(devices).filter((d) => scoreCamera(d.label) > -1000);
 
-// Gemerkte Kamera, wenn es sie noch gibt, sonst die beste Rückkamera; ohne Kamera null
-export function pickCamera(devices, savedId = '') {
+// Gemerkte Kamera, wenn es sie noch gibt, sonst die beste Rückkamera; ohne Kamera null.
+// saved: deviceId (alt) oder { deviceId, label } (v130.13) – manche Browser/WebViews vergeben nach einem
+// Neustart neue deviceIds (Datenschutz-Salt), der Name der Kamera bleibt aber gleich: Rückfalloption per Name,
+// bevor wieder die automatisch beste Kamera gewählt wird (sonst „springt“ die gemerkte Wahl bei jedem Start zurück).
+export function pickCamera(devices, saved = '') {
   const list = backCameras(devices);
-  return list.find((d) => savedId && d.deviceId === savedId) || list[0] || null;
+  const sid = typeof saved === 'string' ? saved : (saved && saved.deviceId) || '';
+  const slabel = (saved && typeof saved === 'object' && saved.label) || '';
+  return list.find((d) => sid && d.deviceId === sid)
+    || (slabel && list.find((d) => d.label === slabel))
+    || list[0] || null;
 }
 // Nächste Kamera reihum
 export function nextCamera(devices, currentId) {

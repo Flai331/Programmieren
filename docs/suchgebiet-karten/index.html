@@ -49,6 +49,8 @@
   <div id="closed-bar" class="handed closed-bar" hidden></div>
   <!-- v124: Aufträge an den ELW -->
   <div id="elw-bar" class="elw-bar" hidden><button id="elw-list" class="el-only"></button><button id="elw-off" hidden>✕ Vorschau</button></div>
+  <!-- v130.15: automatischer Live-Abgleich per WebRTC mit einem anderen EL-Gerät (EL/ELW/UA) -->
+  <div id="rtc-status" class="rtc-status" hidden></div>
 
   <!-- Wetter-Overlay (zuschaltbar): DWD-Wind + gemessener Wind, Ansatz, Vorhersage -->
   <div id="wx" class="wx" hidden>
@@ -84,6 +86,11 @@
     <div class="qr-inner">
       <h2 id="qr-title"></h2>
       <div id="qr-code" class="qr-code"></div>
+      <div id="qr-nav" class="row" hidden>
+        <button id="qr-prev" type="button">◀</button>
+        <button id="qr-pause" type="button">⏸️ Pause</button>
+        <button id="qr-next" type="button">▶</button>
+      </div>
       <p id="qr-text" class="small"></p>
       <div class="row">
         <button id="qr-share">📤 Teilen</button>
@@ -126,6 +133,18 @@
     </div>
   </div>
 
+  <!-- v130.2: Kompass-Navigation (Luftlinie) – zusätzlich zur Google-Maps-Route -->
+  <div id="navmeter" class="windmeter" hidden>
+    <div class="wm-box">
+      <h2 id="nav-title">🧭 Kompass</h2>
+      <p class="small">Luftlinie – führt geradeaus zum Ziel, nicht auf Wegen. Handy flach halten.</p>
+      <div class="wm-rose nav-rose"><div id="nav-needle" class="wm-needle nav-needle"><span>▲</span></div></div>
+      <div id="nav-dist" class="nav-dist">–</div>
+      <div id="nav-read" class="wm-read">Standort wird gesucht …</div>
+      <button id="nav-cancel">Schließen</button>
+    </div>
+  </div>
+
   <nav class="toolbar" aria-label="Werkzeuge">
     <button data-tool="pan" class="active" title="Karte bewegen"><span>✋</span>Bewegen</button>
     <button data-tool="pen" title="Freihand zeichnen"><span>✏️</span>Stift</button>
@@ -159,6 +178,7 @@
     <button id="quick-rp" class="on plain" title="Nächster Rettungspunkt (von GPS-Standort oder Kartenmitte)" hidden><span>🚑</span>RP</button>
     <button id="quick-wx" class="plain" title="Wetter und Wind einblenden"><span>🌬️</span>Wetter</button>
     <button id="quick-arrows" class="plain" title="Wind auf der Karte ein/aus (blau = DWD, grün = gemessen)"><span>➚</span>Windpfeile</button>
+    <button id="quick-ways" class="plain" title="Wege und Gewässer aus OpenStreetMap einblenden (dieselben Daten wie beim Ausrichten an Wegen)"><span>🛤️</span>Wege</button>
     <button id="quick-night" class="plain" title="Nachtmodus: aus → dunkel → rot"><span>🌙</span>Nacht</button>
     <div class="zoomslider">
       <button id="zs-in" title="Hineinzoomen">+</button>
@@ -302,13 +322,13 @@
     <h2>📤 Teilen</h2>
     <h2 class="sub first">1. An wen?</h2>
     <div class="share-grid" id="share-to">
-      <button data-to="team"><span>🐕</span><b>Hundeführer / Team</b><small>Auftrag fürs Handy</small></button>
       <button data-to="ua"><span>🧭</span><b>Unterabschnitt (UA)</b><small>ein Gebiet bearbeiten</small></button>
-      <button data-to="el"><span>🚐</span><b>EL / ELW</b><small>ganzer Einsatz</small></button>
+      <button data-to="el"><span>📲</span><b>Übergabe</b><small>gibt ab, z. B. Handy → Tablet</small></button>
+      <button data-to="elw"><span>🚐</span><b>Weiteres Gerät / ELW</b><small>bleibt zusätzlich aktiv</small></button>
       <button data-to="other"><span>👥</span><b>Sonstige</b><small>ohne App: Polizei, Druck, Garmin …</small></button>
     </div>
-    <select id="share-team" hidden></select>
     <p id="share-tohint" class="small"></p>
+    <p class="small">Auftrag fürs Hundeführer-Handy: unter „Teams“ → „📲 Auftrag an Hundeführer“.</p>
     <div id="share-what" hidden>
       <h2 class="sub">2. Was?</h2>
       <div class="share-grid" id="share-scopes">
@@ -362,13 +382,18 @@
     </div>
     <div class="el-only">
     <h2 class="sub">🌲 Wald</h2>
-    <p class="small">Waldstück mit dem Finger umkreisen: Die App erkennt die Waldflächen (OpenStreetMap) und teilt sie auf Wunsch in Teilgebiete auf, möglichst entlang von Wegen und Bächen.</p>
-    <div class="row"><button id="more-forest">🌲 Wald umkreisen und aufteilen</button></div>
+    <p class="small">Fläche mit dem Finger umkreisen: Die App erkennt darin Wald, Wiese/Grünland und Acker (OpenStreetMap) und teilt das auf Wunsch in Teilgebiete auf, möglichst entlang von Wegen und Bächen. Privatgärten und Wohngebiete werden dabei ausgespart.</p>
+    <div class="row"><button id="more-forest">🌲 Fläche umkreisen und aufteilen</button></div>
     </div>
     <div class="el-only">
     <h2 class="sub">📤 Aufträge an den ELW</h2>
     <p class="small">Umrisse und Zeichnungen mit Auftragstext (z. B. „In 2 Gebiete aufteilen“) an ein anderes EL-Gerät schicken – über den Live-Kanal des Einsatzes, verschlüsselt. Der Empfänger sieht sie nur an und entscheidet selbst.</p>
-    <div class="row"><button id="more-elw">📤 An ELW senden</button><button id="more-elw-in">📥 Empfangene Aufträge</button></div>
+    <div class="row"><button id="more-elw">📤 An ELW senden</button><button id="more-elw-in">📥 Empfangene Aufträge</button><button id="more-elw-out">📨 Gesendete Aufträge</button></div>
+    </div>
+    <div class="el-only">
+    <h2 class="sub">📟 Geräte</h2>
+    <p class="small">Für diesen Einsatz registrierte Geräte (durch „Übergabe“, „Weiteres Gerät/ELW“ oder UA-Teilen) – zum Entfernen, falls nicht mehr gebraucht.</p>
+    <div class="row"><button id="more-devices">📟 Geräte verwalten</button></div>
     </div>
     <div class="el-only">
     <h2 class="sub">🧭 Navigation</h2>
@@ -426,6 +451,11 @@
       <button id="recv-scan">📷 Rückmeldung scannen</button>
       <button id="recv-paste">📋 Rückmeldung einfügen</button>
     </div>
+    <h2 class="sub">📍 Zusätzlich zum laufenden Auftrag</h2>
+    <p class="small">Noch einen Punkt, ein Gebiet, eine Zeichnung oder einen Lage-Ort nachreichen – ohne neuen QR-Code, kommt sofort auf die Karte des Hundeführers.</p>
+    <div class="row">
+      <button id="teams-zusatz">📍 Ort/Gebiet an Team senden</button>
+    </div>
     <div id="sent-list" class="small"></div>
     <button class="close">Schließen</button>
   </section>
@@ -443,9 +473,11 @@
     <div id="st-tools" class="row st-tools" hidden>
       <button id="st-funk" class="keep">✍️ Meldung für Team eintragen</button>
       <button id="st-find" class="keep">🔎 Fund/Hinweis eintragen</button>
+      <button id="st-zusatz" class="keep">📍 Ort/Gebiet an Team senden</button>
     </div>
     <details id="st-ua" class="st-det" hidden><summary>🧭 Unterabschnitte (Übersicht)</summary><div id="st-ua-body"></div></details>
     <details id="st-out" class="st-det" hidden><summary id="st-out-sum">🚶 Wer ist noch draußen?</summary><div id="st-out-body"></div></details>
+    <details id="st-in" class="st-det" hidden><summary id="st-in-sum">🏠 Wer ist noch drinnen?</summary><div id="st-in-body"></div></details>
     <label>Team <select id="st-filter"></select></label>
     <div id="st-list" class="st-list"></div>
     <button class="close">Schließen</button>
@@ -511,6 +543,7 @@
       <button id="hfm-scan">📷 Auftrag scannen (QR-Code)</button>
       <button id="hfm-rp">🚑 Nächster Rettungspunkt</button>
       <button id="hfm-area">🎯 Mein Gebiet</button>
+      <button id="hfm-borders">📏 Grenzen meines Gebiets</button>
       <button id="hfm-nav">🧭 Navigation</button>
       <button id="hfm-meet">🎯 Zum B-Ort</button>
       <button id="hfm-contacts" hidden>📞 Kontakte</button>
@@ -531,6 +564,7 @@
   <section id="panel-layers" class="panel" hidden>
     <h2>Kartenart</h2>
     <div id="layer-list" class="list"></div>
+    <button id="layer-legend" hidden>🖼 Legende anzeigen</button>
     <h2 class="sub">Über Luftbildern einblenden</h2>
     <div id="overlay-list"></div>
     <p class="small">Legt Wege (auch Waldwege), Straßen und Ortsnamen aus der amtlichen Karte TopPlusOpen auf das Luftbild.</p>

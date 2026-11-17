@@ -8,27 +8,29 @@ import {
   LAYERS, OVERLAYS, DEFAULT_OVERLAYS, layerById, layerStack, tileUrl, FALLBACK, isBkg,
 } from './layers.js';
 import { buildPdf, planMultiSheets, planSheets, renderState } from './pdf.js';
-import { formatMgrs } from './utm.js';
-import { areaBounds, navTargets, navTargetsAll, navUrl, boxCenter, cellCenter as navCellCenter } from './hfnav.js';
+import { formatMgrs, formatUtm } from './utm.js';
+import { areaBounds, navTargets, navTargetsAll, navUrl, boxCenter, cellCenter as navCellCenter, navNeedleDeg, fmtDist, areaBorderList, triangulate } from './hfnav.js';
 import { buildGpx, mergeGpx, parseGpx, dedupeImport, parseKml, pointInPolygon, selectionGpx, gridWithLabels, gridPath, labelTracks, cellComponents, cellOutlines, hasArea, polygonArea, formatArea, trackDesc, trackLength, outlineName, msgWaypoints, msgRows } from './gpx.js';
 import { JUH_TEMPLATE, fillJuh } from './juh.js';
 import { buildReport, describeTarget, makeDedup, makeLog, validReportUrl } from './report.js';
 import { POI_CATS, newPoi, poiCat, poiLabel, poiName, sortPois } from './pois.js';
 import { fileName } from './files.js';
 import { buildInfos, deletePoi, infoSummary, infoTarget, mergeInfos } from './infos.js';
-import { emptySel, selectAll, selectTeam, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids, unionSel } from './scope.js';
+import { emptySel, selectAll, selSummary, selCount, subsetProject, itemsWithin, itemsInGrids, unionSel } from './scope.js';
 import { MSG_VIEW, MSG_DELETE, ownTeamMsgs, isUA, lockOf, canEdit, canDelete, canEditCell, canEditGrid, denied, deniedGrid, gridLock, assignedOf, assignedCell, assignedGrid, markAccepted, isAccepted, unlockUntil } from './locks.js';
 import { isDone, openPoints, guardApplies, msgPct, closeMsg, sentPct, closeAsk, autoCloseDue, declineClose, closeSent, reopenSent, predecessorGroups, predecessorText } from './closeout.js';
-import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts } from './elw.js'; // v124
+import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts, buildElwAck, isElwAck } from './elw.js'; // v124, v130.23
+import { RTC_KIND, buildRtcMsg, rtcFor, shouldYield } from './rtc.js'; // v130.15
 import { nextTeamLabel, uaPrefix, sameTeamName, uaName, uaTitle, joinUaNames, renameUa } from './uateam.js';
-import { typeIcon, typeText, unitType, isDog, persons, unitLine, cleanUnit, UNIT_TYPES, ORGS, forcesFromTeams, forcesText, whoText } from './units.js'; // v128
+import { typeIcon, typeText, unitType, isDog, unitLine, cleanUnit, nextFunkrufname, UNIT_TYPES, ORGS, forcesFromTeams, forcesText, whoText } from './units.js'; // v128
 import { FUNK_KINDS, funkKind, funkLabel, timeOfDay, funkTargets, buildFunkMsg, addFunkMsg, buildFindMsg, msgSource } from './funk.js'; // v128
 import { FIND_KINDS, findKind, findLabel, FIND_A, forAllUa, checkText, isFind, findStatusText } from './finds.js'; // v128
+import { buildZusatz, applyZusatz, isZusatz, ZUSATZ_MAX } from './zusatz.js'; // v130
 import { listTracks, trackInfo, importItems, noteImport, importTag, TRACK_KINDS, guessKind, durText } from './tracks.js'; // v128
 import { teamTimes, timeRows, outsideTeams, stateText, totalPersonHours, timeLine } from './times.js'; // v128
 import { uaOverview, levelIcon, agoText, hasUas, BASE_UA } from './uaover.js'; // v128
 import { CAM_KEY, backCameras, pickCamera, nextCamera, cameraConstraints, wantsContinuousFocus } from './camera.js';
-import { rebuildAssignment, teamsWithoutOrder, planAssign, applyAssign, planCount, assignText } from './sentops.js';
+import { rebuildAssignment, teamsStaged, planAssign, applyAssign, planCount, assignText, teamClock } from './sentops.js';
 import { buildProgress, mergeProgress, progressSummary, progressPreview, progressTarget, snapshotBase, stampChanges, setPeer, setPeerId, peerOf } from './progress.js';
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
@@ -56,7 +58,7 @@ import {
 } from './share.js';
 import {
   STATUS_LIST, CLOSE_STATUS, RELIEF_STATUS, SPOT_LIST, SPOT_HINTS, NO_POS, URGENT, spotLabel, msgLabel, msgIcon, isUrgent, buildMsg, buildKor, applyKor, mergeStatus, withoutDeleted, latestFor, headMsg, flushOutbox, pollMessages, coverageGaps, areaShapes,
-  EL_ALL, EL_KINDS, buildAck, buildElMsg, buildReadAck, buildReply, replyContext, QUICK_REPLIES, needsAck, forHf, ackedIds, mergeReads, splitIncoming, elTargets, readSummary,
+  EL_ALL, EL_KINDS, buildAck, buildElMsg, buildReadAck, buildReply, replyContext, QUICK_REPLIES, needsAck, forHf, ackedIds, mergeReads, splitIncoming, elTargets, zusatzTargets, readSummary,
 } from './status.js';
 import {
   teamChips, teamOrder, todoFirst, chipText, teamAssignments, unreadMsgs, noteReceived, markSeen, prune, unreadAlert, unreadAge, bannerText, parseSnooze,
@@ -71,7 +73,7 @@ import { WIZ_STEPS, wizTitle, lastLead, hhmmOf, isoDate } from './wizard.js';
 import { buildHandover, projectFromHandover, replaceWithHandover, splitParts, addPart } from './handover.js';
 import { placeBadges, boxOf } from './badgeplace.js';
 import { parseQuery, searchAddress, suggestPlaces, cornerBox, searchCorner, overpass } from './search.js';
-import { OSM_NOTE, MAX_PARTS, MAX_AREA_M2, MIN_OUTLINE_M, forestQuery, parseForest, originOf, toXY, toLL, forestInLasso, lassoPolygon, shares as forestShares, splitArea, toTracks, mpArea } from './forest.js';
+import { OSM_NOTE, MAX_PARTS, MAX_AREA_M2, MIN_OUTLINE_M, forestQuery, linesQuery, parseForest, parseLines, originOf, toXY, toLL, forestInLasso, lassoPolygon, shares as forestShares, splitArea, toTracks, mpArea, landcoverUrl, isForestColor, landcoverInLasso, LANDCOVER_NOTE } from './forest.js';
 import {
   newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor, cellsText,
   exportProject, importProject, uid, reorderMarks, MARK_COLORS, NO_TEAM, NO_TEAM_COLOR, assignTargets, assigneeName,
@@ -79,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v129';
+const APP_VERSION = 'v130.46';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -120,6 +122,7 @@ let pendingMove = null; // „📍 Verlegen“ mit Tippen auf die Karte: { msg: 
 const NO_RP_HF = 'Die Einsatzleitung hat keine Rettungspunkte mitgeschickt.';
 let pendingSpot = null; // „Standort melden“ mit Tippen auf die Karte (Hundeführer): { cat, txt }
 let elwPollBusy = false; // v124: Abholen der Aufträge an den ELW läuft
+let elwTodoSendTimer = null; // v130.26: Debounce fürs Zurücksenden der To-do-Haken
 let elwLayer = null; // v124: Vorschau eines Auftrags auf der Karte
 let elwShown = ''; // v124: ID des Auftrags, dessen Vorschau steht
 let liveBusy = false; // Abholen der Status-Meldungen läuft
@@ -172,7 +175,7 @@ function load() {
   try {
     const s = JSON.parse(raw || 'null');
     if (s && s.projects) db = { ...db, ...s };
-    if (!['team', 'ua', 'el', 'other'].includes(db.shareTo)) db.shareTo = null; // v99: zuletzt gewählter Empfänger beim Teilen (pro Gerät)
+    if (!['ua', 'el', 'other'].includes(db.shareTo)) db.shareTo = null; // v99: zuletzt gewählter Empfänger beim Teilen (pro Gerät)
     db.teamsOpen = !!db.teamsOpen; // v98: Team-Liste auf dem Handy offen (pro Gerät)
   } catch { if (raw) { saveCorrupt(raw); startNotice = '⚠️ Der Speicher war beschädigt und wurde gesichert (Mehr → Fehlerbericht senden)'; } } // defekter Speicher -> Neustart, Rohdaten bleiben erhalten
   const ld = loadProjects(db.projects);
@@ -292,11 +295,13 @@ function changed() {
   if (!$('panel-teams').hidden) renderMarks();
   redraw();
   save();
+  rtcScheduleSend(); // v130.15: automatischer Live-Abgleich – eigene Änderungen gebündelt an den verbundenen Peer
+  renderRtcStatus();
 }
 
 // ---------- Karte ----------
 load();
-const map = L.map('map', { zoomControl: false, maxZoom: 20 });
+const map = L.map('map', { zoomControl: false, maxZoom: 20, zoomSnap: 0, zoomDelta: 1, wheelPxPerZoomLevel: 300 });
 L.control.zoom({ position: 'bottomright' }).addTo(map);
 map.on('dragstart', () => { userMovedAt = Date.now(); });
 // Quellenangabe: kurz ausgeklappt, dann nur „ⓘ“ (verdeckt sonst Bedienelemente); antippen klappt sie auf
@@ -881,9 +886,9 @@ canvas.addEventListener('pointermove', (e) => {
   map.panBy([gesture.mid.x - m.x, gesture.mid.y - m.y], { animate: false });
   userMovedAt = Date.now();
   gesture.mid = m;
-  // Zoom in ganzen Stufen, sobald die Finger deutlich auseinander/zusammen gehen
-  const want = Math.round(gesture.zoom + Math.log2(m.d / gesture.dist));
-  if (want !== map.getZoom()) map.setZoomAround(L.point(m.x, m.y), want, { animate: false });
+  // v130.5: stufenlos zoomen, nicht mehr auf ganze Stufen springen
+  const want = gesture.zoom + Math.log2(m.d / gesture.dist);
+  if (Math.abs(want - map.getZoom()) > 0.001) map.setZoomAround(L.point(m.x, m.y), want, { animate: false });
 });
 const endTouch = (e) => {
   if (mousePan) { mousePan = null; e.stopImmediatePropagation(); return; }
@@ -901,10 +906,13 @@ let wheelAt = 0;
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   const now = Date.now();
-  if (now - wheelAt < 180) return;
+  if (now - wheelAt < 16) return;
   wheelAt = now;
   const r = canvas.getBoundingClientRect();
-  map.setZoomAround(L.point(e.clientX - r.left, e.clientY - r.top), map.getZoom() + (e.deltaY < 0 ? 1 : -1));
+  // v130.5: stufenlos statt fest ±1 pro Tick – Mausrad (Zeilen) und Trackpad (Pixel) unterschiedlich skaliert
+  const delta = -e.deltaY * (e.deltaMode === 1 ? 0.12 : 0.0033);
+  const z = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), map.getZoom() + delta));
+  map.setZoomAround(L.point(e.clientX - r.left, e.clientY - r.top), z, { animate: false });
 }, { passive: false });
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -1171,6 +1179,9 @@ function textDialog(i) {
   if (!it || it.kind !== 'text') return;
   if (isLocked()) return lockedToast();
   if (blocked(it) || guardAssigned(assignedOf(P, it))) return;
+  // v130.14: Punkte von der EL (Auftragsinhalt, Zusatz) sind beim Hundeführer schreibgeschützt – nicht verschieb-
+  // oder löschbar. EL/ELW dürfen sie immer ändern; ein UA ist schon über blocked()/lockOf() oben eingeschränkt.
+  if (db.mode !== 'el' && it.fromEl) return toast(MSG_VIEW, 4000);
   openDlg((box, close) => {
     dlgHead(box, '📍 Text', 'Ändern oder löschen.');
     const inp = document.createElement('input');
@@ -1221,6 +1232,8 @@ function renameItem(i) {
       if (!r || !P.items.includes(it)) return;
       if (r.del) return deleteOutline(it);
       if (r.vtx) return startVertex(it);
+      if (r.zus) return zusatzDialog({ itemIdx: [P.items.indexOf(it)] });
+      if (r.split) return splitOutlineStart(it);
       snapshot();
       applyOutline(it, { ...r, name: r.name || it.name });
       changed();
@@ -1228,14 +1241,45 @@ function renameItem(i) {
     });
     return;
   }
-  const what = 'der Zeichnung';
-  const t = prompt(`Name ${what} (steht so auf der Karte und im GPX für Garmin):`, it.name || '');
-  if (t === null || t.trim() === (it.name || '')) return;
-  snapshot();
-  // alle Striche einer Zeichnung heißen gleich
-  for (const x of it.group ? P.items.filter((y) => y.group === it.group) : [it]) x.name = t.trim();
-  changed();
-  toast(it.name ? `Name „${it.name}“ gespeichert` : 'Name entfernt');
+  strokeDialog(it, '✏️ Zeichnung').then((r) => {
+    if (!r || !P.items.includes(it)) return;
+    snapshot();
+    // alle Striche einer Zeichnung heißen gleich und tragen dieselbe Teamzuteilung
+    for (const x of it.group ? P.items.filter((y) => y.group === it.group) : [it]) {
+      x.name = r.name;
+      if (r.teams.length) x.teams = [...r.teams]; else delete x.teams;
+    }
+    changed();
+    toast(r.name ? `„${r.name}“ gespeichert` : 'Name entfernt');
+  });
+}
+// Zeichnung (Stift): Name und Zuteilung an ein oder mehrere Teams
+function strokeDialog(it, title) {
+  return openDlg((box, close) => {
+    dlgHead(box, title, 'Name steht so auf der Karte, im PDF und im GPX für Garmin.');
+    const name = dlgField(box, 'Name', Object.assign(document.createElement('input'), { type: 'text', value: it.name || '' }));
+    const teams = P.marks.filter((m) => m.kind === 'team');
+    const picked = new Set(it.teams || []);
+    if (teams.length) {
+      const h = document.createElement('p');
+      h.className = 'small';
+      h.textContent = 'Zugeteilt an (ein oder mehrere Teams):';
+      box.appendChild(h);
+      for (const t of teams) {
+        const l = document.createElement('label');
+        l.className = 'check';
+        const c = Object.assign(document.createElement('input'), { type: 'checkbox', checked: picked.has(t.id) });
+        c.addEventListener('change', () => { if (c.checked) picked.add(t.id); else picked.delete(t.id); });
+        const sp = document.createElement('span');
+        sp.textContent = `${typeIcon(t)} ${t.label}`;
+        l.append(c, sp);
+        box.appendChild(l);
+      }
+    }
+    dlgButton(box, 'Speichern', 'primary', () => close({ name: name.value.trim(), teams: [...picked] }));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+    setTimeout(() => { name.focus(); name.select(); }, 50);
+  });
 }
 
 // Umriss: Name, Zuteilung (Team oder Einheit aus „Einsatz → Kräfte“) und Notiz
@@ -1261,9 +1305,12 @@ function outlineDialog(it, title, opts = {}) {
     p.textContent = 'Teams unter „Teams“, weitere Einheiten (Feuerwehr, Polizei …) unter „Einsatz → Kräfte“.';
     box.appendChild(p);
     dlgButton(box, 'Speichern', 'primary', () => close({ name: name.value.trim(), to: sel.value, note: note.value.trim() }));
+    // v130.35: Aufteilen geht auch schon beim Anlegen, nicht erst wenn der Umriss schon gespeichert ist
+    if (!it.open && (it.pts || []).length > 2) dlgButton(box, '✂️ Aufteilen', '', () => close({ name: name.value.trim(), split: true }));
     if (opts.edit) {
       const ctr = boxCenter(it.pts);
       if (!it.open && (it.pts || []).length > 2 && ctr) dlgNavButton(box, close, null, it.name || 'Umriss', ctr[0], ctr[1]); // v123: nur gespeicherte, geschlossene Umrisse
+      if (db.mode === 'el' && P.live && elTargets(P.sent, P.marks).length) dlgButton(box, '📤 An Team senden', '', () => close({ zus: true })); // v130
       dlgButton(box, '✋ Punkte bearbeiten', '', () => close({ vtx: true }));
       dlgButton(box, '🗑 Löschen', 'urgent', () => close({ del: true }));
     }
@@ -1390,23 +1437,24 @@ function updatePenbar() {
   $('pen-done').disabled = !n;
   $('pen-cancel').disabled = !n;
 }
-function finishPen() {
+async function finishPen() {
   const d = draftPen;
   if (!d || !d.strokes.length) return;
   // wie beim Umriss: Name mit Vorschlag „Zeichnung 3“
   const groups = new Set(P.items.filter((it) => it.kind === 'stroke').map((it) => it.group || it));
   const def = `Zeichnung ${groups.size + 1}`;
-  const t = prompt('Name der Zeichnung (erscheint so auf der Karte und auf dem Garmin):', def);
-  if (t === null) return;
-  const name = t.trim() || def;
+  const r = await strokeDialog({ name: def, teams: [] }, '✏️ Zeichnung speichern');
+  if (!r || draftPen !== d) return;
+  const name = r.name || def;
+  draftPen = null;
   snapshot();
   const group = uid();
   for (const st of d.strokes) {
     st.group = group;
     st.name = name;
+    if (r.teams.length) st.teams = [...r.teams];
     P.items.push(st);
   }
-  draftPen = null;
   changed();
   toast(`„${name}“ gespeichert`);
 }
@@ -1418,8 +1466,8 @@ $('pen-back').addEventListener('click', () => {
   redraw();
   save();
 });
-$('pen-done').addEventListener('click', () => {
-  finishPen();
+$('pen-done').addEventListener('click', async () => {
+  await finishPen();
   if (!draftPen) setTool('pan');
 });
 $('pen-cancel').addEventListener('click', () => {
@@ -1452,6 +1500,16 @@ async function finishTrack(auto) {
     r = await outlineDialog({ ...d, name }, '📐 Umriss speichern');
     if (!r || draftTrack !== d) return;
     name = r.name || name;
+    if (r.split) {
+      // v130.35: erst normal speichern (wie gewohnt rückgängig machbar), dann direkt aufteilen –
+      // bricht der Nutzer das Aufteilen später ab, bleibt der gezeichnete Umriss einfach gespeichert.
+      draftTrack = null;
+      snapshot();
+      d.name = name;
+      P.items.push(d);
+      changed();
+      return splitOutlineStart(d);
+    }
   }
   draftTrack = null;
   snapshot();
@@ -1510,6 +1568,57 @@ for (const [id, v] of [['forest-edit', 'edit'], ['forest-ok', 'apply'], ['forest
 }
 const forestLassoLayer = (pts) => L.polygon(pts, { color: '#2e7d32', weight: 3, dashArray: '2 6', fill: false, interactive: false });
 
+// v130.42: Wege/Bäche aus OpenStreetMap als eigenes Overlay – zeigt genau die Daten, die auch beim
+// Ausrichten an Wegen (✂️ Aufteilen/🌲 Wald) abgefragt werden. Lädt nur den sichtbaren Kartenausschnitt
+// (mit etwas Rand) und nur auf ausdrücklichen Wunsch (Knopf „Wege“) – kein automatischer Dauerabruf.
+const waysLayer = L.layerGroup().addTo(map);
+let waysCtl = null;
+let waysBounds = null; // zuletzt geladener Bereich (mit Rand) – solange die Sicht darin liegt, nicht neu laden
+let waysTimer = null;
+function waysClear() {
+  waysLayer.clearLayers();
+  waysBounds = null;
+  if (waysCtl) { waysCtl.abort(); waysCtl = null; }
+  map.attributionControl.removeAttribution(OSM_NOTE);
+}
+async function loadWays() {
+  if (!db.waysOn) return;
+  const b = map.getBounds();
+  if (waysBounds && waysBounds.contains(b)) return;
+  if (map.getZoom() < 14) { waysLayer.clearLayers(); return toast('Wege-Overlay: bitte näher heranzoomen', 4000); }
+  if (waysCtl) waysCtl.abort();
+  const ctl = new AbortController();
+  waysCtl = ctl;
+  const pad = b.pad(0.3); // Rand, damit nicht schon bei kleinen Schwenks neu geladen wird
+  const bbox = { south: pad.getSouth(), west: pad.getWest(), north: pad.getNorth(), east: pad.getEast() };
+  try {
+    const data = parseLines(await overpass(linesQuery(bbox), ctl.signal, 'Wege-Overlay'));
+    if (ctl.signal.aborted || !db.waysOn) return;
+    waysLayer.clearLayers();
+    for (const p of data.paths) L.polyline(p, { color: '#8d6e63', weight: 3, opacity: 0.85, interactive: false }).addTo(waysLayer);
+    for (const w of data.waters) L.polyline(w, { color: '#1565c0', weight: 3, opacity: 0.85, interactive: false }).addTo(waysLayer);
+    waysBounds = pad;
+    map.attributionControl.addAttribution(OSM_NOTE);
+  } catch (err) {
+    if (!ctl.signal.aborted) toast(`Wege-Overlay: ${(err && err.message) || 'kein Netz'}`, 5000);
+  } finally {
+    if (waysCtl === ctl) waysCtl = null;
+  }
+}
+$('quick-ways').addEventListener('click', () => {
+  db.waysOn = !db.waysOn;
+  saveNow();
+  $('quick-ways').classList.toggle('on', !!db.waysOn);
+  if (db.waysOn) loadWays(); else waysClear();
+});
+map.on('moveend zoomend', () => {
+  if (!db.waysOn) return;
+  clearTimeout(waysTimer);
+  waysTimer = setTimeout(loadWays, 600);
+});
+$('quick-ways').classList.toggle('on', !!db.waysOn);
+if (db.waysOn) loadWays();
+
 async function forestLassoDone(raw) {
   // Punkte ausdünnen (ca. alle 3 m)
   const pts = [];
@@ -1517,11 +1626,11 @@ async function forestLassoDone(raw) {
     const l = pts[pts.length - 1];
     if (!l || distance(l[0], l[1], q[0], q[1]) >= 3) pts.push([Math.round(q[0] * 1e6) / 1e6, Math.round(q[1] * 1e6) / 1e6]);
   }
-  if (pts.length < 3 || pathLen(pts) < MIN_OUTLINE_M) return toast('Zu klein – nochmal „🌲 Wald“ und größer umkreisen');
+  if (pts.length < 3 || pathLen(pts) < MIN_OUTLINE_M) return toast('Zu klein – bitte größer umkreisen');
   const o = originOf(pts);
   const lassoMp = lassoPolygon(pts, o);
   const lassoM2 = mpArea(lassoMp);
-  if (lassoM2 < 1) return toast('Zu klein – nochmal „🌲 Wald“ und größer umkreisen');
+  if (lassoM2 < 1) return toast('Zu klein – bitte größer umkreisen');
   if (lassoM2 > MAX_AREA_M2) return toast('Bitte kleiner umkreisen (höchstens 25 km²)', 5000);
   $('toast').hidden = true;
   forestClear();
@@ -1534,7 +1643,7 @@ async function forestLassoDone(raw) {
   let closeLoad = null;
   openDlg((box, close) => {
     closeLoad = close;
-    dlgHead(box, '🌲 Waldflächen werden geladen …', OSM_NOTE);
+    dlgHead(box, '🌲 Flächen werden geladen …', OSM_NOTE);
     dlgButton(box, 'Abbrechen', '', () => { ctl.abort(); close(null); });
   }, { keep: true });
   let data = null;
@@ -1546,27 +1655,109 @@ async function forestLassoDone(raw) {
     reason = (err && err.message) || 'Keine Verbindung';
   }
   if (closeLoad) closeLoad(null);
-  let mp = data ? forestInLasso(data.forests, pts, o) : [];
+  // v130.45: nicht nur Wald, auch Wiese/Grünland und Acker – Privatgärten/Wohngebiet (data.excludes) werden abgezogen
+  let mp = data ? forestInLasso(data.forests, pts, o, data.excludes) : [];
   const lines = data ? data.lines.map((l) => l.map((q) => toXY(q, o))) : [];
-  let forest = true;
+  let source = mp.length ? 'osm' : null;
+  // v130.32: OSM hat dort nichts getaggt -> zusätzlich die Landbedeckungs-Karte (BKG, v130.30)
+  // probieren, bevor der Nutzer gefragt wird. Die zeigt Wald/Gehölz unabhängig von OSM-Tags.
+  if (!mp.length && !ctl.signal.aborted) {
+    const lcCtl = new AbortController();
+    let closeLc = null;
+    openDlg((box, close) => {
+      closeLc = close;
+      dlgHead(box, '🌲 Landbedeckung wird geprüft …', 'In OpenStreetMap kein Wald getaggt – zusätzlich die Landbedeckungs-Karte (BKG) prüfen.');
+      dlgButton(box, 'Abbrechen', '', () => { lcCtl.abort(); close(null); });
+    }, { keep: true });
+    try {
+      const lc = await landcoverForest(pts, bbox, o, lcCtl.signal);
+      if (lc.length) { mp = lc; source = 'landcover'; }
+    } catch { /* kein Netz o.ä. -> fällt durch zur Rückfrage unten */ }
+    if (closeLc) closeLc(null);
+    if (lcCtl.signal.aborted) { forestClear(); return; }
+  }
   if (!mp.length) {
-    // v121: kein Wald erkannt oder Netzfehler -> die umkreiste Fläche selbst aufteilen?
+    // v121: kein Wald erkannt (auch nicht über die Landbedeckung) oder Netzfehler ->
+    // die umkreiste Fläche selbst aufteilen?
     const ok = await openDlg((box, close) => {
-      dlgHead(box, reason ? '🌲 Waldsuche fehlgeschlagen' : '🌲 Kein Wald erkannt', reason ? `${reason}. Die umkreiste Fläche selbst aufteilen?` : 'Kein Wald erkannt – die umkreiste Fläche selbst aufteilen?');
+      dlgHead(box, reason ? '🌲 Flächensuche fehlgeschlagen' : '🌲 Keine Fläche erkannt', reason ? `${reason}. Die umkreiste Fläche selbst aufteilen?` : 'Weder Wald noch Wiese/Acker erkannt (auch nicht über die Landbedeckungs-Karte) – die umkreiste Fläche selbst aufteilen?');
       dlgButton(box, 'Umkreiste Fläche aufteilen', 'primary', () => close(true));
       dlgButton(box, 'Abbrechen', '', () => close(false));
     });
     if (!ok) { forestClear(); return; }
     mp = lassoMp;
-    forest = false;
+    source = 'lasso';
   }
-  await forestPlan({ mp, lines, o, forest, pts });
+  await forestPlan({ mp, lines, o, source, pts });
+}
+function loadImage(url, signal) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Bild konnte nicht geladen werden'));
+    if (signal) signal.addEventListener('abort', () => reject(new Error('abgebrochen')), { once: true });
+    img.src = url;
+  });
+}
+// v130.32: Landbedeckungs-Raster (BKG) laden, Wald/Gehölz-Pixel (isForestColor) zu einer Fläche
+// zusammenfassen und mit der Umkreisung schneiden – wie forestInLasso, nur aus Bildpunkten statt OSM.
+async function landcoverForest(pts, bbox, o, signal) {
+  const w = 400;
+  const h = Math.max(1, Math.round(w * ((bbox.north - bbox.south) / (bbox.east - bbox.west)) / Math.cos((bbox.south * Math.PI) / 180)));
+  const img = await loadImage(landcoverUrl(bbox, w, h), signal);
+  if (signal && signal.aborted) return [];
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const cx = c.getContext('2d');
+  cx.drawImage(img, 0, 0, w, h);
+  const data = cx.getImageData(0, 0, w, h).data;
+  const mask = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const j = i * 4;
+    if (data[j + 3] > 0 && isForestColor(data[j], data[j + 1], data[j + 2])) mask[i] = 1;
+  }
+  return landcoverInLasso(mask, w, h, bbox, pts, o);
+}
+
+// v130.29: von Hand gezeichneten (bereits gespeicherten) Umriss direkt aufteilen – wie „🌲 Wald“,
+// nur ohne eigenes Umkreisen und ohne Wald-Abfrage (nur Wege/Bäche für „an Wegen ausrichten“).
+async function splitOutlineStart(it) {
+  if (isLocked()) return lockedToast();
+  if (blocked(it) || guardAssigned(assignedOf(P, it))) return;
+  const pts = it.pts || [];
+  if (it.open || pts.length < 3) return toast('Nur geschlossene Umrisse lassen sich aufteilen');
+  const o = originOf(pts);
+  const mp = lassoPolygon(pts, o);
+  const total = mpArea(mp);
+  if (!mp.length || total < 1) return toast('Umriss zu klein zum Aufteilen');
+  if (total > MAX_AREA_M2) return toast('Umriss zu groß zum Aufteilen (höchstens 25 km²)', 5000);
+  const la = pts.map((q) => q[0]);
+  const lo = pts.map((q) => q[1]);
+  const bbox = { south: Math.min(...la) - 0.0005, north: Math.max(...la) + 0.0005, west: Math.min(...lo) - 0.0008, east: Math.max(...lo) + 0.0008 };
+  const ctl = new AbortController();
+  let closeLoad = null;
+  openDlg((box, close) => {
+    closeLoad = close;
+    dlgHead(box, '✂️ Wege werden geladen …', OSM_NOTE);
+    dlgButton(box, 'Abbrechen', '', () => { ctl.abort(); close(null); });
+  }, { keep: true });
+  let lines = [];
+  try {
+    const data = parseForest(await overpass(linesQuery(bbox), ctl.signal, 'Wegesuche'));
+    lines = data.lines.map((l) => l.map((q) => toXY(q, o)));
+  } catch (err) {
+    if (ctl.signal.aborted) { forestClear(); return; }
+    toast(`Wege konnten nicht geladen werden (${(err && err.message) || 'kein Netz'}) – Aufteilen geht trotzdem, nur ohne Wegorientierung.`, 6000);
+  }
+  if (closeLoad) closeLoad(null);
+  await forestPlan({ mp, lines, o, pts, source: 'outline', baseName: it.name, replace: it });
 }
 
 // Fenster „Wald aufteilen“, Vorschau und Übernehmen
 async function forestPlan(ctx) {
   const total = mpArea(ctx.mp);
-  const st = { n: 2, follow: true, rows: [], base: outlineName(P.items, P.meet, ctx.pts) };
+  const st = { n: 2, follow: true, rows: [], base: ctx.baseName || outlineName(P.items, P.meet, ctx.pts) };
   for (;;) {
     while (st.rows.length < st.n) st.rows.push({ size: 'gleich', pct: '', name: `${st.base} ${FOREST_LETTERS[st.rows.length]}`, to: '' });
     const act = await forestDialog(st, ctx, total);
@@ -1574,10 +1765,10 @@ async function forestPlan(ctx) {
     if (isLocked()) { forestClear(); return lockedToast(); }
     const res = await forestCompute(st, ctx, total);
     if (!res) continue;
-    if (act === 'apply') { forestClear(); return forestCommit(res.tracks); }
+    if (act === 'apply') { forestClear(); return forestCommit(res.tracks, ctx); }
     forestShow(st, ctx, res);
     const a = await forestBarWait();
-    if (a === 'apply') { forestClear(); return forestCommit(res.tracks); }
+    if (a === 'apply') { forestClear(); return forestCommit(res.tracks, ctx); }
     if (a !== 'edit') { forestClear(); return; }
     forestPreview.clearLayers();
     forestPreview.addLayer(forestLassoLayer(ctx.pts));
@@ -1588,10 +1779,14 @@ function forestDialog(st, ctx, total) {
   const teams = assignTargets(P);
   return openDlg((box, close) => {
     const n0 = ctx.mp.length;
-    dlgHead(box, '🌲 Wald aufteilen', ctx.forest ? `Erkannt: ${forestHa(total)} ha Wald (${n0} Stück${n0 === 1 ? '' : 'e'})` : `Umkreiste Fläche: ${forestHa(total)} ha`);
+    const head = ctx.source === 'outline' ? `„${ctx.baseName || 'Umriss'}“: ${forestHa(total)} ha`
+      : ctx.source === 'osm' ? `Erkannt: ${forestHa(total)} ha Wald (${n0} Stück${n0 === 1 ? '' : 'e'})`
+        : ctx.source === 'landcover' ? `Erkannt über Landbedeckung: ${forestHa(total)} ha Wald/Gehölz`
+          : `Umkreiste Fläche: ${forestHa(total)} ha`;
+    dlgHead(box, ctx.source === 'outline' ? '✂️ Umriss aufteilen' : '🌲 Wald aufteilen', head);
     const src = document.createElement('p');
     src.className = 'small';
-    src.textContent = OSM_NOTE;
+    src.textContent = ctx.source === 'landcover' ? `${OSM_NOTE} (Wege) · ${LANDCOVER_NOTE}` : OSM_NOTE;
     box.appendChild(src);
     const lab = document.createElement('label');
     lab.textContent = 'Anzahl Teile';
@@ -1750,8 +1945,12 @@ function forestShow(st, ctx, res) {
   $('forest-info').textContent = `Vorschau (ha): ${infos.join(' · ')}`;
 }
 
-function forestCommit(tracks) {
+function forestCommit(tracks, ctx) {
   snapshot();
+  if (ctx && ctx.replace) {
+    const ri = P.items.indexOf(ctx.replace);
+    if (ri >= 0) P.items.splice(ri, 1);
+  }
   for (const t of tracks) {
     const m = t.to ? P.marks.find((x) => x.id === t.to) : null;
     const it = { kind: 'track', name: t.name, color: m ? m.color : db.color, w: 4, pts: t.pts };
@@ -1759,7 +1958,8 @@ function forestCommit(tracks) {
     P.items.push(it);
   }
   changed();
-  toast(`🌲 ${tracks.length} Umriss${tracks.length === 1 ? '' : 'e'} gespeichert (↶ macht es rückgängig) · ${OSM_NOTE}`, 6000);
+  const note = ctx && ctx.source === 'landcover' ? LANDCOVER_NOTE : OSM_NOTE;
+  toast(`${ctx && ctx.source === 'outline' ? '✂️' : '🌲'} ${tracks.length} Umriss${tracks.length === 1 ? '' : 'e'} gespeichert (↶ macht es rückgängig) · ${note}`, 6000);
 }
 
 // Palette
@@ -1898,13 +2098,10 @@ function makeSortable(list, onDone) {
     });
   });
 }
-// v128: Typ-Felder gespeichert (Änderung für „Fortschritt“ merken), ohne die Liste neu aufzubauen
-function unitSaved() {
-  P.updated = Date.now();
-  stamp();
-  renderPalette();
-  redraw();
-  save();
+// v130.31: Team-Farbe geändert -> Umrisse, die diesem Team zugeteilt sind, gleich mitfärben
+// (die Rasterfelder holen sich die Teamfarbe ohnehin live, nur Umrisse tragen eine Kopie in it.color)
+function syncOutlineColor(m) {
+  for (const it of P.items) if (it.kind === 'track' && it.to === m.id) it.color = m.color;
 }
 function renderMarks() {
   const box = $('mark-list');
@@ -1922,27 +2119,33 @@ function renderMarks() {
       <span class="grip" title="Ziehen zum Verschieben">≡</span>
       <button class="swatch" title="Zum Einfärben auswählen"></button>
       <div class="fields">
-        <input type="text" class="name" placeholder="${m.kind === 'team' ? 'Teamname / Hundeführer' : 'Bedeutung'}">
+        ${m.kind === 'team' ? '<div class="uname" title="Automatisch: Organisation + laufende Nummer"></div>' : '<input type="text" class="name" placeholder="Bedeutung">'}
         ${m.kind === 'team' ? `<div class="pair one"><label><small>Typ</small><select class="uty" aria-label="Typ der Einheit">${UNIT_TYPES.map((t) => `<option value="${t.code}">${t.ico} ${t.label}</option>`).join('')}</select></label></div>
-        <div class="pair"><label><small>Organisation</small><input type="text" class="uorg" list="org-list" placeholder="FF, DRK, …" maxlength="30"></label><label class="upers-l"><small>Personen</small><input type="number" class="upers" min="0" inputmode="numeric" placeholder="Anzahl"></label></div>
-        <div class="pair one"><label><small>Funkrufname</small><input type="text" class="ufk" placeholder="z. B. Florian 1" maxlength="40"></label></div>
-        <div class="pair dogrow"><label><small>Hund</small><input type="text" class="dog" placeholder="Name"></label><label><small>Suchhelfer</small><input type="number" class="helpers" min="0" inputmode="numeric" placeholder="Anzahl"></label></div>` : ''}
+        <div class="pair one"><label><small>Organisation</small><input type="text" class="uorg" list="org-list" placeholder="FF, DRK, …" maxlength="30"></label></div>
+        <div class="pair dogrow"><label class="doghund"><small>Hund</small><input type="text" class="dog" placeholder="Name"></label><label><small>Suchhelfer</small><input type="number" class="helpers" min="0" inputmode="numeric" placeholder="Anzahl"></label></div>` : ''}
         <select class="color" aria-label="Farbe"></select>
         <div class="cells"></div>
       </div>
       <button class="del" title="Löschen">✕</button>`;
     el.querySelector('.swatch').style.background = m.color;
-    el.querySelector('.name').value = m.label;
     if (m.kind === 'team') {
+      el.querySelector('.uname').textContent = m.label || 'Team';
       el.querySelector('.dog').value = m.dog || ''; el.querySelector('.helpers').value = m.helpers || '';
-      el.querySelector('.uty').value = unitType(m); el.querySelector('.uorg').value = m.org || ''; el.querySelector('.ufk').value = m.fk || ''; el.querySelector('.upers').value = m.pers || '';
-      el.querySelector('.dogrow').hidden = !isDog(m); // Hund/Suchhelfer nur beim Hund-Team
-      el.querySelector('.upers-l small').textContent = isDog(m) ? 'Personen (gesamt)' : 'Personen';
-      el.querySelector('.upers').placeholder = isDog(m) ? `${persons({ ...m, pers: 0 })}` : 'Anzahl';
+      el.querySelector('.uty').value = unitType(m); el.querySelector('.uorg').value = m.org || '';
+      el.querySelector('.doghund').hidden = !isDog(m); // Hundename nur beim Hund-Team, Suchhelfer bei allen
+    } else {
+      el.querySelector('.name').value = m.label;
     }
     const outl = m.kind === 'team' ? P.items.filter((it) => it.kind === 'track' && it.to === m.id).map((it) => it.name || 'Umriss') : [];
+    // v130.7: Stift-Zeichnungen, die diesem Team zugeteilt sind (je Gruppe nur einmal)
+    const drGroups = new Set();
+    const assigned = (it) => it.kind === 'stroke' && (it.teams || []).includes(m.id) && (!it.group || !drGroups.has(it.group));
+    const draw = m.kind === 'team'
+      ? P.items.filter(assigned).map((it) => { if (it.group) drGroups.add(it.group); return it.name || 'Zeichnung'; })
+      : [];
     el.querySelector('.cells').textContent = (a && a.count ? `${a.count} Feld${a.count > 1 ? 'er' : ''}: ${a.text}` : 'keine Felder')
-      + (outl.length ? ` · Umriss${outl.length > 1 ? 'e' : ''}: ${outl.join(', ')}` : '');
+      + (outl.length ? ` · Umriss${outl.length > 1 ? 'e' : ''}: ${outl.join(', ')}` : '')
+      + (draw.length ? ` · Zeichnung${draw.length > 1 ? 'en' : ''}: ${draw.join(', ')}` : '');
     const sel = el.querySelector('.color');
     for (const c of MARK_COLORS) {
       const o = document.createElement('option');
@@ -1963,32 +2166,37 @@ function renderMarks() {
       setTool('fill');
       renderPalette();
     });
-    let prevLabel = m.label;
-    el.querySelector('.name').addEventListener('input', (e) => { m.label = e.target.value; renderPalette(); redraw(); save(); });
-    // v127: doppelter Teamname -> nachfragen (beim Verlassen des Feldes), sonst alter Name zurück
-    el.querySelector('.name').addEventListener('change', (e) => {
-      const dup = m.kind === 'team' && sameTeamName(P.marks, m.label, m.id);
-      if (dup && !confirm(`Gibt es schon: ${dup.label} – trotzdem?`)) {
-        m.label = prevLabel;
-        e.target.value = prevLabel;
-        renderPalette(); redraw(); save();
-        return;
-      }
-      prevLabel = m.label;
-    });
+    if (m.kind !== 'team') {
+      let prevLabel = m.label;
+      el.querySelector('.name').addEventListener('input', (e) => { m.label = e.target.value; renderPalette(); redraw(); save(); });
+      // v127: doppelter Teamname -> nachfragen (beim Verlassen des Feldes), sonst alter Name zurück
+      el.querySelector('.name').addEventListener('change', (e) => {
+        const dup = sameTeamName(P.marks, m.label, m.id);
+        if (dup && !confirm(`Gibt es schon: ${dup.label} – trotzdem?`)) {
+          m.label = prevLabel;
+          e.target.value = prevLabel;
+          renderPalette(); redraw(); save();
+          return;
+        }
+        prevLabel = m.label;
+      });
+    }
     if (m.kind === 'team') {
-      // v128: Typ, Organisation, Funkrufname, Personenzahl
+      // v130.6: Typ, Organisation (Funkrufname/Name entstehen daraus automatisch), Suchhelfer
       el.querySelector('.uty').addEventListener('change', (e) => { m.ty = e.target.value; cleanUnit(m); changed(); renderMarks(); renderPalette(); });
       el.querySelector('.uorg').addEventListener('input', (e) => { m.org = e.target.value; cleanUnit(m); save(); });
-      el.querySelector('.uorg').addEventListener('change', unitSaved); // ohne Neuaufbau der Liste (Fokus bleibt im nächsten Feld)
-      el.querySelector('.ufk').addEventListener('input', (e) => { m.fk = e.target.value; cleanUnit(m); save(); });
-      el.querySelector('.ufk').addEventListener('change', unitSaved); // ohne Neuaufbau der Liste (Fokus bleibt im nächsten Feld)
-      el.querySelector('.upers').addEventListener('input', (e) => { m.pers = e.target.value; cleanUnit(m); save(); });
-      el.querySelector('.upers').addEventListener('change', unitSaved); // ohne Neuaufbau der Liste (Fokus bleibt im nächsten Feld)
+      // Funkrufname (und damit der Teamname) erst beim Verlassen des Felds neu bilden – sonst würde er
+      // bei jedem Tastendruck wechseln (die laufende Nummer hängt vom vollständigen Organisationsnamen ab)
+      el.querySelector('.uorg').addEventListener('change', (e) => {
+        m.org = e.target.value; cleanUnit(m);
+        m.fk = nextFunkrufname(m.org, P.marks, m.id);
+        if (m.fk) m.label = m.fk;
+        changed(); renderMarks();
+      });
       el.querySelector('.dog').addEventListener('input', (e) => { m.dog = e.target.value; save(); });
       el.querySelector('.helpers').addEventListener('input', (e) => { const n = parseInt(e.target.value, 10); if (n > 0) m.helpers = n; else delete m.helpers; save(); });
     }
-    sel.addEventListener('change', () => { m.color = sel.value; changed(); renderMarks(); });
+    sel.addEventListener('change', () => { m.color = sel.value; if (m.kind === 'team') syncOutlineColor(m); changed(); renderMarks(); });
     el.querySelector('.del').addEventListener('click', () => { if (deleteMark(m, a ? a.count : 0)) renderMarks(); });
     box.appendChild(el);
   }
@@ -2238,8 +2446,10 @@ $('quick-marks').addEventListener('click', () => {
   const zoomAt = (e) => {
     const r = track.getBoundingClientRect();
     const f = 1 - Math.max(0, Math.min(1, (e.clientY - r.top - 6) / (r.height - 12)));
-    const z = Math.round(map.getMinZoom() + f * (map.getMaxZoom() - map.getMinZoom()));
-    if (z !== map.getZoom()) map.setZoom(z, { animate: !dragging });
+    // v130.5: stufenlos – nur beim Klicken/Loslassen (nicht beim Ziehen) auf ganze Stufe einrasten
+    const raw = map.getMinZoom() + f * (map.getMaxZoom() - map.getMinZoom());
+    const z = dragging ? raw : Math.round(raw);
+    if (Math.abs(z - map.getZoom()) > 0.001) map.setZoom(z, { animate: !dragging });
   };
   let dragging = false;
   track.addEventListener('pointerdown', (e) => { dragging = true; track.setPointerCapture(e.pointerId); zoomAt(e); });
@@ -2390,6 +2600,7 @@ function markDialog() {
           snapshot();
           m.label = inp.value.trim() || m.label;
           m.color = sel.value;
+          if (m.kind === 'team') syncOutlineColor(m);
           changed();
           renderPalette();
           edit = null;
@@ -3392,6 +3603,7 @@ function renderHfInfo() {
   $('hfm-meet').disabled = !P.meet;
   const hasArea = !!h && !!areaBounds(P);
   $('hfm-area').disabled = !hasArea;
+  $('hfm-borders').disabled = !hasArea;
   $('hfi-area').hidden = !hasArea;
   $('hfm-nav').disabled = !h; // v123: auch ohne Ziel gibt es die Kartenmitte
   $('hfm-contacts').hidden = !P.contacts.length;
@@ -3419,6 +3631,74 @@ function showMyArea() {
 }
 $('hfm-area').addEventListener('click', showMyArea);
 $('hfi-area').addEventListener('click', (e) => { e.stopPropagation(); showMyArea(); }); // der Tipp auf die Karte klappt sonst die Auftragskarte zu
+// v130.37: 📏 Grenzen – wie weit ist die Nord-/Süd-/…-Grenze meines Gebiets vom aktuellen Standort entfernt?
+// v130.40: Ergebnis einer Triangulation anzeigen (Karte hinspringen + Toast mit Koordinate)
+function showTriangulated(pt) {
+  closePanels();
+  map.setView([pt.lat, pt.lon], Math.max(map.getZoom(), 17));
+  toast(`📐 Triangulierte Position: ${pt.lat.toFixed(5)}, ${pt.lon.toFixed(5)}${P.showUtm ? ` · ${formatMgrs(pt.lat, pt.lon)} · ${formatUtm(pt.lat, pt.lon)}` : ''}`, 12000);
+}
+async function showAreaBorders() {
+  const areas = areaBorderList(P, lastPos ? lastPos[0] : null, lastPos ? lastPos[1] : null);
+  if (!areas.length) return toast('Im Auftrag ist kein Gebiet eingetragen');
+  // v130.40: zwei Grenzen antippen (statt Fenster mit Auswahlfeldern) -> sofort triangulieren,
+  // mit der schon angezeigten (GPS-)Entfernung zu beiden angetippten Grenzen.
+  let picked = null; // { area, bd }
+  const r = await openDlg((box, close) => {
+    dlgHead(box, '📏 Grenzen meines Gebiets', lastPos ? 'Entfernung vom aktuellen Standort zur jeweiligen Grenze (Luftlinie). Zwei Grenzen antippen, um den Standort daraus zu berechnen.' : 'Ohne GPS-Standort keine Entfernung – „📍 Standort“ einschalten.');
+    for (const a of areas) {
+      if (areas.length > 1) { const h = document.createElement('h3'); h.className = 'zus-h'; h.textContent = a.name; box.appendChild(h); }
+      for (const bd of a.borders) {
+        const d = document.createElement('button');
+        d.className = 'st-row loc';
+        d.textContent = `${bd.label}-Grenze: ${bd.dist == null ? '–' : fmtDist(bd.dist)}`;
+        if (bd.dist != null) {
+          d.addEventListener('click', () => {
+            if (picked && picked.area === a && picked.bd === bd) { picked = null; d.classList.remove('picked'); return; }
+            if (!picked) { picked = { area: a, bd }; d.classList.add('picked'); return; }
+            if (picked.area !== a) { toast('Bitte zwei Grenzen desselben Gebiets antippen'); return; }
+            const pt = triangulate(a.borders, picked.bd.label, picked.bd.dist, bd.label, bd.dist, lastPos[0], lastPos[1]);
+            close(null);
+            if (!pt) return toast('Nicht berechenbar – die beiden Grenzen stehen (fast) parallel');
+            showTriangulated(pt);
+          });
+        } else d.disabled = true;
+        box.appendChild(d);
+      }
+    }
+    dlgButton(box, '📐 Von Hand messen & triangulieren', '', () => close(true));
+    dlgButton(box, 'Schließen', 'primary', () => close(false));
+  });
+  if (r) triangulateDialog(areas);
+}
+$('hfm-borders').addEventListener('click', showAreaBorders);
+// v130.38: eigene Position aus der gemessenen Entfernung zu zwei nicht parallelen Grenzen triangulieren (ohne/bei
+// schwachem GPS) – braucht trotzdem einen groben Standort, um die richtige Seite der Grenzen zu wählen
+async function triangulateDialog(areas) {
+  let area = areas[0];
+  const r = await openDlg((box, close) => {
+    dlgHead(box, '📐 Standort triangulieren', 'Entfernung zu zwei nicht parallelen Grenzen eingeben (z. B. mit Kompass/Maßband/Schätzung vor Ort).');
+    if (areas.length > 1) {
+      const sel = dlgField(box, 'Gebiet', document.createElement('select'));
+      for (const a of areas) sel.add(new Option(a.name, a.name));
+      sel.addEventListener('change', () => { area = areas.find((a) => a.name === sel.value) || area; });
+    }
+    const b1 = dlgField(box, 'Grenze 1', document.createElement('select'));
+    const d1 = dlgField(box, 'Entfernung zu Grenze 1 (m)', Object.assign(document.createElement('input'), { type: 'number', min: '0', inputMode: 'numeric' }));
+    const b2 = dlgField(box, 'Grenze 2', document.createElement('select'));
+    const d2 = dlgField(box, 'Entfernung zu Grenze 2 (m)', Object.assign(document.createElement('input'), { type: 'number', min: '0', inputMode: 'numeric' }));
+    for (const bd of area.borders) { b1.add(new Option(`${bd.label}-Grenze`, bd.label)); b2.add(new Option(`${bd.label}-Grenze`, bd.label)); }
+    if (area.borders[1]) b2.value = area.borders[1].label;
+    dlgButton(box, 'Berechnen', 'primary', () => close({ area, b1: b1.value, d1: Number(d1.value), b2: b2.value, d2: Number(d2.value) }));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!r) return;
+  if (r.b1 === r.b2) return toast('Bitte zwei verschiedene Grenzen wählen');
+  if (!lastPos) return toast('Ohne (groben) GPS-Standort nicht möglich – „📍 GPS“ einschalten');
+  const pt = triangulate(r.area.borders, r.b1, r.d1, r.b2, r.d2, lastPos[0], lastPos[1]);
+  if (!pt) return toast('Nicht berechenbar – die beiden Grenzen stehen (fast) parallel oder die Entfernung ist ungültig');
+  showTriangulated(pt);
+}
 // Externen Link öffnen: in der Android-App über die WebView (die reicht https-Adressen an die Maps-App weiter), sonst neuer Tab
 function openLink(url) {
   if (bridge) location.href = url;
@@ -3435,15 +3715,78 @@ function meetDialog() {
   });
 }
 // v123: Auswahl Auto / zu Fuß für ein Ziel; die Route öffnet sich in Google Maps bzw. der Karten-App (Start ist der aktuelle Standort)
+// v130.2: zusätzlich „🧭 Kompass (Luftlinie)“ – ohne Straßen/Internet, direkt zum Punkt
 function navChooser(label, lat, lon) {
   return openDlg((box, close) => {
     dlgHead(box, `🧭 Navigieren zu ${label}`, `${Number(lat).toFixed(5)}, ${Number(lon).toFixed(5)}`);
     box.querySelector('h2').style.overflowWrap = 'anywhere';
     dlgButton(box, '🚗 Auto', 'primary', () => { close(true); openLink(navUrl(lat, lon, 'driving')); });
     dlgButton(box, '🚶 Zu Fuß', '', () => { close(true); openLink(navUrl(lat, lon, 'walking')); });
+    dlgButton(box, '🧭 Kompass (Luftlinie)', '', () => { close(true); openCompassNav(label, lat, lon); });
     dlgButton(box, 'Abbrechen', '', () => close(false));
   });
 }
+// v130.2: Kompass-Navigation (Luftlinie) – Entfernung und Richtung zum Ziel, live aus GPS und (falls vorhanden)
+// dem Kompass des Handys; ohne Kompass zeigt der Pfeil die Gradzahl ab Norden (Handy mit der Oberkante nach Norden halten).
+let navWatchId = null;
+let navOriOn = false;
+let navFallbackTimer = null;
+function navOri(e) {
+  let h = null;
+  if (typeof e.webkitCompassHeading === 'number' && !Number.isNaN(e.webkitCompassHeading)) h = e.webkitCompassHeading;
+  else if ((e.absolute || e.type === 'deviceorientationabsolute') && e.alpha != null) h = 360 - e.alpha;
+  if (h == null) return;
+  const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+  navHeading = (((h + ang) % 360) + 360) % 360;
+  clearTimeout(navFallbackTimer);
+  navUpdateNav();
+}
+let navHeading = null;
+let navTarget = null; // { label, lat, lon }
+function navStop() {
+  if (navWatchId !== null) { navigator.geolocation.clearWatch(navWatchId); navWatchId = null; }
+  if (navOriOn) { window.removeEventListener('deviceorientationabsolute', navOri); window.removeEventListener('deviceorientation', navOri); navOriOn = false; }
+  clearTimeout(navFallbackTimer);
+  navTarget = null;
+  navHeading = null;
+}
+function navUpdateNav() {
+  if (!navTarget) return;
+  const from = lastPos || (map ? [map.getCenter().lat, map.getCenter().lng] : null);
+  if (!from) { $('nav-read').textContent = 'Standort wird gesucht …'; return; }
+  const m = distance(from[0], from[1], navTarget.lat, navTarget.lon);
+  const deg = bearingDeg(from[0], from[1], navTarget.lat, navTarget.lon);
+  $('nav-dist').textContent = fmtDist(m);
+  $('nav-needle').style.transform = `rotate(${navNeedleDeg(deg, navHeading)}deg)`;
+  $('nav-read').textContent = navHeading == null
+    ? `Richtung ${compass(deg)} (${Math.round(deg)}°) ab Norden – ohne Kompass: Handy-Oberkante nach Norden halten`
+    : `Richtung ${compass(deg)} (${Math.round(deg)}°)${!lastPos ? ' · Standort: Kartenmitte (kein GPS)' : ''}`;
+}
+async function openCompassNav(label, lat, lon) {
+  navStop();
+  navTarget = { label, lat, lon };
+  $('nav-title').textContent = `🧭 Kompass zu ${label}`;
+  $('navmeter').hidden = false;
+  $('nav-dist').textContent = '–';
+  $('nav-read').textContent = 'Standort wird gesucht …';
+  $('nav-needle').style.transform = 'rotate(0deg)';
+  navUpdateNav();
+  if (navigator.geolocation) {
+    navWatchId = navigator.geolocation.watchPosition((pos) => {
+      lastPos = [pos.coords.latitude, pos.coords.longitude];
+      navUpdateNav();
+    }, () => {}, { enableHighAccuracy: true, maximumAge: 2000 });
+  }
+  if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try { await DeviceOrientationEvent.requestPermission(); } catch { /* dann ohne Kompass */ }
+  }
+  if (!navTarget) return; // Fenster inzwischen geschlossen
+  window.addEventListener('deviceorientationabsolute', navOri);
+  window.addEventListener('deviceorientation', navOri);
+  navOriOn = true;
+  navFallbackTimer = setTimeout(() => { if (navHeading == null) navUpdateNav(); }, 1500);
+}
+$('nav-cancel').addEventListener('click', () => { navStop(); $('navmeter').hidden = true; });
 // v123: Knopf „🧭 Navigieren“ in Objekt-Fenstern (nur mit gültigem Ziel)
 // (schließt das Fenster wie „Abbrechen“ mit cancelVal und öffnet dann die Auswahl)
 function dlgNavButton(box, close, cancelVal, label, lat, lon) {
@@ -3584,11 +3927,11 @@ $('hf-rec').addEventListener('click', () => (recWatch !== null ? stopRec() : sta
 
 // Markieren: Art wählen, Position = GPS-Standort oder auf der Karte angetippt
 const HF_MARKS = [['⚠️', 'Anzeige'], ['✅', 'Fund'], ['🐾', 'Spur'], ['🎒', 'Gegenstand'], ['❗', 'Gefahr'], ['📝', 'Hinweis']];
-// Mit GPS: Punkt am Standort. Ohne GPS: fragen – auf der Karte antippen oder Standort einschalten
+// v130.16: immer explizit fragen – auf der Karte antippen oder am eigenen Standort markieren
+// (vorher wurde bei vorhandenem GPS-Fix automatisch der Standort genommen, ohne Wahlmöglichkeit)
 $('hf-mark').addEventListener('click', () => {
-  if (lastPos) return hfMarkDialog({ lat: lastPos[0], lon: lastPos[1] }, 'Position: dein GPS-Standort.');
   openDlg((box, close) => {
-    dlgHead(box, '📍 Markieren', 'Der Standort (GPS) ist aus. Wo soll der Punkt hin?');
+    dlgHead(box, '📍 Markieren', 'Wo soll der Punkt hin?');
     const list = document.createElement('div');
     list.className = 'dlg-btns';
     box.appendChild(list);
@@ -3597,7 +3940,8 @@ $('hf-mark').addEventListener('click', () => {
       setTool('hfmarkpt');
       toast('Auf die Karte tippen: dort wird der Punkt gesetzt', 5000);
     });
-    const gpsBtn = dlgButton(list, '🛰️ Standort einschalten', 'primary', () => {
+    const gpsBtn = dlgButton(list, '📍 Punkt = mein Standort', 'primary', () => {
+      if (lastPos) { close(true); return hfMarkDialog({ lat: lastPos[0], lon: lastPos[1] }, 'Position: dein GPS-Standort.'); }
       if (!navigator.geolocation) return toast('Standort wird nicht unterstützt');
       startGps(false);
       gpsBtn.disabled = true;
@@ -3641,7 +3985,7 @@ function hfMarkDialog(pos, where) {
       dlgButton(list, `${ico} ${label}`, '', () => {
         ensureHf();
         const text = `${ico} ${label} ${hhmm(Date.now())}${note.value.trim() ? `: ${note.value.trim()}` : ''}`;
-        P.items.push({ kind: 'text', color: hfColor(), lat: pos.lat, lon: pos.lon, text, t: Date.now() });
+        P.items.push({ kind: 'text', color: hfColor(), lat: pos.lat, lon: pos.lon, text, t: Date.now(), marker: true }); // v130.2: immer sichtbar, großes Symbol
         changed();
         close(true);
         // v116: „✅ Fund“ geht zusätzlich sofort live an die Einsatzleitung (wie „📍 Standort melden → 🟢 Person gefunden“).
@@ -3764,12 +4108,22 @@ function loadScript(src) {
   });
 }
 const QR_MAX = 1800; // Zeichen, die eine Handy-Kamera vom Bildschirm noch sicher liest
+const QR_INTERVAL = 1500; // v130.13: etwas langsamer als vorher (900ms) – mehr Zeit zum Fokussieren/Lesen
 let qrCycle = null;
+let qrParts = null; // { svgs, i, paused } – für Pause/◀/▶ bei mehrteiligen Codes
 function qrSvg(data) {
   const q = window.qrcode(0, data.length < 2000 ? 'M' : 'L');
   q.addData(data, 'Byte');
   q.make();
   return q.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+}
+function qrShowPart() {
+  const { svgs, i } = qrParts;
+  $('qr-code').innerHTML = `${svgs[i]}<b class="qr-part">Teil ${i + 1} von ${svgs.length}</b>`;
+}
+function qrPause(paused) {
+  qrParts.paused = paused;
+  $('qr-pause').textContent = paused ? '▶️ Weiter' : '⏸️ Pause';
 }
 // parts: mehrere QR-Inhalte, die im Wechsel angezeigt werden (Scanner in der App sammelt sie)
 async function showQr(link, title, text, parts = null) {
@@ -3778,15 +4132,15 @@ async function showQr(link, title, text, parts = null) {
   $('qr-text').textContent = text;
   const box = $('qr-code');
   clearInterval(qrCycle);
+  qrCycle = null;
+  qrParts = null;
+  $('qr-nav').hidden = true;
   if (parts && parts.length > 1) {
-    const svgs = parts.map(qrSvg);
-    let i = 0;
-    const show = () => {
-      box.innerHTML = `${svgs[i]}<b class="qr-part">Teil ${i + 1} von ${svgs.length}</b>`;
-      i = (i + 1) % svgs.length;
-    };
-    show();
-    qrCycle = setInterval(show, 900);
+    qrParts = { svgs: parts.map(qrSvg), i: 0, paused: false };
+    qrShowPart();
+    qrPause(false);
+    qrCycle = setInterval(() => { if (!qrParts.paused) { qrParts.i = (qrParts.i + 1) % qrParts.svgs.length; qrShowPart(); } }, QR_INTERVAL);
+    $('qr-nav').hidden = false;
   } else if (link.length > QR_MAX) {
     box.innerHTML = '<p class="small">Zu viele Daten für einen QR-Code – bitte über „Teilen“ (WhatsApp, SMS …) senden.</p>';
   } else {
@@ -3795,6 +4149,10 @@ async function showQr(link, title, text, parts = null) {
   $('qrbox').dataset.link = link;
   $('qrbox').hidden = false;
 }
+// v130.13: mehrteiliger Code manuell steuern – praktisch, wenn die Kamera des Scanners einen Teil immer wieder verpasst
+$('qr-pause').addEventListener('click', () => qrPause(!qrParts.paused));
+$('qr-prev').addEventListener('click', () => { qrPause(true); qrParts.i = (qrParts.i - 1 + qrParts.svgs.length) % qrParts.svgs.length; qrShowPart(); });
+$('qr-next').addEventListener('click', () => { qrPause(true); qrParts.i = (qrParts.i + 1) % qrParts.svgs.length; qrShowPart(); });
 async function shareLinkText(link, title, text) {
   const msg = `${text}\n${link}`;
   if (bridge && bridge.shareText) return bridge.shareText(title, msg);
@@ -4120,32 +4478,57 @@ $('send-copy').addEventListener('click', async () => {
 });
 // Übersicht der Einsatzleitung: welches Team hat welchen Auftrag, seit wann, kamen Rückmeldungen?
 const SENT_QUIET = 60 * 60e3; // so lange ohne Rückmeldung: orange markieren
+// v130.4: Pausenzeit bzw. „noch kein Auftrag“ + Anzahl/Gesamtzeit abgeschlossener Aufträge eines Teams
+// (für „Teams ohne Auftrag“ – läuft gerade kein Auftrag, zeigt, wie lange die Pause schon dauert)
+function teamClockText(teamId) {
+  const c = teamClock(P, teamId);
+  const now = Date.now();
+  const stats = c.count ? `${c.count} Auftrag${c.count === 1 ? '' : 'e'} bisher, insgesamt ${durText(c.totalMs)}` : '';
+  if (c.state === 'new') return 'Noch keinen Auftrag gehabt';
+  if (c.state === 'pause') return `😴 Pause seit ${hhmm(c.since)} (${sinceText(c.since, now)})${stats ? ` · ${stats}` : ''}`;
+  return stats; // 'waiting'/'active' kommen hier nicht vor (Team hat dann einen laufenden Auftrag, s.u.)
+}
+// v130.4: Anzahl/Gesamtzeit früherer Aufträge eines Teams, als Zusatzzeile unter einer laufenden Auftragskarte
+function teamStatsText(teamId) {
+  const c = teamClock(P, teamId);
+  return c.count ? `Bisher ${c.count} Auftrag${c.count === 1 ? '' : 'e'}, insgesamt ${durText(c.totalMs)}` : '';
+}
 function renderSentList() {
   renderTeamBar();
   const box = $('sent-list');
   box.innerHTML = '';
   const list = teamOrder([...(P.sent || [])].reverse(), P.marks); // feste Team-Reihenfolge, je Team neueste zuerst
-  // v125: Teams mit Gebieten, aber noch ohne Auftrag
-  const wo = db.mode === 'el' && !P.closed ? teamsWithoutOrder(P) : [];
-  if (wo.length) {
+  // v125/v130.35: Teams ohne laufenden Auftrag – zweistufig: noch ganz ohne Gebiet (erst zuteilen),
+  // dann mit Gebiet, aber noch ohne Auftrag (kann gleich losgeschickt werden)
+  const staged = db.mode === 'el' && !P.closed ? teamsStaged(P) : { noArea: [], withArea: [] };
+  const woCard = (w) => {
+    const d = document.createElement('div');
+    d.className = 'sent-card wait';
+    d.innerHTML = '<b><i></i><span></span></b><div class="what"></div><div class="tclock"></div>';
+    d.querySelector('i').style.background = w.team.color;
+    d.querySelector('b span').textContent = `${typeIcon(w.team)} ${w.team.label}${w.team.dog ? ` – ${w.team.dog}` : ''}`;
+    d.querySelector('.what').textContent = [w.cells && `${w.cells} Feld${w.cells === 1 ? '' : 'er'}`, w.areas && `${w.areas} Umriss${w.areas === 1 ? '' : 'e'}`].filter(Boolean).join(' · ') || 'Noch kein Gebiet zugeteilt';
+    d.querySelector('.tclock').textContent = teamClockText(w.team.id); // v130.4: Pausenzeit bzw. „noch kein Auftrag“, Anzahl/Gesamtzeit
+    const nb = document.createElement('button');
+    nb.className = 'mini';
+    nb.textContent = '📲 Auftrag erstellen';
+    nb.addEventListener('click', () => openSendFor(w.team.id));
+    d.appendChild(nb);
+    return d;
+  };
+  if (staged.noArea.length) {
     const wh = document.createElement('h2');
     wh.className = 'sub';
-    wh.textContent = `🕓 Teams ohne Auftrag (${wo.length})`;
+    wh.textContent = `🗺️ Teams ohne Gebiet (${staged.noArea.length})`;
     box.appendChild(wh);
-    for (const w of wo) {
-      const d = document.createElement('div');
-      d.className = 'sent-card wait';
-      d.innerHTML = '<b><i></i><span></span></b><div class="what"></div>';
-      d.querySelector('i').style.background = w.team.color;
-      d.querySelector('b span').textContent = `${typeIcon(w.team)} ${w.team.label}${w.team.dog ? ` – ${w.team.dog}` : ''}`;
-      d.querySelector('.what').textContent = [w.cells && `${w.cells} Feld${w.cells === 1 ? '' : 'er'}`, w.areas && `${w.areas} Umriss${w.areas === 1 ? '' : 'e'}`].filter(Boolean).join(' · ');
-      const nb = document.createElement('button');
-      nb.className = 'mini';
-      nb.textContent = '📲 Auftrag erstellen';
-      nb.addEventListener('click', () => openSendFor(w.team.id));
-      d.appendChild(nb);
-      box.appendChild(d);
-    }
+    for (const w of staged.noArea) box.appendChild(woCard(w));
+  }
+  if (staged.withArea.length) {
+    const wh = document.createElement('h2');
+    wh.className = 'sub';
+    wh.textContent = `🕓 Teams mit Gebiet, ohne Auftrag (${staged.withArea.length})`;
+    box.appendChild(wh);
+    for (const w of staged.withArea) box.appendChild(woCard(w));
   }
   if (!list.length) return;
   const open = list.filter((x) => !isDone(x));
@@ -4181,6 +4564,11 @@ function renderSentList() {
     const what = x.what || allGrids(P).filter((g) => (x.grids || []).includes(g.id)).map((g) => gridLabel(P, g)).join(', ');
     d.querySelector('.what').textContent = what || 'Auftrag';
     d.querySelector('.since').textContent = acc ? `📲 Auftrag seit ${hhmm(x.acc)} (${sinceText(x.acc, now)}) – übernommen` : `⏳ QR erstellt ${hhmm(x.at)} – noch nicht übernommen`;
+    // v130.4: bisherige Aufträge/Gesamtzeit dieses Teams – hilft abzuschätzen, ob der Hund noch kann
+    if (acc && !fini) {
+      const stats = teamStatsText(x.teamId);
+      if (stats) { const sn = document.createElement('div'); sn.className = 'since tstats'; sn.textContent = stats; d.querySelector('.since').insertAdjacentElement('afterend', sn); }
+    }
     const n = x.n || (x.last ? 1 : 0);
     d.querySelector('.back').textContent = !acc ? 'Gilt erst als vergeben, wenn das Team ihn übernommen hat.' : x.last
       ? `📥 ${n} Rückmeldung${n === 1 ? '' : 'en'}, zuletzt ${hhmm(x.last)} (vor ${sinceText(x.last, now)})${x.lastSum ? ` – ${x.lastSum}` : ''}`
@@ -4554,7 +4942,9 @@ function statusMarks() {
   else if (!db.msgOff) list = allMsgs().map((m) => ({ m, color: teamColorOf(m.a) }));
   else return [];
   list = list.filter((x) => x.m.lat != null);
-  if (labelDetail(map.getZoom()) === 0) list = list.filter((x) => isUrgent(x.m)); // weit weg: nur Fund/Hilfe
+  // v130.10: Fund/Hinweis der EL (auch „Spur“, Gegenstand, Wärmequelle …) bleibt immer sichtbar – sonst verschwindet
+  // ein frisch angetippter Punkt außerhalb des Rastergebiets, weil man dafür meist weiter herauszoomen muss.
+  if (labelDetail(map.getZoom()) === 0) list = list.filter((x) => isUrgent(x.m) || isFind(x.m));
   const newest = new Map();
   for (const x of list) newest.set(x.m.a, x.m.id); // Liste ist nach Zeit sortiert
   for (const x of list) x.big = newest.get(x.m.a) === x.m.id;
@@ -4846,6 +5236,14 @@ async function flushStatus() {
   if (!$('dlg').hidden && $('dlg-box').querySelector('.st-line')) updateStatusLine();
   if (db.mode === 'el' && P && !$('panel-status').hidden) renderStatusPanel();
 }
+// v130: Karte auf eine Punktmenge (Zusatz der EL) zoomen
+function showPts(pts) {
+  const ok = (pts || []).filter((q) => q && Number.isFinite(q[0]) && Number.isFinite(q[1]));
+  if (!ok.length) return;
+  closePanels();
+  if (ok.length === 1) map.setView(ok[0], Math.max(map.getZoom(), 16));
+  else map.fitBounds(ok, { padding: [60, 60], maxZoom: 17 });
+}
 // ---- v117: Hundeführer holt Quittungen und Nachrichten der Einsatzleitung ab ----
 let hfPollBusy = false;
 let elPrioOpen = false;
@@ -4895,7 +5293,15 @@ async function pollHf() {
       const urgentIds = new Set(hfLog().filter((m) => isUrgent(m)).map((m) => m.id));
       if (fresh.some((m) => m.s === 'q' && urgentIds.has(m.ref))) toast('✓ von der Einsatzleitung gesehen', 6000);
       const els = fresh.filter((m) => m.s === 'el');
-      if (els.length) {
+      // v130: Zusätze (Punkte, Umrisse, Orte …) auf die Karte übernehmen
+      const zs = els.filter(isZusatz);
+      const zpts = [];
+      for (const m of zs) { const r = applyZusatz(proj, m); if (r) zpts.push(...r.pts); }
+      if (zs.length && proj === P) { redraw(); renderPois(); renderMeet(); }
+      if (zs.length && proj === P) {
+        const last = zs[zs.length - 1];
+        toastAction(`📍 Einsatzleitung: ${last.txt || ''}`.replace('📍 Einsatzleitung: 📍 ', '📍 Einsatzleitung: '), '🗺️ Zeigen', () => showPts(zpts), 15000);
+      } else if (els.length) {
         const last = els[els.length - 1];
         toast(`✉️ Einsatzleitung: ${last.txt || ''}`, 8000);
       }
@@ -4915,6 +5321,12 @@ async function showElPrio() {
   const proj = P;
   beep();
   const beeper = setInterval(beepShort, 15000);
+  // v130.35: Zusatz (Punkt, Umriss, Ort …) schon hier auf die Karte übernehmen – nicht erst, wenn später
+  // zufällig „🗺️ Zeigen“ in der Nachrichtenliste angetippt wird. Bugfix: bisher zeigte dieses (wichtige,
+  // blockierende) Fenster nur den Text, der Punkt/Ort selbst blieb unauffindbar irgendwo auf der Karte.
+  const zpts = [];
+  for (const m of todo) { const r = isZusatz(m) && applyZusatz(proj, m); if (r) zpts.push(...r.pts); }
+  if (zpts.length && proj === P) { redraw(); renderPois(); renderMeet(); }
   await openDlg((box, close) => {
     dlgHead(box, `✉️ Wichtig von der Einsatzleitung (${todo.length})`, 'Diese Nachricht bleibt, bis du sie als verstanden bestätigst.');
     for (const m of todo) {
@@ -4922,12 +5334,21 @@ async function showElPrio() {
       d.className = 'st-urgent';
       d.textContent = `${hhmm(m.t)}${m.to === EL_ALL ? ' (an alle)' : ''}: ${m.txt || ''}`;
       box.appendChild(d);
+      if (isZusatz(m)) {
+        const zb = Object.assign(document.createElement('button'), { type: 'button', className: 'mini', textContent: '🗺️ Zeigen' });
+        zb.addEventListener('click', () => { const r = applyZusatz(proj, m); if (r) { if (proj === P) { redraw(); renderPois(); renderMeet(); } showPts(r.pts); } });
+        d.appendChild(zb);
+      }
     }
     dlgButton(box, '✓ Verstanden', 'primary', () => close(true));
   });
   clearInterval(beeper);
   elPrioOpen = false;
   if (proj === P) sendReadAck(todo.map((m) => m.id));
+  // v130.46: Bugfix – „✓ Verstanden“ sprang bisher einfach zurück zur Karte, ohne den gemeldeten Ort zu
+  // zeigen; man musste zusätzlich noch extra auf „🗺️ Zeigen“ tippen (leicht zu übersehen). Jetzt zoomt die
+  // Karte beim Bestätigen gleich automatisch zum Ort (z. B. Fundstelle eines Kleidungsstücks).
+  if (zpts.length && proj === P) showPts(zpts);
   showElPrio();
 }
 // ✉️: Liste der Nachrichten (neueste oben); ungelesene gewöhnliche gelten damit als gelesen
@@ -4953,12 +5374,18 @@ async function hfElList() {
       rb.textContent = '✍️ Antworten';
       rb.addEventListener('click', () => close({ reply: m.id }));
       d.appendChild(rb);
+      if (isZusatz(m)) { // v130: Zusatz -> auf der Karte zeigen
+        const zb = Object.assign(document.createElement('button'), { type: 'button', className: 'mini', textContent: '🗺️ Zeigen' });
+        zb.addEventListener('click', () => close({ show: m.id }));
+        d.appendChild(zb);
+      }
       box.appendChild(d);
     }
     dlgButton(box, '✍️ Neue Nachricht an die EL', '', () => close({ reply: '' }));
     dlgButton(box, 'Schließen', 'primary', () => close(true));
   });
   if (go && go.reply !== undefined) return hfReply(go.reply || null);
+  if (go && go.show) { const m = hfElMsgs().find((x) => x.id === go.show); const r = m && applyZusatz(P, m); if (r) { redraw(); renderPois(); renderMeet(); showPts(r.pts); } return; }
   if (go) showElPrio();
 }
 // v125: Hundeführer schreibt der Einsatzleitung (Freitext oder Schnellwahl), optional als Antwort auf eine EL-Nachricht (ref)
@@ -5613,6 +6040,15 @@ function renderStatusPanel() {
       ft.title = m.fs === 'g' ? 'Wieder offen' : 'Als geprüft markieren';
       ft.addEventListener('click', (e) => { e.stopPropagation(); findToggle(m); });
       d.appendChild(ft);
+      if (m.lat != null) { // v130.11: Prüfauftrag auch nachträglich an ein/mehrere Teams senden
+        const sb = document.createElement('button');
+        sb.type = 'button';
+        sb.className = 'del find-send';
+        sb.textContent = '📤';
+        sb.title = 'An Team(s) senden';
+        sb.addEventListener('click', (e) => { e.stopPropagation(); findSendDialog(m); });
+        d.appendChild(sb);
+      }
     }
     box.appendChild(d);
   }
@@ -5814,12 +6250,23 @@ async function findDialog() {
     dr.className = 'check';
     dr.innerHTML = '<input type="checkbox" id="find-urgent"><span>❗ Dringend melden (Fenster bei allen EL-Geräten)</span>';
     box.appendChild(dr);
-    let chk = null;
+    // v130.11: Prüfauftrag an ein oder mehrere Teams (nicht mehr nur eins)
+    const checkIds = new Set();
     if (targets.length) {
-      chk = dlgField(box, 'Prüfauftrag an Team (optional)', document.createElement('select'));
-      chk.id = 'find-check';
-      chk.add(new Option('– keiner –', ''));
-      for (const q of targets) chk.add(new Option(q.label, q.a));
+      const h = document.createElement('p');
+      h.className = 'small';
+      h.textContent = 'Prüfauftrag an Team(s) (optional):';
+      box.appendChild(h);
+      for (const q of targets) {
+        const l = document.createElement('label');
+        l.className = 'check';
+        const c = Object.assign(document.createElement('input'), { type: 'checkbox' });
+        c.addEventListener('change', () => { if (c.checked) checkIds.add(q.a); else checkIds.delete(q.a); });
+        const sp = document.createElement('span');
+        sp.textContent = q.label;
+        l.append(c, sp);
+        box.appendChild(l);
+      }
     }
     const btns = FIND_KINDS.map((k) => dlgButton(list, esc(`${k.ico} ${k.label}`), '', () => {
       art = k;
@@ -5829,7 +6276,7 @@ async function findDialog() {
       for (const h of k.hints) dlgButton(hints, esc(h), '', () => { txt.value = h; });
     }));
     const need = () => { if (!art) { toast('Bitte erst die Art wählen'); return null; } const t = timeOfDay(tm.value, Date.now()); if (t == null) { toast('Uhrzeit nicht lesbar (z. B. 20:05)'); return null; } return t; };
-    const out = (t) => ({ art: art.code, txt: txt.value.trim(), t, finder: finder.value.trim(), geprueft: st.value === 'g', dringend: dr.querySelector('input').checked, file: file.files[0] || null, check: chk ? chk.value : '' });
+    const out = (t) => ({ art: art.code, txt: txt.value.trim(), t, finder: finder.value.trim(), geprueft: st.value === 'g', dringend: dr.querySelector('input').checked, file: file.files[0] || null, check: [...checkIds] });
     dlgButton(box, '👆 Ort auf der Karte antippen', 'primary', () => { const t = need(); if (t != null) close({ ...out(t), where: 'map' }); });
     dlgButton(box, '📍 Ort = mein Standort', '', () => { const t = need(); if (t != null) close({ ...out(t), where: 'gps' }); });
     dlgButton(box, 'Abbrechen', '', () => close(null));
@@ -5856,19 +6303,58 @@ async function findCommit(r, pos) {
   P.updated = Date.now();
   if (P.live) elSend(m).catch(() => {});
   let pa = '';
-  if (r.check && P.live) {
-    const tg = elTargets(P.sent, P.marks).find((q) => q.a === r.check);
-    if (tg) {
-      const where = formatMgrs(pos.lat, pos.lon);
-      elSend(buildElMsg({ to: tg.a, txt: checkText(m, where), prio: 1 })).catch(() => {});
-      pa = ` · Prüfauftrag an ${tg.label}`;
-    }
+  if (r.check && r.check.length) {
+    const labels = sendFindCheck(m, r.check);
+    if (labels.length) pa = ` · Prüfauftrag an ${labels.join(', ')}`;
   }
   changed();
   redraw();
   renderSentList();
   if ($('panel-status').hidden === false) renderStatusPanel();
   toast(`🔎 ${msgLabel(m)} eingetragen (${hhmm(m.t)})${m.ph ? ' mit Foto' : ''}${pa}`, 6000);
+}
+// Prüfauftrag zu einem Fund an ein oder mehrere Teams senden (bei der Eingabe oder nachträglich aus der Meldungsliste)
+// -> Namen der Teams, an die es tatsächlich ging (ohne Live-Kanal geht nichts)
+function sendFindCheck(m, teamIds) {
+  if (!P.live || m.lat == null) return [];
+  const where = formatMgrs(m.lat, m.lon);
+  const labels = [];
+  for (const a of teamIds) {
+    const tg = elTargets(P.sent, P.marks).find((q) => q.a === a);
+    if (!tg) continue;
+    // v130: der Ort kommt als Punkt auf die Karte des Teams (ältere Apps sehen weiter den Text mit Koordinate)
+    const z = buildZusatz(P, { to: tg.a, points: [{ lat: m.lat, lon: m.lon, name: `${findLabel(m.fa) || 'Fund'}${m.txt ? `: ${m.txt}` : ''}`.slice(0, 60), task: 'Bitte prüfen' }], prio: true });
+    const pm = buildElMsg({ to: tg.a, txt: checkText(m, where), prio: 1 });
+    if (z) pm.z = z.msg.z;
+    elSend(pm).catch(() => {});
+    labels.push(tg.label);
+  }
+  return labels;
+}
+// v130.11: Prüfauftrag nachträglich aus der Meldungsliste senden (nicht nur bei der Eingabe)
+async function findSendDialog(m) {
+  if (!P.live) return toast('Kein laufender Auftrag mit Status-Server – erst unter „Teams“ einen Auftrag per QR-Code vergeben', 7000);
+  const targets = elTargets(P.sent, P.marks);
+  if (!targets.length) return toast('Kein Team mit laufendem Auftrag', 5000);
+  const picked = new Set();
+  const ids = await openDlg((box, close) => {
+    dlgHead(box, '📤 Prüfauftrag senden', `${msgLabel(m)}${m.txt ? `: ${m.txt}` : ''} – an ein oder mehrere Teams.`);
+    for (const q of targets) {
+      const l = document.createElement('label');
+      l.className = 'check';
+      const c = Object.assign(document.createElement('input'), { type: 'checkbox' });
+      c.addEventListener('change', () => { if (c.checked) picked.add(q.a); else picked.delete(q.a); });
+      const sp = document.createElement('span');
+      sp.textContent = q.label;
+      l.append(c, sp);
+      box.appendChild(l);
+    }
+    dlgButton(box, '📤 Senden', 'primary', () => close([...picked]));
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+  });
+  if (!ids || !ids.length) return;
+  const labels = sendFindCheck(m, ids);
+  toast(labels.length ? `📤 Prüfauftrag an ${labels.join(', ')} gesendet` : 'Nicht gesendet – kein Team erreichbar', 6000);
 }
 // Fund als geprüft (oder wieder offen) markieren: Korrektur-Meldung, geht an alle EL-Geräte
 function findToggle(m) {
@@ -5885,6 +6371,168 @@ function findToggle(m) {
 }
 $('st-funk').addEventListener('click', () => funkDialog());
 $('st-find').addEventListener('click', () => findDialog());
+$('st-zusatz').addEventListener('click', () => zusatzDialog());
+$('teams-zusatz').addEventListener('click', () => zusatzDialog()); // v130.9: zweiter Einstieg direkt bei „Teams“ – leichter zu finden als nur unter „Status“
+
+// ---- v130: Zusatz zum laufenden Auftrag – Punkte, Umrisse, Zeichnungen, Lage-Orte, Raster, B-Ort an ein Team ----
+// Geht über den Status-Server wie eine Nachricht (Warteschlange ohne Netz, Lesebestätigung, „wichtig“); kein neuer QR-Code.
+// pre: { itemIdx: [], poiIds: [], gridIds: [], meet, points: [{ lat, lon, name, task }], to, task }
+async function zusatzDialog(pre = {}) {
+  if (!canEnter()) return;
+  if (!P.live) ensureLive(P, liveUrlNow());
+  // v130.36: auch Aufträge ohne Status-Server stehen zur Auswahl – dafür gibt es statt des sofortigen Versands
+  // einen Zusatz-QR-Code zum Scannen (ohne den laufenden Auftrag neu anzunehmen)
+  const tg = zusatzTargets(P.sent, P.marks);
+  if (!tg.length) return toast('Kein laufender Auftrag – erst unter „Teams“ einen Auftrag per QR-Code vergeben', 7000);
+  const st = {
+    to: pre.to || (tg.length === 1 ? tg[0].a : ''), task: pre.task || '', prio: !!pre.prio,
+    items: new Set(pre.itemIdx || []), pois: new Set(pre.poiIds || []), grids: new Set(pre.gridIds || []), meet: !!pre.meet,
+    points: (pre.points || []).map((x) => ({ ...x })),
+  };
+  // Meldungen mit Ort (Funde, Hinweise …) lassen sich als Punkt mitschicken
+  const spots = (P.live.msgs || []).filter((m) => Number.isFinite(m.lat) && Number.isFinite(m.lon) && !m.gone).slice(-30).reverse();
+  for (;;) {
+    const r = await openDlg((box, close) => {
+      dlgHead(box, '📍 Ort/Gebiet an Team senden', 'Kommt zusätzlich zum laufenden Auftrag auf die Karte des Hundeführers – bei Teams mit Status-Server sofort (ohne neuen QR-Code), sonst als kleiner Zusatz-QR-Code zum Scannen.');
+      const sel = dlgField(box, 'An', document.createElement('select'));
+      sel.id = 'zus-to';
+      sel.add(new Option('– Team wählen –', ''));
+      for (const t of tg) sel.add(new Option(t.live ? t.label : `${t.label} (ohne Link – als QR-Code)`, t.a));
+      if (tg.some((t) => t.live)) sel.add(new Option('📢 Alle Teams (mit Status-Server)', EL_ALL));
+      sel.value = st.to;
+      sel.addEventListener('change', () => { st.to = sel.value; });
+      const task = dlgField(box, 'Was soll dort geschehen?', Object.assign(document.createElement('textarea'), { id: 'zus-task', rows: 2, maxLength: 200, value: st.task, placeholder: 'z. B. Bitte Böschung mit Hund prüfen und Stand melden' }));
+      task.addEventListener('input', () => { st.task = task.value; });
+      const group = (title) => { const h = document.createElement('h3'); h.className = 'zus-h'; h.textContent = title; box.appendChild(h); };
+      const check = (label, on, fn) => {
+        const l = document.createElement('label');
+        l.className = 'check';
+        const c = Object.assign(document.createElement('input'), { type: 'checkbox', checked: on });
+        c.addEventListener('change', () => fn(c.checked));
+        const sp = document.createElement('span');
+        sp.textContent = label;
+        l.append(c, sp);
+        box.appendChild(l);
+        return c;
+      };
+      // neue Punkte (auf der Karte gesetzt) mit Name und eigener Aufgabe
+      group('📍 Neue Punkte');
+      st.points.forEach((pt, i) => {
+        const row = document.createElement('div');
+        row.className = 'zus-pt';
+        const n = Object.assign(document.createElement('input'), { type: 'text', value: pt.name || '', maxLength: 60, placeholder: 'Name, z. B. Wärmequelle' });
+        n.className = 'zus-pt-name';
+        n.addEventListener('input', () => { pt.name = n.value; });
+        const tk = Object.assign(document.createElement('input'), { type: 'text', value: pt.task || '', maxLength: 200, placeholder: 'Eigene Aufgabe (sonst die oben)' });
+        tk.className = 'zus-pt-task';
+        tk.addEventListener('input', () => { pt.task = tk.value; });
+        const del = Object.assign(document.createElement('button'), { type: 'button', className: 'mini', textContent: '✕' });
+        del.addEventListener('click', () => close({ delPoint: i }));
+        row.append(n, tk, del);
+        box.appendChild(row);
+      });
+      dlgButton(box, '👆 Punkt auf der Karte setzen', '', () => close({ pick: true }));
+      if (spots.length) {
+        group('🔎 Meldungen mit Ort');
+        for (const m of spots) {
+          const key = `m:${m.id}`;
+          const name = `${hhmm(m.t)} ${m.tm || ''}: ${msgLabel(m)}${m.txt ? ` – ${m.txt}` : ''}`.slice(0, 80);
+          check(name, st.points.some((x) => x.key === key), (on) => {
+            st.points = st.points.filter((x) => x.key !== key);
+            if (on) st.points.push({ key, lat: m.lat, lon: m.lon, name: `${msgLabel(m)}${m.txt ? `: ${m.txt}` : ''}`.slice(0, 60), fromMsg: true });
+          });
+        }
+      }
+      const its = P.items.map((it, i) => ({ it, i })).filter(({ it }) => (it.kind === 'track' || it.kind === 'stroke' || it.kind === 'text') && !it.rec);
+      const seenGroup = new Set();
+      const named = its.filter(({ it }) => { if (!it.group) return true; if (seenGroup.has(it.group)) return false; seenGroup.add(it.group); return true; });
+      if (named.length) {
+        group('📐 Umrisse, Zeichnungen, Texte');
+        for (const { it, i } of named) {
+          const word = it.kind === 'track' ? 'Umriss' : it.kind === 'text' ? 'Text' : 'Zeichnung';
+          const label = `${word}: ${(it.kind === 'text' ? it.text : it.name) || '(ohne Name)'}`;
+          const idx = it.group ? P.items.map((x, k) => (x.group === it.group ? k : -1)).filter((k) => k >= 0) : [i];
+          check(label, idx.every((k) => st.items.has(k)), (on) => idx.forEach((k) => (on ? st.items.add(k) : st.items.delete(k))));
+        }
+      }
+      if ((P.pois || []).length || P.meet) {
+        group('🚐 Lage-Orte');
+        if (P.meet) check(`B-Ort${P.meet.text ? `: ${P.meet.text}` : ''}`, st.meet, (on) => { st.meet = on; });
+        for (const x of P.pois || []) check(poiName(x), st.pois.has(x.id), (on) => (on ? st.pois.add(x.id) : st.pois.delete(x.id)));
+      }
+      const gs = allGrids(P).filter((g) => g.area);
+      if (gs.length) {
+        group('# Raster');
+        for (const g of gs) check(gridLabel(P, g), st.grids.has(g.id), (on) => (on ? st.grids.add(g.id) : st.grids.delete(g.id)));
+      }
+      const pr = document.createElement('label');
+      pr.className = 'check';
+      pr.innerHTML = '<input type="checkbox" id="zus-prio"><span>❗ Wichtig (Ton und Fenster beim Hundeführer, bis „Verstanden“)</span>';
+      pr.querySelector('input').checked = st.prio;
+      pr.querySelector('input').addEventListener('change', (e) => { st.prio = e.target.checked; });
+      box.appendChild(pr);
+      dlgButton(box, '📤 Senden', 'primary', () => close({ send: true }));
+      dlgButton(box, 'Abbrechen', '', () => close(null));
+    });
+    if (!r) return;
+    if (r.delPoint != null) { st.points.splice(r.delPoint, 1); continue; }
+    if (r.pick) {
+      const pos = await new Promise((res) => pickOnMap('Auf die Karte tippen: dort liegt der Punkt', (p) => res(p)));
+      $('toast').hidden = true; // „Auf die Karte tippen …“ nicht über dem Fenster stehen lassen
+      if (pos) st.points.push({ lat: pos.lat, lon: pos.lon, name: '', task: '' });
+      continue;
+    }
+    if (!st.to) { toast('Bitte erst wählen, an welches Team'); continue; }
+    const t = tg.find((x) => x.a === st.to);
+    const out = buildZusatz(P, {
+      to: st.to, teamId: t ? t.teamId : '', itemIdx: [...st.items], poiIds: [...st.pois], gridIds: [...st.grids], meet: st.meet,
+      points: st.points.map((x) => ({ ...x, name: (x.name || '').trim() || 'Punkt' })), task: st.task, prio: st.prio,
+    });
+    if (!out) { toast('Bitte mindestens einen Punkt, ein Gebiet oder einen Ort auswählen'); continue; }
+    if (out.size > ZUSATZ_MAX) { toast('Zu viel auf einmal für den Status-Server – bitte weniger oder einfachere Zeichnungen auswählen', 7000); continue; }
+    // v130.13: an ein bestimmtes Team gesendete Umrisse/Zeichnungen auch beim EL diesem Team zuordnen (Farbe/Zuteilung) –
+    // nicht bei „Alle Teams“, da dort keine einzelne Zuteilung Sinn ergibt
+    const team = t && t.teamId ? P.marks.find((m) => m.id === t.teamId) : null;
+    // neue Punkte bleiben auch auf der Karte der Einsatzleitung (als Textpunkt mit Aufgabe)
+    const fresh = st.points.filter((x) => !x.fromMsg);
+    if (fresh.length || (team && st.items.size)) {
+      snapshot();
+      for (const x of fresh) P.items.push({ kind: 'text', color: '#c62828', text: (x.name || '').trim() || 'Punkt', lat: x.lat, lon: x.lon, ...((x.task || st.task).trim() ? { note: (x.task || st.task).trim().slice(0, 200) } : {}), t: Date.now(), marker: true }); // v130.2: immer sichtbar
+      if (team) {
+        for (const i of st.items) {
+          const it = P.items[i];
+          if (!it) continue;
+          if (it.kind === 'track') { it.to = team.id; it.color = team.color; }
+          else if (it.kind === 'stroke') {
+            for (const x of it.group ? P.items.filter((y) => y.group === it.group) : [it]) {
+              if (!x.teams) x.teams = [];
+              if (!x.teams.includes(team.id)) x.teams.push(team.id);
+            }
+          }
+        }
+      }
+      changed();
+      redraw();
+      if (!$('panel-teams').hidden) renderMarks();
+    }
+    const who = st.to === EL_ALL ? 'alle Teams' : t ? t.label : 'das Team';
+    // v130.36: Nachricht immer absenden (geht unter „Status“ in den Verlauf ein, auch wenn das Team den Kanal
+    // gleich nicht abrufen kann) – v130.37: Status zeigt sie damit jetzt auch dem laufenden Auftrag zugeordnet an.
+    const ok = await elSend(out.msg);
+    if ($('panel-status').hidden === false) renderStatusPanel();
+    // v130.36: Team ohne laufenden Status-Server-Kanal (Auftrag ohne Link) – zusätzlich als QR-Code zum Scannen
+    if (t && !t.live) {
+      const data = { k: 'z', to: out.msg.to, tm: out.msg.tm, txt: out.msg.txt, prio: out.msg.prio, t: out.msg.t, id: out.msg.id, z: out.msg.z };
+      const packed = await pack(data);
+      const link = shareLink('z', packed, PUBLIC_URL);
+      const parts = link.length > QR_MAX ? splitParts(packed, 800).map((x) => shareLink('m', x, PUBLIC_URL)) : null;
+      showQr(link, `📍 Zusatz an ${who}`, `${who} hat keinen laufenden Status-Server-Kanal – dieser Code muss auf dem Gerät von ${who} eingescannt werden (📷 Code einlesen)${parts ? ' (mehrere Codes wechseln sich ab, Kamera ruhig halten)' : ''}.`, parts);
+      return;
+    }
+    toast(ok ? `📤 An ${who} gesendet: ${out.parts.join(', ')}` : `📤 Wartet auf Netz – geht automatisch an ${who}`, 6000);
+    return;
+  }
+}
 
 // Auto-Abschluss: Team meldet „abgeschlossen“ mit 100 % -> Auftrag ohne Rückfrage geschlossen, Toast mit Rückgängig
 function checkAutoClose() {
@@ -5937,20 +6585,38 @@ function renderUaOverview() {
       body.appendChild(d);
     }
   }
-  // wer ist noch draußen?
+  // wer ist noch draußen? (v130.35: zählt schon ab Annahme des Auftrags, nicht erst ab der ersten eigenen Meldung)
   const out = $('st-out');
   const tt = db.mode === 'el' && P ? teamTimes(P.sent, allMsgs(), P.marks) : [];
   const ob = $('st-out-body');
   ob.innerHTML = '';
   const outside = outsideTeams(tt);
-  out.hidden = !tt.some((r) => r.msgs);
+  out.hidden = !tt.some((r) => r.msgs || r.outside);
   if (!out.hidden) {
     $('st-out-sum').textContent = `🚶 Wer ist noch draußen? (${outside.length})`;
-    for (const r of tt.filter((q) => q.msgs)) {
+    for (const r of tt.filter((q) => q.msgs || q.outside)) {
       const d = document.createElement('div');
       d.className = `ua-team${r.outside ? ' out' : ''}`;
       d.textContent = `${r.outside ? '🔶' : '✅'} ${r.mark ? typeIcon(r.mark) : '🐕'} ${r.label}: ${stateText(r)}${r.start ? ` (seit ${hhmm(r.start)})` : ''}`;
       ob.appendChild(d);
+    }
+  }
+  // v130.35: wie viele Teams sind noch drinnen (kein laufender Auftrag) und haben schon mindestens
+  // einen Auftrag erledigt? Mit Pausenzeit – wie bei „Teams ohne Auftrag“, nur hier als Überblick für die EL.
+  const inn = $('st-in');
+  const ib = $('st-in-body');
+  ib.innerHTML = '';
+  const inside = db.mode === 'el' && P
+    ? (P.marks || []).filter((m) => m.kind === 'team').map((m) => ({ m, c: teamClock(P, m.id) })).filter(({ c }) => c.state === 'pause')
+    : [];
+  inn.hidden = !inside.length;
+  if (!inn.hidden) {
+    $('st-in-sum').textContent = `🏠 Wer ist noch drinnen? (${inside.length})`;
+    for (const { m, c } of inside) {
+      const d = document.createElement('div');
+      d.className = 'ua-team';
+      d.textContent = `🏠 ${typeIcon(m)} ${m.label}${m.dog ? ` – ${m.dog}` : ''}: ${teamClockText(m.id)}`;
+      ib.appendChild(d);
     }
   }
 }
@@ -5975,11 +6641,15 @@ function collapseSearch() {
   searchForm.classList.remove('open');
   $('search-input').blur();
 }
+// Suchfeld öffnen und Cursor hinein (auf dem Tablet ist es sonst eingeklappt und unsichtbar)
+function openSearch() {
+  if (isTablet() && db.mode === 'el') searchForm.classList.add('open');
+  $('search-input').focus();
+}
 $('search-form').querySelector('.searchbtn').addEventListener('click', (e) => {
   if (!isTablet() || db.mode !== 'el' || searchForm.classList.contains('open')) return;
   e.preventDefault();
-  searchForm.classList.add('open');
-  $('search-input').focus();
+  openSearch();
 });
 $('search-input').addEventListener('blur', () => {
   setTimeout(() => { if (!$('search-input').value.trim() && document.activeElement !== $('search-input')) collapseSearch(); }, 200);
@@ -6003,8 +6673,10 @@ async function pollLive() {
     const fresh = sp.team.filter((m) => !known.has(m.id) && !(proj.msgDel && proj.msgDel[m.id]));
     liveInit(l);
     const knownOut = new Set(l.out.map((m) => m.id));
-    const freshEl = sp.el.filter((m) => !knownOut.has(m.id) && !ELW_KINDS.includes(m.s)); // auch von anderen EL-Geräten (v124: ELW-Aufträge nicht)
+    const freshEl = sp.el.filter((m) => !knownOut.has(m.id) && !ELW_KINDS.includes(m.s) && m.s !== RTC_KIND && !isElwAck(m)); // auch von anderen EL-Geräten (v124: ELW-Aufträge, v130.15: WebRTC-Signalisierung, v130.23: ELW-Lesebestätigung nicht)
     takeElw(proj, sp.el); // v124: Aufträge an den ELW
+    takeElwAcks(proj, sp.el); // v130.23: Lesebestätigung für gesendete ELW-Aufträge
+    if (proj === P) rtcHandleSignals(sp.el.filter((m) => m.s === RTC_KIND)); // v130.15: automatischer Live-Abgleich
     let readsNew = false;
     for (const [k, v] of Object.entries(sp.reads)) {
       const o = l.reads[k] || {};
@@ -6035,6 +6707,143 @@ async function pollLive() {
     }
   } catch { /* kein Netz oder Server weg: nächster Versuch */ } finally { liveBusy = false; }
   showUrgent();
+  if (proj === P) rtcMaybeConnect(proj); // v130.15: automatischer Live-Abgleich – alle 15 s neu versuchen, falls noch nicht verbunden
+}
+// ---------- v130.15: Automatischer Live-Abgleich (WebRTC) zwischen Geräten der Einsatzleitung ----------
+// Signalisierung über denselben Status-Server-Raum (devId() statt Team-Auftrag adressiert), Nutzlast ist dieselbe
+// wie bei „Fortschritt senden“ (buildProgress/mergeProgress) – nur der Transportweg ist neu (Datenkanal statt QR).
+let rtcPC = null; // aktuelle RTCPeerConnection (immer höchstens eine – erster Schritt: EL <-> ein weiteres Gerät)
+let rtcChan = null; // RTCDataChannel, sobald offen
+let rtcPeerId = ''; // devId() des verbundenen/gerade verhandelten Geräts
+let rtcPeerName = ''; // sein Anzeigename (für die Fortschritt-Peer-Liste)
+let rtcPendingCand = []; // ICE-Kandidaten, die vor der Remote-Beschreibung ankamen
+let rtcTriedAt = 0; // letzter Verbindungsversuch (Drosselung)
+let rtcSendTimer = null; // Debounce fürs automatische Senden bei eigenen Änderungen
+const RTC_RETRY_MS = 15e3;
+const RTC_SEND_DEBOUNCE_MS = 2500;
+function rtcReset() {
+  if (rtcPC) { try { rtcPC.close(); } catch { /* schon zu */ } }
+  rtcPC = null;
+  rtcChan = null;
+  rtcPeerId = '';
+  rtcPeerName = '';
+  rtcPendingCand = [];
+  clearTimeout(rtcSendTimer);
+  rtcSendTimer = null;
+  renderRtcStatus();
+}
+function rtcSend(msg) { elSend(msg).catch(() => {}); }
+function rtcNewPC() {
+  // v130.15: bewusst ohne STUN-Server – der Zweck ist der Abgleich im selben WLAN (z. B. am ELW-Router), wo
+  // die eigene (Host-)Adresse zum Verbinden reicht; ein ggf. nicht erreichbarer STUN-Dienst soll das nicht ausbremsen
+  const pc = new RTCPeerConnection({ iceServers: [] });
+  pc.onicecandidate = (e) => { if (e.candidate) rtcSend(buildRtcMsg({ by: devId(), to: rtcPeerId || '*', rt: 'ice', cand: e.candidate.toJSON() })); };
+  pc.onconnectionstatechange = () => {
+    if (pc !== rtcPC) return;
+    if (pc.connectionState === 'connected') renderRtcStatus();
+    else if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) rtcReset();
+  };
+  pc.ondatachannel = (e) => { rtcWireChannel(e.channel); };
+  return pc;
+}
+function rtcWireChannel(ch) {
+  rtcChan = ch;
+  ch.onopen = () => { renderRtcStatus(); rtcSendProgress(true); };
+  ch.onclose = () => { if (ch === rtcChan) rtcChan = null; };
+  ch.onmessage = (e) => { try { rtcApplyProgress(JSON.parse(e.data)); } catch { /* keine gültige Nutzlast */ } };
+}
+// Neue Verbindung anstoßen, wenn noch keine besteht und genug Zeit seit dem letzten Versuch vergangen ist
+function rtcMaybeConnect(proj) {
+  if (db.mode !== 'el' || !proj.live || proj.closed || !wantsLive(proj)) return;
+  if (rtcPC || Date.now() - rtcTriedAt < RTC_RETRY_MS) return;
+  rtcTriedAt = Date.now();
+  rtcPC = rtcNewPC();
+  rtcWireChannel(rtcPC.createDataChannel('sync'));
+  rtcPC.createOffer().then((offer) => rtcPC.setLocalDescription(offer)).then(() => {
+    if (!rtcPC || !rtcPC.localDescription) return;
+    rtcSend(buildRtcMsg({ by: devId(), byName: devBy(), to: '*', rt: 'offer', sdp: rtcPC.localDescription.sdp }));
+  }).catch(() => rtcReset());
+}
+async function rtcFlushCandidates() {
+  const cs = rtcPendingCand;
+  rtcPendingCand = [];
+  for (const c of cs) { try { await rtcPC.addIceCandidate(c); } catch { /* veraltet/ungültig */ } }
+}
+// Eingehende Signalisierung: Angebot (ggf. „Glarre“ auflösen), Antwort, ICE-Kandidat
+async function rtcHandleSignals(msgs) {
+  if (!msgs.length) return;
+  const mine = devId();
+  if (!mine) return; // ohne eigene Geräte-ID (noch keine Lizenz geladen) keine Zuordnung möglich
+  for (const m of rtcFor(msgs, mine)) {
+    if (m.rt === 'offer') {
+      if (rtcPC && rtcPeerId && rtcPeerId !== m.by) continue; // schon mit einem anderen Gerät verbunden/dabei
+      if (rtcPC && rtcPC.signalingState === 'have-local-offer') {
+        if (!shouldYield(mine, m.by)) continue; // bleibe Anbieter, ignoriere das fremde Angebot
+        rtcReset(); // gebe nach: eigenes Angebot verwerfen, das andere annehmen
+      } else if (rtcPC) continue; // schon verbunden/am Verhandeln mit genau diesem Gerät
+      rtcPeerId = m.by;
+      rtcPeerName = m.byName || 'Gerät';
+      rtcPC = rtcNewPC();
+      try {
+        await rtcPC.setRemoteDescription({ type: 'offer', sdp: m.sdp });
+        await rtcFlushCandidates();
+        const answer = await rtcPC.createAnswer();
+        await rtcPC.setLocalDescription(answer);
+        rtcSend(buildRtcMsg({ by: mine, byName: devBy(), to: m.by, rt: 'answer', sdp: rtcPC.localDescription.sdp }));
+      } catch { rtcReset(); }
+    } else if (m.rt === 'answer') {
+      if (!rtcPC || rtcPC.signalingState !== 'have-local-offer') continue;
+      rtcPeerId = m.by;
+      rtcPeerName = m.byName || 'Gerät';
+      try { await rtcPC.setRemoteDescription({ type: 'answer', sdp: m.sdp }); await rtcFlushCandidates(); } catch { rtcReset(); }
+    } else if (m.rt === 'ice') {
+      if (!rtcPC) continue;
+      if (rtcPC.remoteDescription) { try { await rtcPC.addIceCandidate(m.cand); } catch { /* veraltet/ungültig */ } } else rtcPendingCand.push(m.cand);
+    }
+  }
+}
+// Eigene Änderungen automatisch schicken, sobald sich etwas geändert hat (gebündelt, nicht bei jedem Tastendruck einzeln)
+function rtcScheduleSend() {
+  if (!rtcChan || rtcChan.readyState !== 'open') return;
+  clearTimeout(rtcSendTimer);
+  rtcSendTimer = setTimeout(() => rtcSendProgress(false), RTC_SEND_DEBOUNCE_MS);
+}
+function rtcSendProgress(full) {
+  if (!rtcChan || rtcChan.readyState !== 'open' || !P || !P.live) return;
+  const from = devBy();
+  if (!peerOf(P, rtcPeerName)) setPeer(P, rtcPeerName, 0, false);
+  setPeerId(P, rtcPeerName, rtcPeerId);
+  const peer = peerOf(P, rtcPeerName);
+  const since = full ? 0 : (peer ? peer.lastSent : 0);
+  const f = buildProgress(P, { from, fromId: devId(), to: rtcPeerName, toId: rtcPeerId, since, full });
+  if (!f) return;
+  try { rtcChan.send(JSON.stringify(f)); setPeer(P, rtcPeerName, f.at); saveNow(); } catch { /* Kanal gerade nicht bereit */ }
+}
+// Eingehende Fortschritt-Nutzlast einarbeiten – wie „Fortschritt einfügen“, aber still (kein Projektwechsel/Nachfrage)
+function rtcApplyProgress(f) {
+  const target = progressTarget(db.projects, f);
+  if (!target || target !== P || isClosed()) return;
+  snapshot();
+  const r = mergeProgress(P, f);
+  if (!r) return;
+  const name = f.from || rtcPeerName;
+  // v130.15: Empfangenes gilt als „bis hierhin abgeglichen“ – sonst würde das Nächste eigene Senden denselben
+  // Stand gleich wieder zurückschicken (der Peer-Zeitstempel ist beiden Richtungen gemeinsam)
+  setPeer(P, name, f.at, false);
+  setPeerId(P, name, f.fi);
+  progBase.set(P, snapshotBase(P));
+  markAccepted(P, allMsgsRaw());
+  syncGrid();
+  changed();
+  redraw();
+}
+function renderRtcStatus() {
+  const el = $('rtc-status');
+  if (!el) return;
+  const on = rtcChan && rtcChan.readyState === 'open';
+  el.hidden = !(P && P.live && wantsLive(P));
+  el.textContent = on ? `🔗 Live verbunden mit ${rtcPeerName || 'Gerät'}` : rtcPC ? '🔗 Verbinde …' : '';
+  el.className = `rtc-status${on ? ' on' : ''}`;
 }
 // ---- v117: Rückkanal Einsatzleitung -> Hundeführer ----
 // Quittungen („✓ Gesehen“) und Nachrichten schreibt die EL selbst in den Raum des Einsatzes (derselbe Schlüssel wie im Auftrag, ls);
@@ -6118,6 +6927,7 @@ function renderElwBar() {
 $('elw-list').addEventListener('click', () => elwList());
 $('elw-off').addEventListener('click', elwClearPreview);
 $('more-elw-in').addEventListener('click', () => { closePanels(); elwList(true); });
+$('more-elw-out').addEventListener('click', () => { closePanels(); elwOutList(); });
 $('more-elw').addEventListener('click', () => { closePanels(); sendElw(); });
 
 // Empfangen: alle Raum-Meldungen durchsehen, Teile sammeln, neue Aufträge für dieses Gerät speichern und melden
@@ -6147,6 +6957,22 @@ function takeElw(proj, msgs) {
   const tb = $('toast');
   tb.onclick = () => { if (tb.textContent === msg) { tb.hidden = true; elwOpenOrder(o); } };
 }
+// v130.23: Lesebestätigung für eigene gesendete ELW-Aufträge einarbeiten (proj.elwOut, siehe sendElw).
+// v130.26: trägt jetzt auch laufend den Haken-Zustand der To-do-Liste nach (m.todo), nicht nur einmalig das „gesehen“.
+function takeElwAcks(proj, msgs) {
+  const acks = (msgs || []).filter((m) => isElwAck(m) && m.to === devBy());
+  if (!acks.length || !proj.elwOut || !proj.elwOut.length) return;
+  let firstSeen = false;
+  for (const a of acks) {
+    const x = proj.elwOut.find((o) => o.id === a.ref);
+    if (!x) continue;
+    if (!x.ack) { x.ack = a.t; x.ackBy = a.from || ''; firstSeen = true; }
+    if (Array.isArray(a.todo)) x.todoDone = a.todo;
+  }
+  proj.updated = Date.now();
+  saveNow();
+  if (proj === P && firstSeen) toast(`✓ Auftrag gesehen${acks[0].from ? ` (${acks[0].from})` : ''}`, 4000);
+}
 async function pollElw() {
   const proj = P;
   const l = proj && proj.live;
@@ -6156,6 +6982,7 @@ async function pollElw() {
   try {
     const r = await pollMessages({ url: l.url, key: l.key, since: l.eSince || 0 });
     takeElw(proj, r.msgs);
+    takeElwAcks(proj, r.msgs);
     if (r.since !== l.eSince) { l.eSince = r.since; saveNow(); }
   } catch { /* kein Netz: nächster Versuch */ } finally { elwPollBusy = false; }
 }
@@ -6180,7 +7007,7 @@ async function sendElw() {
   if (!db.deviceName) await askDeviceName(false);
   stamp();
   const proj = P;
-  // wählbar: Umrisse (je einer) und Stift-Zeichnungen (je Gruppe)
+  // wählbar: Umrisse (je einer), Stift-Zeichnungen (je Gruppe) und v130.24: einzelne Punkte/Markierungen (📍)
   const rows = [];
   const byGroup = new Map();
   for (const it of proj.items) {
@@ -6191,9 +7018,11 @@ async function sendElw() {
       const r = byGroup.get(k);
       r.items.push(it);
       r.t = Math.max(r.t, it.t || 0);
+    } else if (it.kind === 'text' && Number.isFinite(it.lat) && Number.isFinite(it.lon)) {
+      rows.push({ key: it.id, label: `📍 ${it.text || 'Markierung'}`, items: [it], t: it.t || 0 });
     }
   }
-  if (!rows.length) return toast('Keine Umrisse oder Stift-Zeichnungen vorhanden');
+  if (!rows.length) return toast('Keine Umrisse, Zeichnungen oder Markierungen vorhanden');
   const since = proj.elwSent || 0;
   const newer = since ? rows.filter((r) => r.t > since) : [];
   const pre = new Set((newer.length ? newer : rows).map((r) => r.key)); // neu/geändert seit dem letzten Senden, sonst alles
@@ -6227,16 +7056,16 @@ async function sendElw() {
     nn.id = 'elw-to-new';
     nn.placeholder = 'oder anderes Gerät: Name';
     box.appendChild(nn);
-    lab('Auftrag an den Empfänger:');
-    const txt = document.createElement('input');
-    txt.type = 'text';
+    lab('Auftrag an den Empfänger – als To-do-Liste, ein Punkt pro Zeile:');
+    const txt = document.createElement('textarea');
     txt.id = 'elw-txt';
-    txt.maxLength = 300;
-    txt.placeholder = 'Auftrag (z. B. In 2 Gebiete aufteilen)';
+    txt.maxLength = 600;
+    txt.rows = 4;
+    txt.placeholder = 'z. B.:\nIn 4 gleich große Gebiete aufteilen\nAn JUH1-3 und DRK5 verteilen\nMit Polizei klären, ob absuchbar';
     box.appendChild(txt);
     const q = document.createElement('div');
     q.className = 'elw-tpl';
-    for (const t of elwTemplates) dlgButton(q, esc(t), 'mini', () => { txt.value = t; });
+    for (const t of elwTemplates) dlgButton(q, esc(t), 'mini', () => { txt.value = txt.value.trim() ? `${txt.value.replace(/\n+$/, '')}\n${t}` : t; });
     box.appendChild(q);
     dlgButton(box, '📤 Senden', 'primary', () => {
       const keys = [...box.querySelectorAll('.elw-pick:checked')].map((c) => c.value);
@@ -6255,9 +7084,74 @@ async function sendElw() {
   const waiting = proj.live.outbox.some((m) => ids.has(m.id));
   if (!waiting && !ok.every(Boolean)) return; // abgelehnt: flushStatus hat schon gewarnt
   proj.elwSent = Date.now();
+  // v130.23: zum Nachsehen in „📨 Gesendete Aufträge“ merken, ob/wann der Empfänger ihn geöffnet hat
+  proj.elwOut = proj.elwOut || [];
+  proj.elwOut.push({ id: order.id, to: res.to || '', txt: res.txt, t: Date.now(), n: items.length, ack: 0, ackBy: '' });
+  proj.elwOut = proj.elwOut.slice(-50);
   saveNow();
   const wohin = res.to || 'alle EL-Geräte';
   toast(waiting ? `⏳ Auftrag an ${wohin} wartet auf Netz – wird automatisch nachgesendet` : `✓ Auftrag an ${wohin} gesendet ${hhmm(Date.now())}${parts.length > 1 ? ` (${parts.length} Teile)` : ''}`, 5000);
+}
+// v130.23: eigene gesendete ELW-Aufträge mit Lesestatus ansehen
+async function elwOutList() {
+  const list = (P.elwOut || []).slice().reverse();
+  if (!list.length) return toast('Noch keine Aufträge gesendet');
+  await openDlg((box, close) => {
+    dlgHead(box, `📨 Gesendete Aufträge (${list.length})`, 'Ob/wann der Empfänger den Auftrag geöffnet hat und welche To-do-Punkte er abgehakt hat.');
+    for (const x of list) {
+      const status = x.ack ? `✓ gesehen ${hhmm(x.ack)}${x.ackBy ? ` (${esc(x.ackBy)})` : ''}` : '… noch nicht gesehen';
+      const p = document.createElement('p');
+      p.className = 'small';
+      const lines = String(x.txt || '').split('\n').map((s) => s.trim()).filter(Boolean);
+      // v130.26: Haken des Empfängers (x.todoDone), nur zum Ansehen – hier nicht änderbar
+      const todo = lines.length
+        ? lines.map((line, i) => `${(x.todoDone || [])[i] ? '☑' : '☐'} ${esc(line)}`).join('<br>')
+        : esc(x.txt || '–');
+      p.innerHTML = `<b>${esc(x.to || 'alle EL-Geräte')}</b> ${hhmm(x.t)}<br>${todo}<br>${status}`;
+      box.appendChild(p);
+    }
+    dlgButton(box, 'Schließen', 'primary', () => close(null));
+  });
+}
+
+// v130.19: Übersicht der für diesen Einsatz registrierten Geräte (role aus v130.17: handover/device/ua) – zum Entfernen
+const PEER_ROLE_LABEL = { handover: 'Übergabe', device: 'Weiteres Gerät / ELW', ua: 'UA' };
+$('more-devices').addEventListener('click', () => { closePanels(); openDeviceList(); });
+function openDeviceList() {
+  openDlg((box, close) => {
+    const render = () => {
+      box.innerHTML = '';
+      dlgHead(box, '📟 Geräte', `Für „${P.title || 'diesen Einsatz'}“ registrierte Geräte.`);
+      const peers = P.peers || [];
+      if (!peers.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = 'Noch keine Geräte registriert.'; box.appendChild(p); }
+      for (const x of peers) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const lab = document.createElement('span');
+        lab.textContent = `${x.name}${PEER_ROLE_LABEL[x.role] ? ` (${PEER_ROLE_LABEL[x.role]})` : ''}`;
+        row.appendChild(lab);
+        dlgButton(row, '🗑️ Entfernen', 'mini', async () => {
+          // v130.22: erst nachfragen – ein versehentlicher Tipp hätte sonst sofort das Gerät (samt Live-Verbindung) entfernt
+          const ok = await openDlg((box2, close2) => {
+            dlgHead(box2, '🗑️ Gerät entfernen?', `„${x.name}“ wirklich aus der Geräteliste entfernen?`);
+            dlgButton(box2, 'Entfernen', 'primary', () => close2(true));
+            dlgButton(box2, 'Abbrechen', '', () => close2(false));
+          });
+          if (!ok) return render();
+          P.peers = (P.peers || []).filter((p2) => p2 !== x);
+          // v130.21: steht gerade eine Live-Verbindung (WebRTC) zu genau diesem Gerät, auch trennen – sonst
+          // legt rtcSendProgress den Peer beim nächsten Abgleich automatisch wieder an (die Verbindung besteht ja noch)
+          if (rtcPC && (rtcPeerId === x.id || (!x.id && rtcPeerName === x.name))) rtcReset();
+          changed();
+          saveNow();
+          render();
+        });
+        box.appendChild(row);
+      }
+      dlgButton(box, 'Fertig', 'primary', () => close(true));
+    };
+    render();
+  });
 }
 
 // Anzeigen
@@ -6277,13 +7171,46 @@ async function elwList(all) {
 async function elwOpenOrder(o) {
   const proj = P;
   elwPreview(o);
+  // v130.23: Lesebestätigung – einmal je Auftrag, geht an den Absender zurück
+  if (!o.ackSent && o.from && proj.live) {
+    o.ackSent = true;
+    elSend(buildElwAck({ ref: o.id, to: o.from, from: devBy() }));
+    saveNow();
+  }
   const had = proj.items.filter((i) => i.elw === o.id).length;
   const r = await openDlg((box, close) => {
     dlgHead(box, `📥 Auftrag von ${o.from || 'EL'} · ${hhmm(o.t)}${o.done ? ' · erledigt' : ''}`, `${elwCounts(o.items)} – auf der Karte gestrichelt (lila).`);
-    const t = document.createElement('div');
-    t.className = 'elw-txt';
-    t.textContent = o.txt || '(ohne Text)';
-    box.appendChild(t);
+    // v130.25: txt ist eine To-do-Liste (ein Punkt pro Zeile) – zum Abhaken nur zur eigenen Übersicht, geht nicht an den Absender zurück
+    const lines = String(o.txt || '').split('\n').map((s) => s.trim()).filter(Boolean);
+    if (lines.length) {
+      o.todoDone = Array.isArray(o.todoDone) ? o.todoDone : [];
+      const list = document.createElement('div');
+      list.className = 'elw-txt st-list';
+      lines.forEach((line, i) => {
+        const lb = document.createElement('label');
+        lb.className = 'check';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = !!o.todoDone[i];
+        // v130.26: Haken gehen (gebündelt) an den Absender zurück, damit der in „📨 Gesendete Aufträge“ den Fortschritt sieht
+        cb.addEventListener('change', () => {
+          o.todoDone[i] = cb.checked;
+          saveNow();
+          clearTimeout(elwTodoSendTimer);
+          elwTodoSendTimer = setTimeout(() => {
+            if (o.from && proj.live) elSend(buildElwAck({ ref: o.id, to: o.from, from: devBy(), todo: o.todoDone }));
+          }, 1500);
+        });
+        lb.append(cb, ` ${line}`);
+        list.appendChild(lb);
+      });
+      box.appendChild(list);
+    } else {
+      const t = document.createElement('div');
+      t.className = 'elw-txt';
+      t.textContent = '(ohne Text)';
+      box.appendChild(t);
+    }
     dlgButton(box, `➕ In laufenden Einsatz einfügen${had ? ` <small>schon ${had} eingefügt – ergänzt nur Fehlendes</small>` : ''}`, 'primary', () => close('insert'));
     if (!bridge) dlgButton(box, '🗺️ In BaseCamp öffnen', '', () => close('bc'));
     dlgButton(box, '👁 Zeigen', '', () => close('show'));
@@ -6411,6 +7338,8 @@ function startStatus() {
   renderTeamBar();
   checkUnread();
   setInterval(checkUnread, 15e3); // Erinnerung bei ungelesenen Meldungen
+  // v130.4: Auftrags-/Pausenzeit der Teams laufen mit – Anzeige auffrischen, solange das Fenster offen ist
+  setInterval(() => { if (db.mode === 'el' && !$('panel-teams').hidden) renderSentList(); }, 30e3);
   checkCloseAsk();
   setInterval(checkCloseAsk, 15e3);
   window.addEventListener('online', () => { flushStatus(); pollLive(); pollElw(); pollHf(); });
@@ -6431,6 +7360,7 @@ async function handleShared1(text) {
   if (data.k === 'e') return takeHandover(data);
   if (data.k === 'i') return takeInfos(data);
   if (data.k === 'f') return takeProgress(data);
+  if (data.k === 'z') return takeZusatz(data);
   if (data.k !== 'r') return toast('Unbekannter Inhalt');
   // Rückmeldungen gehören zur Einsatzleitung: Modus umschalten (vom Hundeführer-Modus nur mit PIN)
   if (db.mode === 'hf' && !(await toElMode())) return;
@@ -6529,8 +7459,11 @@ let scanRun = false;
 // v125: Hauptkamera statt Ultraweitwinkel. Erst die Freigabe über facingMode (damit die Kameras Namen haben), dann die
 // beste Rückkamera nach Namen mit deviceId, 1920x1080 und Dauerfokus; die Wahl (auch „🔄 Kamera wechseln“) wird gemerkt.
 let scanCams = [];
-const camSaved = () => { try { return localStorage.getItem(CAM_KEY) || ''; } catch { return ''; } };
-const camSave = (id) => { try { localStorage.setItem(CAM_KEY, id); } catch { /* ohne Speicher: gilt nur jetzt */ } };
+// v130.13: Name der Kamera mitspeichern – falls die deviceId sich (Browser-Neustart, Datenschutz-Salt) ändert,
+// findet pickCamera() die gemerkte Kamera trotzdem über ihren Namen wieder, statt auf die „beste automatische“
+// Wahl zurückzufallen (die auf manchen Geräten das Weitwinkel-Objektiv statt der normalen Kamera trifft).
+const camSaved = () => { try { return JSON.parse(localStorage.getItem(CAM_KEY) || 'null') || ''; } catch { return ''; } };
+const camSave = (id, label) => { try { localStorage.setItem(CAM_KEY, JSON.stringify({ deviceId: id, label: label || '' })); } catch { /* ohne Speicher: gilt nur jetzt */ } };
 async function focusTrack(stream) {
   try {
     const tr = stream.getVideoTracks()[0];
@@ -6572,7 +7505,7 @@ async function switchScanCamera() {
     scanStream = stream;
     $('scan-video').srcObject = stream;
     await $('scan-video').play().catch(() => {});
-    camSave(scanCams.curId || next.deviceId);
+    camSave(scanCams.curId || next.deviceId, next.label);
     $('scan-text').textContent = `Kamera: ${next.label || 'Kamera'} – auf den QR-Code richten.`;
   } catch { $('scan-text').textContent = 'Kamera lässt sich nicht wechseln.'; }
 }
@@ -6617,7 +7550,8 @@ async function startScan() {
         // mehrteiliger Code: Teile sammeln, bis alle da sind
         const r = addPart(scanParts, sh.data);
         if (r.done) { stopScan(); handleShared(shareLink('e', r.done)); return; }
-        if (r.n) $('scan-text').textContent = `Mehrteiliger Code: ${r.have} von ${r.n} Teilen gelesen – Kamera ruhig auf den Code halten …`;
+        // v130.13: zeigt, welche Teile konkret noch fehlen – hilft beim Zurückspulen auf dem anderen Gerät
+        if (r.n) $('scan-text').textContent = `Mehrteiliger Code: ${r.have} von ${r.n} Teilen gelesen – noch fehlt Teil ${r.missing.join(', ')}. Kamera ruhig halten …`;
       } else if (text) { stopScan(); handleShared(text); return; }
     }
     setTimeout(tick, 200);
@@ -6733,14 +7667,47 @@ $('closed-bar').addEventListener('click', () => (isFree() ? $('proj-new').click(
 $('handed').addEventListener('click', async () => {
   const ok = await openDlg((box, close) => {
     dlgHead(box, '📲 Übergeben', `Dieser Einsatz wurde um ${hhmm(P.handedOver)} an ein weiteres Gerät übergeben. Dort laufen jetzt die Rückmeldungen ein. Hier geht alles weiter, wird aber nicht mehr abgeglichen.`);
-    dlgButton(box, 'Hinweis ausblenden', '', () => close(true));
-    dlgButton(box, 'OK', 'primary', () => close(false));
+    dlgButton(box, 'Hinweis ausblenden', 'primary', () => close(false));
+    dlgButton(box, 'Hier wieder weiterarbeiten', '', () => close(true));
   });
   if (ok) { delete P.handedOver; changed(); }
 });
-$('ho-send').addEventListener('click', () => handoverQr(P, true));
-// Einsatz (ganz oder Unterabschnitt aus „Weitergeben“) per QR-Code an ein Gerät der Einsatzleitung
-async function handoverQr(proj, whole) {
+$('ho-send').addEventListener('click', () => handoverQr(P, 'handover'));
+// v130.18: Name des Geräts (bzw. UA), an das übergeben/geteilt wird, gleich beim Teilen abfragen – statt des
+// bisherigen „Gerät HH:MM“-Platzhalters. Hilft später beim Zuordnen von Rückmeldungen und beim gezielten Senden.
+const PEER_NAME_SUGG = { handover: ['Tablet EL', 'Handy EL', 'PC EL'], device: ['ELW', 'EL 2', 'Tablet EL'], ua: ['UA'] };
+async function askPeerName(mode, fallback) {
+  const title = mode === 'device' ? '📛 Name des weiteren Geräts' : mode === 'ua' ? '📛 Name des Unterabschnitts (UA)' : '📛 Name des übernehmenden Geräts';
+  const hint = mode === 'device' ? 'Wie soll das zusätzliche, dauerhaft aktive Gerät heißen (z. B. der ELW)? Hilft später beim gezielten Senden von Aufträgen/Zeichnungen.'
+    : mode === 'ua' ? 'Wie soll dieser Unterabschnitt bzw. das Gerät dort heißen?'
+      : 'Wie soll das Gerät heißen, das den Einsatz übernimmt? Hilft später beim Zuordnen von Rückmeldungen.';
+  const sugg = PEER_NAME_SUGG[mode] || [];
+  return openDlg((box, close) => {
+    dlgHead(box, title, hint);
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.placeholder = sugg[0] || 'Name';
+    inp.value = fallback || '';
+    inp.setAttribute('list', 'peer-name-sugg');
+    const dl = document.createElement('datalist');
+    dl.id = 'peer-name-sugg';
+    for (const v of sugg) { const o = document.createElement('option'); o.value = v; dl.appendChild(o); }
+    box.append(inp, dl);
+    const go = () => close(inp.value.trim() || fallback || null);
+    inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') go(); });
+    dlgButton(box, 'Weiter', 'primary', go);
+    dlgButton(box, 'Abbrechen', '', () => close(null));
+    setTimeout(() => { inp.focus(); inp.select(); }, 50);
+  });
+}
+// Einsatz (ganz oder Unterabschnitt aus „Weitergeben“) per QR-Code an ein Gerät der Einsatzleitung.
+// mode: 'handover' (dieses Gerät gibt ab, z. B. Handy -> Tablet), 'device' (bleibt zusätzlich aktiv, z. B. ELW),
+// 'ua' (Unterabschnitt). 'handover' und 'device' geben den ganzen Einsatz weiter, nur 'ua' einen Ausschnitt.
+async function handoverQr(proj, mode) {
+  const whole = mode !== 'ua';
+  const defName = mode === 'device' ? 'ELW' : mode === 'ua' ? (proj.title || 'UA') : '';
+  const peerName = await askPeerName(mode, defName);
+  if (!peerName) return;
   stamp();
   saveNow();
   // erst ein QR-Code mit wenig Vereinfachung, sonst mehrere im Wechsel
@@ -6768,12 +7735,17 @@ async function handoverQr(proj, whole) {
     : 'Auf dem anderen Gerät „Einsätze → 📷 Einsatz übernehmen“ antippen oder den Code mit der Kamera scannen.';
   const pc = ' Zum PC: „Teilen“ oder „Link kopieren“ (z. B. WhatsApp Web, Mail).';
   const lost = miss.length ? ` Nicht dabei: ${miss.join(', ')} – dafür „Suchgebiet als Datei senden“.` : '';
-  // das neue Gerät gleich als Empfänger für „Fortschritt senden“ merken (Name lässt sich dort ändern bzw. neu eintragen)
+  // das neue Gerät gleich als Empfänger für „Fortschritt senden“ merken (Name lässt sich bei „An ELW senden“ ändern);
+  // v130.17: role merkt, ob es eine Übergabe (löst ab) oder ein zusätzliches, dauerhaft aktives Gerät (z. B. ELW) ist
   const now = Date.now();
-  setPeer(P, `Gerät ${hhmm(now)}${whole ? '' : ' (UA)'}`, now);
+  const peer = setPeer(P, peerName, now);
+  peer.role = mode;
   touch();
-  if (whole) qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
-  showQr(link, `📲 ${whole ? 'Einsatz' : 'Unterabschnitt'} „${proj.title || 'Suchgebiet'}“ übergeben`, how + pc + lost, parts);
+  if (mode === 'handover') qrDone.push(() => { P.handedOver = Date.now(); changed(); saveNow(); });
+  const title = mode === 'handover' ? `📲 Einsatz „${proj.title || 'Suchgebiet'}“ übergeben`
+    : mode === 'device' ? `➕ Einsatz „${proj.title || 'Suchgebiet'}“ an weiteres Gerät freigeben`
+      : `📲 Unterabschnitt „${proj.title || 'Suchgebiet'}“ übergeben`;
+  showQr(link, title, how + pc + lost, parts);
 }
 $('ho-scan').addEventListener('click', () => { closePanels(); startScan(); });
 
@@ -6975,6 +7947,23 @@ async function takeProgress(f) {
   const others = sum ? P.peers.filter((x) => x.name !== from) : [];
   if (others.length) toastAction(`${msg} – weiterleiten?`, 'Weiterleiten', () => sendProgress(), 15000);
   else toast(msg, 8000);
+}
+// v130.36: Zusatz zum laufenden Auftrag, per QR-Code statt Status-Server (Auftrag ohne Link) – beim Hundeführer übernehmen
+async function takeZusatz(data) {
+  const target = P && P.hf && (P.hf.id === data.to || data.to === EL_ALL) ? P
+    : Object.values(db.projects).find((p) => p.hf && (p.hf.id === data.to || data.to === EL_ALL));
+  if (!target) return toast('Kein passender laufender Auftrag auf diesem Gerät gefunden – erst den Auftrag hier einscannen', 8000);
+  if (db.mode !== 'hf') { db.mode = 'hf'; applyMode(); }
+  if (target !== P) switchProject(target.id);
+  const proj = P;
+  const m = buildElMsg({ to: data.to, txt: data.txt, prio: data.prio, t: data.t, id: data.id });
+  m.z = data.z;
+  proj.hf.inbox = mergeStatus(proj.hf.inbox || [], [m]).slice(-200);
+  const r = isZusatz(m) && applyZusatz(proj, m);
+  if (proj === P) { redraw(); renderPois(); renderMeet(); renderHfMsgBtn(); }
+  saveNow();
+  if (r) toastAction(`📍 Einsatzleitung: ${m.txt || ''}`, '🗺️ Zeigen', () => showPts(r.pts), 15000);
+  else toast(`✉️ Einsatzleitung: ${m.txt || ''}`, 8000);
 }
 
 // Name dieses Geräts (z. B. „ELW 11-1“, „Tablet EL“) – wird beim Übernehmen eines Einsatzes abgefragt
@@ -7519,6 +8508,8 @@ function renderLayerList() {
     b.addEventListener('click', () => setLayer(l.id, true));
     box.appendChild(b);
   }
+  const cur = layerById(P.layerId);
+  $('layer-legend').hidden = !cur.legend;
   const ovBox = $('overlay-list');
   ovBox.innerHTML = '';
   for (const o of OVERLAYS) {
@@ -7556,7 +8547,8 @@ function updateStatus() {
     const c = hitGrid(lat, lon);
     parts.push(c ? `📍 ${c.label}${cellLabel(c.c, c.r)}` : '📍 außerhalb');
   }
-  if (P.showUtm) parts.push(formatMgrs(lat, lon));
+  // v130.39: neben der MGRS-Kurzform (Klaas' Rückmeldung) auch die vollständige UTM-Koordinate des Standorts
+  if (P.showUtm) parts.push(formatMgrs(lat, lon), formatUtm(lat, lon));
   $('status').textContent = parts.join(' · ') || '📍';
 }
 
@@ -7618,6 +8610,7 @@ function switchProject(id) {
   if (recWatch !== null) stopRec(); // Aufzeichnung gehört zum alten Einsatz
   endGridFit();
   endVertex();
+  rtcReset(); // v130.15: Live-Verbindung gehört zum alten Einsatz – für den neuen baut sich bei Bedarf eine eigene auf
   saveNow();
   db.currentId = id;
   P = db.projects[id];
@@ -7746,7 +8739,7 @@ $('proj-new').addEventListener('click', async () => {
   });
   if (!how) return;
   if (how === 'plain') {
-    const t = prompt('Name des neuen Suchgebiets:', '');
+    const t = prompt('Name des neuen Suchgebiets:', wizTitle());
     if (t !== null) createProject(t.trim() || wizTitle());
     return;
   }
@@ -7923,7 +8916,7 @@ const WIZ = {
       wizMeet = true;
       closePanels();
       setTool('meet');
-      $('search-input').focus();
+      openSearch();
       toast('Adresse oder Kreuzung oben eingeben, dann auf den genauen B-Ort tippen', 7000);
     });
     wizBtn(big, '🗺️ Auf der Karte antippen', () => {
@@ -8105,6 +9098,7 @@ function poiTextDlg(p, isNew) {
     dlgButton(box, isNew ? 'Speichern' : 'Übernehmen', 'primary', () => close({ name: name.value.trim(), desc: desc.value.trim() }));
     if (!isNew) {
       dlgNavButton(box, close, null, poiName(p), p.lat, p.lon); // v123
+      if (db.mode === 'el' && P.live && elTargets(P.sent, P.marks).length) dlgButton(box, '📤 An Team senden', '', () => close('zus')); // v130
       dlgButton(box, '🔁 Art ändern', '', () => close('cat'));
       dlgButton(box, '📍 Verschieben', '', () => close('move'));
       dlgButton(box, '🗑️ Löschen', '', () => close('delete'));
@@ -8173,6 +9167,7 @@ async function editPoi(p) {
   if (blocked(p)) return;
   const r = await poiTextDlg(p, false);
   if (!r) return;
+  if (r === 'zus') return zusatzDialog({ poiIds: [p.id] }); // v130
   if (r === 'move') {
     poiDraft = { move: p };
     closePanels();
@@ -8476,7 +9471,10 @@ for (const btn of ['btn-mission', 'btn-notes', 'btn-grid', 'btn-teams']) {
 // Seitenknopf nochmal antippen, während sein Fenster offen ist: Fenster schließen
 const SIDE_PANELS = {
   'btn-projects': 'panel-projects', 'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',
-  'btn-status': 'panel-status', 'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-more': 'panel-more', 'btn-hfmenu': 'panel-hfmenu', 'btn-pdf': 'panel-share', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
+  'btn-status': 'panel-status', 'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-more': 'panel-more', 'btn-hfmenu': 'panel-hfmenu', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
+  // v130.27: „Teilen“ (btn-pdf) bewusst NICHT hier – das Teilen-Fenster bleibt nach einem QR-Vorgang
+  // absichtlich im Hintergrund offen (zweiten Empfänger wählen); ein erneuter Klick soll es wieder
+  // vorne zeigen/auffrischen statt es überraschend zu schließen.
 };
 for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
   $(btn).addEventListener('click', (e) => {
@@ -8495,6 +9493,21 @@ $('btn-layers').addEventListener('click', () => {
 });
 $('msg-show').addEventListener('change', () => { db.msgOff = !$('msg-show').checked; saveNow(); redraw(); });
 $('layers-offline').addEventListener('click', () => { renderOfflineForm(); openPanel('panel-offline'); });
+// v130.30: Legende der Landbedeckungs-Karte (Wald/Gehölz-Farben) als Bild anzeigen
+$('layer-legend').addEventListener('click', () => {
+  const cur = layerById(P.layerId);
+  if (!cur.legend) return;
+  openDlg((box, close) => {
+    dlgHead(box, '🖼 Legende', cur.name);
+    const img = document.createElement('img');
+    img.src = cur.legend;
+    img.alt = 'Legende';
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    box.appendChild(img);
+    dlgButton(box, 'Schließen', 'primary', () => close(true));
+  });
+});
 $('btn-more').addEventListener('click', () => { renderDeviceName(); openPanel('panel-more'); });
 $('app-version').textContent = `Version ${APP_VERSION}`;
 $('btn-pdf').addEventListener('click', () => openShare());
@@ -8510,60 +9523,49 @@ function openExport() {
 }
 
 // ---------- Teilen: „An wen?“ (Empfänger), „Was?“ (Umfang) und „Wie?“ (Weg) ----------
-const SHARE_TO = ['team', 'ua', 'el', 'other'];
+const SHARE_TO = ['ua', 'el', 'elw', 'other'];
 const SHARE_HINT = {
-  team: 'Hundeführer-Handy: bekommt einen Auftrag (QR-Code), die Rückmeldung kommt zurück. Vorausgewählt sind die Felder und Umrisse des Teams.',
   ua: 'Unterabschnitt: bearbeitbar ist nur das ausgewählte Gebiet, der Rest ist nur zum Ansehen (QR-Code an ein Gerät mit dieser App).',
-  el: 'Weiteres EL-Tablet / Einsatzleitwagen: bekommt den ganzen Einsatz, Rückmeldungen laufen dann dort ein (QR-Code).',
+  el: 'Übergabe (dieses Gerät gibt ab, z. B. Handy → Tablet): bekommt den ganzen Einsatz, Rückmeldungen laufen dann dort ein (QR-Code).',
+  elw: 'Weiteres Gerät, z. B. ELW (bleibt zusätzlich aktiv): bekommt den ganzen Einsatz dazu, dieses Gerät läuft normal weiter (QR-Code).',
   other: 'Stellen ohne die App (Polizei, Feuerwehr, Druck, Garmin, Mail …): Datei oder PDF, kein QR-Code.',
 };
 let shareScope = 'all';
 let shareSel = null;
 let shareName = '';
-let shareTo = null; // 'team' | 'ua' | 'el' | 'other' – zuletzt gewählter Empfänger (pro Gerät in db.shareTo)
+let shareTo = null; // 'ua' | 'el' | 'other' – zuletzt gewählter Empfänger (pro Gerät in db.shareTo)
 let shareInit = false;
 function shareLabel() {
   if (shareScope === 'all') return 'Einsatz';
-  if (shareScope === 'team') { const t = P.marks.find((m) => m.id === $('share-team').value); return t ? t.label : 'Team'; }
   return shareName || 'Auswahl';
 }
 function openShare() {
-  const teams = P.marks.filter((m) => m.kind === 'team');
-  const ts = $('share-team');
-  const prev = ts.value;
-  ts.innerHTML = '';
-  for (const t of teams) ts.add(new Option(`${typeIcon(t)} ${t.label}${t.dog ? ` – ${t.dog}` : ''}`, t.id));
-  if (teams.some((t) => t.id === prev)) ts.value = prev;
-  if (!shareInit) { // erstes Öffnen: zuletzt gewählter Empfänger dieses Geräts (Team wird nicht gemerkt)
+  if (!shareInit) { // erstes Öffnen: zuletzt gewählter Empfänger dieses Geräts
     shareInit = true;
     if (SHARE_TO.includes(db.shareTo)) applyShareTo(db.shareTo);
   }
   // Rückkehr von der Kartenauswahl ohne passenden Empfänger -> „Sonstige“ (alle Wege außer QR)
   if (!shareTo && (shareScope === 'pick' || shareScope === 'area' || shareScope === 'areas') && shareSel) shareTo = 'other';
-  if (shareTo === 'el' || shareScope === 'all') { if (shareTo) shareSel = selectAll(P); }
-  if (shareScope === 'team') shareSel = selectTeam(P, ts.value);
+  if (shareTo === 'el' || shareTo === 'elw' || shareScope === 'all') { if (shareTo) shareSel = selectAll(P); }
   renderShare();
   openPanel('panel-share');
 }
 // Empfänger setzen und den Umfang dazu sinnvoll vorbelegen
 function applyShareTo(to) {
   shareTo = to;
-  if (to === 'team') { shareScope = 'team'; shareSel = $('share-team').value ? selectTeam(P, $('share-team').value) : emptySel(); }
-  else if (to === 'el') { shareScope = 'all'; shareSel = selectAll(P); }
+  if (to === 'el' || to === 'elw') { shareScope = 'all'; shareSel = selectAll(P); }
   else if (to === 'ua') {
-    if (shareScope === 'all' || shareScope === 'team' || !shareSel) { shareScope = 'pick'; shareName = 'Auswahl'; shareSel = emptySel(); }
-  } else if (shareScope === 'team' || !shareSel) { shareScope = 'all'; shareSel = selectAll(P); }
+    if (shareScope === 'all' || !shareSel) { shareScope = 'pick'; shareName = 'Auswahl'; shareSel = emptySel(); }
+  } else if (!shareSel) { shareScope = 'all'; shareSel = selectAll(P); }
 }
 function renderShare() {
   const to = shareTo;
-  const app = to === 'ua' || to === 'el'; // nur QR-Übergabe
+  const app = to === 'ua' || to === 'el' || to === 'elw'; // nur QR-Übergabe
   document.querySelectorAll('#share-to button').forEach((b) => b.classList.toggle('active', b.dataset.to === to));
   document.querySelectorAll('#share-scopes button').forEach((b) => b.classList.toggle('active', b.dataset.scope === shareScope));
   document.querySelector('#share-scopes [data-scope=all]').hidden = to === 'ua';
-  const hasTeams = P.marks.some((m) => m.kind === 'team');
-  $('share-team').hidden = to !== 'team' || !hasTeams;
-  $('share-tohint').textContent = to ? (to === 'team' && !hasTeams ? 'Noch keine Teams angelegt (Teams → „+ Team“).' : SHARE_HINT[to]) : 'Zuerst wählen, an wen es geht – dann kommen die passenden Wege.';
-  $('share-what').hidden = !to || to === 'el';
+  $('share-tohint').textContent = to ? SHARE_HINT[to] : 'Zuerst wählen, an wen es geht – dann kommen die passenden Wege.';
+  $('share-what').hidden = !to || to === 'el' || to === 'elw';
   $('share-how').hidden = !to;
   const sum = shareSel ? selSummary(P, shareSel) : '';
   $('share-summary').textContent = `${shareScope === 'all' ? 'Ganzer Einsatz' : shareLabel()}: ${sum || 'nichts ausgewählt'}`;
@@ -8617,7 +9619,6 @@ function editShareSel(start) {
   updateGpxSelBar();
   redraw();
 }
-$('share-team').addEventListener('change', () => { shareScope = 'team'; shareSel = selectTeam(P, $('share-team').value); renderShare(); });
 $('share-edit').addEventListener('click', () => {
   // ändern: die bisherige Auswahl auf der Karte weiter bearbeiten (wird zur eigenen Auswahl)
   if (shareScope !== 'pick') shareName = shareLabel();
@@ -8640,10 +9641,10 @@ $('share-save').addEventListener('click', () => shareRun(async () => { const f =
 $('share-file').addEventListener('click', () => $('proj-share').click());
 $('share-qr').addEventListener('click', () => shareRun(async () => {
   stamp(); // feste IDs vor dem Ausschneiden eines Unterabschnitts
-  if (shareTo === 'el') return handoverQr(P, true);
+  if (shareTo === 'el') return handoverQr(P, 'handover');
+  if (shareTo === 'elw') return handoverQr(P, 'device'); // v130.17: zusätzliches, dauerhaft aktives Gerät (z. B. ELW)
   if (shareTo === 'ua') ensureLive(P, liveUrlNow()); // v127: der UA bekommt den Live-Kanal des Grund-Einsatzes mit
-  if (shareTo === 'ua') return handoverQr(subsetProject(P, shareSel, uaTitle(P.title, shareLabel()), { base: true }), false); // v128: nie „UA UA …“
-  if (shareTo === 'team') prefillSend(shareSel, $('share-team').value, shareScope === 'team' ? 'team' : 'pick');
+  if (shareTo === 'ua') return handoverQr(subsetProject(P, shareSel, uaTitle(P.title, shareLabel()), { base: true }), 'ua'); // v128: nie „UA UA …“
 }));
 $('share-pdf').addEventListener('click', () => shareRun(async () => {
   if (shareScope === 'all') return openExport();
@@ -8656,29 +9657,6 @@ $('share-pdf').addEventListener('click', () => shareRun(async () => {
   $('share-msg').textContent = '';
   await shareFile(res.blob, safeName(shareLabel(), '.pdf'), q.title, mailText(q.title));
 }));
-// Auftrags-Fenster für Hundeführer mit der Auswahl vorbelegen
-function prefillSend(sel, teamId, fields) {
-  for (const id of ['send-grids', 'send-items', 'send-pois', 'send-prev']) $(id).innerHTML = '';
-  renderSend();
-  $('send-team').value = teamId || '';
-  for (const id of ['send-grids', 'send-items', 'send-pois', 'send-prev']) $(id).innerHTML = '';
-  renderSend();
-  for (const inp of $('send-items').querySelectorAll('input')) inp.checked = sel.items.has(P.items[Number(inp.value)]);
-  for (const inp of $('send-grids').querySelectorAll('input')) inp.checked = sel.edges.has(inp.value) || ((sel.cells.get(inp.value) || new Set()).size > 0);
-  for (const inp of $('send-pois').querySelectorAll('input')) inp.checked = [...sel.pois].some((x) => x.id === inp.value);
-  $('send-meet').checked = !!sel.meet;
-  const mode = fields || (teamId ? 'team' : 'pick');
-  if (mode === 'pick') sendPicked = Object.fromEntries([...sel.cells].map(([id, s]) => [id, new Set(s)]));
-  document.querySelector(`input[name=send-fields][value=${mode}]`).checked = true;
-  syncSendFields();
-  renderPrev(); // Spuren des vorherigen Teams im gewählten Gebiet: Team-Auftrag über Teilen nimmt sie mit
-  const picked = Object.values(sendPicked).reduce((a, x) => a + x.size, 0);
-  $('send-pickinfo').textContent = mode === 'pick' ? `${picked} Felder angetippt.` : '';
-  sendCache = null;
-  updateSendSize();
-  openPanel('panel-send');
-}
-
 // ---------- Export (PDF, GPX, Garmin-Karte): Teilen oder Speichern ----------
 // Fertige Dateien werden kurz zwischengespeichert: Der Browser erlaubt das Teilen nur
 // direkt nach einem Tipp – dauert das Erstellen zu lange, reicht dann ein zweiter Tipp.
@@ -10310,7 +11288,8 @@ async function updateSuggestions(immediate = false) {
   if (suggestAbort) suggestAbort.abort();
   const text = $('search-input').value.trim();
   const q = parseQuery(text);
-  if (!q) { closeSearch(); return; }
+  // Nur die Trefferliste schließen – das Suchfeld bleibt offen (Tablet: sonst klappt es beim ersten Buchstaben zu)
+  if (!q) { $('searchbar').hidden = true; return; }
   const local = localResult(q);
   if (local) {
     // v123: bei einem Feldnamen („C4“) zusätzlich „🧭 Navigieren zu C4“
@@ -10324,7 +11303,7 @@ async function updateSuggestions(immediate = false) {
     else showResults([cornerEntry(q)]);
     return;
   }
-  if (q.type !== 'address' || text.length < 3) { closeSearch(); return; }
+  if (q.type !== 'address' || text.length < 3) { $('searchbar').hidden = true; return; }
   const run = async () => {
     const ac = suggestAbort = new AbortController();
     const c = map.getCenter();
@@ -10595,7 +11574,7 @@ console.info(`RHS Einsatz bereit (${bridge ? 'Android-App' : 'Browser'})`);
 
 // Für Tests
 window.__app = {
-  get P() { return P; }, reportExtras, funkDialog, findDialog, checkAutoClose, get grid() { return grid; }, get db() { return db; }, get fallback() { return !!fallbackFor; }, probeBkg, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread, sentBadges,
+  get P() { return P; }, reportExtras, funkDialog, findDialog, checkAutoClose, get grid() { return grid; }, get db() { return db; }, get fallback() { return !!fallbackFor; }, probeBkg, map, setArea, setTool, saveNow, changed, renderTeamBar, checkUnread, sentBadges, renderSentList,
 };
 
 // ---------- Freigabe (v113): Sperrbildschirm, Prüfung beim Status-Server ----------

@@ -16,7 +16,7 @@ const WAY_EXTEND_M = 60; // Wegenden bis zu 60 m vor dem Rand werden bis zum Ran
 const WAY_HALF_M = 0.25; // Schnittbreite entlang eines Wegs: 0,5 m
 const WAY_MIN_COS = Math.SQRT1_2; // Winkel zur Schnittrichtung unter 45°
 
-export const OSM_NOTE = 'Wald und Wege: © OpenStreetMap-Mitwirkende';
+export const OSM_NOTE = 'Wald, Wiese, Acker und Wege: © OpenStreetMap-Mitwirkende';
 export const MAX_PARTS = 8;
 export const MAX_AREA_M2 = 25e6; // 25 km²
 export const MIN_OUTLINE_M = 30;
@@ -24,14 +24,29 @@ const HIGHWAYS = 'track|path|footway|bridleway|cycleway|service|unclassified|res
 
 // ---------- Overpass ----------
 // bbox: { south, west, north, east }
+function linesPart(b) {
+  return `way["highway"~"^(${HIGHWAYS})$"](${b});way["waterway"~"^(stream|river|ditch|canal)$"](${b});`;
+}
+// v130.45: Klaas' Rückmeldung – nicht nur Wald, auch Wiese/Grünland und Acker automatisch als
+// durchsuchbare Fläche nehmen. Privatgärten und ganze Wohngebiete werden dafür als eigene Flächen
+// mitgeladen (AREA_EXCLUDE_TAGS) und in forestInLasso von der erkannten Fläche abgezogen.
+const AREA_INCLUDE_LANDUSE = 'forest|meadow|grass|farmland';
+const AREA_INCLUDE_NATURAL = 'wood|grassland';
+const AREA_EXCLUDE_LANDUSE = 'residential|garden|allotments';
 export function forestQuery(bbox) {
   const b = [bbox.south, bbox.west, bbox.north, bbox.east].map((v) => Number(v).toFixed(6)).join(',');
   return `[out:json][timeout:25];(`
-    + `way["landuse"="forest"](${b});relation["landuse"="forest"](${b});`
-    + `way["natural"="wood"](${b});relation["natural"="wood"](${b});`
-    + `way["highway"~"^(${HIGHWAYS})$"](${b});`
-    + `way["waterway"~"^(stream|river|ditch|canal)$"](${b});`
+    + `way["landuse"~"^(${AREA_INCLUDE_LANDUSE})$"](${b});relation["landuse"~"^(${AREA_INCLUDE_LANDUSE})$"](${b});`
+    + `way["natural"~"^(${AREA_INCLUDE_NATURAL})$"](${b});relation["natural"~"^(${AREA_INCLUDE_NATURAL})$"](${b});`
+    + `way["landuse"~"^(${AREA_EXCLUDE_LANDUSE})$"](${b});relation["landuse"~"^(${AREA_EXCLUDE_LANDUSE})$"](${b});`
+    + `way["leisure"="garden"](${b});relation["leisure"="garden"](${b});`
+    + linesPart(b)
     + `);out geom;`;
+}
+// Nur Wege/Bäche (ohne Wald-Abfrage) – fürs Aufteilen eines schon vorhandenen, von Hand gezeichneten Umrisses.
+export function linesQuery(bbox) {
+  const b = [bbox.south, bbox.west, bbox.north, bbox.east].map((v) => Number(v).toFixed(6)).join(',');
+  return `[out:json][timeout:25];(${linesPart(b)});out geom;`;
 }
 
 const sameKey = (p) => `${p[0]},${p[1]}`;
@@ -55,25 +70,51 @@ function stitch(segs) {
   return rings;
 }
 
-// Overpass-Antwort -> { forests: [Ring [lat,lon] (geschlossen)…], lines: [[[lat,lon]…]…] }
+const AREA_RE = new RegExp(`^(${AREA_INCLUDE_LANDUSE})$`);
+const NATURAL_RE = new RegExp(`^(${AREA_INCLUDE_NATURAL})$`);
+const EXCLUDE_RE = new RegExp(`^(${AREA_EXCLUDE_LANDUSE})$`);
+const isAreaTags = (tags) => AREA_RE.test(tags.landuse) || NATURAL_RE.test(tags.natural);
+const isExcludeTags = (tags) => EXCLUDE_RE.test(tags.landuse) || tags.leisure === 'garden';
+
+// Overpass-Antwort -> { forests: [Ring [lat,lon] (geschlossen)…] (Wald/Wiese/Acker),
+// excludes: [Ring…] (Privatgärten/Wohngebiet – wird davon abgezogen), lines: [[[lat,lon]…]…] }
 export function parseForest(json) {
   const forests = [];
+  const excludes = [];
   const lines = [];
   const pts = (g) => (Array.isArray(g) ? g.filter((q) => q && Number.isFinite(q.lat) && Number.isFinite(q.lon)).map((q) => [q.lat, q.lon]) : []);
   for (const el of (json && json.elements) || []) {
     const tags = el.tags || {};
-    const isForest = tags.landuse === 'forest' || tags.natural === 'wood';
+    const isArea = isAreaTags(tags);
+    const isExcl = !isArea && isExcludeTags(tags);
     if (el.type === 'way') {
       const p = pts(el.geometry);
-      if (isForest) {
-        if (p.length >= 4 && sameKey(p[0]) === sameKey(p[p.length - 1])) forests.push(p);
+      if (isArea || isExcl) {
+        if (p.length >= 4 && sameKey(p[0]) === sameKey(p[p.length - 1])) (isArea ? forests : excludes).push(p);
       } else if ((tags.highway || tags.waterway) && p.length >= 2) lines.push(p);
-    } else if (el.type === 'relation' && isForest) {
+    } else if (el.type === 'relation' && (isArea || isExcl)) {
       const outer = (el.members || []).filter((m) => m.type === 'way' && (m.role === 'outer' || m.role === '')).map((m) => pts(m.geometry));
-      forests.push(...stitch(outer));
+      (isArea ? forests : excludes).push(...stitch(outer));
     }
   }
-  return { forests, lines };
+  return { forests, excludes, lines };
+}
+
+// v130.42: dieselben Wege/Bäche wie beim Ausrichten (linesQuery/parseForest), aber getrennt nach Art
+// fürs Anzeigen als eigenes Overlay – { paths: [[[lat,lon]…]…], waters: [[[lat,lon]…]…] }
+export function parseLines(json) {
+  const paths = [];
+  const waters = [];
+  const pts = (g) => (Array.isArray(g) ? g.filter((q) => q && Number.isFinite(q.lat) && Number.isFinite(q.lon)).map((q) => [q.lat, q.lon]) : []);
+  for (const el of (json && json.elements) || []) {
+    if (el.type !== 'way') continue;
+    const tags = el.tags || {};
+    const p = pts(el.geometry);
+    if (p.length < 2) continue;
+    if (tags.waterway) waters.push(p);
+    else if (tags.highway) paths.push(p);
+  }
+  return { paths, waters };
 }
 
 // ---------- Ebene in Metern ----------
@@ -126,14 +167,92 @@ function dropSmall(mp) {
   return mp.filter((p) => polyArea(p) >= Math.max(MIN_PART_M2, total * MIN_PART_FRAC));
 }
 
-// Waldfläche innerhalb der Umkreisung -> MultiPolygon in Metern (Polygone ohne Löcher)
-export function forestInLasso(forests, lasso, o = originOf(lasso)) {
+// Wald-/Wiesen-/Ackerfläche innerhalb der Umkreisung -> MultiPolygon in Metern (Polygone ohne Löcher).
+// v130.45: excludes (Privatgärten/Wohngebiet) werden danach abgezogen – auch wenn eine Wiese bis an
+// ein Grundstück heranreicht, bleibt das Grundstück selbst außen vor.
+export function forestInLasso(forests, lasso, o = originOf(lasso), excludes = []) {
   const L = lassoPolygon(lasso, o);
   const rings = (forests || []).map((r) => closeRing(r.map((p) => toXY(p, o)))).filter((r) => r.length >= 4);
   if (!L.length || !rings.length) return [];
   try {
     const f = pc.union(...rings.map((r) => [r]));
-    return dropSmall(solid(pc.intersection(f, L)));
+    let area = solid(pc.intersection(f, L));
+    const exRings = (excludes || []).map((r) => closeRing(r.map((p) => toXY(p, o)))).filter((r) => r.length >= 4);
+    if (exRings.length) {
+      const ex = pc.union(...exRings.map((r) => [r]));
+      area = solid(pc.difference(area, ex));
+    }
+    return dropSmall(area);
+  } catch {
+    return [];
+  }
+}
+
+// ---------- v130.32: Wald automatisch auch über die Landbedeckungs-Karte erkennen ----------
+// (BKG wms_lb-de, zeigt Wald/Gehölz per KI aus Sentinel-2 + Orthophotos, unabhängig von
+// OSM-Tags – siehe v130.30). Fällt die reine OSM-Abfrage leer aus (Wald dort nicht getaggt),
+// probiert forestLassoDone (app.js) zusätzlich diesen Weg, bevor sie den Nutzer fragt.
+const LANDCOVER_WMS = 'https://sgx.geodatenzentrum.de/wms_lb-de';
+const LANDCOVER_LAYER = '2024_lb_de';
+export const LANDCOVER_NOTE = 'Landbedeckung © GeoBasis-DE / BKG, Contains modified Copernicus Sentinel data';
+
+// WMS-GetMap-URL (EPSG:4326, PNG) für ein rechteckiges Gebiet in fester Pixelgröße.
+export function landcoverUrl(bbox, w, h) {
+  const b = [bbox.south, bbox.west, bbox.north, bbox.east].map((v) => Number(v).toFixed(6)).join(',');
+  return `${LANDCOVER_WMS}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${LANDCOVER_LAYER}`
+    + `&STYLES=&CRS=EPSG:4326&WIDTH=${w}&HEIGHT=${h}&FORMAT=image/png&BBOX=${b}`;
+}
+
+// „Holzige Vegetation“ (Bäume Laub/Nadel, Gehölz, Büsche) ist im LBM-DE reines bis oliv-Grün
+// (Rot und Blau klein, Grün deutlich höher) – anders als „Krautige Vegetation“ (Gras/Acker:
+// Rot ebenfalls hoch, gelb-grün) oder Röhricht/Schilf (Blauanteil hoch, türkis). Kalibriert
+// an den echten Legenden-/WMS-Pixelfarben (0,220,0 / 68,150,0 Wald, 255,255,168 Gras/Acker).
+export function isForestColor(r, g, b) {
+  return r < 90 && b < 60 && g > 60 && (g - r) > 40;
+}
+
+// Zeilenweise zusammenhängende Wald-Pixel zu Rechtecken zusammenfassen (weit weniger Polygone als
+// 1 je Pixel). mask: Uint8Array/Array der Länge w*h (1 = Wald), Reihenfolge zeilenweise von oben.
+function forestRuns(mask, w, h) {
+  const runs = [];
+  for (let y = 0; y < h; y++) {
+    let x0 = -1;
+    for (let x = 0; x <= w; x++) {
+      const v = x < w && mask[y * w + x];
+      if (v && x0 < 0) x0 = x;
+      else if (!v && x0 >= 0) { runs.push([y, x0, x]); x0 = -1; }
+    }
+  }
+  return runs;
+}
+
+// Wald-Maske (Raster-Pixel) -> bereinigtes MultiPolygon in Metern (gleiches System wie forestInLasso).
+export function maskPolygon(mask, w, h, bbox, o) {
+  const runs = forestRuns(mask, w, h);
+  if (!runs.length) return [];
+  const latAt = (y) => bbox.north - (y / h) * (bbox.north - bbox.south);
+  const lonAt = (x) => bbox.west + (x / w) * (bbox.east - bbox.west);
+  const rects = runs.map(([y, x0, x1]) => {
+    const yA = latAt(y);
+    const yB = latAt(y + 1);
+    const xA = lonAt(x0);
+    const xB = lonAt(x1);
+    return [[[yA, xA], [yA, xB], [yB, xB], [yB, xA], [yA, xA]].map((p) => toXY(p, o))];
+  });
+  try {
+    return dropSmall(solid(rects.length > 1 ? pc.union(...rects) : rects));
+  } catch {
+    return [];
+  }
+}
+
+// Wald-Maske -> Anteil innerhalb der Umkreisung (wie forestInLasso, nur Raster statt OSM-Ringe).
+export function landcoverInLasso(mask, w, h, bbox, lasso, o = originOf(lasso)) {
+  const L = lassoPolygon(lasso, o);
+  const fc = maskPolygon(mask, w, h, bbox, o);
+  if (!L.length || !fc.length) return [];
+  try {
+    return dropSmall(solid(pc.intersection(fc, L)));
   } catch {
     return [];
   }
@@ -465,6 +584,54 @@ function wayCut(R, runs, u, target, total) {
   return best;
 }
 
+// ---------- v130.4x: Nebenstücke anbinden statt nur benennen ----------
+const BRIDGE_HALF_M = 4; // Korridorbreite 8 m – schmal, aber breit genug, dass die Vereinigung sicher zusammenhängt
+// Nächstes Punktpaar zwischen zwei (offenen oder geschlossenen) Ringen
+function closestPoints(ringA, ringB) {
+  let best = null;
+  for (const a of ringA) {
+    for (const b of ringB) {
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (!best || d < best.d) best = { d, a, b };
+    }
+  }
+  return best;
+}
+// Schmales Rechteck zwischen zwei Punkten, quer zur Verbindungslinie. An beiden Enden ein Stück über
+// a/b hinaus verlängert (BRIDGE_EXTEND_M) – sonst träfe der Korridor die Ringe oft genau auf einer
+// (konvexen) Ecke, wo sich keine echte Fläche überlappt und die Vereinigung getrennt bliebe.
+const BRIDGE_EXTEND_M = 2;
+function bridge(a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy) || 1;
+  const dirx = dx / len;
+  const diry = dy / len;
+  const a2 = [a[0] - dirx * BRIDGE_EXTEND_M, a[1] - diry * BRIDGE_EXTEND_M];
+  const b2 = [b[0] + dirx * BRIDGE_EXTEND_M, b[1] + diry * BRIDGE_EXTEND_M];
+  const ux = -diry * BRIDGE_HALF_M;
+  const uy = dirx * BRIDGE_HALF_M;
+  return [[[a2[0] + ux, a2[1] + uy], [b2[0] + ux, b2[1] + uy], [b2[0] - ux, b2[1] - uy], [a2[0] - ux, a2[1] - uy], [a2[0] + ux, a2[1] + uy]]];
+}
+// Ein Nebenstück (ring) per Korridor mit dem nächstgelegenen Ring aus mainPolys verschmelzen,
+// so dass am Ende ein einziger zusammenhängender Umriss entsteht statt zweier getrennter.
+function absorb(mainPolys, ring) {
+  if (!mainPolys.length) return [ring];
+  let near = null;
+  mainPolys.forEach((m, i) => {
+    const hit = closestPoints(m, ring);
+    if (!near || hit.d < near.d) near = { ...hit, i };
+  });
+  try {
+    const u = pc.union([mainPolys[near.i]], [ring], bridge(near.a, near.b));
+    const polys = solid(u).map((p) => closeRing(p[0]));
+    polys.sort((x, y) => Math.abs(ringArea(y)) - Math.abs(ringArea(x)));
+    return mainPolys.filter((_, i) => i !== near.i).concat(polys[0] ? [polys[0]] : []).concat(polys.slice(1));
+  } catch {
+    return mainPolys.concat([ring]);
+  }
+}
+
 // Aufteilen: Teile werden entlang der Hauptachse nacheinander abgeschnitten, das letzte ist der Rest.
 // mp: MultiPolygon in Metern; sh: Anteile (Summe 1); lines: Wege/Bäche in Metern.
 // -> [{ polys: [Ring…], area, onWay }]; onWay: eine Grenze des Teils folgt einem Weg
@@ -498,13 +665,33 @@ export function splitArea(mp, sh, lines = [], opts = {}) {
     R = rest;
   }
   pieces.push(R);
-  return pieces.map((m, i) => {
+  const raw = pieces.map((m) => {
     let polys = solid(m).map((p) => closeRing(p[0]));
     const big = polys.filter((r) => Math.abs(ringArea(r)) >= SLIVER_M2);
     if (big.length) polys = big;
     polys.sort((x, y) => Math.abs(ringArea(y)) - Math.abs(ringArea(x))); // größtes Stück zuerst
-    return { polys, area: polys.reduce((s, r) => s + Math.abs(ringArea(r)), 0), onWay: !!(cutWay[i - 1] || cutWay[i]) };
+    return polys;
   });
+  // v130.4x: getrennte Nebenstücke eines Teils (z. B. ein Wald-Fleck jenseits einer Lichtung) gehören
+  // zum geometrisch nächsten Hauptstück – meist das eigene, manchmal aber ein Nachbarteil. Statt sie
+  // nur zuzuordnen (dann erscheinen sie trotzdem als eigener benannter Umriss „Name (2)“ …), werden sie
+  // per schmalem Korridor direkt angebunden: am Ende bekommt jedes Team genau EINEN zusammenhängenden
+  // Umriss – praxisnäher, keine verwirrenden Mini-Flächen abseits vom eigentlichen Gebiet.
+  const mains = raw.map((polys) => (polys[0] ? centroid([polys[0]]) : null));
+  const merged = raw.map((polys) => (polys[0] ? [polys[0]] : []));
+  raw.forEach((polys, i) => {
+    for (let k = 1; k < polys.length; k++) {
+      const c = centroid([polys[k]]);
+      let best = i; let bestD = Infinity;
+      mains.forEach((m, j) => {
+        if (!m) return;
+        const d = Math.hypot(c[0] - m[0], c[1] - m[1]);
+        if (d < bestD) { bestD = d; best = j; }
+      });
+      merged[best] = absorb(merged[best], polys[k]);
+    }
+  });
+  return merged.map((polys, i) => ({ polys, area: polys.reduce((s, r) => s + Math.abs(ringArea(r)), 0), onWay: !!(cutWay[i - 1] || cutWay[i]) }));
 }
 
 // Soll-Flächen in m²
@@ -518,7 +705,10 @@ export function toTracks(parts, names, teams, o) {
     const rings = part.polys.slice().sort((a, b) => Math.abs(ringArea(b)) - Math.abs(ringArea(a)));
     rings.forEach((ring, k) => {
       let pts = ring.map((q) => toLL(q, o));
-      for (let tol = 3; ; tol = Math.ceil(tol * 1.6)) {
+      // v130.4x: deutlich gröber glätten als früher (3 m) – die Landbedeckungs-Karte liefert die Fläche
+      // pixelgenau (Stufen-/Treppenmuster), das als Grenze unnötig kleinteilig und krumm wirkt. Eine
+      // Such-Grenze braucht keine Meter-Genauigkeit; lieber eine praxisnahe, möglichst gerade Linie.
+      for (let tol = 15; ; tol = Math.ceil(tol * 1.6)) {
         const s = simplify(pts, tol);
         if (s.length <= 400 || tol > 200) { pts = s; break; }
       }

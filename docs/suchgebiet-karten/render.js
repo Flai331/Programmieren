@@ -40,20 +40,22 @@ function pill(ctx, text, cx, cy, s) {
 //          fillLabels: "c,r" -> Text, items, meet }
 // state.others: weitere Rastergebiete [{ grid, name, fills, status, fillLabels, statusLabels }],
 // state.gridName: Name des Hauptrasters (steht nur da, wenn es mehrere Gebiete gibt)
-// Beschriftungen je nach Zoomstufe: 0 = keine (bis 14, dann auch keine Markierungen – nur Umrandungen), 1 = nur Namen (15, Texte gekürzt),
-// 2 = Gebietsname und Team untereinander (16), 3 = dazu Fläche und Notiz (ab 17)
+// Beschriftungen je nach Zoomstufe: 0 = keine (bis 14, dann auch keine Markierungen – nur Umrandungen), 1 = Name und Fläche (15, Texte gekürzt),
+// 2 = dazu Team untereinander (16), 3 = dazu Notiz (ab 17)
 export function labelDetail(zoom) {
   if (zoom == null) return 3;
   zoom = Math.round(zoom);
   return zoom <= 14 ? 0 : zoom === 15 ? 1 : zoom === 16 ? 2 : 3;
 }
 export { isNoTeamOutline, outlineColor };
-// Text am Umriss je nach Stufe (Zeilen mit \n getrennt)
+// Text am Umriss je nach Stufe (Zeilen mit \n getrennt). Die Fläche steht (v130.33) schon ab
+// Stufe 1 dabei – klein, aber gut lesbar, nicht erst beim tiefsten Zoom.
 export function trackLabel(it, who, d = 3) {
   if (d <= 0) return '';
   const name = (it.name || '').trim();
-  if (d === 1) return name;
-  const second = [who ? `→ ${who}` : '', d >= 3 && hasArea(it) ? formatArea(polygonArea(it.pts)) : ''].filter(Boolean).join(' · ');
+  const area = hasArea(it) ? formatArea(polygonArea(it.pts)) : '';
+  if (d === 1) return [name, area].filter(Boolean).join(' · ');
+  const second = [who ? `→ ${who}` : '', area].filter(Boolean).join(' · ');
   return [name, second].filter(Boolean).join('\n');
 }
 const shortText = (t, d) => (d >= 3 || t.length <= 16 ? t : `${t.slice(0, 15)}…`);
@@ -633,7 +635,6 @@ function gridLon(grid, c) {
 function drawItems(ctx, toPx, items, s, teamNames = {}, d = 3, grey = true) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  const named = new Set(); // Zeichnung aus mehreren Strichen: Name nur am ersten
   for (const it of items) {
     if (it.kind === 'stroke' && it.pts.length) {
       ctx.strokeStyle = it.color;
@@ -649,9 +650,10 @@ function drawItems(ctx, toPx, items, s, teamNames = {}, d = 3, grey = true) {
         ctx.lineTo(x + 0.1, y);
       }
       ctx.stroke();
-      if (d > 0 && it.name && !(it.group && named.has(it.group))) {
-        if (it.group) named.add(it.group);
-        // Name am Anfang der Zeichnung, wie bei Tracks
+      if (d > 0 && it.name) {
+        // v130.7: an jedem Strich der Zeichnung (nicht nur am ersten) – sonst bleibt der Name bei zwei
+        // in einem Zug gezeichneten, getrennten Strichen nur an einem davon sichtbar
+        // Name am Anfang des Strichs, wie bei Tracks
         const [x, y] = toPx(it.pts[0][0], it.pts[0][1]);
         ctx.font = `bold ${13 * s}px sans-serif`;
         ctx.textAlign = 'left';
@@ -662,17 +664,38 @@ function drawItems(ctx, toPx, items, s, teamNames = {}, d = 3, grey = true) {
       drawTrack(ctx, toPx, it, s, it.to ? (it.to.startsWith('u:') ? it.to.slice(2) : (teamNames || {})[it.to] || '') : '', d, grey);
     } else if (it.kind === 'text') {
       const [x, y] = toPx(it.lat, it.lon);
-      ctx.fillStyle = it.color;
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2 * s;
+      // v130.2: wichtige Punkte (HF-Markierungen, von der EL zusätzlich geschickte Punkte) deutlich größer
+      // und mit Symbol – bleiben bei jeder Zoomstufe als Punkt sichtbar (markHidden lässt sie durch)
+      const big = !!it.marker;
+      const rad = (big ? 10 : 6) * s;
+      ctx.fillStyle = big ? '#fff' : it.color;
+      ctx.strokeStyle = big ? it.color : '#fff';
+      ctx.lineWidth = (big ? 3 : 2) * s;
       ctx.beginPath();
-      ctx.arc(x, y, 5 * s, 0, Math.PI * 2);
+      ctx.arc(x, y, rad, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+      if (big) {
+        const ico = (it.text || '').match(/^\p{Extended_Pictographic}(️|‍\p{Extended_Pictographic})*/u);
+        if (ico) {
+          ctx.font = `${13 * s}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#000';
+          ctx.fillText(ico[0], x, y + 1 * s);
+        }
+      }
       ctx.font = `bold ${15 * s}px sans-serif`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      if (d > 0) halo(ctx, shortText(it.text, d), x + 9 * s, y, it.color, s);
+      // Beschriftung: normale Texte nur ab Zoomstufe 15 (d>0, Deckluttern), wichtige Punkte immer
+      if (d > 0 || big) halo(ctx, big && d === 0 ? shortText(it.text, 1) : shortText(it.text, d || 1), x + (rad + 4) * s, y, it.color, s);
+      // v130: Aufgabe zum Punkt (z. B. von der Einsatzleitung: „Bitte prüfen …“) klein darunter
+      if (it.note && (d >= 2 || big)) {
+        ctx.font = `${12 * s}px sans-serif`;
+        ctx.textBaseline = 'top';
+        halo(ctx, it.note.length > 60 ? `${it.note.slice(0, 59)}…` : it.note, x + (rad + 4) * s, y + (rad - 1) * s, it.color, s);
+      }
     }
   }
 }
@@ -748,8 +771,10 @@ export function distToSegment(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-// Weit herausgezoomt (bis Stufe 14) sind Texte und Zeichnungen nicht zu sehen
-export const markHidden = (it, d) => d === 0 && (it.kind === 'text' || it.kind === 'stroke');
+// Weit herausgezoomt (bis Stufe 14) sind Texte und Zeichnungen nicht zu sehen – außer wichtigen Punkten
+// (it.marker: HF-Markierungen, von der Einsatzleitung zusätzlich geschickte Punkte), die bleiben immer sichtbar,
+// genau wie Fund/Hilfe-Meldungen, B-Ort und Lage-Orte.
+export const markHidden = (it, d) => d === 0 && (it.kind === 'text' || it.kind === 'stroke') && !it.marker;
 export function hitItem(items, toPx, x, y, tol, d = 3) {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
