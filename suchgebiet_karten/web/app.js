@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.45';
+const APP_VERSION = 'v130.46';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -5345,6 +5345,10 @@ async function showElPrio() {
   clearInterval(beeper);
   elPrioOpen = false;
   if (proj === P) sendReadAck(todo.map((m) => m.id));
+  // v130.46: Bugfix – „✓ Verstanden“ sprang bisher einfach zurück zur Karte, ohne den gemeldeten Ort zu
+  // zeigen; man musste zusätzlich noch extra auf „🗺️ Zeigen“ tippen (leicht zu übersehen). Jetzt zoomt die
+  // Karte beim Bestätigen gleich automatisch zum Ort (z. B. Fundstelle eines Kleidungsstücks).
+  if (zpts.length && proj === P) showPts(zpts);
   showElPrio();
 }
 // ✉️: Liste der Nachrichten (neueste oben); ungelesene gewöhnliche gelten damit als gelesen
