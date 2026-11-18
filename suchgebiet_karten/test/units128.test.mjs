@@ -149,8 +149,8 @@ test('Kräfteübersicht aus den Teams', () => {
     { id: 's', kind: 'status', label: 'abgesucht' },
   ];
   const f = forcesFromTeams(marks);
-  assert.deepEqual(f.find((x) => x.org === 'FF'), { org: 'FF', lead: 2, helpers: 6, dogs: 0, vehicles: 1, teams: 2 });
-  assert.deepEqual(f.find((x) => x.org === 'DRK'), { org: 'DRK', lead: 0, helpers: 2, dogs: 1, vehicles: 0, teams: 1 });
+  assert.deepEqual(f.find((x) => x.org === 'FF'), { org: 'FF', lead: 2, uf: 0, helpers: 6, dogs: 0, vehicles: 1, teams: 2 });
+  assert.deepEqual(f.find((x) => x.org === 'DRK'), { org: 'DRK', lead: 0, uf: 0, helpers: 2, dogs: 1, vehicles: 0, teams: 1 });
   assert.equal(f.find((x) => x.org === 'ohne Organisation').teams, 1);
   assert.match(forcesText(f)[0], /^FF: 2 Einheiten, 8 Pers\., 1 Fahrz\.$/);
   assert.deepEqual(typeCounts(marks), { hund: 1, kette: 1, kfz: 1, drohne: 1 });

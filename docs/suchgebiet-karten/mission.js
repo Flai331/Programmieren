@@ -5,36 +5,42 @@
 import { windLines } from './weather.js';
 import { outlineColor } from './store.js';
 
+// v130.54 (Klaas' Rückmeldung): „Unterführer“ (Gruppen-/Truppführer) als eigene Stufe dazu – Stärke wird nach dem
+// Hiorg/Kat-Schutz-Standard „Führung/Unterführer/Helfer//Gesamt“ gerechnet (z. B. „1/1/7//9“) statt nur zweistufig.
 export const FORCE_KEYS = [
   ['lead', 'Führung'],
+  ['uf', 'Unterführer'],
   ['helpers', 'Helfer'],
   ['dogs', 'Hunde'],
   ['vehicles', 'Fahrz.'],
 ];
 
-// ---------- v130.53 (Klaas' Rückmeldung): Stärkemeldung per QR-Code ----------
-// Eine Hilfsorganisation ohne eigenen Zugriff auf den Einsatz soll ihre Stärke eintragen können, ohne dass
-// die Einsatzleitung sie diktiert bekommt oder abtippt: die EL zeigt einen QR-Code („Formular anfordern“,
-// #k=…), die Hiorg scannt ihn mit einer beliebigen Kamera – das öffnet in der App ein einfaches Formular
-// (kein Einsatz/Login nötig). Das Ausgefüllte kommt als eigener QR-Code (#s=…) zurück, den die
-// Einsatzleitung scannt – die Zeile landet direkt in „Kräfte der Organisationen“.
+// ---------- v130.53/54 (Klaas' Rückmeldung): Stärken & Teams per QR erfassen (Rundgang) ----------
+// Eine Hilfsorganisation oder ein herumgeschickter Helfer ohne eigenen Zugriff auf den Einsatz soll Stärken
+// und Teams erfassen können, ohne dass die Einsatzleitung sie diktiert bekommt oder abtippt: die EL zeigt
+// einen QR-Code („Formular anfordern“, #k=…), das andere Gerät scannt ihn mit einer beliebigen Kamera – das
+// öffnet in der App ein Formular (kein Einsatz/Login nötig), in das nacheinander beliebig viele Organisationen
+// (Stärke) und/oder Teams (Hund, Trupp, Fahrzeug, Drohne) eingetragen werden. Das Ganze kommt als EIN
+// QR-Code (#s=…, bei vielen Einträgen mehrteilig) zurück: die Einsatzleitung scannt ihn und jeder Eintrag
+// landet in der passenden Rubrik – Stärken bei „Kräfte der Organisationen“, Teams bei „Teams“.
 export function buildForceRequest(p) {
   return { k: 'k', v: 1, ti: (p && p.title) || '' };
 }
 const forceNum = (v) => String(Math.max(0, Math.floor(Number(v)) || 0));
-export function buildForceReply(f, now = Date.now()) {
-  return {
-    k: 's', v: 1, at: now,
-    org: String((f && f.org) || '').trim().slice(0, 60),
-    lead: forceNum(f && f.lead), helpers: forceNum(f && f.helpers), dogs: forceNum(f && f.dogs), vehicles: forceNum(f && f.vehicles),
-  };
+// Ein Stärke-Eintrag (Organisation), roh wie im Formular eingegeben -> normalisiert für die QR-Übertragung
+export function normForceItem(f) {
+  const out = { t: 'o', org: String((f && f.org) || '').trim().slice(0, 60) };
+  for (const [key] of FORCE_KEYS) out[key] = forceNum(f && f[key]);
+  return out;
 }
-// Ergänzt p.mission.forces um die gemeldete Stärke als neue Zeile (ändert p) -> die neue Zeile
-export function mergeForceReply(p, data) {
-  const row = {
-    org: data.org || '(ohne Namen)', lead: data.lead || '0', helpers: data.helpers || '0', dogs: data.dogs || '0', vehicles: data.vehicles || '0',
-  };
-  p.mission.forces.push(row);
+// Mehrere Einträge (Organisationen und/oder Teams) in einem QR-Code/Link
+export function buildForceBatch(items, now = Date.now()) {
+  return { k: 's', v: 2, at: now, items: items || [] };
+}
+// Ein Stärke-Eintrag (t:'o') -> die neue Zeile für p.mission.forces (reine Funktion, mutiert nichts)
+export function forceRowFromItem(it) {
+  const row = { org: it.org || '(ohne Namen)' };
+  for (const [key] of FORCE_KEYS) row[key] = it[key] || '0';
   return row;
 }
 
@@ -132,17 +138,17 @@ export function mailAddresses(row) {
 const num = (v) => Math.max(0, Math.round(Number(v) || 0));
 
 export function forceTotals(forces) {
-  const t = { lead: 0, helpers: 0, dogs: 0, vehicles: 0 };
+  const t = Object.fromEntries(FORCE_KEYS.map(([k]) => [k, 0]));
   for (const f of forces) for (const [k] of FORCE_KEYS) t[k] += num(f[k]);
-  t.people = t.lead + t.helpers;
+  t.people = t.lead + t.uf + t.helpers;
   return t;
 }
 
-// „DRK RHS Celle: 1 Führung, 6 Helfer, 4 Hunde, 2 Fahrz.“
-// Stärke nur als Zahlen: Führung/Helfer//Gesamt + Hunde (+ Fahrzeuge)
-export const STRENGTH_HINT = 'Führung/Helfer//Gesamt';
+// „DRK RHS Celle: 1 Führung, 1 Unterführer, 6 Helfer, 4 Hunde, 2 Fahrz.“
+// Stärke nach dem Hiorg/Kat-Schutz-Standard: Führung/Unterführer/Helfer//Gesamt + Hunde (+ Fahrzeuge)
+export const STRENGTH_HINT = 'Führung/Unterführer/Helfer//Gesamt';
 function strength(t) {
-  let s = `${t.lead}/${t.helpers}//${t.lead + t.helpers}`;
+  let s = `${t.lead}/${t.uf}/${t.helpers}//${t.lead + t.uf + t.helpers}`;
   if (t.dogs) s += ` + ${t.dogs} Hunde`;
   if (t.vehicles) s += ` + ${t.vehicles} Fz.`;
   return s;
