@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.47';// Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
+const APP_VERSION = 'v130.48';// Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
 let userMovedAt = 0; // zuletzt von Hand verschoben (GPS-Mitführen pausiert kurz)
@@ -1602,8 +1602,17 @@ async function loadWays(auto) {
     const data = parseLines(await overpass(linesQuery(bbox), ctl.signal, 'Wege-Overlay'));
     if (ctl.signal.aborted || !db.waysOn) return;
     waysLayer.clearLayers();
-    for (const p of data.paths) L.polyline(p, { color: '#8d6e63', weight: 3, opacity: 0.85, interactive: false }).addTo(waysLayer);
-    for (const w of data.waters) L.polyline(w, { color: '#1565c0', weight: 3, opacity: 0.85, interactive: false }).addTo(waysLayer);
+    // v130.48: Bugfix – auf dem Luftbild (der meistgenutzten Grundkarte) gingen die dünnen, gedeckten
+    // Linien im Foto unter (Waldweg auf braunem Boden, Bach auf dunklem Wasser kaum zu unterscheiden).
+    // Jetzt mit weißem "Lichtrand" darunter und kräftigeren Farben – sichtbar auf jedem Untergrund.
+    for (const p of data.paths) {
+      L.polyline(p, { color: '#fff', weight: 6, opacity: 0.9, interactive: false }).addTo(waysLayer);
+      L.polyline(p, { color: '#e65100', weight: 3, opacity: 0.95, interactive: false }).addTo(waysLayer);
+    }
+    for (const w of data.waters) {
+      L.polyline(w, { color: '#fff', weight: 6, opacity: 0.9, interactive: false }).addTo(waysLayer);
+      L.polyline(w, { color: '#0091ea', weight: 3, opacity: 0.95, interactive: false }).addTo(waysLayer);
+    }
     waysBounds = pad;
     map.attributionControl.addAttribution(OSM_NOTE);
   } catch (err) {
