@@ -13,8 +13,8 @@ function project() {
     summary: '15:05 Person gefunden',
     author: 'Anna',
     forces: [
-      { org: 'Feuerwehr Laer', lead: 2, helpers: 18, dogs: 0 },
-      { org: 'JUH RHS Osnabrück', lead: 1, helpers: 7, dogs: 5, own: true },
+      { org: 'Feuerwehr Laer', lead: 2, uf: 1, helpers: 18, dogs: 0 },
+      { org: 'JUH RHS Osnabrück', lead: 1, uf: 1, helpers: 7, dogs: 5, own: true },
       { org: 'BRH RHS Münster', lead: 1, helpers: 4, dogs: 3 },
     ],
   });
@@ -30,8 +30,8 @@ test('JUH: eigene und fremde Kräfte, Gruppen, Texte', () => {
   assert.equal(fields['Textfeld 77'], '26');
   assert.equal(fields['Textfeld 6'], 'Osnabrück');
   assert.equal(fields['Textfeld 39'], 'K. Otte (JUH RHS Osnabrück)');
-  assert.deepEqual([fields['Textfeld 41'], fields['Textfeld 43.0'], fields['Textfeld 43.1']], ['1', '7', '8']);
-  assert.deepEqual([fields['Textfeld 46'], fields['Textfeld 44.0'], fields['Textfeld 44.1']], ['3', '22', '25']);
+  assert.deepEqual([fields['Textfeld 41'], fields['Textfeld 42'], fields['Textfeld 43.0'], fields['Textfeld 43.1']], ['1', '1', '7', '9']);
+  assert.deepEqual([fields['Textfeld 46'], fields['Textfeld 45'], fields['Textfeld 44.0'], fields['Textfeld 44.1']], ['3', '1', '22', '26']);
   assert.equal(fields['Textfeld 47'], '5');
   assert.equal(fields['Textfeld 50'], '3'); // nur Hunde fremder Staffeln
   assert.match(fields['Textfeld 78.0.1'], /Feuerwehr Laer/);
@@ -41,8 +41,8 @@ test('JUH: eigene und fremde Kräfte, Gruppen, Texte', () => {
   p2.mission.times = { alarm: '13:20', alarmDate: '2026-10-28', depart: '13:35', arrive: '14:05', end: '15:40', back: '16:20' };
   const v2 = juhValues(p2).fields;
   assert.deepEqual(['29', '30', '36', '37', '52', '54'].map((n) => v2[`Textfeld ${n}`]), ['28.10.2026', '13:20', '13:35', '14:05', '15:40', '16:20']);
-  assert.equal(v2['Textfeld 55'], '24'); // 8 eigene Helfer × 3 h
-  assert.equal(v2['Textfeld 56'], '99'); // 33 × 3 h
+  assert.equal(v2['Textfeld 55'], '27'); // 9 eigene (Führung+Unterführer+Helfer) × 3 h
+  assert.equal(v2['Textfeld 56'], '105'); // 35 × 3 h
   assert.equal(blocks.lage, 'Vermisste Person: Herr M., 82 J.');
   assert.match(blocks.staffeln, /BRH RHS Münster/);
 });

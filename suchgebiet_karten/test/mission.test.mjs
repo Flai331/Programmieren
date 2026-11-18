@@ -1,17 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { forceTotals, forceLine, totalLine, missionText, lineLegend, normalizeMission, buildForceRequest, buildForceReply, mergeForceReply } from '../web/mission.js';
+import { forceTotals, forceLine, totalLine, missionText, lineLegend, normalizeMission, buildForceRequest, normForceItem, buildForceBatch, forceRowFromItem } from '../web/mission.js';
 import { newProject, normalizeProject } from '../web/store.js';
-import { forcesFromTeams } from '../web/units.js';
+import { forcesFromTeams, packReportTeam, teamFromReportItem } from '../web/units.js';
 
-test('Kräfte: Summen und Zeilen', () => {
+test('Kräfte: Summen und Zeilen (Hiorg/Kat-Schutz-Standard: Führung/Unterführer/Helfer//Gesamt)', () => {
   const f = [
-    { org: 'DRK RHS Celle', lead: '1', helpers: '6', dogs: '4', vehicles: '2' },
-    { org: 'Feuerwehr', lead: 2, helpers: 'x', dogs: '', vehicles: -1 },
+    { org: 'DRK RHS Celle', lead: '1', uf: '1', helpers: '7', dogs: '4', vehicles: '2' },
+    { org: 'Feuerwehr', lead: 2, uf: '', helpers: 'x', dogs: '', vehicles: -1 },
   ];
-  assert.deepEqual(forceTotals(f), { lead: 3, helpers: 6, dogs: 4, vehicles: 2, people: 9 });
-  assert.equal(forceLine(f[0]), 'DRK RHS Celle: 1/6//7 + 4 Hunde + 2 Fz.');
-  assert.equal(totalLine(f), 'Gesamt: 3/6//9 + 4 Hunde + 2 Fz.');
+  assert.deepEqual(forceTotals(f), { lead: 3, uf: 1, helpers: 7, dogs: 4, vehicles: 2, people: 11 });
+  assert.equal(forceLine(f[0]), 'DRK RHS Celle: 1/1/7//9 + 4 Hunde + 2 Fz.');
+  assert.equal(totalLine(f), 'Gesamt: 3/1/7//11 + 4 Hunde + 2 Fz.');
 });
 
 test('Alte Suchgebiete bekommen ein leeres Protokoll', () => {
@@ -35,7 +35,7 @@ test('Mailtext und Kartenlegende', () => {
   });
   assert.deepEqual(lineLegend(p), [{ color: '#d50000', label: 'Spur Mantrailer', line: true }]);
   const t = missionText(p, null);
-  for (const part of ['Einsatz: Suche Wald', 'Verfasser: Anna', 'Herr M., 82 J.', 'RHS: 1/4//5 + 3 Hunde + 1 Fz.', 'Gesamt: 1/4//5', 'Person in C4 gefunden']) {
+  for (const part of ['Einsatz: Suche Wald', 'Verfasser: Anna', 'Herr M., 82 J.', 'RHS: 1/0/4//5 + 3 Hunde + 1 Fz.', 'Gesamt: 1/0/4//5', 'Person in C4 gefunden']) {
     assert.ok(t.includes(part), part);
   }
 });
@@ -62,7 +62,7 @@ test('Mailtext nur mit angekreuzten Inhalten', () => {
   const p = newProject('X');
   Object.assign(p.mission, { person: 'Herr M.', summary: 'gefunden', forces: [{ org: 'RHS', helpers: 3 }] });
   const t = missionText(p, null, 'Anhang', { person: false, forces: true, summary: false });
-  assert.ok(!t.includes('Herr M.') && !t.includes('gefunden') && t.includes('RHS: 0/3//3'));
+  assert.ok(!t.includes('Herr M.') && !t.includes('gefunden') && t.includes('RHS: 0/0/3//3'));
 });
 
 test('Zeiten: Zeilen und Dauer über Mitternacht', async () => {
@@ -94,18 +94,27 @@ test('Kräfteübersicht: der Hundeführer zählt als Helfer, nicht als Führung'
   const f = forcesFromTeams(marks).find((x) => x.org === 'DRK');
   // Hund-Team (1 Hundeführer + 2 Suchhelfer): alle 3 zählen als Helfer, keine Führung
   // Kette (1 Truppführer + 3 Helfer): der Truppführer zählt weiter als Führung
-  assert.deepEqual(f, { org: 'DRK', lead: 1, helpers: 6, dogs: 1, vehicles: 0, teams: 2 });
+  assert.deepEqual(f, { org: 'DRK', lead: 1, uf: 0, helpers: 6, dogs: 1, vehicles: 0, teams: 2 });
 });
 
-test('Stärkemeldung per QR: Formular anfordern, ausfüllen, bei der EL einfügen', () => {
+test('Rundgang per QR: Formular anfordern, Stärken+Teams sammeln, als ein Paket bauen', () => {
   const p = normalizeProject({ title: 'Übung Stadtwald' });
   assert.deepEqual(buildForceRequest(p), { k: 'k', v: 1, ti: 'Übung Stadtwald' });
-  const reply = buildForceReply({ org: '  THW OV Celle  ', lead: '1', helpers: '7', dogs: '', vehicles: '-2' }, 1700000000000);
-  assert.deepEqual(reply, { k: 's', v: 1, at: 1700000000000, org: 'THW OV Celle', lead: '1', helpers: '7', dogs: '0', vehicles: '0' });
-  const row = mergeForceReply(p, reply);
-  assert.deepEqual(row, { org: 'THW OV Celle', lead: '1', helpers: '7', dogs: '0', vehicles: '0' });
-  assert.deepEqual(p.mission.forces, [row]);
+  const item = normForceItem({ org: '  THW OV Celle  ', lead: '1', uf: '1', helpers: '7', dogs: '', vehicles: '-2' });
+  assert.deepEqual(item, { t: 'o', org: 'THW OV Celle', lead: '1', uf: '1', helpers: '7', dogs: '0', vehicles: '0' });
+  const row = forceRowFromItem(item);
+  assert.deepEqual(row, { org: 'THW OV Celle', lead: '1', uf: '1', helpers: '7', dogs: '0', vehicles: '0' });
   // leere Organisation -> Platzhalter statt leerer Zeile
-  const row2 = mergeForceReply(p, buildForceReply({ org: '', lead: '0', helpers: '0', dogs: '0', vehicles: '0' }));
-  assert.equal(row2.org, '(ohne Namen)');
+  assert.equal(forceRowFromItem(normForceItem({ org: '' })).org, '(ohne Namen)');
+  const batch = buildForceBatch([item], 1700000000000);
+  assert.deepEqual(batch, { k: 's', v: 2, at: 1700000000000, items: [item] });
+});
+
+test('Rundgang: Team-Eintrag (Hund) im Formular packen und bei der EL wieder auspacken', () => {
+  const t1 = packReportTeam({ ty: 'hund', org: 'DRK', dog: 'Rex', helpers: '2' });
+  assert.deepEqual(t1, { t: 'u', o: 'DRK', dog: 'Rex', n: 3 }); // ty: 'hund' ist Standard, wird nicht gespeichert
+  assert.deepEqual(teamFromReportItem(t1), { org: 'DRK', dog: 'Rex', helpers: 2 });
+  const t2 = packReportTeam({ ty: 'kette', org: 'FF', helpers: '4' });
+  assert.deepEqual(t2, { t: 'u', ty: 'kette', o: 'FF', n: 5 });
+  assert.deepEqual(teamFromReportItem(t2), { ty: 'kette', org: 'FF', helpers: 4 });
 });

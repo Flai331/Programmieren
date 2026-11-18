@@ -41,9 +41,11 @@ export function juhValues(project, now = new Date()) {
     'Textfeld 39': [project.leader, ownNames && `(${ownNames})`].filter(Boolean).join(' '),
     // Kräfte: Fü / GF / Helfer // Gesamt
     'Textfeld 41': n(ownT.lead),
+    'Textfeld 42': n(ownT.uf),
     'Textfeld 43.0': n(ownT.helpers),
     'Textfeld 43.1': n(ownT.people),
     'Textfeld 46': n(otherT.lead),
+    'Textfeld 45': n(otherT.uf),
     'Textfeld 44.0': n(otherT.helpers),
     'Textfeld 44.1': n(otherT.people),
     // RH-Teams Fläche (Hunde)

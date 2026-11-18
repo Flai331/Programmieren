@@ -22,7 +22,7 @@ import { isDone, openPoints, guardApplies, msgPct, closeMsg, sentPct, closeAsk, 
 import { ELW_KINDS, elwTemplates, buildElwOrder, splitElwOrder, joinElwParts, elwInbox, addElwIn, mergeElwItems, elwPoints, elwCounts, buildElwAck, isElwAck } from './elw.js'; // v124, v130.23
 import { RTC_KIND, buildRtcMsg, rtcFor, shouldYield } from './rtc.js'; // v130.15
 import { nextTeamLabel, uaPrefix, sameTeamName, uaName, uaTitle, joinUaNames, renameUa } from './uateam.js';
-import { typeIcon, typeText, unitType, isDog, unitLine, cleanUnit, nextFunkrufname, UNIT_TYPES, ORGS, forcesFromTeams, forcesText, whoText } from './units.js'; // v128
+import { typeIcon, typeText, unitType, unitInfo, isDog, unitLine, cleanUnit, nextFunkrufname, UNIT_TYPES, ORGS, forcesFromTeams, forcesText, whoText, packReportTeam, teamFromReportItem } from './units.js'; // v128
 import { FUNK_KINDS, funkKind, funkLabel, timeOfDay, funkTargets, buildFunkMsg, addFunkMsg, buildFindMsg, msgSource } from './funk.js'; // v128
 import { FIND_KINDS, findKind, findLabel, FIND_A, forAllUa, checkText, isFind, findStatusText } from './finds.js'; // v128
 import { buildZusatz, applyZusatz, isZusatz, ZUSATZ_MAX } from './zusatz.js'; // v130
@@ -35,7 +35,7 @@ import { buildProgress, mergeProgress, progressSummary, progressPreview, progres
 import {
   FORCE_KEYS, TIME_KEYS, totalLine, usedColors, colorName, notePageImage, drawNotePage, PAGE_RATIO, shrinkPhoto, missionText,
   MAIL_PARTS, REPORT_SECTIONS, MAP_PARTS, EXTRA_PARTS, hasReportText, newMailTo, mailAddresses,
-  normTime, buildForceRequest, buildForceReply, mergeForceReply,
+  normTime, buildForceRequest, normForceItem, buildForceBatch, forceRowFromItem,
 } from './mission.js';
 import { buildCustomMap, planCustomMap } from './kmz.js';
 import {
@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.53';
+const APP_VERSION = 'v130.54';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -7877,21 +7877,23 @@ async function takeInfos(inf) {
   toast(sum ? `📥 Infos von ${from}: ${sum}` : `📥 Infos von ${from}: nichts Neues`, 6000);
 }
 
-// ---- Stärkemeldung per QR: Hiorg ohne eigenen Zugriff auf den Einsatz trägt ihre Stärke in ein kurzes
-// Formular ein (kein Einsatz/Login nötig) und zeigt den entstehenden QR-Code der Einsatzleitung (v130.53) ----
+// ---- Rundgang: Stärken & Teams per QR erfassen – ein Helfer ohne eigenen Zugriff auf den Einsatz trägt
+// nacheinander beliebig viele Hiorg-Stärken und/oder Teams (Hund, Trupp, Fahrzeug, Drohne) in ein Formular
+// ein und zeigt am Ende EINEN QR-Code für alles zusammen der Einsatzleitung (v130.53/54) ----
 async function sendForceRequest() {
   if (isFree()) return lockedToast();
   const link = shareLink('k', await pack(buildForceRequest(P)), PUBLIC_URL);
-  showQr(link, '📲 Stärkemeldung anfordern', 'Die Hiorg scannt diesen Code mit einer beliebigen Kamera – das öffnet ein kurzes Formular, kein Einsatz-Zugriff nötig. Das Ausgefüllte kommt als eigener QR-Code zurück: mit „📷 Scannen“ einlesen – die Zeile landet direkt hier in „Kräfte der Organisationen“.');
+  showQr(link, '📲 Stärken & Teams erfassen', 'Ein Helfer oder eine Hiorg scannt diesen Code mit einer beliebigen Kamera – das öffnet ein Formular, kein Einsatz-Zugriff nötig: dort können nacheinander mehrere Organisationen (Stärke) und/oder Teams eingetragen werden. Am Ende entsteht EIN QR-Code für alles zusammen: mit „📷 Scannen“ einlesen – jeder Eintrag landet hier in der passenden Rubrik.');
 }
 $('ms-force-qr').addEventListener('click', sendForceRequest);
 
-async function openForceForm(data) {
-  const ti = (data && data.ti) || '';
-  const f = { org: '', lead: '', helpers: '', dogs: '', vehicles: '' };
+// Ein Eintrag „Organisation (Stärke)“ -> normForceItem oder null (Abbruch)
+async function askForceOrg() {
+  const f = { org: '' };
+  for (const [key] of FORCE_KEYS) f[key] = '';
   for (;;) {
     const go = await openDlg((box, close) => {
-      dlgHead(box, '📋 Stärkemeldung', `Für die Einsatzleitung${ti ? ` – Einsatz „${esc(ti)}“` : ''}. Eintragen und danach den entstehenden QR-Code der Einsatzleitung zeigen.`);
+      dlgHead(box, '📋 Organisation (Stärke)', 'Zahlen ohne eigene Führung/Unterführer getrennt eintragen – nach dem Hiorg/Kat-Schutz-Standard Führung/Unterführer/Helfer//Gesamt.');
       const row = (key, label, type) => {
         const l = document.createElement('label');
         l.innerHTML = `<small>${label}</small><input type="${type}" ${type === 'number' ? 'min="0" inputmode="numeric"' : ''}>`;
@@ -7904,27 +7906,125 @@ async function openForceForm(data) {
       const orgInp = row('org', 'Organisation', 'text');
       orgInp.placeholder = 'z. B. DRK RHS Celle, Feuerwehr, THW';
       for (const [key, label] of FORCE_KEYS) row(key, label, 'number');
-      dlgButton(box, '📲 QR-Code erzeugen', 'primary', () => close(true));
+      dlgButton(box, '+ Hinzufügen', 'primary', () => close(true));
       dlgButton(box, 'Abbrechen', '', () => close(false));
       setTimeout(() => orgInp.focus(), 50);
     });
-    if (!go) return;
+    if (!go) return null;
     if (!String(f.org).trim()) { toast('Bitte Organisation eintragen'); continue; }
-    const reply = buildForceReply(f);
-    const link = shareLink('s', await pack(reply), PUBLIC_URL);
-    return showQr(link, `📋 Stärkemeldung ${reply.org}`, 'Der Einsatzleitung zeigen – sie scannt diesen Code (📷 Scannen).');
+    return normForceItem(f);
+  }
+}
+// Ein Eintrag „Team“ -> packReportTeam(...) oder null (Abbruch)
+async function askForceTeam() {
+  const f = { ty: 'hund', org: '', dog: '', helpers: '' };
+  for (;;) {
+    const go = await openDlg((box, close) => {
+      dlgHead(box, '🐕 Team anlegen', 'Die Einsatzleitung vergibt beim Einfügen Funkrufname/Farbe passend zu den schon vorhandenen Teams.');
+      const tySel = document.createElement('label');
+      tySel.innerHTML = `<small>Typ</small><select>${UNIT_TYPES.map((t) => `<option value="${t.code}">${t.ico} ${t.label}</option>`).join('')}</select>`;
+      const sel = tySel.querySelector('select');
+      sel.value = f.ty;
+      box.appendChild(tySel);
+      const row = (key, label, type) => {
+        const l = document.createElement('label');
+        l.innerHTML = `<small>${label}</small><input type="${type}" ${type === 'number' ? 'min="0" inputmode="numeric"' : ''}>`;
+        const inp = l.querySelector('input');
+        inp.value = f[key];
+        inp.addEventListener('input', () => { f[key] = inp.value; });
+        box.appendChild(l);
+        return inp;
+      };
+      const orgInp = row('org', 'Organisation', 'text');
+      orgInp.placeholder = 'z. B. DRK RHS Celle, Feuerwehr, THW';
+      orgInp.setAttribute('list', 'org-list');
+      const dogRow = row('dog', 'Hund', 'text');
+      dogRow.placeholder = 'Name';
+      dogRow.parentElement.hidden = sel.value !== 'hund';
+      sel.addEventListener('change', () => { f.ty = sel.value; dogRow.parentElement.hidden = sel.value !== 'hund'; });
+      row('helpers', 'Suchhelfer (ohne Führer der Einheit)', 'number');
+      dlgButton(box, '+ Hinzufügen', 'primary', () => close(true));
+      dlgButton(box, 'Abbrechen', '', () => close(false));
+      setTimeout(() => orgInp.focus(), 50);
+    });
+    if (!go) return null;
+    return packReportTeam(f);
+  }
+}
+function forceItemText(it) {
+  if (it.t === 'u') return `${typeIcon({ ty: it.ty })} ${unitInfo({ ty: it.ty }).short}${it.o ? ` · ${it.o}` : ''}${it.dog ? ` · ${it.dog}` : ''} · ${it.n} Pers.`;
+  const total = Number(it.lead) + Number(it.uf) + Number(it.helpers);
+  return `${it.org}: ${it.lead}/${it.uf}/${it.helpers}//${total}${Number(it.dogs) ? ` + ${it.dogs} Hunde` : ''}${Number(it.vehicles) ? ` + ${it.vehicles} Fz.` : ''}`;
+}
+async function openForceForm(data) {
+  const ti = (data && data.ti) || '';
+  const items = [];
+  for (;;) {
+    const choice = await openDlg((box, close) => {
+      dlgHead(box, '📋 Stärken & Teams erfassen', `Für die Einsatzleitung${ti ? ` – Einsatz „${esc(ti)}“` : ''}. Beliebig viele Organisationen/Teams nacheinander eintragen, am Ende einen QR-Code für alle zusammen erzeugen.`);
+      if (items.length) {
+        const list = document.createElement('div');
+        list.className = 'plist';
+        items.forEach((it, i) => {
+          const row = document.createElement('div');
+          row.className = 'proj';
+          row.innerHTML = '<div class="meta"><b></b></div>';
+          row.querySelector('b').textContent = forceItemText(it);
+          const del = document.createElement('button');
+          del.textContent = '✕';
+          del.title = 'Entfernen';
+          del.addEventListener('click', () => { items.splice(i, 1); close('again'); });
+          row.appendChild(del);
+          list.appendChild(row);
+        });
+        box.appendChild(list);
+      }
+      dlgButton(box, '+ Organisation (Stärke)', 'primary', () => close('org'));
+      dlgButton(box, '+ Team (Hund, Trupp, Fahrzeug, Drohne)', '', () => close('team'));
+      if (items.length) dlgButton(box, `📲 QR-Code für ${items.length} Eintrag${items.length === 1 ? '' : 'e'} erzeugen`, 'urgent', () => close('send'));
+      dlgButton(box, items.length ? 'Fertig für jetzt' : 'Abbrechen', '', () => close(null));
+    });
+    if (choice === 'again') continue;
+    if (!choice) return;
+    if (choice === 'org') { const it = await askForceOrg(); if (it) items.push(it); continue; }
+    if (choice === 'team') { const it = await askForceTeam(); if (it) items.push(it); continue; }
+    const data2 = await pack(buildForceBatch(items));
+    const link = shareLink('s', data2, PUBLIC_URL);
+    const parts = link.length > QR_MAX ? splitParts(data2, 800).map((x) => shareLink('m', x, PUBLIC_URL)) : null;
+    return showQr(link, `📋 ${items.length} Eintrag${items.length === 1 ? '' : 'e'} für die Einsatzleitung`, `Der Einsatzleitung zeigen – sie scannt diesen Code (📷 Scannen)${parts ? ' (mehrere Codes wechseln sich ab, Kamera ruhig halten)' : ''}.`, parts);
   }
 }
 
 async function takeForceReply(data) {
   if (db.mode === 'hf' && !(await toElMode())) return;
   if (db.mode !== 'el') { db.mode = 'el'; applyMode(); }
-  if (isFree()) return toast('Kein Einsatz offen – erst einen Einsatz öffnen, dann die Stärkemeldung nochmal scannen', 7000);
+  if (isFree()) return toast('Kein Einsatz offen – erst einen Einsatz öffnen, dann den Code nochmal scannen', 7000);
   if (isClosed() && !(await reopenClosed())) return;
-  const row = mergeForceReply(P, data);
-  touch();
+  const items = Array.isArray(data.items) ? data.items : (data.org != null ? [{ t: 'o', ...data }] : []);
+  snapshot();
+  let forces = 0;
+  let teams = 0;
+  for (const it of items) {
+    if (it.t === 'u') {
+      const used = new Set(P.marks.map((mk) => mk.color));
+      const color = MARK_COLORS.find((c) => !used.has(c)) || MARK_COLORS[P.marks.length % MARK_COLORS.length];
+      const mk = { id: uid(), kind: 'team', label: '', dog: '', color, ...(P.parentEid ? { ua: uaName(P.title) } : {}) };
+      Object.assign(mk, teamFromReportItem(it));
+      if (mk.org) { const fk = nextFunkrufname(mk.org, P.marks); if (fk) { mk.fk = fk; mk.label = fk; } }
+      if (!mk.label) mk.label = nextTeamLabel(P);
+      cleanUnit(mk);
+      P.marks.push(mk);
+      teams++;
+    } else {
+      M().forces.push(forceRowFromItem(it));
+      forces++;
+    }
+  }
+  changed();
   if (!$('panel-mission').hidden) renderForces();
-  toast(`📥 Stärkemeldung von ${row.org}: ${row.lead} Führung, ${row.helpers} Helfer${row.dogs !== '0' ? `, ${row.dogs} Hunde` : ''}${row.vehicles !== '0' ? `, ${row.vehicles} Fahrz.` : ''}`, 8000);
+  if (!$('panel-teams').hidden) renderMarks();
+  renderPalette();
+  toast(`📥 Rundgang übernommen: ${forces ? `${forces} Stärkemeldung${forces === 1 ? '' : 'en'}` : ''}${forces && teams ? ', ' : ''}${teams ? `${teams} Team${teams === 1 ? '' : 's'} angelegt` : ''}${forces + teams ? '' : 'nichts Neues'}`, 8000);
 }
 
 // ---- Fortschritt (nur das Neue) zwischen Geräten der Einsatzleitung: nur QR-Code/Link, nie über den Status-Server ----
@@ -10467,12 +10567,18 @@ function renderTotal() {
 }
 $('ms-force-teams').addEventListener('click', () => {
   M().forces = M().forces.filter((f) => !f.auto);
-  for (const f of forcesFromTeams(P.marks)) M().forces.push({ org: f.org, lead: String(f.lead), helpers: String(f.helpers), dogs: String(f.dogs), vehicles: String(f.vehicles), auto: true });
+  for (const f of forcesFromTeams(P.marks)) {
+    const row = { org: f.org, auto: true };
+    for (const [key] of FORCE_KEYS) row[key] = String(f[key] || 0);
+    M().forces.push(row);
+  }
   touch();
   renderForces();
 });
 $('ms-force-add').addEventListener('click', () => {
-  M().forces.push({ org: '', lead: '', helpers: '', dogs: '', vehicles: '' });
+  const row = { org: '' };
+  for (const [key] of FORCE_KEYS) row[key] = '';
+  M().forces.push(row);
   touch();
   renderForces();
   const inputs = $('ms-forces').querySelectorAll('.org input');

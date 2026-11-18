@@ -97,18 +97,41 @@ export function fillUnit(old, inc) {
   return n > 0;
 }
 
+// ---------- v130.54: Rundgang – Team-Eintrag im Formular (ohne eigenen Einsatz) für den QR-Code an die EL ----------
+// Formular-Eingabe -> kompakter Eintrag: { t:'u', ty?, o?, dog?, n? }
+export function packReportTeam(f) {
+  const out = { t: 'u' };
+  if (f && TYPES[f.ty] && f.ty !== 'hund') out.ty = f.ty;
+  if (f && String(f.org || '').trim()) out.o = String(f.org).trim().slice(0, 30);
+  if (f && String(f.dog || '').trim()) out.dog = String(f.dog).trim().slice(0, 40);
+  out.n = persons(f);
+  return out;
+}
+// Eintrag -> Team-Felder (ohne id/Farbe/Funkrufname – die vergibt die Einsatzleitung beim Einfügen)
+export function teamFromReportItem(it) {
+  const out = {};
+  if (it && TYPES[it.ty] && it.ty !== 'hund') out.ty = it.ty;
+  if (it && String(it.o || '').trim()) out.org = String(it.o).trim().slice(0, 30);
+  if (it && String(it.dog || '').trim()) out.dog = String(it.dog).trim().slice(0, 40);
+  const n = Math.floor(Number(it && it.n));
+  if (n > 1) out.helpers = n - 1;
+  return out;
+}
+
 // ---------- Kräfteübersicht aus den Teams ----------
-// -> [{ org, lead, helpers, dogs, vehicles, teams }] je Organisation (Reihenfolge des ersten Auftretens);
+// -> [{ org, lead, uf, helpers, dogs, vehicles, teams }] je Organisation (Reihenfolge des ersten Auftretens);
 // Führung = 1 je Einheit außer Hund-Teams, Helfer = übrige Personen, Hunde = Hund-Teams, Fahrzeuge = Fahrzeug/Quad-Teams
 // v130.53 (Klaas' Rückmeldung): der Hundeführer selbst zählt als Helfer, nicht als Führung – „Führung“ meint
 // hier die Einsatzleitung/Zugführung, nicht den Hundeführer, der mit seinem Hund selbst sucht.
+// v130.54: „uf“ (Unterführer, Hiorg/Kat-Schutz-Stufe) bleibt bei einzelnen Teams immer 0 – die Stufe gibt es
+// erst ab Gruppen-/Zuggröße, nicht bei einem einzelnen Hund-/Kette-/Fahrzeug-/Drohnen-Team.
 export const NO_ORG = 'ohne Organisation';
 export function forcesFromTeams(marks) {
   const by = new Map();
   for (const m of marks || []) {
     if (!m || m.kind !== 'team' || m.id === '-' || m.hidden) continue;
     const org = String(m.org || '').trim() || NO_ORG;
-    if (!by.has(org)) by.set(org, { org, lead: 0, helpers: 0, dogs: 0, vehicles: 0, teams: 0 });
+    if (!by.has(org)) by.set(org, { org, lead: 0, uf: 0, helpers: 0, dogs: 0, vehicles: 0, teams: 0 });
     const f = by.get(org);
     const n = Math.max(1, persons(m));
     f.teams++;
