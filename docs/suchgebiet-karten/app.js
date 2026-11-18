@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.46';
+const APP_VERSION = 'v130.47';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -1581,11 +1581,19 @@ function waysClear() {
   if (waysCtl) { waysCtl.abort(); waysCtl = null; }
   map.attributionControl.removeAttribution(OSM_NOTE);
 }
-async function loadWays() {
+async function loadWays(auto) {
   if (!db.waysOn) return;
   const b = map.getBounds();
   if (waysBounds && waysBounds.contains(b)) return;
-  if (map.getZoom() < 14) { waysLayer.clearLayers(); return toast('Wege-Overlay: bitte näher heranzoomen', 4000); }
+  if (map.getZoom() < 14) {
+    waysLayer.clearLayers();
+    // v130.47: Bugfix/Bedienbarkeit – direkt beim Einschalten war oft weiter herausgezoomt als nötig; der
+    // Knopf sprang auf "an", aber es passierte sichtbar nichts außer einem schnell verschwindenden Hinweis
+    // (wirkte wie "kaputt", gerade für Erstnutzer ohne Erklärung). Jetzt zoomt die Karte beim Einschalten
+    // automatisch nah genug heran; beim Herauszoomen danach bleibt der Hinweis wie gewohnt.
+    if (auto) { map.setZoom(14); return; }
+    return toast('Wege-Overlay: bitte näher heranzoomen', 4000);
+  }
   if (waysCtl) waysCtl.abort();
   const ctl = new AbortController();
   waysCtl = ctl;
@@ -1609,7 +1617,7 @@ $('quick-ways').addEventListener('click', () => {
   db.waysOn = !db.waysOn;
   saveNow();
   $('quick-ways').classList.toggle('on', !!db.waysOn);
-  if (db.waysOn) loadWays(); else waysClear();
+  if (db.waysOn) loadWays(true); else waysClear();
 });
 map.on('moveend zoomend', () => {
   if (!db.waysOn) return;
