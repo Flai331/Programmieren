@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { forceTotals, forceLine, totalLine, missionText, lineLegend, normalizeMission } from '../web/mission.js';
+import { forceTotals, forceLine, totalLine, missionText, lineLegend, normalizeMission, buildForceRequest, buildForceReply, mergeForceReply } from '../web/mission.js';
 import { newProject, normalizeProject } from '../web/store.js';
+import { forcesFromTeams } from '../web/units.js';
 
 test('Kräfte: Summen und Zeilen', () => {
   const f = [
@@ -83,4 +84,28 @@ test('normTime: Uhrzeit von Hand', async () => {
   assert.equal(normTime('2460'), null);
   assert.equal(normTime('25:00'), null);
   assert.equal(normTime('12345'), null);
+});
+
+test('Kräfteübersicht: der Hundeführer zählt als Helfer, nicht als Führung', () => {
+  const marks = [
+    { id: '1', kind: 'team', label: 'H1', dog: 'Rex', helpers: 2, org: 'DRK' },
+    { id: '2', kind: 'team', label: 'K1', ty: 'kette', org: 'DRK', helpers: 3 },
+  ];
+  const f = forcesFromTeams(marks).find((x) => x.org === 'DRK');
+  // Hund-Team (1 Hundeführer + 2 Suchhelfer): alle 3 zählen als Helfer, keine Führung
+  // Kette (1 Truppführer + 3 Helfer): der Truppführer zählt weiter als Führung
+  assert.deepEqual(f, { org: 'DRK', lead: 1, helpers: 6, dogs: 1, vehicles: 0, teams: 2 });
+});
+
+test('Stärkemeldung per QR: Formular anfordern, ausfüllen, bei der EL einfügen', () => {
+  const p = normalizeProject({ title: 'Übung Stadtwald' });
+  assert.deepEqual(buildForceRequest(p), { k: 'k', v: 1, ti: 'Übung Stadtwald' });
+  const reply = buildForceReply({ org: '  THW OV Celle  ', lead: '1', helpers: '7', dogs: '', vehicles: '-2' }, 1700000000000);
+  assert.deepEqual(reply, { k: 's', v: 1, at: 1700000000000, org: 'THW OV Celle', lead: '1', helpers: '7', dogs: '0', vehicles: '0' });
+  const row = mergeForceReply(p, reply);
+  assert.deepEqual(row, { org: 'THW OV Celle', lead: '1', helpers: '7', dogs: '0', vehicles: '0' });
+  assert.deepEqual(p.mission.forces, [row]);
+  // leere Organisation -> Platzhalter statt leerer Zeile
+  const row2 = mergeForceReply(p, buildForceReply({ org: '', lead: '0', helpers: '0', dogs: '0', vehicles: '0' }));
+  assert.equal(row2.org, '(ohne Namen)');
 });

@@ -12,6 +12,32 @@ export const FORCE_KEYS = [
   ['vehicles', 'Fahrz.'],
 ];
 
+// ---------- v130.53 (Klaas' Rückmeldung): Stärkemeldung per QR-Code ----------
+// Eine Hilfsorganisation ohne eigenen Zugriff auf den Einsatz soll ihre Stärke eintragen können, ohne dass
+// die Einsatzleitung sie diktiert bekommt oder abtippt: die EL zeigt einen QR-Code („Formular anfordern“,
+// #k=…), die Hiorg scannt ihn mit einer beliebigen Kamera – das öffnet in der App ein einfaches Formular
+// (kein Einsatz/Login nötig). Das Ausgefüllte kommt als eigener QR-Code (#s=…) zurück, den die
+// Einsatzleitung scannt – die Zeile landet direkt in „Kräfte der Organisationen“.
+export function buildForceRequest(p) {
+  return { k: 'k', v: 1, ti: (p && p.title) || '' };
+}
+const forceNum = (v) => String(Math.max(0, Math.floor(Number(v)) || 0));
+export function buildForceReply(f, now = Date.now()) {
+  return {
+    k: 's', v: 1, at: now,
+    org: String((f && f.org) || '').trim().slice(0, 60),
+    lead: forceNum(f && f.lead), helpers: forceNum(f && f.helpers), dogs: forceNum(f && f.dogs), vehicles: forceNum(f && f.vehicles),
+  };
+}
+// Ergänzt p.mission.forces um die gemeldete Stärke als neue Zeile (ändert p) -> die neue Zeile
+export function mergeForceReply(p, data) {
+  const row = {
+    org: data.org || '(ohne Namen)', lead: data.lead || '0', helpers: data.helpers || '0', dogs: data.dogs || '0', vehicles: data.vehicles || '0',
+  };
+  p.mission.forces.push(row);
+  return row;
+}
+
 // Uhrzeit von Hand: „930“, „9:30“, „0930“, „14“ -> „09:30“ bzw. „14:00“; leer -> ''; ungültig -> null
 export function normTime(s) {
   const t = String(s || '').trim();

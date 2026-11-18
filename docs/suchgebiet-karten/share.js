@@ -33,8 +33,9 @@ export async function unpack(str) {
 // Link oder nackter Inhalt (aus QR-Code, eingefügtem Text …) -> { kind: 'a'|'r', data }
 export function parseShared(text) {
   // a = Auftrag, r = Rückmeldung, e = Einsatz-Übergabe, m = Teil eines mehrteiligen QR-Codes, i = Lage-Infos (ELW <-> EL),
-  // z = Zusatz zum laufenden Auftrag ohne Status-Server-Kanal (v130.36)
-  const m = String(text).match(/#([areimfz])=([A-Za-z0-9_-]+)/);
+  // z = Zusatz zum laufenden Auftrag ohne Status-Server-Kanal (v130.36),
+  // k = Stärke-Formular anfordern, s = ausgefüllte Stärkemeldung zurück an die EL (v130.53)
+  const m = String(text).match(/#([areimfzks])=([A-Za-z0-9_-]+)/);
   return m ? { kind: m[1], data: m[2] } : null;
 }
 export const shareLink = (kind, data, base = PUBLIC_URL) => `${base}#${kind}=${data}`;
