@@ -99,7 +99,9 @@ export function fillUnit(old, inc) {
 
 // ---------- Kräfteübersicht aus den Teams ----------
 // -> [{ org, lead, helpers, dogs, vehicles, teams }] je Organisation (Reihenfolge des ersten Auftretens);
-// Führung = 1 je Einheit, Helfer = übrige Personen, Hunde = Hund-Teams, Fahrzeuge = Fahrzeug/Quad-Teams
+// Führung = 1 je Einheit außer Hund-Teams, Helfer = übrige Personen, Hunde = Hund-Teams, Fahrzeuge = Fahrzeug/Quad-Teams
+// v130.53 (Klaas' Rückmeldung): der Hundeführer selbst zählt als Helfer, nicht als Führung – „Führung“ meint
+// hier die Einsatzleitung/Zugführung, nicht den Hundeführer, der mit seinem Hund selbst sucht.
 export const NO_ORG = 'ohne Organisation';
 export function forcesFromTeams(marks) {
   const by = new Map();
@@ -110,8 +112,12 @@ export function forcesFromTeams(marks) {
     const f = by.get(org);
     const n = Math.max(1, persons(m));
     f.teams++;
-    f.lead += 1;
-    f.helpers += n - 1;
+    if (isDog(m)) {
+      f.helpers += n;
+    } else {
+      f.lead += 1;
+      f.helpers += n - 1;
+    }
     if (isDog(m)) f.dogs++;
     if (unitType(m) === 'kfz') f.vehicles++;
   }
