@@ -156,18 +156,21 @@
   </nav>
 
   <div class="sidebuttons">
+    <!-- v130.51 (Klaas' Rückmeldung): Reihenfolge nach Häufigkeit im laufenden Einsatz statt historisch
+         gewachsen – vorne, was während der Suche ständig gebraucht wird (Teams/Status/Scannen/GPS),
+         hinten, was meist nur am Anfang/Ende eines Einsatzes drankommt. -->
     <button id="btn-hfmenu" class="hfonly" title="Mein Auftrag, Rettungspunkt, Notizen …"><span>☰</span>Menü</button>
-    <button id="btn-projects" title="Einsätze: Liste, neu, Datei, an weiteres Gerät übergeben"><span>📁</span>Einsätze</button>
-    <button id="btn-mission" title="Einsatz: Stammdaten, Lage, Einsatzende"><span>📋</span>Einsatz</button>
-    <button id="btn-notes" title="Notizen: getippt und handschriftlich"><span>📝</span>Notizen</button>
-    <button id="btn-grid" title="Raster"><span>#</span>Raster</button>
     <button id="btn-teams" title="Teams (Hund, Trupp, Fahrzeug, Drohne), Aufträge und Rückmeldungen"><span>👥</span>Teams</button>
     <button id="btn-status" class="el-only" title="Status-Verlauf: alle Meldungen der Teams"><span>📣</span>Status<i id="st-count" hidden></i></button>
-    <button id="btn-contacts" title="Kontakte: für diesen Einsatz und Adressbuch"><span>📇</span>Kontakte</button>
-    <button id="btn-layers" title="Kartenart, Rettungspunkte, Offline-Karten"><span>🗺️</span>Karte</button>
-    <button id="btn-gps" title="Mein Standort"><span>◎</span>GPS</button>
-    <button id="btn-more" title="Gerät, Hundeführer-Modus, App-Download"><span>⚙️</span>Mehr</button>
     <button id="btn-scan" title="QR-Code scannen: Rückmeldung, Einsatz-Übergabe, Unterabschnitt, Lage-Infos"><span>📷</span>Scannen</button>
+    <button id="btn-gps" title="Mein Standort"><span>◎</span>GPS</button>
+    <button id="btn-layers" title="Kartenart, Rettungspunkte, Offline-Karten"><span>🗺️</span>Karte</button>
+    <button id="btn-grid" title="Raster"><span>#</span>Raster</button>
+    <button id="btn-notes" title="Notizen: getippt und handschriftlich"><span>📝</span>Notizen</button>
+    <button id="btn-contacts" title="Kontakte: für diesen Einsatz und Adressbuch"><span>📇</span>Kontakte</button>
+    <button id="btn-projects" title="Einsätze: Liste, neu, Datei, an weiteres Gerät übergeben"><span>📁</span>Einsätze</button>
+    <button id="btn-mission" title="Einsatz: Stammdaten, Lage, Einsatzende"><span>📋</span>Einsatz</button>
+    <button id="btn-more" title="Gerät, Hundeführer-Modus, App-Download"><span>⚙️</span>Mehr</button>
     <button id="btn-pdf" class="primary" title="Weitergeben: QR-Code, Garmin, Mail, Speichern, PDF"><span>📤</span>Teilen</button>
   </div>
 
@@ -176,8 +179,7 @@
     <button id="quick-grid" class="on" title="Raster ein-/ausblenden"><span>#</span>Raster</button>
     <button id="quick-marks" class="on" title="Teams und Markierungen ein-/ausblenden"><span>▦</span>Felder</button>
     <button id="quick-rp" class="on plain" title="Nächster Rettungspunkt (von GPS-Standort oder Kartenmitte)" hidden><span>🚑</span>RP</button>
-    <button id="quick-wx" class="plain" title="Wetter und Wind einblenden"><span>🌬️</span>Wetter</button>
-    <button id="quick-arrows" class="plain" title="Wind auf der Karte ein/aus (blau = DWD, grün = gemessen)"><span>➚</span>Windpfeile</button>
+    <button id="quick-wx" class="plain" title="Wetter-Infofenster und Windpfeile auf der Karte ein-/ausblenden (blau = DWD, grün = gemessen)"><span>🌬️</span>Wind</button>
     <button id="quick-ways" class="plain" title="Wege und Gewässer aus OpenStreetMap einblenden (dieselben Daten wie beim Ausrichten an Wegen)"><span>🛤️</span>Wege</button>
     <button id="quick-night" class="plain" title="Nachtmodus: aus → dunkel → rot"><span>🌙</span>Nacht</button>
     <div class="zoomslider">

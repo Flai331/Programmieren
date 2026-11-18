@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.50';
+const APP_VERSION = 'v130.51';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -3246,7 +3246,7 @@ function dwdText(c) {
   return `aus ${dirName(c.from)} (${Math.round(c.from)}°) · ${Math.round(c.kmh)} km/h${c.gust ? `, Böen ${Math.round(c.gust)}` : ''} · Bft ${beaufort(c.kmh)}`;
 }
 function renderWx() {
-  $('quick-wx').classList.toggle('on', !!db.wxOn);
+  $('quick-wx').classList.toggle('on', !!(db.wxOn || db.windArrows));
   $('wx').hidden = !db.wxOn;
   if (!db.wxOn) return;
   $('wx-body').hidden = !!db.wxMin;
@@ -3344,34 +3344,32 @@ async function loadWeather(manual) {
     redraw();
   }
 }
-$('quick-wx').addEventListener('click', () => {
-  db.wxOn = !db.wxOn;
+// v130.51 (Klaas' Rückmeldung): „Wetter“ (Infofenster) und „Windpfeile“ (Karten-Overlay) waren zwei fast
+// gleich aussehende Knöpfe nebeneinander – jetzt ein Knopf „🌬️ Wind“, der beides zusammen ein-/ausschaltet.
+function setWindOn(on) {
+  db.wxOn = on;
+  db.windArrows = on;
   saveNow();
+  $('quick-wx').classList.toggle('on', on);
   renderWx();
   redraw();
-  if (db.wxOn) loadWeather(true);
-});
+  if (on) {
+    const stale = !db.wxLast || Date.now() - db.wxLast.fetched > 10 * 60e3 || (db.mode === 'hf' && !db.wxStations);
+    if (stale) loadWeather(true);
+    toast(db.mode === 'hf' ? 'Wind: blau = DWD (Punkt/Suchgebiet und Messstationen), grün = selbst gemessen'
+      : 'Wind: blau = DWD in der Mitte jedes Rasters/Umrisses, grün = von den Teams gemessen', 6000);
+  }
+}
+$('quick-wx').addEventListener('click', () => setWindOn(!(db.wxOn || db.windArrows)));
 $('wx-refresh').addEventListener('click', () => loadWeather(true));
 $('wx-min').addEventListener('click', () => { db.wxMin = !db.wxMin; saveNow(); renderWx(); });
 setInterval(() => { if ((db.wxOn || db.windArrows) && navigator.onLine) loadWeather(false); else renderWx(); }, 15 * 60e3);
-$('quick-arrows').addEventListener('click', () => {
-  db.windArrows = !db.windArrows;
-  saveNow();
-  $('quick-arrows').classList.toggle('on', !!db.windArrows);
-  redraw();
-  if (db.windArrows) {
-    const stale = !db.wxLast || Date.now() - db.wxLast.fetched > 10 * 60e3 || (db.mode === 'hf' && !db.wxStations);
-    if (stale) loadWeather(true);
-    toast(db.mode === 'hf' ? 'Windpfeile: blau = DWD (Punkt/Suchgebiet und Messstationen), grün = selbst gemessen'
-      : 'Wind: blau = DWD in der Mitte jedes Rasters/Umrisses, grün = von den Teams gemessen', 6000);
-  }
-});
-$('quick-arrows').classList.toggle('on', !!db.windArrows);
+$('quick-wx').classList.toggle('on', !!(db.wxOn || db.windArrows));
 // Hundeführer: gemessener Wind soll sofort als Pfeil zu sehen sein (Einsatzleitung schaltet „Wind“ selbst ein)
 function showWindArrows() {
   if (db.windArrows || db.mode !== 'hf') return;
   db.windArrows = true;
-  $('quick-arrows').classList.add('on');
+  $('quick-wx').classList.add('on');
   saveNow();
   redraw();
 }
@@ -8963,9 +8961,7 @@ const WIZ = {
       }
     }).catch(() => { out.textContent = 'Wetter nicht abrufbar (kein Netz?). Später über „Wetter“ links nachholen.'; });
     const on = wizBtn(box, db.wxOn ? '✅ Wetter wird auf der Karte angezeigt' : '🌦️ Wetter auf der Karte anzeigen', () => {
-      db.wxOn = true;
-      saveNow();
-      renderWx();
+      setWindOn(true);
       loadWeather(false);
       on.textContent = '✅ Wetter wird auf der Karte angezeigt';
     });
