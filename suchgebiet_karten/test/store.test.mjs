@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   newProject, migrateV1, cellRects, cellsText, assignments, resolveFills, exportProject, importProject,
-  embedMarker, normalizeProject, isStatusUrl,
+  embedMarker, normalizeProject, isStatusUrl, markGridNames,
 } from '../web/store.js';
 
 test('Felder werden zu Rechtecken zusammengefasst', () => {
@@ -24,6 +24,20 @@ test('Teams: Zuteilung und Farben', () => {
   assert.equal(a.count, 2);
   assert.equal(a.text, 'A1–B1');
   assert.equal(resolveFills(p)['0,0'], '#d50000');
+});
+
+// v130.55: Felder eines Teams ohne eigenen Umriss sollen trotzdem einen benannten „Gebiet“-Namen haben
+test('markGridNames: benanntes Rastergebiet statt nur Feldanzahl', () => {
+  const p = newProject('Test');
+  p.marks.push({ id: 't1', kind: 'team', label: 'Team 1', color: '#d50000' });
+  p.area = { north: 1, south: 0, west: 0, east: 1 };
+  p.gridName = 'Waldstück Nord';
+  p.fills = { '0,0': 't1' };
+  assert.deepEqual(markGridNames(p, 't1'), ['Waldstück Nord']);
+  assert.deepEqual(markGridNames(p, 'keiner'), []);
+  // ohne eigenen Namen: „Raster 1“ als Standard
+  p.gridName = '';
+  assert.deepEqual(markGridNames(p, 't1'), ['Raster 1']);
 });
 
 test('Alte Version (Farben) wird übernommen', () => {

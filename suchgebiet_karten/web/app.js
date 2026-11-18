@@ -77,11 +77,11 @@ import { OSM_NOTE, MAX_PARTS, MAX_AREA_M2, MIN_OUTLINE_M, forestQuery, linesQuer
 import {
   newProject, normalizeProject, isBlankProject, migrateV1, assignments, markLabel, cellOwner, cellStatus, mapFor, cellsText,
   exportProject, importProject, uid, reorderMarks, MARK_COLORS, NO_TEAM, NO_TEAM_COLOR, assignTargets, assigneeName,
-  allGrids, activateGrid, startNewGrid, removeActiveGrid, gridView, gridLabel, gridTeams, loadProjects, mergeTrackBackup,
+  allGrids, activateGrid, startNewGrid, removeActiveGrid, gridView, gridLabel, gridTeams, loadProjects, mergeTrackBackup, markGridNames,
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.54';
+const APP_VERSION = 'v130.55';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -2160,7 +2160,9 @@ function renderMarks() {
     const draw = m.kind === 'team'
       ? P.items.filter(assigned).map((it) => { if (it.group) drGroups.add(it.group); return it.name || 'Zeichnung'; })
       : [];
-    el.querySelector('.cells').textContent = (a && a.count ? `${a.count} Feld${a.count > 1 ? 'er' : ''}: ${a.text}` : 'keine Felder')
+    // v130.55: Felder ohne eigenen Umriss trotzdem als benanntes „Gebiet“ (Rastername) zeigen, nicht nur als Feldanzahl
+    const fieldGrids = a && a.count ? markGridNames(P, m.id) : [];
+    el.querySelector('.cells').textContent = (a && a.count ? `${a.count} Feld${a.count > 1 ? 'er' : ''} (Gebiet: ${fieldGrids.join(', ')}): ${a.text}` : 'keine Felder')
       + (outl.length ? ` · Umriss${outl.length > 1 ? 'e' : ''}: ${outl.join(', ')}` : '')
       + (draw.length ? ` · Zeichnung${draw.length > 1 ? 'en' : ''}: ${draw.join(', ')}` : '');
     const sel = el.querySelector('.color');
@@ -3605,6 +3607,8 @@ function renderHfInfo() {
   m.textContent = '';
   if (h) {
     const lines = [P.title.endsWith(` – ${h.team}`) ? P.title : `${h.team} – ${P.title}`, `Auftrag erhalten ${hhmm(h.received)}`];
+    const hfa = hfAreas(); // v130.55: Gebiet(e) beim Namen nennen – auch Rasterfelder ohne eigenen Umriss
+    if (hfa.length) lines.push(`Gebiet: ${hfa.join(', ')}`);
     if (h.closed) lines.push(`✅ Auftrag abgeschlossen ${hhmm(h.closed)} – bitte zurückgeben`);
     if (h.prev) lines.push(`Vorher abgesucht: ${h.prev} (graue Wege und Markierungen)`);
     if (h.hint) lines.push(`Hinweis: ${h.hint}`);
@@ -4522,7 +4526,8 @@ function renderSentList() {
     d.innerHTML = '<b><i></i><span></span></b><div class="what"></div><div class="tclock"></div>';
     d.querySelector('i').style.background = w.team.color;
     d.querySelector('b span').textContent = `${typeIcon(w.team)} ${w.team.label}${w.team.dog ? ` – ${w.team.dog}` : ''}`;
-    d.querySelector('.what').textContent = [w.cells && `${w.cells} Feld${w.cells === 1 ? '' : 'er'}`, w.areas && `${w.areas} Umriss${w.areas === 1 ? '' : 'e'}`].filter(Boolean).join(' · ') || 'Noch kein Gebiet zugeteilt';
+    // v130.55: Rastergebiet(e) mit Feldern beim Namen nennen, nicht nur zählen (wie ein Umriss)
+    d.querySelector('.what').textContent = [w.cells && `${w.cells} Feld${w.cells === 1 ? '' : 'er'}${w.gridNames.length ? ` (Gebiet: ${w.gridNames.join(', ')})` : ''}`, w.areas && `${w.areas} Umriss${w.areas === 1 ? '' : 'e'}`].filter(Boolean).join(' · ') || 'Noch kein Gebiet zugeteilt';
     d.querySelector('.tclock').textContent = teamClockText(w.team.id); // v130.4: Pausenzeit bzw. „noch kein Auftrag“, Anzahl/Gesamtzeit
     const nb = document.createElement('button');
     nb.className = 'mini';

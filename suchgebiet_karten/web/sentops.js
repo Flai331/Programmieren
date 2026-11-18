@@ -1,6 +1,6 @@
 // v125: Aufträge an Hundeführer – QR erneut zeigen, Teams ohne Auftrag, Gebiete beim Auftrag dem Team zuordnen.
 // Reine Logik ohne DOM, testbar.
-import { allGrids, NO_TEAM } from './store.js';
+import { allGrids, gridLabel, NO_TEAM } from './store.js';
 import { buildAssignment } from './share.js';
 import { hasArea } from './gpx.js';
 import { isDone } from './closeout.js';
@@ -39,9 +39,11 @@ export function teamsWithoutOrder(p) {
   const out = [];
   for (const m of p.marks || []) {
     if (m.kind !== 'team' || m.id === NO_TEAM || have.has(m.id)) continue;
-    const cells = allGrids(p).reduce((n, g) => n + Object.values(g.fills || {}).filter((id) => id === m.id).length, 0);
+    const grids = allGrids(p).filter((g) => Object.values(g.fills || {}).includes(m.id));
+    const cells = grids.reduce((n, g) => n + Object.values(g.fills || {}).filter((id) => id === m.id).length, 0);
     const areas = (p.items || []).filter((it) => it.to === m.id && hasArea(it)).length;
-    out.push({ team: m, cells, areas });
+    // v130.55: Name(n) des/der Rastergebiets/e mit zugeteilten Feldern – wie ein Umriss als „Gebiet“ zeigen
+    out.push({ team: m, cells, areas, gridNames: grids.map((g) => gridLabel(p, g)) });
   }
   return out;
 }
