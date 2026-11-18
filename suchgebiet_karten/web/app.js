@@ -81,7 +81,7 @@ import {
 } from './store.js';
 
 // Bei jeder Änderung erhöhen (gleich wie VERSION in sw.js) – steht im Export-Fenster
-const APP_VERSION = 'v130.51';
+const APP_VERSION = 'v130.52';
 // Status-Server (Google-Tabelle von Klaas); pro Gerät unter „⚙️ Mehr → Dieses Gerät“ überschreibbar
 const STATUS_URL = 'https://script.google.com/macros/s/AKfycbzDnsK7N-7uJigNMewDMQx8o2U7FhlOIHpPnzgXb3HKqjahrnQJXwgPKUf8U8G604CRxg/exec';
 const STORE_KEY = 'suchgebiet-karten-v2';
@@ -3636,7 +3636,7 @@ $('hfm-contacts').addEventListener('click', () => {
 });
 // direkt öffnen (openPanel schließt das Menü; closePanels davor ginge im Verlauf zurück und schlösse das neue Fenster gleich wieder)
 $('hfm-notes').addEventListener('click', () => $('btn-notes').click());
-$('hfm-projects').addEventListener('click', () => $('btn-projects').click());
+$('hfm-projects').addEventListener('click', () => { renderMission(); openPanel('panel-mission'); showTab('projects'); });
 // v116: 🎯 Mein Gebiet – alle Gebiete des Auftrags (Felder des Teams, Umrisse) ins Bild
 function showMyArea() {
   const b = areaBounds(P);
@@ -9474,7 +9474,7 @@ for (const btn of ['btn-mission', 'btn-notes', 'btn-grid', 'btn-teams']) {
     if (!isFree()) return;
     e.stopImmediatePropagation();
     const ok = await openDlg((box, close) => {
-      dlgHead(box, '🗺️ Kein Einsatz offen', 'Raster, Teams, Notizen und Einsatzdaten gehören zu einem Einsatz. Erst einen neuen anlegen – oder unter „📁 Einsätze“ einen bestehenden öffnen.');
+      dlgHead(box, '🗺️ Kein Einsatz offen', 'Raster, Teams, Notizen und Einsatzdaten gehören zu einem Einsatz. Erst einen neuen anlegen – oder unter „📋 Einsatz“ → „📁 Alle Einsätze“ einen bestehenden öffnen.');
       dlgButton(box, '+ Neuer Einsatz', 'primary', () => close(true));
       dlgButton(box, 'Abbrechen', '', () => close(false));
     });
@@ -9483,7 +9483,7 @@ for (const btn of ['btn-mission', 'btn-notes', 'btn-grid', 'btn-teams']) {
 }
 // Seitenknopf nochmal antippen, während sein Fenster offen ist: Fenster schließen
 const SIDE_PANELS = {
-  'btn-projects': 'panel-projects', 'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',
+  'btn-grid': 'panel-grid', 'btn-teams': 'panel-teams',
   'btn-status': 'panel-status', 'btn-layers': 'panel-layers', 'btn-contacts': 'panel-contacts', 'btn-more': 'panel-more', 'btn-hfmenu': 'panel-hfmenu', 'btn-mission': 'panel-mission', 'btn-notes': 'panel-notes',
   // v130.27: „Teilen“ (btn-pdf) bewusst NICHT hier – das Teilen-Fenster bleibt nach einem QR-Vorgang
   // absichtlich im Hintergrund offen (zweiten Empfänger wählen); ein erneuter Klick soll es wieder
@@ -9496,7 +9496,6 @@ for (const [btn, panel] of Object.entries(SIDE_PANELS)) {
     closePanels();
   }, { capture: true });
 }
-$('btn-projects').addEventListener('click', () => { fillProjectForm(); renderProjects(); openPanel('panel-projects'); });
 $('btn-grid').addEventListener('click', () => { updateGridInfo(); renderAlpha(); openPanel('panel-grid'); });
 $('btn-teams').addEventListener('click', () => { renderMarks(); openPanel('panel-teams'); });
 $('btn-layers').addEventListener('click', () => {
@@ -10639,10 +10638,12 @@ function endFullView() {
 function showTab(t) {
   endFullView();
   document.querySelectorAll('#panel-mission .tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
+  $('tab-projects').hidden = t !== 'projects';
   $('tab-stamm').hidden = t !== 'stamm';
   $('tab-lage').hidden = t !== 'lage';
   $('tab-ende').hidden = t !== 'ende';
   db.missionTab = t;
+  if (t === 'projects') renderProjects();
   if (t === 'ende') { renderViewer(); renderLegend(); }
 }
 document.querySelectorAll('#panel-mission .tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
@@ -10720,7 +10721,7 @@ $('ms-close').addEventListener('click', async () => {
   renderClosed();
   renderProjects();
   const next = await openDlg((box, close) => {
-    dlgHead(box, '✅ Einsatz abgeschlossen', `„${P.title || 'Suchgebiet'}“ bleibt unter „📁 Einsätze“ gespeichert. Die Karte wird jetzt geleert.`);
+    dlgHead(box, '✅ Einsatz abgeschlossen', `„${P.title || 'Suchgebiet'}“ bleibt unter „📋 Einsatz“ → „📁 Alle Einsätze“ gespeichert. Die Karte wird jetzt geleert.`);
     dlgButton(box, '📤 Vorher Abschlussbericht teilen', '', () => close('share'));
     dlgButton(box, '🗺️ Freie Karte', 'primary', () => close('free'));
     dlgButton(box, '+ Neuer Einsatz', '', () => close('new'));
@@ -10740,7 +10741,7 @@ function freeMap() {
     switchProject(blank.id);
     renderProjects();
   } else createProject('');
-  toast('🗺️ Freie Karte – der abgeschlossene Einsatz liegt unter „📁 Einsätze“.', 5000);
+  toast('🗺️ Freie Karte – der abgeschlossene Einsatz liegt unter „📋 Einsatz“ → „📁 Alle Einsätze“.', 5000);
 }
 $('btn-mission').addEventListener('click', () => { renderMission(); openPanel('panel-mission'); });
 // Notizen-Fenster: getippte Notizen (P.notes, wie im Einsatz-Fenster), Notizblock, Fotos

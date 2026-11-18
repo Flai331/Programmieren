@@ -168,8 +168,7 @@
     <button id="btn-grid" title="Raster"><span>#</span>Raster</button>
     <button id="btn-notes" title="Notizen: getippt und handschriftlich"><span>📝</span>Notizen</button>
     <button id="btn-contacts" title="Kontakte: für diesen Einsatz und Adressbuch"><span>📇</span>Kontakte</button>
-    <button id="btn-projects" title="Einsätze: Liste, neu, Datei, an weiteres Gerät übergeben"><span>📁</span>Einsätze</button>
-    <button id="btn-mission" title="Einsatz: Stammdaten, Lage, Einsatzende"><span>📋</span>Einsatz</button>
+    <button id="btn-mission" title="Einsatz: alle Einsätze, Stammdaten, Lage, Einsatzende"><span>📋</span>Einsatz</button>
     <button id="btn-more" title="Gerät, Hundeführer-Modus, App-Download"><span>⚙️</span>Mehr</button>
     <button id="btn-pdf" class="primary" title="Weitergeben: QR-Code, Garmin, Mail, Speichern, PDF"><span>📤</span>Teilen</button>
   </div>
@@ -291,34 +290,6 @@
   </section>
 
   <!-- Suchgebiete -->
-  <section id="panel-projects" class="panel" hidden>
-    <h2>📁 Einsätze</h2>
-    <div class="row el-only">
-      <button id="proj-new" class="primary">+ Neuer Einsatz</button>
-    </div>
-    <div id="project-list" class="plist"></div>
-
-    <h2 class="sub el-only">Datei</h2>
-    <p class="small el-only">Zum Weitergeben an die Staffel. Jedes PDF aus dieser App enthält das Suchgebiet ebenfalls und kann hier wieder geöffnet werden.</p>
-    <div class="row el-only">
-      <button id="proj-share" class="primary">Suchgebiet als Datei senden</button>
-      <button id="proj-import">Datei öffnen (Suchgebiet, PDF, GPX oder KML)</button>
-      <input id="import-file" type="file" accept=".json,.txt,.pdf,.gpx,.kml,.xml,application/json,text/plain,application/pdf,application/gpx+xml,application/vnd.google-earth.kml+xml,application/xml,text/xml" hidden>
-    </div>
-
-    <div class="el-only">
-    <h2 class="sub">📲 Weiteres Gerät der Einsatzleitung (Tablet/PC)</h2>
-    <p class="small">Überträgt den ganzen Einsatz mit Raster, Teams, Aufträgen und Rückmeldungen auf ein weiteres Gerät der Einsatzleitung. Fotos gehen nur über „Suchgebiet als Datei senden“.</p>
-    <div class="row">
-      <button id="ho-send" class="primary">📲 Einsatz übergeben (QR-Code)</button>
-      <button id="ho-scan">📷 Einsatz übernehmen (scannen)</button>
-    </div>
-    </div>
-
-    <button class="close">Schließen</button>
-  </section>
-
-
   <!-- Teilen: 1. An wen? 2. Was? 3. Wie? -->
   <section id="panel-share" class="panel" hidden>
     <h2>📤 Teilen</h2>
@@ -786,10 +757,38 @@
   </section>
 
   <section id="panel-mission" class="panel wide" hidden>
+    <!-- v130.52 (Klaas' Rückmeldung): „📁 Einsätze“ und „📋 Einsatz“ waren zwei ähnlich benannte Knöpfe,
+         deren Unterschied neuen Leuten nicht klar war – jetzt ein Knopf „Einsatz“ mit der Einsätze-Liste
+         als erstem Reiter. -->
     <div class="tabs">
+      <button data-tab="projects">📁 Alle Einsätze</button>
       <button data-tab="stamm" class="active">📌 Stammdaten</button>
       <button data-tab="lage">📋 Lage</button>
       <button data-tab="ende">🏁 Einsatzende</button>
+    </div>
+
+    <div id="tab-projects" hidden>
+      <div class="row el-only">
+        <button id="proj-new" class="primary">+ Neuer Einsatz</button>
+      </div>
+      <div id="project-list" class="plist"></div>
+
+      <h2 class="sub el-only">Datei</h2>
+      <p class="small el-only">Zum Weitergeben an die Staffel. Jedes PDF aus dieser App enthält das Suchgebiet ebenfalls und kann hier wieder geöffnet werden.</p>
+      <div class="row el-only">
+        <button id="proj-share" class="primary">Suchgebiet als Datei senden</button>
+        <button id="proj-import">Datei öffnen (Suchgebiet, PDF, GPX oder KML)</button>
+        <input id="import-file" type="file" accept=".json,.txt,.pdf,.gpx,.kml,.xml,application/json,text/plain,application/pdf,application/gpx+xml,application/vnd.google-earth.kml+xml,application/xml,text/xml" hidden>
+      </div>
+
+      <div class="el-only">
+      <h2 class="sub">📲 Weiteres Gerät der Einsatzleitung (Tablet/PC)</h2>
+      <p class="small">Überträgt den ganzen Einsatz mit Raster, Teams, Aufträgen und Rückmeldungen auf ein weiteres Gerät der Einsatzleitung. Fotos gehen nur über „Suchgebiet als Datei senden“.</p>
+      <div class="row">
+        <button id="ho-send" class="primary">📲 Einsatz übergeben (QR-Code)</button>
+        <button id="ho-scan">📷 Einsatz übernehmen (scannen)</button>
+      </div>
+      </div>
     </div>
 
     <div id="tab-stamm">
