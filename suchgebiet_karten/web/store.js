@@ -377,6 +377,13 @@ export function assignments(p) {
   }))).map((a, i) => ({ mark: p.marks[i], ...a }));
 }
 
+// Namen der Rastergebiete, in denen eine Markierung (meist ein Team) mindestens ein Feld hat – damit ein Team
+// mit Feldern auch ohne eigenen Umriss ein benanntes „Gebiet“ hat (Rastername, ggf. umbenannt), nicht nur eine
+// Feldanzahl (v130.55, Klaas' Rückmeldung).
+export function markGridNames(p, markId) {
+  return allGrids(p).filter((g) => Object.values(g.fills || {}).includes(markId)).map((g) => gridLabel(p, g));
+}
+
 // Status innerhalb der Felder eines Teams, z. B. [{mark: abgesucht, count: 2, text: 'A3–B3'}]
 export function teamStatus(p, team) {
   return p.marks.filter((m) => m.kind !== 'team').map((m) => ({ mark: m, ...joinParts(perGrid(p, (fills, status, pre) => {

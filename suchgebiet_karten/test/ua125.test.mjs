@@ -236,6 +236,15 @@ test('Teams ohne Auftrag: jedes freie Team, auch ganz ohne zugeteilte Gebiete', 
   assert.equal(teamsWithoutOrder(p).length, 0);
 });
 
+// v130.55: Felder ohne eigenen Umriss bekommen trotzdem einen Gebietsnamen (Rastername) statt nur eine Feldanzahl
+test('Teams ohne Auftrag: Rastername als Gebiet bei reinen Feld-Zuteilungen', () => {
+  const { p } = mitAuftrag();
+  assert.deepEqual(teamsWithoutOrder(p).find((x) => x.team.id === 'T2').gridNames, []);
+  p.gridName = 'Waldstück Nord';
+  p.fills['5,5'] = 'T2';
+  assert.deepEqual(teamsWithoutOrder(p).find((x) => x.team.id === 'T2').gridNames, ['Waldstück Nord']);
+});
+
 // v130.35: dieselbe Liste, zweistufig – „ohne Gebiet“ und „mit Gebiet, ohne Auftrag“ getrennt
 test('Teams ohne Auftrag, zweistufig: ohne Gebiet vs. mit Gebiet ohne Auftrag', () => {
   const { p } = mitAuftrag();
