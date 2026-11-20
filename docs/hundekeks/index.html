@@ -93,6 +93,7 @@ details .sliders{margin-top:10px}
       <label class="btn primary" style="position:relative">Foto wählen<input id="file" type="file" accept="image/*"></label>
       <span class="hint" id="photoInfo">Beispielhund geladen. Lade ein eigenes Foto (JPG/PNG), zieh es auf das Bild oder füge es mit Strg+V ein.</span>
     </div>
+    <p class="hint" id="mlInfo" role="status">KI-Hunderkennung wird geladen …</p>
     <div class="chips" role="group" aria-label="Motiv">
       <span class="hint" style="align-self:center">Motiv:</span>
       <button data-preset="face" class="on">Gesicht frontal</button>
@@ -106,7 +107,7 @@ details .sliders{margin-top:10px}
       <button id="bSegUndo">Rückgängig</button>
       <button id="bSegClear">Korrekturen löschen</button>
     </div>
-    <p class="hint">Der Umriss wird automatisch über die Farben von Hund und Hintergrund erkannt. Wenn etwas fehlt oder zu viel ist, mal mit dem Pinsel darüber. Am besten klappt es mit ruhigem Hintergrund.</p>
+    <p class="hint">Eine KI sucht den Hund im Foto, die Farbanalyse schärft danach die Fellkanten. Fehlt etwas oder ist zu viel dabei, mal mit dem Pinsel darüber.</p>
     <div class="sliders" id="slSeg"></div>
   </section>
 
@@ -311,21 +312,32 @@ function loadImage(img,label){
   S.rgb=g.getImageData(0,0,S.W,S.H);S.lab=toLab(S.rgb.data,S.W*S.H);
   S.segStrokes=[];S.detStrokes=[];
   const sc=$('segCanvas');sc.width=S.W;sc.height=S.H;
-  if(label)$('photoInfo').textContent=label;
-  runSeg();
+  if(label)$('photoInfo').textContent=label.text||label;
+  S.ml=null;S.mlFor=null;S.cropped=!!(label&&label.cropped);
+  runSeg();runML();
 }
 function segment(){
   const W=S.W,H=S.H,N=W*H,lab=S.lab;
   const cons=rasterStrokes(S.segStrokes,W,H,p=>p,s=>s.r,'fg');
   const band=Math.max(3,Math.round(Math.min(W,H)*0.04));
   // Hintergrund-Proben: oberer, linker, rechter Rand (unten steht oft Hals/Brust des Hundes)
+  const ml=S.ml;let mlNear=null;
   let idx=new Int32Array(N),n=0;
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const p=y*W+x;
-    if(cons[p]===2||((y<band||x<band||x>=W-band)&&((x+y)&1)===0&&cons[p]!==1))idx[n++]=p;}
+  if(ml){
+    // KI-Wahrscheinlichkeit als Startpunkt; nur in der Nähe der KI-Fläche darf Hund sein
+    const core=new Uint8Array(N);for(let p=0;p<N;p++)core[p]=ml[p]>0.3?1:0;
+    const rad=Math.max(3,Math.round(Math.max(W,H)*0.03));mlNear=boxBlur(core,W,H,rad);
+    const st=Math.max(1,Math.floor(N/20000));
+    for(let p=0;p<N;p+=st)if(cons[p]===2||(ml[p]<0.08&&cons[p]!==1))idx[n++]=p;
+  }else{
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){const p=y*W+x;
+      if(cons[p]===2||((y<band||x<band||x>=W-band)&&((x+y)&1)===0&&cons[p]!==1))idx[n++]=p;}
+  }
   let bgM=kmeans(lab,idx,n,6);
   const fg=new Uint8Array(N);
-  const dB=new Float32Array(N);for(let p=0;p<N;p++)dB[p]=nearestDist(bgM,lab,p*3);
-  const th=otsu(dB,N);for(let p=0;p<N;p++)fg[p]=dB[p]>th?1:0;
+  if(ml){for(let p=0;p<N;p++)fg[p]=ml[p]>0.5?1:0}
+  else{const dB=new Float32Array(N);for(let p=0;p<N;p++)dB[p]=nearestDist(bgM,lab,p*3);
+    const th=otsu(dB,N);for(let p=0;p<N;p++)fg[p]=dB[p]>th?1:0;}
   for(let p=0;p<N;p++)if(cons[p])fg[p]=cons[p]===1?1:0;
   // Iteratives Verfeinern mit Farbmodellen für Hund und Hintergrund
   const fIdx=new Int32Array(N),bIdx=new Int32Array(N);
@@ -336,7 +348,10 @@ function segment(){
     if(nf<20||nb<20)break;
     const fM=kmeans(lab,fIdx,nf,6);bgM=kmeans(lab,bIdx,nb,7);
     for(let p=0;p<N;p++){if(cons[p]){fg[p]=cons[p]===1?1:0;continue}
-      fg[p]=nearestDist(fM,lab,p*3)<nearestDist(bgM,lab,p*3)*P.sens?1:0;}
+      const df=nearestDist(fM,lab,p*3),db=nearestDist(bgM,lab,p*3);
+      if(ml){if(mlNear[p]<=0.001){fg[p]=0;continue}
+        const col=db/(df+db+1e-6);fg[p]=(0.7*ml[p]+0.3*col)*P.sens>0.5?1:0;}
+      else fg[p]=df<db*P.sens?1:0;}
   }
   // Glätten (Mehrheitsfilter) und Pinsel erneut anwenden
   const bl=boxBlur(fg,W,H,2);for(let p=0;p<N;p++)fg[p]=bl[p]>0.5?1:0;
@@ -345,7 +360,7 @@ function segment(){
   const {lab:cl,sizes}=labelComponents(fg,W,H);
   if(!sizes.length){S.mask=null;return}
   const score=new Float64Array(sizes.length),sx=new Float64Array(sizes.length),sy=new Float64Array(sizes.length),hit=new Float64Array(sizes.length);
-  for(let p=0;p<N;p++){const c=cl[p];if(c<0)continue;sx[c]+=p%W;sy[c]+=Math.floor(p/W);if(cons[p]===1)hit[c]++}
+  for(let p=0;p<N;p++){const c=cl[p];if(c<0)continue;sx[c]+=p%W;sy[c]+=Math.floor(p/W);if(cons[p]===1)hit[c]+=1e6;if(ml)hit[c]+=ml[p]}
   let best=0;const diag=Math.hypot(W,H);
   for(let c=0;c<sizes.length;c++){const cx=sx[c]/sizes[c],cy=sy[c]/sizes[c];
     score[c]=hit[c]*1e9+sizes[c]/(1+Math.hypot(cx-W/2,cy-H/2)/(0.35*diag));if(score[c]>score[best])best=c;}
@@ -368,7 +383,99 @@ function drawSeg(){
     d[p*4]=r;d[p*4+1]=gg;d[p*4+2]=b;d[p*4+3]=255;}
   g.putImageData(im,0,0);
   // Konturverdickung für Sichtbarkeit
-  $('segBadge').textContent=m?'Umriss erkannt':'Kein Hund gefunden';
+  $('segBadge').textContent=m?(S.ml?'Umriss erkannt · KI':'Umriss erkannt · Farbe'):'Kein Hund gefunden';
+}
+
+/* ---------------- KI-Hunderkennung (MediaPipe + DeepLab v3, läuft lokal) ---------------- */
+const ML={state:'idle',seg:null};
+const VOC={dog:12,cat:8,cow:10,horse:13,sheep:17};
+function mlInfo(t){$('mlInfo').textContent=t}
+async function initML(){
+  if(ML.state!=='idle')return;ML.state='loading';mlInfo('KI-Hunderkennung wird geladen …');
+  try{
+    const u=f=>new URL('ml/'+f,location.href).href;
+    const mod=await import(u('vision_bundle.mjs'));
+    ML.seg=await mod.ImageSegmenter.createFromOptions({wasmLoaderPath:u('vision_wasm_internal.js'),wasmBinaryPath:u('vision_wasm_internal.wasm')},
+      {baseOptions:{modelAssetPath:u('deeplab_v3.tflite'),delegate:'CPU'},runningMode:'IMAGE',outputCategoryMask:false,outputConfidenceMasks:true});
+    ML.state='ready';
+    try{ML.touch=await mod.InteractiveSegmenter.createFromOptions({wasmLoaderPath:u('vision_wasm_internal.js'),wasmBinaryPath:u('vision_wasm_internal.wasm')},
+      {baseOptions:{modelAssetPath:u('magic_touch.tflite'),delegate:'CPU'},outputCategoryMask:false,outputConfidenceMasks:true});}
+    catch(e){console.warn('MagicTouch nicht verfügbar',e);ML.touch=null}
+  }catch(e){console.warn('KI nicht verfügbar',e);ML.state='failed';mlInfo('KI-Erkennung ist hier nicht verfügbar, der Umriss kommt aus der Farbanalyse.')}
+  runML();
+}
+function runML(){
+  if(!S.img)return;
+  if(ML.state==='idle'){initML();return}
+  if(ML.state!=='ready'||S.mlFor===S.img)return;
+  S.mlFor=S.img;
+  try{
+    const iw=S.img.naturalWidth||S.img.width,ih=S.img.naturalHeight||S.img.height,k=Math.min(1,640/Math.max(iw,ih));
+    const c=document.createElement('canvas');c.width=Math.round(iw*k);c.height=Math.round(ih*k);c.getContext('2d').drawImage(S.img,0,0,c.width,c.height);
+    const res=ML.seg.segment(c),masks=res.confidenceMasks||[];
+    const w=masks[0].width,h=masks[0].height,prob=new Float32Array(w*h);
+    const wt={[VOC.dog]:1,[VOC.cat]:0.7,[VOC.cow]:0.5,[VOC.horse]:0.5,[VOC.sheep]:0.5};
+    for(const ci in wt){const a=masks[ci]&&masks[ci].getAsFloat32Array();if(!a)continue;for(let i=0;i<a.length;i++)prob[i]+=a[i]*wt[ci]}
+    let dogSum=0;{const a=masks[VOC.dog].getAsFloat32Array();for(let i=0;i<a.length;i++)dogSum+=a[i]}
+    if(res.close)res.close();else masks.forEach(m=>m.close&&m.close());
+    const out=new Float32Array(S.W*S.H);let mx=0,cnt=0;
+    for(let y=0;y<S.H;y++)for(let x=0;x<S.W;x++){const v=Math.min(1,sampleMask(prob,w,h,(x+0.5)*w/S.W-0.5,(y+0.5)*h/S.H-0.5));out[y*S.W+x]=v;if(v>mx)mx=v;if(v>0.5)cnt++}
+    if(mx<0.5||cnt<S.W*S.H*0.01){S.ml=null;mlInfo('Die KI hat keinen Hund gefunden, der Umriss kommt aus der Farbanalyse. Tipp: Hund groß und ganz im Bild.')}
+    else{
+      // Hund klein im Bild? Dann auf ihn zuschneiden und fein nachrechnen
+      let x0=S.W,y0=S.H,x1=-1,y1=-1;for(let y=0;y<S.H;y++)for(let x=0;x<S.W;x++)if(out[y*S.W+x]>0.4){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}
+      const bw=x1-x0+1,bh=y1-y0+1;
+      if(!S.cropped&&bw*bh<S.W*S.H*0.45){
+        const m=0.18*Math.max(bw,bh),k=S.k;
+        const cx0=Math.max(0,(x0-m)*k),cy0=Math.max(0,(y0-m)*k),cx1=Math.min(iw,(x1+1+m)*k),cy1=Math.min(ih,(y1+1+m)*k);
+        const cc=document.createElement('canvas');cc.width=Math.round(cx1-cx0);cc.height=Math.round(cy1-cy0);
+        cc.getContext('2d').drawImage(S.img,cx0,cy0,cx1-cx0,cy1-cy0,0,0,cc.width,cc.height);
+        loadImage(cc,{text:$('photoInfo').textContent+' · auf den Hund zugeschnitten',cropped:true});return;
+      }
+      S.mlDeep=out;S.mlCanvas=c;
+      const many=countDogs(out)>1;
+      S.ml=touchMask(null)||out;
+      mlInfo((dogSum>0?'KI hat den Hund erkannt':'KI hat ein Tier erkannt')+(many?'. Mehrere Hunde im Bild: tippe mit „Gehört zum Hund“ auf den richtigen.':', die Fellkanten sind nachgeschärft.'))}
+  }catch(e){console.warn(e);S.ml=null;mlInfo('KI-Erkennung fehlgeschlagen, der Umriss kommt aus der Farbanalyse.')}
+  runSeg();
+}
+
+/* Anzahl getrennter Hundeflächen (grob) */
+function countDogs(prob){const W=S.W,H=S.H,m=new Uint8Array(W*H);for(let i=0;i<W*H;i++)m[i]=prob[i]>0.5?1:0;
+  const {sizes}=labelComponents(m,W,H);return sizes.filter(v=>v>W*H*0.02).length}
+/* Hauptpunkt des Hundes: dickste Stelle der KI-Fläche, Bildmitte bevorzugt */
+function mainKeypoint(prob){
+  const W=S.W,H=S.H,m=new Uint8Array(W*H);for(let i=0;i<W*H;i++)m[i]=prob[i]>0.5?1:0;
+  const d=edt(invert(m),W,H);let best=-1,bx=W/2,by=H/2;const diag=Math.hypot(W,H);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const v=d[y*W+x]/(1+Math.hypot(x-W/2,y-H*0.55)/(0.5*diag));if(m[y*W+x]&&v>best){best=v;bx=x;by=y}}
+  return [bx,by];
+}
+/* MagicTouch: genau das Tier unter den Punkten ausschneiden (trennt mehrere Hunde) */
+function touchMask(extraPts){
+  if(!ML.touch||!S.mlDeep||!S.mlCanvas)return null;
+  try{
+    const pts=[];
+    if(extraPts&&extraPts.length)for(const p of extraPts)pts.push({x:clamp(p[0]/S.W,0,1),y:clamp(p[1]/S.H,0,1)});
+    else{const k=mainKeypoint(S.mlDeep);pts.push({x:k[0]/S.W,y:k[1]/S.H})}
+    const roi=pts.length===1?{keypoint:pts[0]}:{scribble:pts};
+    const res=ML.touch.segment(S.mlCanvas,roi),mk=res.confidenceMasks&&res.confidenceMasks[0];
+    if(!mk)return null;
+    const w=mk.width,h=mk.height,a=mk.getAsFloat32Array().slice();if(res.close)res.close();
+    const out=new Float32Array(S.W*S.H);let cnt=0,agree=0;
+    for(let y=0;y<S.H;y++)for(let x=0;x<S.W;x++){const i=y*S.W+x,v=sampleMask(a,w,h,(x+0.5)*w/S.W-0.5,(y+0.5)*h/S.H-0.5);
+      out[i]=v;if(v>0.5){cnt++;if(S.mlDeep[i]>0.3)agree++}}
+    // Plausibilität: Auswahl muss zum großen Teil Hund sein (sonst z. B. nur Halstuch)
+    if(cnt<S.W*S.H*0.01||(!extraPts&&agree<cnt*0.6))return null;
+    // Halstuch, Geschirr u. ä. innerhalb des Hundes bleiben drin; Ränder aus beiden Modellen mitteln
+    for(let i=0;i<out.length;i++)out[i]=out[i]>0.5?Math.max(out[i],S.mlDeep[i]*0.5+0.5*out[i]):Math.min(out[i],S.mlDeep[i]);
+    return out;
+  }catch(e){console.warn(e);return null}
+}
+/* Nutzer hat auf den Hund getippt/gemalt: MagicTouch mit diesen Punkten neu */
+function retouch(){
+  if(!ML.touch||!S.mlDeep)return;
+  const pts=[];for(const st of S.segStrokes)if(st.type==='fg')for(let i=0;i<st.pts.length;i+=Math.max(1,Math.floor(st.pts.length/6)))pts.push(st.pts[i]);
+  const m=touchMask(pts.length?pts.slice(-12):null);S.ml=m||S.mlDeep;
 }
 
 /* ---------------- 2./3. Modell bauen ---------------- */
@@ -417,7 +524,10 @@ function buildModel(){
   if(P.lineAmt>0){let k=0;for(let i=0;i<N;i++)if(inner[i])vals[k++]=b1[i]-b2[i];
     const t=percentile(vals,k,P.lineAmt/100);for(let i=0;i<N;i++)if(inner[i]&&b1[i]-b2[i]<=t&&b1[i]-b2[i]<-0.004)det[i]=1;}
   if(P.areaAmt>0){let k=0;for(let i=0;i<N;i++)if(inner[i])vals[k++]=b3[i];
-    const t=percentile(vals,k,P.areaAmt/100);for(let i=0;i<N;i++)if(inner[i]&&b3[i]<=t)det[i]=1;}
+    // Dunkler Hund: die hellen Stellen (Augen, Abzeichen) prägen, sonst die dunklen
+    const med=percentile(vals,k,0.5),light=med<0.28;
+    const t=percentile(vals,k,light?1-P.areaAmt/100:P.areaAmt/100);
+    for(let i=0;i<N;i++)if(inner[i]&&(light?b3[i]>=t:b3[i]<=t))det[i]=1;}
   // kleine Krümel entfernen
   const minCells=P.minArea/(r*r);
   if(minCells>1){const {lab,sizes}=labelComponents(det,GW,GH);for(let i=0;i<N;i++)if(det[i]&&sizes[lab[i]]<minCells)det[i]=0;}
@@ -638,7 +748,7 @@ function setupBrushes(){
     if(start)S.segStrokes.push({type:S.segMode,pts:[],r:P.brush*S.W/480});
     const st=S.segStrokes[S.segStrokes.length-1];st.pts.push(p);
     const g=sc.getContext('2d');g.fillStyle=S.segMode==='fg'?'rgba(47,191,113,.55)':'rgba(229,72,77,.55)';g.beginPath();g.arc(p[0],p[1],st.r,0,7);g.fill();
-  },()=>schedule('seg'));
+  },()=>{retouch();schedule('seg')});
   const cc=$('cookieCanvas');
   attachBrush(cc,(p,start)=>{const m=S.model;if(!m)return;
     const rMm=Math.max(P.lineW,0.8)/2;
@@ -650,7 +760,7 @@ function setupBrushes(){
   const tog=(a,b,set)=>{$(a).onclick=()=>{set();$(a).classList.add('on');$(b).classList.remove('on')}};
   tog('bFg','bBg',()=>S.segMode='fg');tog('bBg','bFg',()=>S.segMode='bg');
   tog('bDetAdd','bDetDel',()=>S.detMode='add');tog('bDetDel','bDetAdd',()=>S.detMode='del');
-  $('bSegUndo').onclick=()=>{S.segStrokes.pop();runSeg()};$('bSegClear').onclick=()=>{S.segStrokes=[];runSeg()};
+  $('bSegUndo').onclick=()=>{S.segStrokes.pop();retouch();runSeg()};$('bSegClear').onclick=()=>{S.segStrokes=[];retouch();runSeg()};
   $('bDetUndo').onclick=()=>{S.detStrokes.pop();runGeo()};$('bDetClear').onclick=()=>{S.detStrokes=[];runGeo()};
 }
 

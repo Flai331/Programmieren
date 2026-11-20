@@ -17,6 +17,7 @@ sed -e 's#https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js#thre
     -e 's#https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js#OrbitControls.js#' \
     ../../docs/hundekeks/index.html > $OUT/assets/index.html
 cp vendor/three.min.js vendor/OrbitControls.js $OUT/assets/
+mkdir -p $OUT/assets/ml && cp ../ml/* $OUT/assets/ml/
 
 $BT/aapt2 compile --dir res -o $OUT/res.zip
 $BT/aapt2 link -o $OUT/base.apk -I $JAR --manifest AndroidManifest.xml -A $OUT/assets $OUT/res.zip \

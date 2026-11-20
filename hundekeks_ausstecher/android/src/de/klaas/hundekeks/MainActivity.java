@@ -7,6 +7,8 @@ import android.os.Bundle;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -15,11 +17,15 @@ import android.webkit.WebViewClient;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.HashMap;
+import java.util.Map;
 
 /** Zeigt die Hundekeks-Web-App offline aus den Assets an. */
 public class MainActivity extends Activity {
     private static final int REQ_PHOTO = 1;
     private static final int REQ_SAVE = 2;
+    /** Interne Adresse: Assets werden wie von einem Webserver geliefert (nötig für KI-Module und WebAssembly). */
+    private static final String HOST = "appassets.androidplatform.net";
 
     private WebView web;
     private ValueCallback<Uri[]> photoCallback;
@@ -38,6 +44,24 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(true);
         web.addJavascriptInterface(new Bridge(), "AndroidBridge");
         web.setWebViewClient(new WebViewClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
+                Uri u = req.getUrl();
+                if (!HOST.equals(u.getHost())) return null;
+                String path = u.getPath();
+                if (path == null || path.equals("/")) path = "/index.html";
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Access-Control-Allow-Origin", "*");
+                try {
+                    InputStream in = getAssets().open(path.substring(1));
+                    String mime = mimeFor(path);
+                    String enc = mime.startsWith("text/") || mime.endsWith("javascript") ? "utf-8" : null;
+                    return new WebResourceResponse(mime, enc, 200, "OK", headers, in);
+                } catch (Exception e) {
+                    return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found", headers, null);
+                }
+            }
+
             @Override
             public void onPageFinished(WebView view, String url) {
                 pageReady = true;
@@ -62,7 +86,15 @@ public class MainActivity extends Activity {
             }
         });
         handleIntent(getIntent());
-        web.loadUrl("file:///android_asset/index.html");
+        web.loadUrl("https://" + HOST + "/index.html");
+    }
+
+    private static String mimeFor(String path) {
+        if (path.endsWith(".html")) return "text/html";
+        if (path.endsWith(".js") || path.endsWith(".mjs")) return "text/javascript";
+        if (path.endsWith(".wasm")) return "application/wasm";
+        if (path.endsWith(".png")) return "image/png";
+        return "application/octet-stream";
     }
 
     @Override
