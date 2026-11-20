@@ -661,6 +661,7 @@ async function download(){
   const info=`Hundekeks-Ausstecher\n\n${base}_ausstecher.stl  Ausstecher, Griffrand aufs Druckbett, Schneide oben.\n${base}_stempel.stl     Stempel, flach drucken (Relief oben). Zum Prägen umdrehen.\n\nKeksgröße: ${Math.round(m.wmm)} x ${Math.round(m.hmm)} mm\nHöhe Ausstecher: ${P.height} mm, Wand: ${P.wall} mm, Rand: ${P.flange} mm\nStempel: Platte ${P.plate} mm + Relief ${P.relief} mm\n\nEmpfehlung: 0,2 mm Schichthöhe, 3 Wände, keine Stützen.\nFür Teigkontakt PETG oder lebensmittelechtes Filament nehmen.\n`;
   const bytes=zip([{name:base+'_ausstecher.stl',data:stl(m.cut,'Ausstecher')},{name:base+'_stempel.stl',data:stl(m.stamp,'Stempel')},{name:'Anleitung.txt',data:new TextEncoder().encode(info)}]);
   const fname=base+'.zip';
+  if(window.AndroidBridge){let bin='';for(let i=0;i<bytes.length;i+=0x8000)bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));window.AndroidBridge.saveFile(fname,btoa(bin));return}
   if(dlNS){try{await dlNS.save({filename:fname,data:new Blob([bytes],{type:'application/zip'})});toast('ZIP gespeichert')}
     catch(e){toast(e&&e.code==='declined'?'Download abgebrochen':'Download nicht möglich: '+(e&&e.message||e))}return}
   const url=URL.createObjectURL(new Blob([bytes],{type:'application/zip'}));const a=document.createElement('a');a.href=url;a.download=fname;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast('ZIP wird heruntergeladen');
@@ -703,6 +704,7 @@ function openFile(f){if(!f)return;
   const fail=()=>{$('photoInfo').textContent='Foto konnte nicht geöffnet werden.';toast('Dieses Bildformat kann der Browser nicht öffnen (z. B. HEIC vom iPhone). Bitte als JPG speichern.')};
   const show=src=>{const img=new Image();img.onload=()=>{try{loadImage(img,f.name||'Eingefügtes Foto')}catch(e){console.error(e);toast('Fehler beim Verarbeiten: '+e.message)}};img.onerror=fail;img.src=src};
   const rd=new FileReader();rd.onload=()=>show(rd.result);rd.onerror=fail;rd.readAsDataURL(f);}
+function openDataUrl(u){fetch(u).then(r=>r.blob()).then(b=>openFile(new File([b],'Geteiltes Foto',{type:b.type})))}
 $('file').addEventListener('change',e=>{openFile(e.target.files[0]);e.target.value=''});
 const dz=$('segCanvas').parentElement;
 ['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add('drop')}));
