@@ -395,11 +395,13 @@ async function initML(){
   try{
     const u=f=>new URL('ml/'+f,location.href).href;
     const mod=await import(u('vision_bundle.mjs'));
+    // Modell selbst laden (Web-Version liefert es ggf. mit .wasm-Endung aus)
+    const model=async n=>{for(const f of [n,n+'.wasm']){try{const r=await fetch(u(f));if(r.ok)return new Uint8Array(await r.arrayBuffer())}catch(e){}}throw new Error(n+' fehlt')};
     ML.seg=await mod.ImageSegmenter.createFromOptions({wasmLoaderPath:u('vision_wasm_internal.js'),wasmBinaryPath:u('vision_wasm_internal.wasm')},
-      {baseOptions:{modelAssetPath:u('deeplab_v3.tflite'),delegate:'CPU'},runningMode:'IMAGE',outputCategoryMask:false,outputConfidenceMasks:true});
+      {baseOptions:{modelAssetBuffer:await model('deeplab_v3.tflite'),delegate:'CPU'},runningMode:'IMAGE',outputCategoryMask:false,outputConfidenceMasks:true});
     ML.state='ready';
     try{ML.touch=await mod.InteractiveSegmenter.createFromOptions({wasmLoaderPath:u('vision_wasm_internal.js'),wasmBinaryPath:u('vision_wasm_internal.wasm')},
-      {baseOptions:{modelAssetPath:u('magic_touch.tflite'),delegate:'CPU'},outputCategoryMask:false,outputConfidenceMasks:true});}
+      {baseOptions:{modelAssetBuffer:await model('magic_touch.tflite'),delegate:'CPU'},outputCategoryMask:false,outputConfidenceMasks:true});}
     catch(e){console.warn('MagicTouch nicht verfügbar',e);ML.touch=null}
   }catch(e){console.warn('KI nicht verfügbar',e);ML.state='failed';mlInfo('KI-Erkennung ist hier nicht verfügbar, der Umriss kommt aus der Farbanalyse.')}
   runML();
