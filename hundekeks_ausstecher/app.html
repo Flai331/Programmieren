@@ -1,0 +1,704 @@
+<title>Hundekeks-Ausstecher</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: drei Werkbank-Panels nebeneinander (Foto → Prägung → Druckteile), auf dem Handy untereinander */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#1b2330; --muted:#5d6878; --line:#d6dce4;
+  --accent:#2f5bd3; --accent-ink:#ffffff; --accent-soft:#e3eafb;
+  --dough:#d9a35a; --dough-dark:#a8692c; --ok:#2e7d4f; --warn:#b26a00;
+  --bed:#e7ebf0;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161c; --panel:#1a2029; --ink:#e7ebf1; --muted:#9aa5b5; --line:#2c3542;
+  --accent:#7c9cf5; --accent-ink:#0d1322; --accent-soft:#232f4a;
+  --dough:#d29b52; --dough-dark:#9c6128; --ok:#5fc08a; --warn:#e3a443; --bed:#161b22; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161c; --panel:#1a2029; --ink:#e7ebf1; --muted:#9aa5b5; --line:#2c3542;
+  --accent:#7c9cf5; --accent-ink:#0d1322; --accent-soft:#232f4a;
+  --dough:#d29b52; --dough-dark:#9c6128; --ok:#5fc08a; --warn:#e3a443; --bed:#161b22; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:20px 40px}
+header{max-width:1500px;margin:0 auto 18px;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 24px}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(1.6rem,3.4vw,2.3rem);letter-spacing:-.01em;margin:0;line-height:1.05;text-wrap:balance}
+header p{margin:4px 0 0;color:var(--muted);max-width:62ch}
+.flow{font-family:var(--f-mono);font-size:.78rem;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap}
+.flow span{padding:3px 8px;border:1px solid var(--line);border-radius:4px;background:var(--panel)}
+main{max-width:1500px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,370px),1fr));gap:16px;align-items:start}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.panel h2{font-family:var(--f-display);font-weight:700;font-size:1.2rem;margin:0;display:flex;align-items:baseline;gap:10px}
+.step{font-family:var(--f-mono);font-size:.75rem;font-weight:500;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:1px 6px}
+.hint{color:var(--muted);font-size:.86rem;margin:0}
+.stage{position:relative;background:var(--bed);border-radius:8px;overflow:hidden;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:20px 20px}
+.stage canvas{display:block;width:100%;height:auto;touch-action:none}
+#segCanvas,#cookieCanvas{cursor:crosshair}
+#three{width:100%;aspect-ratio:4/3;max-width:100%}
+#three canvas{touch-action:none}
+.badge{position:absolute;left:8px;top:8px;font-family:var(--f-mono);font-size:.72rem;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:2px 6px;pointer-events:none}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,.btn{font:inherit;font-size:.88rem;font-weight:600;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:7px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+button:hover,.btn:hover{border-color:var(--accent)}
+button:focus-visible,.btn:focus-within,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);padding:10px 16px;font-size:.95rem}
+.btn input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.seg-tools .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.sliders{display:grid;gap:10px}
+.sl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center}
+.sl label{font-size:.86rem}
+.sl output{font-family:var(--f-mono);font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.sl input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--accent)}
+details{border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;font-weight:600;font-size:.9rem}
+details .sliders{margin-top:10px}
+.txt{display:grid;gap:4px}
+.txt input{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{border:1px solid var(--line);border-radius:6px;padding:8px}
+.stat b{display:block;font-family:var(--f-mono);font-weight:500;font-size:1rem;font-variant-numeric:tabular-nums}
+.stat span{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.tips{font-size:.85rem;color:var(--muted);margin:0;padding-left:18px;display:grid;gap:4px}
+.tips b{color:var(--ink);font-weight:600}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:6px;font-size:.88rem;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
+.toast.show{opacity:1}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{font-weight:500;font-size:.82rem;padding:5px 10px;border-radius:999px}
+.legend{display:flex;gap:14px;font-size:.78rem;color:var(--muted);flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+
+<header>
+  <div>
+    <h1>Hundekeks-Ausstecher</h1>
+    <p>Aus einem Foto deines Hundes entstehen zwei Druckteile: ein Ausstecher in seiner Silhouette und ein Stempel, der Augen, Nase, Ohren und Fellzeichnung in den Teig prägt.</p>
+  </div>
+  <div class="flow" aria-hidden="true"><span>Foto</span><span>→ Umriss</span><span>→ Prägung</span><span>→ STL</span></div>
+</header>
+
+<main>
+  <!-- 1 Foto & Umriss -->
+  <section class="panel" aria-labelledby="h1s">
+    <h2 id="h1s"><span class="step">1</span>Foto &amp; Umriss</h2>
+    <div class="row">
+      <label class="btn primary" style="position:relative">Foto wählen<input id="file" type="file" accept="image/*"></label>
+      <span class="hint" id="photoInfo">Beispielhund geladen. Lade ein eigenes Foto (JPG/PNG).</span>
+    </div>
+    <div class="chips" role="group" aria-label="Motiv">
+      <span class="hint" style="align-self:center">Motiv:</span>
+      <button data-preset="face" class="on">Gesicht frontal</button>
+      <button data-preset="profile">Kopf im Profil</button>
+      <button data-preset="full">Ganzer Hund</button>
+    </div>
+    <div class="stage"><canvas id="segCanvas" width="10" height="10"></canvas><span class="badge" id="segBadge">Umriss</span></div>
+    <div class="row seg-tools" role="group" aria-label="Korrekturpinsel">
+      <button id="bFg" class="on"><span class="dot" style="background:#2fbf71"></span>Gehört zum Hund</button>
+      <button id="bBg"><span class="dot" style="background:#e5484d"></span>Hintergrund</button>
+      <button id="bSegUndo">Rückgängig</button>
+      <button id="bSegClear">Korrekturen löschen</button>
+    </div>
+    <p class="hint">Der Umriss wird automatisch über die Farben von Hund und Hintergrund erkannt. Wenn etwas fehlt oder zu viel ist, mal mit dem Pinsel darüber. Am besten klappt es mit ruhigem Hintergrund.</p>
+    <div class="sliders" id="slSeg"></div>
+  </section>
+
+  <!-- 2 Prägung -->
+  <section class="panel" aria-labelledby="h2s">
+    <h2 id="h2s"><span class="step">2</span>Prägung</h2>
+    <div class="stage"><canvas id="cookieCanvas" width="10" height="10"></canvas><span class="badge">Keks-Vorschau</span></div>
+    <div class="row" role="group" aria-label="Prägepinsel">
+      <button id="bDetAdd" class="on">Linie zeichnen</button>
+      <button id="bDetDel">Radieren</button>
+      <button id="bDetUndo">Rückgängig</button>
+      <button id="bDetClear">Alles löschen</button>
+    </div>
+    <p class="hint">Dunkle Stellen in der Vorschau werden in den Keks gedrückt. Zeichne fehlende Details nach (Augenbrauen, Lefzen) oder radiere Fellrauschen weg.</p>
+    <div class="sliders" id="slDet"></div>
+    <div class="txt">
+      <label for="name" style="font-size:.86rem">Name auf dem Keks (optional)</label>
+      <input id="name" type="text" maxlength="14" placeholder="z. B. Bello">
+    </div>
+    <div class="sliders" id="slName"></div>
+  </section>
+
+  <!-- 3 Druckteile -->
+  <section class="panel" aria-labelledby="h3s">
+    <h2 id="h3s"><span class="step">3</span>Druckteile</h2>
+    <div class="stage" style="background-size:24px 24px"><div id="three"></div><span class="badge">3D · ziehen zum Drehen</span></div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>Ausstecher</span><span><i style="background:var(--dough-dark)"></i>Stempel (gespiegelt, Relief nach oben)</span></div>
+    <div class="stats">
+      <div class="stat"><span>Keksgröße</span><b id="stSize">–</b></div>
+      <div class="stat"><span>Filament</span><b id="stGram">–</b></div>
+      <div class="stat"><span>Dreiecke</span><b id="stTris">–</b></div>
+    </div>
+    <div class="sliders" id="slGeo"></div>
+    <details>
+      <summary>Wand, Rand &amp; Stempel</summary>
+      <div class="sliders" id="slGeo2"></div>
+    </details>
+    <button class="primary" id="bDownload">STL-Dateien herunterladen (ZIP)</button>
+    <ul class="tips">
+      <li><b>Ausstecher</b> mit dem breiten Rand aufs Druckbett, Schneide zeigt nach oben. Keine Stützen nötig.</li>
+      <li><b>Stempel</b> liegt flach, Relief oben. Zum Prägen umdrehen und in den ausgestochenen Teig drücken. Er ist schon gespiegelt, damit das Bild richtig herum im Keks erscheint.</li>
+      <li>0,2 mm Schichthöhe, 3 Wände. Für Teigkontakt PETG oder lebensmittelechtes Filament nehmen und kalt von Hand spülen.</li>
+      <li>Teig vor dem Prägen gut kühlen und den Stempel leicht bemehlen, dann bleiben die Linien scharf.</li>
+    </ul>
+  </section>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+
+/* ---------------- Parameter ---------------- */
+const P={sens:1.0,smooth:2.0,brush:14,
+  lineAmt:7,areaAmt:12,fine:0.5,lineW:1.0,minArea:2,
+  nameSize:8,nameX:50,nameY:82,
+  size:80,height:14,wall:1.2,flange:4,flangeH:2,plate:3,relief:2,clear:0.8};
+const SLIDERS={
+  slSeg:[['sens','Hund-Anteil',0.6,1.6,0.02,'',v=>v.toFixed(2)],['smooth','Konturglättung',0,5,0.1,'mm'],['brush','Pinselgröße',4,40,1,'px']],
+  slDet:[['lineAmt','Linien',0,20,0.5,'%'],['areaAmt','Dunkle Flächen (Augen, Nase, Fleck)',0,35,0.5,'%'],['fine','Detailgrad (klein = feiner)',0.25,1.5,0.05,'mm'],['lineW','Mindest-Linienbreite',0.6,2,0.05,'mm'],['minArea','Kleine Punkte entfernen unter',0,10,0.5,'mm²']],
+  slName:[['nameSize','Schriftgröße',4,16,0.5,'mm'],['nameX','Position waagrecht',0,100,1,'%'],['nameY','Position senkrecht',0,100,1,'%']],
+  slGeo:[['size','Keksgröße (längste Seite)',40,150,1,'mm']],
+  slGeo2:[['height','Höhe Ausstecher',8,25,0.5,'mm'],['wall','Wandstärke Schneide',0.8,2.4,0.05,'mm'],['flange','Griffrand Breite',0,8,0.5,'mm'],['flangeH','Griffrand Höhe',1,4,0.2,'mm'],
+    ['plate','Stempel Plattendicke',1.5,6,0.1,'mm'],['relief','Relief Höhe',0.8,4,0.1,'mm'],['clear','Stempel kleiner als Keks um',0,3,0.1,'mm']]
+};
+const GROUP={slSeg:'seg',slDet:'det',slName:'det',slGeo:'geo',slGeo2:'geo'};
+const PRESETS={
+  face:{lineAmt:7,areaAmt:12,fine:0.5,smooth:2.0},
+  profile:{lineAmt:6,areaAmt:6,fine:0.55,smooth:1.6},
+  full:{lineAmt:4,areaAmt:5,fine:0.7,smooth:1.2}
+};
+function fmt(def){const v=P[def[0]];return (def[6]?def[6](v):(Number.isInteger(def[4])?String(v):v.toFixed(def[4]<0.1?2:1)))+(def[5]?' '+def[5]:'')}
+function buildSliders(){
+  for(const cid in SLIDERS){const box=$(cid);
+    for(const d of SLIDERS[cid]){const [k,label,mn,mx,st]=d;
+      const w=document.createElement('div');w.className='sl';
+      w.innerHTML=`<label for="p-${k}">${label}</label><output id="o-${k}"></output><input type="range" id="p-${k}" min="${mn}" max="${mx}" step="${st}">`;
+      box.appendChild(w);const inp=w.querySelector('input');inp.value=P[k];$('o-'+k).textContent=fmt(d);
+      inp.addEventListener('input',()=>{P[k]=parseFloat(inp.value);$('o-'+k).textContent=fmt(d);
+        if(k==='brush')return; schedule(GROUP[cid]==='seg'?'seg':'geo');});
+    }}
+}
+function syncSliders(){for(const cid in SLIDERS)for(const d of SLIDERS[cid]){const i=$('p-'+d[0]);if(i){i.value=P[d[0]];$('o-'+d[0]).textContent=fmt(d);}}}
+
+/* ---------------- Zustand ---------------- */
+const S={img:null,W:0,H:0,rgb:null,lab:null,segStrokes:[],detStrokes:[],mask:null,maskF:null,bbox:null,model:null,
+  segMode:'fg',detMode:'add'};
+
+/* ---------------- Bildhilfen ---------------- */
+function boxBlur(src,W,H,r){
+  const tmp=new Float32Array(W*H),out=new Float32Array(W*H),inv=1/(2*r+1);
+  for(let y=0;y<H;y++){const o=y*W;let s=0;
+    for(let k=-r;k<=r;k++)s+=src[o+clamp(k,0,W-1)];
+    for(let x=0;x<W;x++){tmp[o+x]=s*inv;s+=src[o+Math.min(W-1,x+r+1)]-src[o+Math.max(0,x-r)];}}
+  for(let x=0;x<W;x++){let s=0;
+    for(let k=-r;k<=r;k++)s+=tmp[clamp(k,0,H-1)*W+x];
+    for(let y=0;y<H;y++){out[y*W+x]=s*inv;s+=tmp[Math.min(H-1,y+r+1)*W+x]-tmp[Math.max(0,y-r)*W+x];}}
+  return out;
+}
+function gauss(src,W,H,sigma){
+  if(sigma<0.35)return Float32Array.from(src);
+  const r=Math.max(1,Math.round((Math.sqrt(4*sigma*sigma+1)-1)/2));
+  return boxBlur(boxBlur(boxBlur(src,W,H,r),W,H,r),W,H,r);
+}
+function dt1d(f,n,d,v,z){
+  let k=0;v[0]=0;z[0]=-1e20;z[1]=1e20;
+  for(let q=1;q<n;q++){
+    let s=((f[q]+q*q)-(f[v[k]]+v[k]*v[k]))/(2*q-2*v[k]);
+    while(s<=z[k]){k--;s=((f[q]+q*q)-(f[v[k]]+v[k]*v[k]))/(2*q-2*v[k]);}
+    k++;v[k]=q;z[k]=s;z[k+1]=1e20;}
+  k=0;for(let q=0;q<n;q++){while(z[k+1]<q)k++;const dq=q-v[k];d[q]=dq*dq+f[v[k]];}
+}
+/* Euklidische Distanz (in Zellen) jeder Zelle zur nächsten Zelle mit feat=1 */
+function edt(feat,W,H){
+  const n=Math.max(W,H),f=new Float64Array(n),d=new Float64Array(n),v=new Int32Array(n),z=new Float64Array(n+1),g=new Float64Array(W*H);
+  for(let x=0;x<W;x++){for(let y=0;y<H;y++)f[y]=feat[y*W+x]?0:1e20;dt1d(f,H,d,v,z);for(let y=0;y<H;y++)g[y*W+x]=d[y];}
+  const out=new Float32Array(W*H);
+  for(let y=0;y<H;y++){const o=y*W;for(let x=0;x<W;x++)f[x]=g[o+x];dt1d(f,W,d,v,z);for(let x=0;x<W;x++)out[o+x]=Math.sqrt(d[x]);}
+  return out;
+}
+function invert(m){const o=new Uint8Array(m.length);for(let i=0;i<m.length;i++)o[i]=m[i]?0:1;return o}
+function labelComponents(mask,W,H){
+  const lab=new Int32Array(W*H).fill(-1),stack=new Int32Array(W*H),sizes=[];let n=0;
+  for(let i=0;i<W*H;i++){if(!mask[i]||lab[i]>=0)continue;let sp=0,c=0;stack[sp++]=i;lab[i]=n;
+    while(sp){const p=stack[--sp];c++;const x=p%W,y=(p-x)/W;
+      if(x>0&&mask[p-1]&&lab[p-1]<0){lab[p-1]=n;stack[sp++]=p-1}
+      if(x<W-1&&mask[p+1]&&lab[p+1]<0){lab[p+1]=n;stack[sp++]=p+1}
+      if(y>0&&mask[p-W]&&lab[p-W]<0){lab[p-W]=n;stack[sp++]=p-W}
+      if(y<H-1&&mask[p+W]&&lab[p+W]<0){lab[p+W]=n;stack[sp++]=p+W}}
+    sizes.push(c);n++;}
+  return {lab,sizes};
+}
+/* Löcher füllen: alles was nicht vom Rand (oder von seeds) aus erreichbar ist, wird Vordergrund */
+function fillHoles(mask,W,H,seeds){
+  const reach=new Uint8Array(W*H),stack=new Int32Array(W*H);let sp=0;
+  const push=p=>{if(!mask[p]&&!reach[p]){reach[p]=1;stack[sp++]=p}};
+  for(let x=0;x<W;x++){push(x);push((H-1)*W+x)}for(let y=0;y<H;y++){push(y*W);push(y*W+W-1)}
+  if(seeds)for(let i=0;i<W*H;i++)if(seeds[i])push(i);
+  while(sp){const p=stack[--sp];const x=p%W,y=(p-x)/W;
+    if(x>0)push(p-1);if(x<W-1)push(p+1);if(y>0)push(p-W);if(y<H-1)push(p+W);}
+  for(let i=0;i<W*H;i++)if(!mask[i]&&!reach[i])mask[i]=1;
+}
+function percentile(vals,n,p){if(n===0)return 0;const a=vals.subarray(0,n).slice().sort();return a[clamp(Math.floor(p*(n-1)),0,n-1)]}
+function rng(seed){return()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}}
+
+/* ---------------- Farbraum + k-Means ---------------- */
+const LIN=new Float32Array(256);for(let i=0;i<256;i++){const c=i/255;LIN[i]=c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4)}
+function toLab(rgba,N){
+  const lab=new Float32Array(N*3),fx=t=>t>0.008856?Math.cbrt(t):7.787*t+16/116;
+  for(let i=0;i<N;i++){const r=LIN[rgba[i*4]],g=LIN[rgba[i*4+1]],b=LIN[rgba[i*4+2]];
+    const X=(0.4124*r+0.3576*g+0.1805*b)/0.95047,Y=0.2126*r+0.7152*g+0.0722*b,Z=(0.0193*r+0.1192*g+0.9505*b)/1.08883;
+    const a=fx(X),c=fx(Y),e=fx(Z);
+    lab[i*3]=(116*c-16)*0.9;lab[i*3+1]=500*(a-c);lab[i*3+2]=200*(c-e);}
+  return lab;
+}
+function kmeans(lab,idx,n,k){
+  if(n===0)return null;k=Math.min(k,n);const R=rng(7),C=new Float32Array(k*3),D=new Float32Array(n).fill(1e30);
+  let pick=idx[Math.floor(R()*n)];
+  for(let c=0;c<k;c++){C[c*3]=lab[pick*3];C[c*3+1]=lab[pick*3+1];C[c*3+2]=lab[pick*3+2];
+    if(c===k-1)break;let sum=0;
+    for(let i=0;i<n;i++){const p=idx[i]*3,dl=lab[p]-C[c*3],da=lab[p+1]-C[c*3+1],db=lab[p+2]-C[c*3+2],dd=dl*dl+da*da+db*db;if(dd<D[i])D[i]=dd;sum+=D[i];}
+    let t=R()*sum,j=0;for(;j<n-1;j++){t-=D[j];if(t<=0)break}pick=idx[j];}
+  const acc=new Float64Array(k*4);
+  for(let it=0;it<7;it++){acc.fill(0);
+    for(let i=0;i<n;i++){const p=idx[i]*3;let best=0,bd=1e30;
+      for(let c=0;c<k;c++){const dl=lab[p]-C[c*3],da=lab[p+1]-C[c*3+1],db=lab[p+2]-C[c*3+2],dd=dl*dl+da*da+db*db;if(dd<bd){bd=dd;best=c}}
+      acc[best*4]+=lab[p];acc[best*4+1]+=lab[p+1];acc[best*4+2]+=lab[p+2];acc[best*4+3]++;}
+    for(let c=0;c<k;c++)if(acc[c*4+3]>0){C[c*3]=acc[c*4]/acc[c*4+3];C[c*3+1]=acc[c*4+1]/acc[c*4+3];C[c*3+2]=acc[c*4+2]/acc[c*4+3];}}
+  return {C,k};
+}
+function nearestDist(M,lab,p){let bd=1e30;const C=M.C;for(let c=0;c<M.k;c++){const dl=lab[p]-C[c*3],da=lab[p+1]-C[c*3+1],db=lab[p+2]-C[c*3+2],dd=dl*dl+da*da+db*db;if(dd<bd)bd=dd}return Math.sqrt(bd)}
+function otsu(v,N){
+  let mx=0;for(let i=0;i<N;i++)if(v[i]>mx)mx=v[i];if(mx<=0)return 0;
+  const h=new Float64Array(256);for(let i=0;i<N;i++)h[Math.min(255,Math.floor(v[i]/mx*255))]++;
+  let sum=0;for(let i=0;i<256;i++)sum+=i*h[i];let sB=0,wB=0,best=0,th=0;
+  for(let t=0;t<256;t++){wB+=h[t];if(!wB)continue;const wF=N-wB;if(!wF)break;sB+=t*h[t];const mB=sB/wB,mF=(sum-sB)/wF,b=wB*wF*(mB-mF)*(mB-mF);if(b>best){best=b;th=t}}
+  return (th+0.5)/255*mx;
+}
+
+/* ---------------- Pinselstriche rastern ---------------- */
+/* Gibt Uint8 zurück: 0 nichts, 1 = Typ A, 2 = Typ B; spätere Striche überdecken frühere */
+function rasterStrokes(strokes,W,H,map,radiusPx,typeA){
+  const out=new Uint8Array(W*H);if(!strokes.length)return out;
+  const c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d');
+  g.lineCap='round';g.lineJoin='round';
+  for(const s of strokes){g.strokeStyle=g.fillStyle=s.type===typeA?'#ff0000':'#0000ff';g.lineWidth=2*radiusPx(s);
+    const pts=s.pts.map(map);g.beginPath();g.moveTo(pts[0][0],pts[0][1]);
+    if(pts.length===1){g.arc(pts[0][0],pts[0][1],radiusPx(s),0,7);g.fill()}else{for(const p of pts)g.lineTo(p[0],p[1]);g.stroke()}}
+  const d=g.getImageData(0,0,W,H).data;
+  for(let i=0;i<W*H;i++){if(d[i*4]>128)out[i]=1;else if(d[i*4+2]>128)out[i]=2}
+  return out;
+}
+
+/* ---------------- 1. Freistellen ---------------- */
+function loadImage(img,label){
+  S.img=img;const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+  const k=480/Math.max(iw,ih);S.W=Math.max(8,Math.round(iw*k));S.H=Math.max(8,Math.round(ih*k));S.k=iw/S.W;
+  const c=document.createElement('canvas');c.width=S.W;c.height=S.H;const g=c.getContext('2d');g.drawImage(img,0,0,S.W,S.H);
+  S.rgb=g.getImageData(0,0,S.W,S.H);S.lab=toLab(S.rgb.data,S.W*S.H);
+  S.segStrokes=[];S.detStrokes=[];
+  const sc=$('segCanvas');sc.width=S.W;sc.height=S.H;
+  if(label)$('photoInfo').textContent=label;
+  runSeg();
+}
+function segment(){
+  const W=S.W,H=S.H,N=W*H,lab=S.lab;
+  const cons=rasterStrokes(S.segStrokes,W,H,p=>p,s=>s.r,'fg');
+  const band=Math.max(3,Math.round(Math.min(W,H)*0.04));
+  // Hintergrund-Proben: oberer, linker, rechter Rand (unten steht oft Hals/Brust des Hundes)
+  let idx=new Int32Array(N),n=0;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const p=y*W+x;
+    if(cons[p]===2||((y<band||x<band||x>=W-band)&&((x+y)&1)===0&&cons[p]!==1))idx[n++]=p;}
+  let bgM=kmeans(lab,idx,n,6);
+  const fg=new Uint8Array(N);
+  const dB=new Float32Array(N);for(let p=0;p<N;p++)dB[p]=nearestDist(bgM,lab,p*3);
+  const th=otsu(dB,N);for(let p=0;p<N;p++)fg[p]=dB[p]>th?1:0;
+  for(let p=0;p<N;p++)if(cons[p])fg[p]=cons[p]===1?1:0;
+  // Iteratives Verfeinern mit Farbmodellen für Hund und Hintergrund
+  const fIdx=new Int32Array(N),bIdx=new Int32Array(N);
+  for(let it=0;it<3;it++){
+    let nf=0,nb=0,cf=0,cb=0;for(let p=0;p<N;p++)fg[p]?cf++:cb++;
+    const sf=Math.max(1,Math.floor(cf/14000)),sb=Math.max(1,Math.floor(cb/14000));let kf=0,kb=0;
+    for(let p=0;p<N;p++){if(cons[p]===1)fIdx[nf++]=p;else if(cons[p]===2)bIdx[nb++]=p;else if(fg[p]){if((kf++%sf)===0)fIdx[nf++]=p}else{if((kb++%sb)===0)bIdx[nb++]=p}}
+    if(nf<20||nb<20)break;
+    const fM=kmeans(lab,fIdx,nf,6);bgM=kmeans(lab,bIdx,nb,7);
+    for(let p=0;p<N;p++){if(cons[p]){fg[p]=cons[p]===1?1:0;continue}
+      fg[p]=nearestDist(fM,lab,p*3)<nearestDist(bgM,lab,p*3)*P.sens?1:0;}
+  }
+  // Glätten (Mehrheitsfilter) und Pinsel erneut anwenden
+  const bl=boxBlur(fg,W,H,2);for(let p=0;p<N;p++)fg[p]=bl[p]>0.5?1:0;
+  for(let p=0;p<N;p++)if(cons[p])fg[p]=cons[p]===1?1:0;
+  // Zusammenhängende Fläche des Hundes wählen
+  const {lab:cl,sizes}=labelComponents(fg,W,H);
+  if(!sizes.length){S.mask=null;return}
+  const score=new Float64Array(sizes.length),sx=new Float64Array(sizes.length),sy=new Float64Array(sizes.length),hit=new Float64Array(sizes.length);
+  for(let p=0;p<N;p++){const c=cl[p];if(c<0)continue;sx[c]+=p%W;sy[c]+=Math.floor(p/W);if(cons[p]===1)hit[c]++}
+  let best=0;const diag=Math.hypot(W,H);
+  for(let c=0;c<sizes.length;c++){const cx=sx[c]/sizes[c],cy=sy[c]/sizes[c];
+    score[c]=hit[c]*1e9+sizes[c]/(1+Math.hypot(cx-W/2,cy-H/2)/(0.35*diag));if(score[c]>score[best])best=c;}
+  for(let p=0;p<N;p++)fg[p]=cl[p]===best?1:0;
+  const seeds=new Uint8Array(N);for(let p=0;p<N;p++)if(cons[p]===2)seeds[p]=1;
+  fillHoles(fg,W,H,seeds);
+  let x0=W,y0=H,x1=-1,y1=-1;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(fg[y*W+x]){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}
+  S.mask=fg;S.maskF=boxBlur(fg,W,H,1);S.bbox={x0,y0,x1,y1};S.cons=cons;
+}
+function drawSeg(){
+  const W=S.W,H=S.H,c=$('segCanvas'),g=c.getContext('2d');
+  const im=g.createImageData(W,H),d=im.data,src=S.rgb.data,m=S.mask,cons=S.cons;
+  const ac=hexRGB(css('--accent'));
+  for(let p=0;p<W*H;p++){let r=src[p*4],gg=src[p*4+1],b=src[p*4+2];
+    if(!m||!m[p]){r=r*0.35+20;gg=gg*0.35+24;b=b*0.35+30}
+    if(m){const x=p%W,y=(p-x)/W;const e=m[p]&&((x>0&&!m[p-1])||(x<W-1&&!m[p+1])||(y>0&&!m[p-W])||(y<H-1&&!m[p+W]));if(e){r=ac[0];gg=ac[1];b=ac[2]}}
+    if(cons&&cons[p]===1){r=r*0.6+47*0.4;gg=gg*0.6+191*0.4;b=b*0.6+113*0.4}
+    else if(cons&&cons[p]===2){r=r*0.6+229*0.4;gg=gg*0.6+72*0.4;b=b*0.6+77*0.4}
+    d[p*4]=r;d[p*4+1]=gg;d[p*4+2]=b;d[p*4+3]=255;}
+  g.putImageData(im,0,0);
+  // Konturverdickung für Sichtbarkeit
+  $('segBadge').textContent=m?'Umriss erkannt':'Kein Hund gefunden';
+}
+
+/* ---------------- 2./3. Modell bauen ---------------- */
+function sampleMask(F,W,H,x,y){
+  const xi=Math.floor(x),yi=Math.floor(y),fx=x-xi,fy=y-yi;
+  const at=(a,b)=>(a<0||b<0||a>=W||b>=H)?0:F[b*W+a];
+  return at(xi,yi)*(1-fx)*(1-fy)+at(xi+1,yi)*fx*(1-fy)+at(xi,yi+1)*(1-fx)*fy+at(xi+1,yi+1)*fx*fy;
+}
+function buildModel(){
+  if(!S.mask){S.model=null;return}
+  const bb=S.bbox,bw=bb.x1-bb.x0+1,bh=bb.y1-bb.y0+1;
+  const s=P.size/Math.max(bw,bh);                // mm pro Foto-Pixel
+  const r=Math.max(0.2,P.size/420);               // mm pro Rasterzelle
+  const M=P.wall+P.flange+3;
+  const GW=Math.ceil((bw*s+2*M)/r),GH=Math.ceil((bh*s+2*M)/r),N=GW*GH;
+  const ox=bb.x0-M/s,oy=bb.y0-M/s,q=r/s;          // Foto-Koordinate von Zelle 0, Foto-Pixel je Zelle
+  const toSeg=(i,j)=>[ox+(i+0.5)*q-0.5,oy+(j+0.5)*q-0.5];
+  const toGrid=(x,y)=>[(x+0.5-ox)/q-0.5,(y+0.5-oy)/q-0.5];
+  let Sm=new Uint8Array(N);
+  for(let j=0;j<GH;j++)for(let i=0;i<GW;i++){const [x,y]=toSeg(i,j);Sm[j*GW+i]=sampleMask(S.maskF,S.W,S.H,x,y)>=0.5?1:0}
+  // Glätten: Schließen (Lücken/Kerben füllen) und Öffnen (dünne Fransen weg)
+  const R=P.smooth/r;
+  if(R>0.5){
+    let d=edt(Sm,GW,GH);const dil=new Uint8Array(N);for(let i=0;i<N;i++)dil[i]=d[i]<=R?1:0;
+    d=edt(invert(dil),GW,GH);for(let i=0;i<N;i++)Sm[i]=d[i]>R?1:0;
+    const Ro=R*0.6;d=edt(invert(Sm),GW,GH);const er=new Uint8Array(N);for(let i=0;i<N;i++)er[i]=d[i]>Ro?1:0;
+    d=edt(er,GW,GH);for(let i=0;i<N;i++)Sm[i]=d[i]<=Ro?1:0;
+  }
+  {const {lab,sizes}=labelComponents(Sm,GW,GH);let b=-1,bs=0;sizes.forEach((v,i)=>{if(v>bs){bs=v;b=i}});
+    for(let i=0;i<N;i++)Sm[i]=lab[i]===b?1:0;fillHoles(Sm,GW,GH);}
+  // Vorzeichenbehaftete Distanz zur Keks-Kante (mm, innen negativ)
+  const dOut=edt(Sm,GW,GH),dIn=edt(invert(Sm),GW,GH);
+  let SD=new Float32Array(N);for(let i=0;i<N;i++)SD[i]=Sm[i]?-(dIn[i]-0.5)*r:(dOut[i]-0.5)*r;
+  SD=boxBlur(SD,GW,GH,1);
+
+  // Detailbild aus dem Originalfoto im Raster
+  const gc=document.createElement('canvas');gc.width=GW;gc.height=GH;const g=gc.getContext('2d');
+  g.fillStyle='#fff';g.fillRect(0,0,GW,GH);const sc=1/(q*S.k);
+  g.setTransform(sc,0,0,sc,-ox/q,-oy/q);g.drawImage(S.img,0,0);g.setTransform(1,0,0,1,0,0);
+  const px=g.getImageData(0,0,GW,GH).data,G=new Float32Array(N);
+  for(let i=0;i<N;i++)G[i]=(0.299*px[i*4]+0.587*px[i*4+1]+0.114*px[i*4+2])/255;
+  const edgeM=0.8,inner=new Uint8Array(N);let nI=0;
+  for(let i=0;i<N;i++)if(SD[i]<=-(P.clear+edgeM)){inner[i]=1;nI++}
+  const sig=P.fine/r,b1=gauss(G,GW,GH,sig),b2=gauss(G,GW,GH,sig*1.8),b3=gauss(G,GW,GH,sig*1.4);
+  const vals=new Float32Array(nI),det=new Uint8Array(N);
+  if(P.lineAmt>0){let k=0;for(let i=0;i<N;i++)if(inner[i])vals[k++]=b1[i]-b2[i];
+    const t=percentile(vals,k,P.lineAmt/100);for(let i=0;i<N;i++)if(inner[i]&&b1[i]-b2[i]<=t&&b1[i]-b2[i]<-0.004)det[i]=1;}
+  if(P.areaAmt>0){let k=0;for(let i=0;i<N;i++)if(inner[i])vals[k++]=b3[i];
+    const t=percentile(vals,k,P.areaAmt/100);for(let i=0;i<N;i++)if(inner[i]&&b3[i]<=t)det[i]=1;}
+  // kleine Krümel entfernen
+  const minCells=P.minArea/(r*r);
+  if(minCells>1){const {lab,sizes}=labelComponents(det,GW,GH);for(let i=0;i<N;i++)if(det[i]&&sizes[lab[i]]<minCells)det[i]=0;}
+  // Eigene Pinselstriche
+  const dc=rasterStrokes(S.detStrokes,GW,GH,p=>toGrid(p[0],p[1]),st=>st.rMm/r,'add');
+  for(let i=0;i<N;i++){if(dc[i]===1)det[i]=1;else if(dc[i]===2)det[i]=0}
+  // Name
+  const name=$('name').value.trim();
+  if(name){const tc=document.createElement('canvas');tc.width=GW;tc.height=GH;const t=tc.getContext('2d');
+    const fpx=P.nameSize/r/0.72;t.font=`700 ${fpx}px "Bricolage Grotesque", "Arial Black", sans-serif`;t.textAlign='center';t.textBaseline='middle';t.fillStyle='#f00';
+    const bx0=M/r,by0=M/r,bxw=GW-2*M/r,byh=GH-2*M/r;t.fillText(name,bx0+bxw*P.nameX/100,by0+byh*P.nameY/100);
+    const td=t.getImageData(0,0,GW,GH).data,tm=new Uint8Array(N);for(let i=0;i<N;i++)tm[i]=td[i*4]>110?1:0;
+    const dt=edt(tm,GW,GH),halo=(1.0+P.lineW/2)/r;
+    for(let i=0;i<N;i++){if(dt[i]<=halo)det[i]=0;if(tm[i])det[i]=1}}
+
+  // Felder für die Druckteile (Bereich = Feld ≤ 0)
+  const dDet=edt(det,GW,GH);
+  const W0=P.wall,F0=P.wall+P.flange;
+  const gFl=new Float32Array(N),gW=new Float32Array(N),gPl=new Float32Array(N),gRel=new Float32Array(N);
+  for(let i=0;i<N;i++){const sd=SD[i];
+    gFl[i]=Math.max(-sd,sd-F0);gW[i]=Math.max(-sd,sd-W0);gPl[i]=sd+P.clear;
+    gRel[i]=Math.max(dDet[i]*r-P.lineW/2,sd+P.clear+edgeM*0.5);}
+  for(const f of [gFl,gW,gPl,gRel]){for(let i=0;i<GW;i++){f[i]=1;f[(GH-1)*GW+i]=1}for(let j=0;j<GH;j++){f[j*GW]=1;f[j*GW+GW-1]=1}}
+
+  const cut=new Mesh(),stamp=new Mesh();
+  const mmC=(x,y)=>[x*r,-y*r],mmS=(x,y)=>[-x*r,-y*r];
+  if(P.flange>0)cut.extrude(regionLoops(gFl,GW,GH,mmC,0.3),0,P.flangeH);
+  cut.extrude(regionLoops(gW,GW,GH,mmC,0.3),P.flange>0?P.flangeH-0.05:0,P.height);
+  stamp.extrude(regionLoops(gPl,GW,GH,mmS,1),0,P.plate);
+  stamp.extrude(regionLoops(gRel,GW,GH,mmS,0.4),P.plate-0.05,P.plate+P.relief);
+  let wmm=0,hmm=0;{let a=GW,b=GH,c=-1,e=-1;for(let j=0;j<GH;j++)for(let i=0;i<GW;i++)if(Sm[j*GW+i]){if(i<a)a=i;if(i>c)c=i;if(j<b)b=j;if(j>e)e=j}wmm=(c-a+1)*r;hmm=(e-b+1)*r;}
+  S.model={GW,GH,r,SD,gRel,cut,stamp,wmm,hmm,toSeg,toGrid};
+}
+
+/* ---------------- Marching Squares ---------------- */
+function regionLoops(g,W,H,toMM,minArea){
+  const nIds=W*H*2,px=new Float32Array(nIds),py=new Float32Array(nIds),nA=new Int32Array(nIds).fill(-1),nB=new Int32Array(nIds).fill(-1);
+  const Hid=(i,j)=>(j*W+i)*2,Vid=(i,j)=>(j*W+i)*2+1;
+  const setP=(id,x,y)=>{px[id]=x;py[id]=y};
+  const link=(a,b)=>{if(nA[a]<0)nA[a]=b;else nB[a]=b;if(nA[b]<0)nA[b]=a;else nB[b]=a};
+  for(let j=0;j<H-1;j++)for(let i=0;i<W-1;i++){
+    const a=g[j*W+i],b=g[j*W+i+1],c=g[(j+1)*W+i+1],d=g[(j+1)*W+i];
+    const code=(a<=0?1:0)|(b<=0?2:0)|(c<=0?4:0)|(d<=0?8:0);if(code===0||code===15)continue;
+    const T=Hid(i,j),Rr=Vid(i+1,j),B=Hid(i,j+1),L=Vid(i,j);
+    const need=(id)=>{if(id===T)setP(T,i+a/(a-b),j);else if(id===B)setP(B,i+d/(d-c),j+1);else if(id===L)setP(L,i,j+a/(a-d));else setP(Rr,i+1,j+b/(b-c))};
+    const seg=(u,v)=>{need(u);need(v);link(u,v)};
+    switch(code){
+      case 1:case 14:seg(L,T);break;case 2:case 13:seg(T,Rr);break;case 3:case 12:seg(L,Rr);break;
+      case 4:case 11:seg(Rr,B);break;case 6:case 9:seg(T,B);break;case 7:case 8:seg(L,B);break;
+      case 5:{const m=(a+b+c+d)/4;if(m<=0){seg(T,Rr);seg(B,L)}else{seg(L,T);seg(Rr,B)}break}
+      case 10:{const m=(a+b+c+d)/4;if(m<=0){seg(L,T);seg(Rr,B)}else{seg(T,Rr);seg(B,L)}break}
+    }
+  }
+  const seen=new Uint8Array(nIds),loops=[];
+  for(let s=0;s<nIds;s++){if(nA[s]<0||seen[s])continue;
+    const pts=[];let prev=-1,cur=s;
+    while(cur>=0&&!seen[cur]){seen[cur]=1;pts.push(toMM(px[cur],py[cur]));const nx=nA[cur]!==prev?nA[cur]:nB[cur];prev=cur;cur=nx;}
+    if(pts.length>=3)loops.push(simplify(pts,0.04));}
+  return classify(loops,minArea);
+}
+function simplify(pts,eps){
+  // Douglas-Peucker auf geschlossenem Ring
+  const n=pts.length;if(n<8)return pts;
+  let far=0,fd=-1;for(let i=1;i<n;i++){const d=(pts[i][0]-pts[0][0])**2+(pts[i][1]-pts[0][1])**2;if(d>fd){fd=d;far=i}}
+  const keep=new Uint8Array(n);keep[0]=keep[far]=1;
+  const st=[[0,far],[far,n]];
+  while(st.length){const [a,b]=st.pop();const A=pts[a],B=pts[b%n];let mi=-1,md=eps;
+    const dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy)||1e-9;
+    for(let i=a+1;i<b;i++){const d=Math.abs((pts[i][0]-A[0])*dy-(pts[i][1]-A[1])*dx)/L;if(d>md){md=d;mi=i}}
+    if(mi>0){keep[mi]=1;st.push([a,mi],[mi,b])}}
+  const out=[];for(let i=0;i<n;i++)if(keep[i])out.push(pts[i]);return out.length>=3?out:pts;
+}
+function area(l){let s=0;for(let i=0,n=l.length;i<n;i++){const a=l[i],b=l[(i+1)%n];s+=a[0]*b[1]-b[0]*a[1]}return s/2}
+function bbox(l){let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const p of l){if(p[0]<a)a=p[0];if(p[0]>c)c=p[0];if(p[1]<b)b=p[1];if(p[1]>d)d=p[1]}return [a,b,c,d]}
+function inside(pt,l,bb){if(pt[0]<bb[0]||pt[0]>bb[2]||pt[1]<bb[1]||pt[1]>bb[3])return false;let c=false;
+  for(let i=0,j=l.length-1;i<l.length;j=i++){const a=l[i],b=l[j];if((a[1]>pt[1])!==(b[1]>pt[1])&&pt[0]<(b[0]-a[0])*(pt[1]-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
+function classify(loops,minArea){
+  const L=loops.map(l=>({l,a:Math.abs(area(l)),bb:bbox(l)})).filter(o=>o.a>0.05);
+  for(const o of L){o.depth=0;o.parent=null;let pa=1e18;
+    for(const p of L){if(p===o||p.a<=o.a)continue;if(inside(o.l[0],p.l,p.bb)){o.depth++;if(p.a<pa){pa=p.a;o.parent=p}}}}
+  const outers=[];
+  for(const o of L)if(o.depth%2===0&&o.a>=minArea){o.holes=[];outers.push(o)}
+  for(const o of L)if(o.depth%2===1&&o.parent&&o.parent.holes&&o.a>=0.08)o.parent.holes.push(o);
+  return outers.map(o=>({outer:orient(o.l,true),holes:o.holes.map(h=>orient(h.l,false)),area:o.a-o.holes.reduce((s,h)=>s+h.a,0)}));
+}
+function orient(l,ccw){return (area(l)>0)===ccw?l:l.slice().reverse()}
+
+/* ---------------- Mesh + STL ---------------- */
+class Mesh{
+  constructor(){this.t=[];this.vol=0}
+  tri(a,b,c){this.t.push(a[0],a[1],a[2],b[0],b[1],b[2],c[0],c[1],c[2])}
+  extrude(polys,z0,z1){
+    for(const P0 of polys){
+      const ring=[P0.outer,...P0.holes];
+      const contour=P0.outer.map(p=>new THREE.Vector2(p[0],p[1])),holes=P0.holes.map(h=>h.map(p=>new THREE.Vector2(p[0],p[1])));
+      const faces=THREE.ShapeUtils.triangulateShape(contour,holes),all=contour.concat(...holes);
+      for(const f of faces){let A=all[f[0]],B=all[f[1]],C=all[f[2]];
+        if((B.x-A.x)*(C.y-A.y)-(B.y-A.y)*(C.x-A.x)<0){const t=B;B=C;C=t}
+        this.tri([A.x,A.y,z1],[B.x,B.y,z1],[C.x,C.y,z1]);this.tri([A.x,A.y,z0],[C.x,C.y,z0],[B.x,B.y,z0]);}
+      for(const l of ring)for(let i=0,n=l.length;i<n;i++){const p=l[i],q=l[(i+1)%n];
+        this.tri([p[0],p[1],z0],[q[0],q[1],z0],[q[0],q[1],z1]);this.tri([p[0],p[1],z0],[q[0],q[1],z1],[p[0],p[1],z1]);}
+      this.vol+=P0.area*(z1-z0);
+    }
+  }
+  get count(){return this.t.length/9}
+}
+function stl(mesh,name){
+  const n=mesh.count,buf=new ArrayBuffer(84+50*n),dv=new DataView(buf),t=mesh.t;
+  const h=('Hundekeks-Ausstecher '+name).slice(0,79);for(let i=0;i<h.length;i++)dv.setUint8(i,h.charCodeAt(i)&127);
+  dv.setUint32(80,n,true);let o=84;
+  for(let i=0;i<n;i++){const k=i*9;const ux=t[k+3]-t[k],uy=t[k+4]-t[k+1],uz=t[k+5]-t[k+2],vx=t[k+6]-t[k],vy=t[k+7]-t[k+1],vz=t[k+8]-t[k+2];
+    let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;const L=Math.hypot(nx,ny,nz)||1;
+    dv.setFloat32(o,nx/L,true);dv.setFloat32(o+4,ny/L,true);dv.setFloat32(o+8,nz/L,true);o+=12;
+    for(let j=0;j<9;j++){dv.setFloat32(o,t[k+j],true);o+=4}dv.setUint16(o,0,true);o+=2;}
+  return new Uint8Array(buf);
+}
+const CRC=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function crc32(d){let c=0xFFFFFFFF;for(let i=0;i<d.length;i++)c=CRC[(c^d[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0}
+function zip(files){
+  const enc=new TextEncoder(),parts=[],cd=[];let off=0;
+  const now=new Date(),time=(now.getHours()<<11)|(now.getMinutes()<<5)|(now.getSeconds()>>1),date=((now.getFullYear()-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate();
+  for(const f of files){const nm=enc.encode(f.name),crc=crc32(f.data),sz=f.data.length;
+    const lh=new DataView(new ArrayBuffer(30));lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,0x0800,true);lh.setUint16(8,0,true);
+    lh.setUint16(10,time,true);lh.setUint16(12,date,true);lh.setUint32(14,crc,true);lh.setUint32(18,sz,true);lh.setUint32(22,sz,true);lh.setUint16(26,nm.length,true);lh.setUint16(28,0,true);
+    parts.push(new Uint8Array(lh.buffer),nm,f.data);
+    const ch=new DataView(new ArrayBuffer(46));ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,0x0800,true);ch.setUint16(10,0,true);
+    ch.setUint16(12,time,true);ch.setUint16(14,date,true);ch.setUint32(16,crc,true);ch.setUint32(20,sz,true);ch.setUint32(24,sz,true);ch.setUint16(28,nm.length,true);ch.setUint32(42,off,true);
+    cd.push(new Uint8Array(ch.buffer),nm);off+=30+nm.length+sz;}
+  let cdSize=0;for(const c of cd)cdSize+=c.length;
+  const end=new DataView(new ArrayBuffer(22));end.setUint32(0,0x06054b50,true);end.setUint16(8,files.length,true);end.setUint16(10,files.length,true);end.setUint32(12,cdSize,true);end.setUint32(16,off,true);
+  const all=[...parts,...cd,new Uint8Array(end.buffer)];let len=0;for(const a of all)len+=a.length;
+  const out=new Uint8Array(len);let p=0;for(const a of all){out.set(a,p);p+=a.length}return out;
+}
+
+/* ---------------- Keks-Vorschau ---------------- */
+function drawCookie(){
+  const c=$('cookieCanvas'),m=S.model;
+  if(!m){const g=c.getContext('2d');c.width=300;c.height=200;g.clearRect(0,0,300,200);return}
+  const {GW,GH,r,SD,gRel}=m;c.width=GW;c.height=GH;const g=c.getContext('2d');
+  const rel=new Float32Array(GW*GH);for(let i=0;i<GW*GH;i++)rel[i]=gRel[i]<=0?1:0;
+  const h=gauss(rel,GW,GH,0.25/r);
+  const dough=hexRGB(css('--dough')),dark=hexRGB(css('--dough-dark'));
+  const im=g.createImageData(GW,GH),d=im.data;
+  for(let j=1;j<GH-1;j++)for(let i=1;i<GW-1;i++){const p=j*GW+i,sd=SD[p];if(sd>0)continue;
+    const sh=((h[p-1]-h[p+1])+(h[p-GW]-h[p+GW]))*0.9;           // Licht von links oben
+    const edge=clamp(1+sd/1.6,0,1);                              // gebräunter Rand
+    let k=h[p]*0.32+edge*0.35;
+    let R=dough[0]*(1-k)+dark[0]*k,G=dough[1]*(1-k)+dark[1]*k,B=dough[2]*(1-k)+dark[2]*k;
+    R+=sh*-70;G+=sh*-60;B+=sh*-45;
+    const a=clamp(-sd/r+0.5,0,1);
+    d[p*4]=R;d[p*4+1]=G;d[p*4+2]=B;d[p*4+3]=255*a;}
+  g.putImageData(im,0,0);
+}
+
+/* ---------------- 3D-Ansicht ---------------- */
+let T=null;
+function initThree(){
+  if(T||typeof THREE==='undefined')return;
+  const el=$('three'),w=el.clientWidth||400,h=Math.round(w*0.75);
+  const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(2,devicePixelRatio||1));renderer.setSize(w,h);el.appendChild(renderer.domElement);
+  const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(35,w/h,1,5000);
+  scene.add(new THREE.HemisphereLight(0xffffff,0x667788,0.75));const dl=new THREE.DirectionalLight(0xffffff,0.75);dl.position.set(-0.5,-0.8,1.4);scene.add(dl);
+  const controls=THREE.OrbitControls?new THREE.OrbitControls(cam,renderer.domElement):null;
+  const group=new THREE.Group();scene.add(group);
+  const render=()=>renderer.render(scene,cam);
+  if(controls){controls.enableDamping=false;controls.addEventListener('change',render)}
+  new ResizeObserver(()=>{const w2=el.clientWidth;if(!w2)return;const h2=Math.round(w2*0.75);renderer.setSize(w2,h2);cam.aspect=w2/h2;cam.updateProjectionMatrix();render()}).observe(el);
+  T={renderer,scene,cam,controls,group,render,first:true};
+}
+function updateThree(){
+  initThree();if(!T)return;const m=S.model;
+  while(T.group.children.length){const o=T.group.children.pop();o.geometry.dispose();o.material.dispose()}
+  if(!m){T.render();return}
+  const mk=(mesh,color)=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(mesh.t,3));g.computeVertexNormals();
+    return new THREE.Mesh(g,new THREE.MeshStandardMaterial({color,roughness:0.55,metalness:0.05}))};
+  const a=mk(m.cut,css('--accent')),b=mk(m.stamp,css('--dough-dark'));
+  a.geometry.computeBoundingBox();b.geometry.computeBoundingBox();
+  const ba=a.geometry.boundingBox,bb=b.geometry.boundingBox,gap=8;
+  a.position.x=-ba.min.x;b.position.x=(ba.max.x-ba.min.x)+gap-bb.min.x;
+  a.position.y=-(ba.min.y+ba.max.y)/2;b.position.y=-(bb.min.y+bb.max.y)/2;
+  T.group.add(a,b);
+  const totalW=(ba.max.x-ba.min.x)+gap+(bb.max.x-bb.min.x);T.group.position.x=-totalW/2;
+  if(T.first){const d=totalW*1.25+60;T.cam.up.set(0,0,1);T.cam.position.set(0,-d*0.95,d*0.75);T.cam.lookAt(0,0,0);if(T.controls){T.controls.target.set(0,0,4);T.controls.update()}T.first=false}
+  T.render();
+}
+
+/* ---------------- Statistik ---------------- */
+function updateStats(){
+  const m=S.model;
+  if(!m){$('stSize').textContent='–';$('stGram').textContent='–';$('stTris').textContent='–';return}
+  $('stSize').textContent=`${Math.round(m.wmm)} × ${Math.round(m.hmm)} mm`;
+  const g=(m.cut.vol+m.stamp.vol)/1000*1.24;           // PLA 1,24 g/cm³, massiv gerechnet
+  $('stGram').textContent=`≈ ${Math.round(g)} g`;
+  $('stTris').textContent=(m.cut.count+m.stamp.count).toLocaleString('de-DE');
+}
+
+/* ---------------- Ablauf ---------------- */
+let timers={};
+function schedule(what){
+  clearTimeout(timers.s);clearTimeout(timers.g);
+  if(what==='seg')timers.s=setTimeout(runSeg,90);else timers.g=setTimeout(runGeo,90);
+}
+function runSeg(){segment();drawSeg();runGeo()}
+function runGeo(){try{buildModel()}catch(e){console.error(e);S.model=null;toast('Modell konnte nicht berechnet werden: '+e.message)}drawCookie();updateStats();updateThree()}
+
+/* ---------------- Pinsel ---------------- */
+function attachBrush(canvas,onPoint,onEnd){
+  let active=false;
+  const pos=e=>{const b=canvas.getBoundingClientRect();return [(e.clientX-b.left)/b.width*canvas.width,(e.clientY-b.top)/b.height*canvas.height]};
+  canvas.addEventListener('pointerdown',e=>{active=true;canvas.setPointerCapture(e.pointerId);onPoint(pos(e),true)});
+  canvas.addEventListener('pointermove',e=>{if(active)onPoint(pos(e),false)});
+  const end=()=>{if(active){active=false;onEnd()}};
+  canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);
+}
+function setupBrushes(){
+  const sc=$('segCanvas');
+  attachBrush(sc,(p,start)=>{
+    if(start)S.segStrokes.push({type:S.segMode,pts:[],r:P.brush*S.W/480});
+    const st=S.segStrokes[S.segStrokes.length-1];st.pts.push(p);
+    const g=sc.getContext('2d');g.fillStyle=S.segMode==='fg'?'rgba(47,191,113,.55)':'rgba(229,72,77,.55)';g.beginPath();g.arc(p[0],p[1],st.r,0,7);g.fill();
+  },()=>schedule('seg'));
+  const cc=$('cookieCanvas');
+  attachBrush(cc,(p,start)=>{const m=S.model;if(!m)return;
+    const rMm=Math.max(P.lineW,0.8)/2;
+    if(start)S.detStrokes.push({type:S.detMode,pts:[],rMm});
+    const st=S.detStrokes[S.detStrokes.length-1];st.pts.push(m.toSeg(p[0],p[1]));
+    const g=cc.getContext('2d');g.fillStyle=S.detMode==='add'?'rgba(90,50,20,.8)':'rgba(255,255,255,.7)';g.beginPath();g.arc(p[0],p[1],(S.detMode==='add'?rMm:rMm*2.5)/m.r,0,7);g.fill();
+    if(S.detMode==='del')st.rMm=rMm*2.5;
+  },()=>schedule('geo'));
+  const tog=(a,b,set)=>{$(a).onclick=()=>{set();$(a).classList.add('on');$(b).classList.remove('on')}};
+  tog('bFg','bBg',()=>S.segMode='fg');tog('bBg','bFg',()=>S.segMode='bg');
+  tog('bDetAdd','bDetDel',()=>S.detMode='add');tog('bDetDel','bDetAdd',()=>S.detMode='del');
+  $('bSegUndo').onclick=()=>{S.segStrokes.pop();runSeg()};$('bSegClear').onclick=()=>{S.segStrokes=[];runSeg()};
+  $('bDetUndo').onclick=()=>{S.detStrokes.pop();runGeo()};$('bDetClear').onclick=()=>{S.detStrokes=[];runGeo()};
+}
+
+/* ---------------- Download ---------------- */
+let dlNS=null;
+if(window.claude&&window.claude.use){window.claude.use('downloads').then(d=>{dlNS=d}).catch(()=>{})}
+async function download(){
+  const m=S.model;if(!m){toast('Erst ein Foto mit erkanntem Hund laden.');return}
+  const base=(($('name').value.trim()||'hund').replace(/[^\wäöüÄÖÜß-]+/g,'_'))+'_'+Math.round(P.size)+'mm';
+  const info=`Hundekeks-Ausstecher\n\n${base}_ausstecher.stl  Ausstecher, Griffrand aufs Druckbett, Schneide oben.\n${base}_stempel.stl     Stempel, flach drucken (Relief oben). Zum Prägen umdrehen.\n\nKeksgröße: ${Math.round(m.wmm)} x ${Math.round(m.hmm)} mm\nHöhe Ausstecher: ${P.height} mm, Wand: ${P.wall} mm, Rand: ${P.flange} mm\nStempel: Platte ${P.plate} mm + Relief ${P.relief} mm\n\nEmpfehlung: 0,2 mm Schichthöhe, 3 Wände, keine Stützen.\nFür Teigkontakt PETG oder lebensmittelechtes Filament nehmen.\n`;
+  const bytes=zip([{name:base+'_ausstecher.stl',data:stl(m.cut,'Ausstecher')},{name:base+'_stempel.stl',data:stl(m.stamp,'Stempel')},{name:'Anleitung.txt',data:new TextEncoder().encode(info)}]);
+  const fname=base+'.zip';
+  if(dlNS){try{await dlNS.save({filename:fname,data:new Blob([bytes],{type:'application/zip'})});toast('ZIP gespeichert')}
+    catch(e){toast(e&&e.code==='declined'?'Download abgebrochen':'Download nicht möglich: '+(e&&e.message||e))}return}
+  const url=URL.createObjectURL(new Blob([bytes],{type:'application/zip'}));const a=document.createElement('a');a.href=url;a.download=fname;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast('ZIP wird heruntergeladen');
+}
+
+/* ---------------- Kleinkram ---------------- */
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function hexRGB(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const v=parseInt(h,16);return [(v>>16)&255,(v>>8)&255,v&255]}
+let tt;function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),2600)}
+
+/* Beispielhund (gezeichnet), damit die App sofort etwas zeigt */
+function demoDog(){
+  const c=document.createElement('canvas');c.width=640;c.height=600;const g=c.getContext('2d');
+  const bg=g.createLinearGradient(0,0,0,600);bg.addColorStop(0,'#a9c0a2');bg.addColorStop(1,'#cfd8c6');g.fillStyle=bg;g.fillRect(0,0,640,600);
+  g.globalAlpha=.25;for(let i=0;i<14;i++){g.fillStyle=i%2?'#8fa98a':'#e3e9da';g.beginPath();g.arc((i*97)%640,(i*61)%300,30+(i*13)%40,0,7);g.fill()}g.globalAlpha=1;
+  const E=(x,y,rx,ry,rot,col)=>{g.fillStyle=col;g.beginPath();g.ellipse(x,y,rx,ry,rot,0,7);g.fill()};
+  E(320,540,140,150,0,'#b07a43');                        // Brust/Hals bis zum Rand
+  E(170,300,62,135,0.35,'#5b3a1e');E(470,300,62,135,-0.35,'#5b3a1e');   // Schlappohren
+  E(320,270,150,165,0,'#b98248');                        // Kopf
+  E(320,200,24,70,0,'#f1e7d8');                          // Blesse
+  E(320,362,84,62,0,'#f3ece1');                          // Schnauze
+  E(250,255,19,17,0,'#1d140d');E(390,255,19,17,0,'#1d140d');  // Augen
+  E(256,249,5,5,0,'#fff');E(396,249,5,5,0,'#fff');
+  E(245,222,22,8,-0.25,'#8a5a2e');E(395,222,22,8,0.25,'#8a5a2e'); // Brauen
+  g.fillStyle='#17110c';g.beginPath();g.moveTo(285,322);g.quadraticCurveTo(320,305,355,322);g.quadraticCurveTo(352,352,320,360);g.quadraticCurveTo(288,352,285,322);g.fill();
+  g.strokeStyle='#3a2616';g.lineWidth=6;g.lineCap='round';g.beginPath();g.moveTo(320,360);g.lineTo(320,392);g.moveTo(320,392);g.quadraticCurveTo(295,412,272,398);g.moveTo(320,392);g.quadraticCurveTo(345,412,368,398);g.stroke();
+  const img=new Image();img.onload=()=>loadImage(img,'Beispielhund geladen. Lade ein eigenes Foto (JPG/PNG).');img.src=c.toDataURL('image/png');
+}
+
+/* ---------------- Start ---------------- */
+buildSliders();setupBrushes();
+$('bDownload').onclick=download;
+$('name').addEventListener('input',()=>schedule('geo'));
+document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-preset]').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  Object.assign(P,PRESETS[b.dataset.preset]);if(b.dataset.preset==='full'&&P.size<100)P.size=100;syncSliders();schedule('seg')});
+$('file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;
+  const url=URL.createObjectURL(f);const img=new Image();
+  img.onload=()=>{loadImage(img,f.name);URL.revokeObjectURL(url)};
+  img.onerror=()=>toast('Dieses Bildformat kann der Browser nicht öffnen. Bitte JPG oder PNG verwenden.');img.src=url;});
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(demoDog);else demoDog();
+</script>
