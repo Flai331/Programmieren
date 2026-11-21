@@ -93,6 +93,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     autoSync().then((_) {
       if (mounted) setState(() {});
     });
+    // Neueinrichtung: Nummern erst am Ende nach Datum (Ersterfassung).
+    SetupMode.autoEnable(services.repository.finalNumberedCount).then((_) {
+      if (mounted) setState(() {});
+    });
     // Einmal beim Start still nach einer neuen Version schauen.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) checkForUpdate(context, silent: true);
@@ -165,6 +169,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _scanMenu() async {
     if (_scanning) return;
     var mode = await BlankPageSettings.mode();
+    var collect = await ScanFlow.collect();
     if (!mounted) return;
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -197,6 +202,44 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     const SizedBox(height: 4),
                     Text(
                       mode.description,
+                      style: Theme.of(ctx).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Nach dem Scan',
+                      style: Theme.of(ctx).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<bool>(
+                        segments: const [
+                          ButtonSegment(
+                            value: false,
+                            icon: Icon(Icons.auto_awesome),
+                            label: Text('Direkt auslesen'),
+                          ),
+                          ButtonSegment(
+                            value: true,
+                            icon: Icon(Icons.inventory_2_outlined),
+                            label: Text('Erst sammeln'),
+                          ),
+                        ],
+                        selected: {collect},
+                        onSelectionChanged: (v) async {
+                          await ScanFlow.setCollect(v.first);
+                          setSheet(() => collect = v.first);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      collect
+                          ? 'Nur speichern – schnell viele Dokumente '
+                                'hintereinander. Ausgelesen und kontrolliert '
+                                'wird später gesammelt.'
+                          : 'Felder per Texterkennung/KI vorausfüllen und '
+                                'gleich kontrollieren.',
                       style: Theme.of(ctx).textTheme.bodySmall,
                     ),
                   ],
@@ -263,7 +306,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         );
       }
 
-      await _confirmOutcomes(result.documents);
+      await _processOutcomes(result.documents);
     }
   }
 
@@ -470,7 +513,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
         outcomes.add(outcome);
       }
-      saved = await _confirmOutcomes(outcomes);
+      saved = await _processOutcomes(outcomes);
       if (paths.length > 1 && mounted) {
         _snack(
           '$saved von ${paths.length} PDFs gespeichert'
@@ -522,6 +565,155 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Ein Dokument → sofort Nummer, bestätigen, speichern. Mehrere →
   /// [_confirmBatch] (Nummern am Ende nach Datum). Liefert die Anzahl
   /// gespeicherter Dokumente.
+  /// Je nach Wahl vor dem Scan: direkt auslesen oder erst sammeln.
+  Future<int> _processOutcomes(List<ScanOutcome> outcomes) async =>
+      await ScanFlow.collect()
+          ? _collectOutcomes(outcomes)
+          : _confirmOutcomes(outcomes);
+
+  /// „Erst sammeln“: ohne Rückfrage mit vorläufiger Nummer speichern
+  /// (nur schnelle Regel-Vorschläge, keine KI), Markierung „Noch auslesen“.
+  Future<int> _collectOutcomes(List<ScanOutcome> outcomes) async {
+    final finance = await FinanceSettings.load();
+    final tag = await SyncSettings.isMain() ? '' : await SyncSettings.deviceTag();
+    var saved = 0;
+    await BackgroundWork.run('Speichere ${outcomes.length} Dokument(e) …', () async {
+      for (final o in outcomes) {
+        final number = await services.repository.nextProvisionalNumber(tag: tag);
+        final pdfPath = await services.scanner.renamePdf(o.relativePdfPath, number);
+        final draft = await services.suggestions.buildDraft(o.ocrText, finance: finance);
+        draft.tagNames = [...draft.tagNames, DocumentRepository.pendingTag];
+        await services.repository.createDocument(
+          docNumber: number,
+          draft: draft,
+          pdfPath: pdfPath,
+          pageCount: o.pageCount,
+          ocrText: o.ocrText,
+          refs: extractRefs(o.ocrText),
+        );
+        saved++;
+      }
+    });
+    if (mounted) {
+      setState(() {});
+      _snack('$saved gesammelt – Originale auf den Stapel. Später oben '
+          '„Auslesen“ tippen.');
+    }
+    return saved;
+  }
+
+  /// Gesammelte Dokumente nacheinander auslesen (Regeln + KI) und
+  /// kontrollieren. Danach (außer in der Ersterfassung) Nummern nach Datum.
+  Future<void> _reviewPending() async {
+    final docs = await services.repository.pendingReview();
+    final reviewed = <String>{};
+    for (var i = 0; i < docs.length; i++) {
+      if (!mounted) return;
+      final doc = docs[i];
+      final ocr = doc.ocrText;
+      final outcome = ScanOutcome(
+        relativePdfPath: doc.pdfPath,
+        pageCount: doc.pageCount,
+        ocrText: ocr,
+        firstPageOcr: ocr.length > 3000 ? ocr.substring(0, 3000) : ocr,
+      );
+      final draft = await _withProgress(
+          'Lese Dokument ${i + 1} von ${docs.length} …', () => _prepareDraft(outcome));
+      final oldTags = await services.repository.tagNamesForDocument(doc.id);
+      draft.tagNames = {
+        ...draft.tagNames,
+        ...oldTags.where((t) => t != DocumentRepository.pendingTag),
+      }.toList();
+      final analysis = await _analyze(outcome, draft);
+      if (!mounted) return;
+      final result = await Navigator.of(context).push<DocumentDraft>(
+        MaterialPageRoute(
+          builder: (_) => ConfirmScreen(
+            draft: draft,
+            docNumber: doc.docNumber,
+            pdfPath: doc.pdfPath,
+            duplicates: analysis.duplicates
+                .where((d) => d.docNumber != doc.docNumber)
+                .toList(),
+            related: analysis.related.where((r) => r.id != doc.id).toList(),
+            batchInfo: '${i + 1} von ${docs.length}',
+            saveLabel: i == docs.length - 1 ? 'Fertig' : 'Weiter',
+          ),
+        ),
+      );
+      if (result == null) break; // Rest bleibt gesammelt.
+      result.tagNames.remove(DocumentRepository.pendingTag);
+      await services.repository.updateDocument(doc.id, result);
+      await services.notifications.syncDocument(doc.id);
+      await _afterLink(result.linkDocumentIds);
+      reviewed.add(doc.id);
+    }
+    if (!mounted) return;
+    setState(() {});
+    // Ersterfassung: Nummern erst ganz am Ende („Nummern vergeben“).
+    if (reviewed.isEmpty || await SetupMode.isOn() || !await SyncSettings.isMain()) {
+      return;
+    }
+    final result = await services.repository.assignFinalNumbers(onlyIds: reviewed);
+    await _showNumbering(result);
+  }
+
+  /// Dateien umbenennen und Nummernliste zum Beschriften zeigen.
+  Future<void> _showNumbering(List<FinalNumbering> result) async {
+    for (final n in result) {
+      for (final e in n.renames.entries) {
+        final from = File(await ScanService.absolutePdfPath(e.key));
+        if (await from.exists()) {
+          await from.rename(await ScanService.absolutePdfPath(e.value));
+        }
+      }
+      await services.notifications.syncDocument(n.doc.id);
+    }
+    if (!mounted || result.isEmpty) return;
+    setState(() {});
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NumberListScreen(
+          entries: [
+            for (final n in result)
+              (doc: n.doc, sender: n.sender, oldNumber: n.oldNumber),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pendingBanner() {
+    return StreamBuilder<int>(
+      stream: services.repository.watchPendingCount(),
+      builder: (context, snap) {
+        final count = snap.data ?? 0;
+        if (count == 0) return const SizedBox.shrink();
+        final theme = Theme.of(context);
+        return Card(
+          margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          color: theme.colorScheme.secondaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+            child: Row(
+              children: [
+                const Icon(Icons.inventory_2_outlined),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text('$count gesammelt, noch nicht ausgelesen'),
+                ),
+                FilledButton(
+                  onPressed: _reviewPending,
+                  child: const Text('Auslesen'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<int> _confirmOutcomes(List<ScanOutcome> outcomes) async {
     if (outcomes.isEmpty) return 0;
     if (outcomes.length == 1 ||
@@ -544,6 +736,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Ersterfassung abschließen: alle vorläufigen Dokumente bekommen
   /// endgültige Nummern nach Datum; danach Nummernliste.
   Future<void> _finishSetup(int count) async {
+    final pending = (await services.repository.pendingReview()).length;
+    if (pending > 0 && mounted) {
+      final first = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Erst auslesen?'),
+          content: Text(
+            '$pending gesammelte Dokumente sind noch nicht ausgelesen. Für die '
+            'Sortierung zählt das Datum – am besten erst auslesen und '
+            'kontrollieren.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Trotzdem vergeben'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Erst auslesen'),
+            ),
+          ],
+        ),
+      );
+      if (first == null) return;
+      if (first) {
+        await _reviewPending();
+        return;
+      }
+    }
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -569,31 +791,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (ok != true || !mounted) return;
     final result = await _withProgress('Vergebe Nummern …', () async {
       final r = await services.repository.assignFinalNumbers();
-      for (final n in r) {
-        for (final e in n.renames.entries) {
-          final from = File(await ScanService.absolutePdfPath(e.key));
-          if (await from.exists()) {
-            await from.rename(await ScanService.absolutePdfPath(e.value));
-          }
-        }
-        await services.notifications.syncDocument(n.doc.id);
-      }
       await SetupMode.set(false);
       return r;
     });
-    if (!mounted) return;
-    setState(() {});
-    if (result.isEmpty) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => NumberListScreen(
-          entries: [
-            for (final n in result)
-              (doc: n.doc, sender: n.sender, oldNumber: n.oldNumber),
-          ],
-        ),
-      ),
-    );
+    await _showNumbering(result);
   }
 
   Widget _setupBanner() {
@@ -1084,6 +1285,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       body: Column(
         children: [
           _setupBanner(),
+          _pendingBanner(),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: TextField(

@@ -242,14 +242,18 @@ class DocumentRepository {
   /// nach Dokumentdatum (ältestes zuerst, ohne Datum ans Ende, sonst in
   /// Scan-Reihenfolge). Passt PDF-Pfade und Suchindex an; die Dateien
   /// benennt der Aufrufer um (siehe Rückgabe).
-  Future<List<FinalNumbering>> assignFinalNumbers({DateTime? now}) =>
+  /// [onlyIds]: nur diese Dokumente (z. B. gerade ausgelesene Sammlung).
+  Future<List<FinalNumbering>> assignFinalNumbers(
+          {DateTime? now, Set<String>? onlyIds}) =>
       db.transaction(() async {
-        final docs = await (db.select(db.documents)
-              ..where((d) =>
-                  d.deletedAt.isNull() &
-                  d.docNumber.like('$provisionalPrefix%'))
-              ..orderBy([(d) => OrderingTerm.asc(d.scannedAt)]))
-            .get();
+        final docs = (await (db.select(db.documents)
+                  ..where((d) =>
+                      d.deletedAt.isNull() &
+                      d.docNumber.like('$provisionalPrefix%'))
+                  ..orderBy([(d) => OrderingTerm.asc(d.scannedAt)]))
+                .get())
+            .where((d) => onlyIds == null || onlyIds.contains(d.id))
+            .toList();
         final result = <FinalNumbering>[];
         for (final doc in sortForNumbering(docs, (d) => d.docDate)) {
           final number = await nextDocNumber(now: now);
@@ -281,10 +285,86 @@ class DocumentRepository {
             },
           ));
         }
-        // Vorläufiger Zähler startet bei der nächsten Ersterfassung neu.
-        await (db.delete(db.counters)..where((c) => c.year.equals(0))).go();
+        // Vorläufiger Zähler startet bei der nächsten Ersterfassung neu
+        // (nur wenn keine vorläufigen Dokumente übrig sind).
+        final left = await (db.select(db.documents)
+              ..where((d) => d.docNumber.like('$provisionalPrefix%')))
+            .get();
+        if (left.isEmpty) {
+          await (db.delete(db.counters)..where((c) => c.year.equals(0))).go();
+        }
         return result;
       });
+
+  /// Ersterfassung nachträglich: alle schon vergebenen Nummern wieder
+  /// vorläufig machen (V-…), Jahreszähler zurücksetzen. Danach vergibt
+  /// „Nummern vergeben“ alles neu nach Datum. Dateien benennt der Aufrufer
+  /// um (Rückgabe: alt → neu).
+  Future<Map<String, String>> resetNumbersToProvisional() =>
+      db.transaction(() async {
+        final docs = await (db.select(db.documents)
+              ..where((d) => d.docNumber.like('$provisionalPrefix%').not())
+              ..orderBy([(d) => OrderingTerm.asc(d.scannedAt)]))
+            .get();
+        final renames = <String, String>{};
+        for (final doc in docs) {
+          final number = await nextProvisionalNumber();
+          String? swap(String? path) => path?.replaceAll(doc.docNumber, number);
+          await (db.update(db.documents)..where((d) => d.id.equals(doc.id)))
+              .write(DocumentsCompanion(
+            docNumber: Value(number),
+            pdfPath: Value(swap(doc.pdfPath)!),
+            filledPdfPath: Value(swap(doc.filledPdfPath)),
+            updatedAt: Value(DateTime.now()),
+          ));
+          await db.customStatement(
+            'UPDATE document_fts SET content = replace(content, ?, ?) '
+            'WHERE document_id = ?',
+            [doc.docNumber, number, doc.id],
+          );
+          renames[doc.pdfPath] = swap(doc.pdfPath)!;
+          if (doc.filledPdfPath != null) {
+            renames[doc.filledPdfPath!] = swap(doc.filledPdfPath)!;
+          }
+        }
+        await (db.delete(db.counters)..where((c) => c.year.equals(0).not())).go();
+        return renames;
+      });
+
+  /// Anzahl Dokumente mit endgültiger Nummer (0 = frische Einrichtung).
+  Future<int> finalNumberedCount() async => (await (db.select(db.documents)
+            ..where((d) =>
+                d.deletedAt.isNull() &
+                d.docNumber.like('$provisionalPrefix%').not()))
+          .get())
+      .length;
+
+  // ------------------------------------------------- Gesammelt, noch auslesen
+
+  /// Markierung für „erst sammeln“: Dokument ist gespeichert, aber noch
+  /// nicht ausgelesen/kontrolliert.
+  static const pendingTag = 'Noch auslesen';
+
+  Future<List<Document>> pendingReview() async {
+    final tag = await (db.select(db.tags)..where((t) => t.name.equals(pendingTag)))
+        .getSingleOrNull();
+    if (tag == null) return const [];
+    final q = db.select(db.documents).join([
+      innerJoin(db.documentTags, db.documentTags.documentId.equalsExp(db.documents.id)),
+    ])
+      ..where(db.documentTags.tagId.equals(tag.id) & db.documents.deletedAt.isNull())
+      ..orderBy([OrderingTerm.asc(db.documents.scannedAt)]);
+    return [for (final r in await q.get()) r.readTable(db.documents)];
+  }
+
+  Stream<int> watchPendingCount() {
+    final q = db.select(db.documentTags).join([
+      innerJoin(db.tags, db.tags.id.equalsExp(db.documentTags.tagId)),
+      innerJoin(db.documents, db.documents.id.equalsExp(db.documentTags.documentId)),
+    ])
+      ..where(db.tags.name.equals(pendingTag) & db.documents.deletedAt.isNull());
+    return q.watch().map((rows) => rows.length);
+  }
 
   /// Rollback für einen verworfenen Scan: War [docNumber] die zuletzt
   /// vergebene Nummer und wurde kein Dokument damit angelegt, wird der

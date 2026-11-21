@@ -14,6 +14,7 @@ import '../platform.dart';
 import '../data/finance.dart';
 import '../lock/lock_gate.dart';
 import '../scan/blank_pages.dart';
+import '../scan/scan_service.dart';
 import '../data/deadline_settings.dart';
 import '../data/setup_mode.dart';
 import '../extract/deadlines.dart';
@@ -317,6 +318,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
       ];
 
+  Future<void> _resetNumbers() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nummern zurücksetzen?'),
+        content: const Text(
+            'Alle Dokumente bekommen vorläufige Nummern (V-…) und die '
+            'Ersterfassung wird eingeschaltet. Wenn alles eingescannt ist, auf '
+            'dem Startbildschirm „Nummern vergeben“ – dann wird ab 1 nach '
+            'Datum nummeriert. Nur sinnvoll, solange die Originale noch nicht '
+            'beschriftet sind!'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true), child: const Text('Zurücksetzen')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _busy = true);
+    try {
+      final renames = await services.repository.resetNumbersToProvisional();
+      for (final e in renames.entries) {
+        final from = File(await ScanService.absolutePdfPath(e.key));
+        if (await from.exists()) {
+          await from.rename(await ScanService.absolutePdfPath(e.value));
+        }
+      }
+      await SetupMode.set(true);
+      _snack('${renames.length} Dateien umbenannt – Ersterfassung ist an.');
+    } catch (e) {
+      _snack('Fehler: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _importBackup() async {
     // Datei-Auswahl ist eine eigene Activity → Sperre kurz unterdrücken.
     LockController.suppressAutoLock = true;
@@ -527,6 +565,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 setState(() {});
               },
             ),
+          ),
+          FutureBuilder<int>(
+            future: services.repository.finalNumberedCount(),
+            builder: (context, snap) => (snap.data ?? 0) == 0
+                ? const SizedBox.shrink()
+                : ListTile(
+                    leading: const Icon(Icons.restart_alt),
+                    title: const Text('Bisherige Nummern zurücksetzen'),
+                    subtitle: Text(
+                        '${snap.data} Dokumente haben schon Nummern. Noch nicht '
+                        'beschriftet? Dann vorläufig machen und am Ende alles '
+                        'nach Datum neu nummerieren.'),
+                    onTap: _resetNumbers,
+                  ),
           ),
           ListTile(
             leading: const Icon(Icons.business),
