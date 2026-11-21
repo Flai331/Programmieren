@@ -30,6 +30,7 @@ export function records(state) {
   for (const o of state.orders) out.push({ c: 'orders', id: o.id, d: o });
   out.push({ c: 'config', id: 'settings', d: state.settings });
   out.push({ c: 'config', id: 'boxes', d: state.boxes });
+  out.push({ c: 'config', id: 'customers', d: state.customers || [] });
   return out;
 }
 
@@ -41,6 +42,7 @@ function applyRecord(state, c, id, d, del) {
     if (del || !d) return;
     if (id === 'settings') state.settings = { ...L.emptyState().settings, ...d };
     if (id === 'boxes') state.boxes = d || {};
+    if (id === 'customers') state.customers = Array.isArray(d) ? d : [];
     return;
   }
   const arr = state[LIST[c]];

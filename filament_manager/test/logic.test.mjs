@@ -251,8 +251,103 @@ test('Preiskalkulation: Vorgaben, Überschreiben im Auftrag, Marge, Rundung, Min
 
   const lines = L.docLines({ title: 'Halter', kind: 'eigen', material: 'PETG', colorWish: 'schwarz', designHours: 2, extraCost: 4.9 }, c, p);
   assert.deepEqual(lines.map((l) => [l.text, l.qty, l.unit]), [['Halter', 10, 1.5], ['Konstruktion / Modellierung', 1, 60], ['Versand / Sonstiges', 1, 4.9]]);
-  assert.equal(lines[0].detail, '3D-Druck, PETG, schwarz');
+  assert.equal(lines[0].detail, '3D-Druck, PETG schwarz');
   assert.deepEqual(L.docTotals(lines, { vatMode: 'klein' }), { net: 79.9, vat: 0, rate: 0, gross: 79.9 });
   assert.deepEqual(L.docTotals(lines, { vatMode: 'ust', vatRate: 19 }), { net: 79.9, vat: 15.18, rate: 19, gross: 95.08 });
   assert.equal(L.docNumber('RE', 7, new Date(2026, 10, 21)), 'RE-2026-007');
+});
+
+test('Rollenempfehlung: Material, Farbe, Reste aufbrauchen, Aufteilen auf zwei Rollen', () => {
+  const sp = [
+    spool({ id: 'w-voll', colorHex: '#FFFFFF', price: 20 }),
+    spool({ id: 'w-rest', colorHex: '#FDFDFD', price: 20, weighings: [{ date: '2020-01-01', remaining: 150 }] }),
+    spool({ id: 'w-rest2', colorHex: '#FAFAFA', price: 20, weighings: [{ date: '2020-01-01', remaining: 80 }] }),
+    spool({ id: 'grau', colorHex: '#8E9089', price: 20 }),
+    spool({ id: 'petg-w', material: 'PETG', colorHex: '#FFFFFF', price: 25 }),
+  ];
+  const line = { material: 'PLA', colorHex: '#FFFFFF' };
+  // 100 g: der kleinste Rest, der reicht (150 g), wird zuerst verbraucht
+  assert.equal(L.recommendSpools(line, 100, sp, []).best.id, 'w-rest');
+  // 500 g: nur die volle Rolle reicht
+  assert.equal(L.recommendSpools(line, 500, sp, []).best.id, 'w-voll');
+  // 1200 g: keine reicht allein → aufteilen auf weiße Rollen (voll + Reste), Rest fehlt
+  const big = L.recommendSpools(line, 1200, sp, []);
+  assert.equal(big.best, null);
+  assert.deepEqual(big.split.map((x) => [x.spool.id, x.grams]), [['w-voll', 1000], ['w-rest', 150], ['w-rest2', 50]]);
+  assert.equal(big.enough, true);
+  // Material falsch → PETG-Rolle nie für PLA
+  assert.ok(!L.recommendSpools(line, 10, sp, []).candidates.some((c) => c.spool.id === 'petg-w'));
+  // schon für eine andere Zeile verplant
+  assert.equal(L.recommendSpools(line, 100, sp, [], { 'w-rest': 100 }).best.id, 'w-voll');
+});
+
+test('Endpreis: mehrere Farben/Materialien, Stützen, Maschine, Marge, Arbeit, Versand – von Hand nachgerechnet', () => {
+  const sp = [
+    spool({ id: 'schwarz', material: 'PETG', colorHex: '#000000', price: 22 }), // 22 €/kg
+    spool({ id: 'weiss', material: 'PLA', colorHex: '#FFFFFF', price: 0 }), // ohne Preis
+    spool({ id: 'pla-rot', material: 'PLA', colorHex: '#E01A1A', price: 18 }),
+    spool({ id: 'pla-blau', material: 'PLA', colorHex: '#0A2CA5', price: 26 }), // PLA-Schnitt 22 €/kg
+  ];
+  const order = {
+    id: 'o1', quantity: 4, hoursPerPiece: 2, designHours: 1.5, extraCost: 4.95,
+    lines: [
+      { id: 'a', material: 'PETG', colorHex: '#000000', grams: 30, supportGrams: 5 },
+      { id: 'b', material: 'PLA', colorHex: '#FFFFFF', grams: 10, supportGrams: 0 },
+    ],
+  };
+  const settings = { markup: 40, hourlyRate: 0.3, laborRate: 25, minOrder: 0, rounding: 0.1 };
+  const r = L.orderPrice(order, sp, [], settings);
+  // Zeile a: 35 g × 22 €/kg = 0,77 € ; Zeile b: 10 g × Ø PLA 22 €/kg = 0,22 €
+  assert.equal(r.plan.rows[0].spool.id, 'schwarz');
+  assert.equal(r.plan.rows[0].priceSource, 'spool');
+  assert.equal(r.plan.rows[1].spool.id, 'weiss');
+  assert.equal(r.plan.rows[1].priceSource, 'avg');
+  assert.equal(r.plan.rows[1].pricePerKg, 22);
+  assert.equal(r.plan.gramsPerPiece, 45);
+  assert.equal(r.plan.materialPiece, 0.99);
+  // Kosten/Stück = 0,99 + 2 h × 0,30 = 1,59 ; × 1,4 = 2,226 → aufgerundet 2,30
+  assert.equal(r.calc.costPiece, 1.59);
+  assert.equal(r.calc.unit, 2.3);
+  // 4 × 2,30 = 9,20 + 1,5 h × 25 = 37,50 + 4,95 = 51,65
+  assert.equal(r.calc.pieces, 9.2);
+  assert.equal(r.calc.labor, 37.5);
+  assert.equal(r.total, 51.65);
+  // Gewinn = 51,65 − 4 × 1,59 − 4,95 = 40,34
+  assert.equal(r.calc.profit, 40.34);
+  // Marge im Auftrag überschrieben
+  assert.equal(L.orderPrice({ ...order, pricing: { markup: 100 } }, sp, [], settings).calc.unit, 3.2);
+  // fester Preis
+  const m = L.orderPrice({ ...order, priceManual: true, price: 60 }, sp, [], settings);
+  assert.equal(m.total, 60);
+  assert.equal(m.manual, true);
+  // gewählte Rolle statt Empfehlung
+  const own = L.orderPrice({ ...order, lines: [{ ...order.lines[0], spoolId: 'schwarz' }, { ...order.lines[1], spoolId: 'pla-blau' }] }, sp, [], settings);
+  assert.equal(own.plan.rows[1].pricePerKg, 26);
+  // alte Aufträge ohne Zeilen
+  const old = L.orderPrice({ id: 'x', quantity: 2, gramsPerPiece: 50, material: 'PETG', colorHex: '#000000' }, sp, [], settings);
+  assert.equal(old.plan.rows.length, 1);
+  assert.equal(old.plan.materialPiece, 1.1);
+  // Mindestpreis
+  const tiny = L.orderPrice({ id: 't', quantity: 1, lines: [{ material: 'PETG', colorHex: '#000000', grams: 5 }] }, sp, [], { ...settings, minOrder: 10 });
+  assert.equal(tiny.calc.minFill > 0, true);
+  assert.equal(tiny.total, 10);
+});
+
+test('Kundenliste: zusammenführen nach Namen, leere Felder überschreiben nicht', () => {
+  let r = L.upsertCustomer([], { name: 'Erika Mustermann', contact: '0171', address: 'Weg 1' });
+  const id = r.id;
+  r = L.upsertCustomer(r.list, { name: ' erika mustermann ', contact: '', address: 'Weg 2' });
+  assert.equal(r.id, id);
+  assert.equal(r.list.length, 1);
+  assert.equal(r.list[0].contact, '0171');
+  assert.equal(r.list[0].address, 'Weg 2');
+  r = L.upsertCustomer(r.list, { name: 'Anton' });
+  assert.deepEqual(r.list.map((c) => c.name), ['Anton', 'Erika Mustermann']);
+  assert.equal(L.upsertCustomer(r.list, { name: '  ' }).id, '');
+});
+
+test('Angebot: Materialien und Farben aller Zeilen', () => {
+  const o = { title: 'Figur', lines: [{ material: 'PLA', colorHex: '#FFFFFF', grams: 15 }, { material: 'PLA', colorHex: '#E01A1A', grams: 3 }, { material: 'PETG', colorWish: 'schwarz matt', grams: 2 }] };
+  const lines = L.docLines(o, { unit: 1, qty: 2, labor: 0, extras: 0, minFill: 0 }, L.pricingFor({}, o));
+  assert.equal(lines[0].detail, '3D-Druck, PLA weiß / PLA rot / PETG schwarz matt');
 });

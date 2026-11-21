@@ -29,7 +29,10 @@ Online (nach Merge in `main`): `https://flai331.github.io/Programmieren/filament
 - Stückzahl, Termin (Überfällig-Warnung), Material/Farbwunsch, Preis, bezahlt
 - Status: Anfrage → Angebot → Konstruktion → Druckbereit → Im Druck → Fertig → Übergeben
 - Importierte Drucke einem Auftrag zuordnen → Stückzahl zählt hoch, Status springt automatisch auf „Im Druck“/„Fertig“
-- **Filament aus 3D-Datei:** STL/OBJ/3MF anhängen → Volumen, Oberfläche, Maße, passt auf den P1S?, Gramm pro Stück (Haut + Infill + Zuschlag; geslicte 3MF: exakte Werte)
+- **Auftrag anlegen in einem Schritt:** Was, Kunde (Kundenliste mit Kontakt/Anschrift), Stück, Termin, Art, Link/Maße, Material/Farbe und **ein** Feld für Fotos und Dateien; Druck, Preis und Kunden-Details in aufklappbaren Abschnitten, die sich selbst füllen
+- **Filament aus 3D-Dateien automatisch:** jede STL/OBJ/3MF wird beim Hochladen ausgewertet (Maße, passt auf den P1S?, Gramm, Druckzeit); mehrere Dateien = mehrere Teile/Farben; geslicte 3MF liefern alle Farben exakt
+- **Stützen-Erkennung:** Überhänge flacher als 30° (wie Bambu Studio) über dem Bett → Stützmaterial wird geschätzt; kleine Überhänge (Brücken) bleiben ohne Zuschlag
+- **Rollenempfehlung je Farbe/Material:** passende Rolle, die reicht – angebrochene zuerst; reicht keine allein, wird auf mehrere Rollen aufgeteilt; Rolle pro Zeile auch selbst wählbar
 - **Preiskalkulation:** (Material mit dem Preis der passenden Rolle + Maschinenzeit) × (1 + Marge), aufgerundet; dazu Arbeitszeit × Stundensatz, Versand/Sonstiges, Mindestpreis. Vorgaben in den Einstellungen, Marge/Stundensatz/Maschine pro Auftrag änderbar; Gewinn wird angezeigt
 - **Angebot und Rechnung als PDF** aus dem Auftrag: Positionen aus der Kalkulation (bearbeitbar), fortlaufende Nummern, Absender und Kundenadresse, Kleinunternehmer (§ 19 UStG) oder mit USt, Zahlungsziel, Bankverbindung; Rechnung übernimmt die Positionen des Angebots
 - Zeigt passende Rollen mit Lagerplatz und ob sie für den Rest reichen

@@ -57,6 +57,7 @@ export function emptyState() {
     spools: [],
     prints: [],
     orders: [],
+    customers: [],
   };
 }
 
@@ -71,6 +72,7 @@ export function normalizeState(s) {
     spools: Array.isArray(s.spools) ? s.spools : [],
     prints: Array.isArray(s.prints) ? s.prints : [],
     orders: Array.isArray(s.orders) ? s.orders : [],
+    customers: Array.isArray(s.customers) ? s.customers : [],
   };
 }
 
@@ -716,9 +718,12 @@ function roundUp(v, step) {
  * Kalkulation: Stückpreis = (Material + Maschine) × (1 + Marge), aufgerundet.
  * Arbeit = Stunden × Stundensatz, Extras = Versand/Sonstiges, Mindestpreis füllt auf.
  */
-export function priceCalc({ gramsPerPiece, hoursPerPiece, quantity, pricePerKg, designHours, extraCost }, p) {
+export function priceCalc({ gramsPerPiece, hoursPerPiece, quantity, pricePerKg, materialPiece, designHours, extraCost }, p) {
   const qty = Math.max(1, Number(quantity) || 1);
-  const material = (Number(gramsPerPiece) || 0) * (Number(pricePerKg) || 0) / 1000;
+  // Materialkosten pro Stück direkt (mehrere Zeilen/Rollen) oder aus Gramm × €/kg
+  const material = materialPiece !== undefined && materialPiece !== null
+    ? Number(materialPiece) || 0
+    : (Number(gramsPerPiece) || 0) * (Number(pricePerKg) || 0) / 1000;
   const machine = (Number(hoursPerPiece) || 0) * p.hourlyRate;
   const cost = material + machine;
   const unit = cost > 0 ? roundUp(cost * (1 + p.markup / 100), p.rounding) : 0;
@@ -742,7 +747,9 @@ export function priceCalc({ gramsPerPiece, hoursPerPiece, quantity, pricePerKg, 
 /** Positionen für Angebot/Rechnung aus der Kalkulation. */
 export function docLines(order, calc, p) {
   const lines = [];
-  const detail = [order.material, order.colorWish].filter(Boolean).join(', ');
+  // Materialien/Farben aller Zeilen (mehrfarbig), sonst Material/Farbwunsch des Auftrags
+  const mats = [...new Set(orderLines(order).map((l) => [l.material, l.colorWish || (l.colorHex ? baseColorName(l.colorHex).toLowerCase() : '')].filter(Boolean).join(' ')).filter(Boolean))];
+  const detail = mats.length ? mats.join(' / ') : [order.material, order.colorWish].filter(Boolean).join(', ');
   if (calc.unit > 0) lines.push({ text: order.title || '3D-Druck', detail: detail ? `3D-Druck, ${detail}` : '3D-Druck', qty: calc.qty, unit: calc.unit });
   if (calc.labor > 0) {
     lines.push({
@@ -766,4 +773,142 @@ export function docTotals(lines, biz) {
 
 export function docNumber(prefix, n, date = new Date()) {
   return `${prefix || ''}${prefix ? '-' : ''}${date.getFullYear()}-${String(Math.max(1, Number(n) || 1)).padStart(3, '0')}`;
+}
+
+// ---------- Auftrag v2: Filament-Zeilen, Rollenempfehlung, Endpreis, Kunden ----------
+
+/**
+ * Filament-Zeilen eines Auftrags – ein Teil bzw. eine Farbe je Zeile:
+ * { id, name, material, colorHex, colorWish, grams (pro Stück, Modell), supportGrams (pro Stück), spoolId ('' = automatisch), src }
+ * Ältere Aufträge ohne Zeilen bekommen eine Zeile aus material/colorHex/gramsPerPiece.
+ */
+export function orderLines(o) {
+  if (o && Array.isArray(o.lines) && o.lines.length) return o.lines;
+  if (o && (o.gramsPerPiece || o.material || o.colorHex)) {
+    return [{ id: 'l0', name: '', material: o.material || '', colorHex: o.colorHex || '', colorWish: o.colorWish || '', grams: Number(o.gramsPerPiece) || 0, supportGrams: 0, spoolId: '', src: '' }];
+  }
+  return [];
+}
+
+export function lineGrams(l) {
+  return (Number(l.grams) || 0) + (Number(l.supportGrams) || 0);
+}
+
+export function orderGramsPerPiece(o) {
+  return round(orderLines(o).reduce((t, l) => t + lineGrams(l), 0), 1);
+}
+
+const colorBucket = (d) => (d < 8 ? 0 : d < 18 ? 1 : 2);
+
+/**
+ * Rollen für eine Zeile: Material muss passen, Farbe ähnlich (ΔE < 30; ohne Farbwunsch egal).
+ * best = passende Rolle, die reicht – bevorzugt die ähnlichste Farbe, dann die angebrochene mit dem
+ * kleinsten Rest, der noch reicht (damit Reste aufgebraucht werden).
+ * Reicht keine allein: split = mehrere Rollen gleicher Farbe nacheinander.
+ * reserved: {spoolId: g} schon für andere Zeilen eingeplant.
+ */
+export function recommendSpools(line, needGrams, spools, prints, reserved = {}) {
+  const need = Math.max(0, Number(needGrams) || 0);
+  const mat = materialBase(line.material);
+  const cands = spools
+    .filter((s) => !s.archived)
+    .filter((s) => !mat || materialBase(s.material) === mat)
+    .map((s) => {
+      const distance = line.colorHex ? colorDistance(s.colorHex, line.colorHex) : 0;
+      const avail = Math.max(0, spoolRemaining(s, prints).remaining - (reserved[s.id] || 0));
+      return { spool: s, distance, bucket: colorBucket(distance), avail: round(avail, 1), enough: avail >= need && avail > 0 };
+    })
+    .filter((x) => x.distance < 30 && x.avail > 0);
+  cands.sort((a, b) =>
+    (b.enough - a.enough) || (a.bucket - b.bucket) ||
+    (a.enough ? a.avail - b.avail : b.avail - a.avail) || (a.distance - b.distance));
+  const best = cands.find((c) => c.enough) || null;
+  let split = [];
+  let missing = 0;
+  if (!best && need > 0 && cands.length) {
+    const bucket = Math.min(...cands.map((c) => c.bucket));
+    let rest = need;
+    for (const c of cands.filter((x) => x.bucket === bucket).sort((a, b) => b.avail - a.avail)) {
+      if (rest <= 0) break;
+      const take = Math.min(rest, c.avail);
+      split.push({ spool: c.spool, grams: round(take, 1) });
+      rest -= take;
+    }
+    missing = round(Math.max(0, rest), 1);
+  } else if (!best && need > 0) {
+    missing = need;
+  }
+  if (best) split = [{ spool: best.spool, grams: round(need, 1) }];
+  return { candidates: cands, best: best ? best.spool : null, split, enough: !!best || (split.length > 0 && missing === 0), missing };
+}
+
+/** €/kg einer Rolle, sonst Durchschnitt der Rollen gleichen Materials mit Preis, sonst 20 €/kg */
+export function pricePerKgFor(spool, material, spools) {
+  if (spool && pricePerGram(spool) > 0) return { value: round(pricePerGram(spool) * 1000, 2), source: 'spool' };
+  const mat = materialBase(material || (spool && spool.material));
+  const priced = spools.filter((s) => !s.archived && pricePerGram(s) > 0 && (!mat || materialBase(s.material) === mat));
+  if (priced.length) return { value: round(priced.reduce((t, s) => t + pricePerGram(s) * 1000, 0) / priced.length, 2), source: 'avg' };
+  return { value: 20, source: 'default' };
+}
+
+/**
+ * Materialplan: je Zeile Bedarf für die offenen Stück, gewählte oder empfohlene Rolle(n), €/kg, Kosten pro Stück.
+ * Eine Rolle wird nicht doppelt verplant (reserved über die Zeilen).
+ */
+export function orderMaterialPlan(o, spools, prints) {
+  const open = orderProgress(o, prints).open;
+  const reserved = {};
+  const rows = orderLines(o).map((line) => {
+    const perPiece = lineGrams(line);
+    const need = round(perPiece * open, 1);
+    const rec = recommendSpools(line, need, spools, prints, reserved);
+    const chosen = line.spoolId ? spools.find((s) => s.id === line.spoolId) || null : null;
+    const use = chosen ? [{ spool: chosen, grams: need }] : rec.split;
+    for (const u of use) reserved[u.spool.id] = (reserved[u.spool.id] || 0) + u.grams;
+    const main = chosen || (use[0] && use[0].spool) || null;
+    const ppk = pricePerKgFor(main, line.material, spools);
+    return {
+      line, perPiece, need, rec, chosen, use, spool: main,
+      pricePerKg: ppk.value, priceSource: ppk.source,
+      costPiece: round(perPiece * ppk.value / 1000, 4),
+      enough: chosen ? spoolRemaining(chosen, prints).remaining >= need : rec.enough,
+    };
+  });
+  return { rows, open, gramsPerPiece: round(rows.reduce((t, r) => t + r.perPiece, 0), 1), materialPiece: round(rows.reduce((t, r) => t + r.costPiece, 0), 4) };
+}
+
+/**
+ * Endpreis eines Auftrags:
+ *   Kosten/Stück = Material (je Zeile mit dem €/kg der Rolle) + Druckstunden × Maschinenkosten
+ *   Stückpreis   = Kosten/Stück × (1 + Marge), aufgerundet
+ *   Gesamt       = Stückpreis × Menge + Arbeitszeit × Stundensatz + Versand/Sonstiges (+ Ausgleich Mindestpreis)
+ * Fester Preis (o.priceManual) ersetzt den berechneten Gesamtpreis.
+ */
+export function orderPrice(o, spools, prints, settings) {
+  const p = pricingFor(settings, o);
+  const plan = orderMaterialPlan(o, spools, prints);
+  const calc = priceCalc({
+    materialPiece: plan.materialPiece, hoursPerPiece: o.hoursPerPiece, quantity: o.quantity,
+    designHours: o.designHours, extraCost: o.extraCost,
+  }, p);
+  const manual = !!o.priceManual && Number(o.price) > 0;
+  return { p, plan, calc, manual, total: manual ? round(Number(o.price), 2) : calc.total };
+}
+
+/** Kunden: nach Namen (ohne Groß/Klein) zusammenführen; leere Felder überschreiben nichts. */
+export function upsertCustomer(list, c) {
+  const name = String(c.name || '').trim();
+  if (!name) return { list, id: '' };
+  const out = Array.isArray(list) ? list.slice() : [];
+  const i = out.findIndex((x) => String(x.name).trim().toLowerCase() === name.toLowerCase());
+  if (i >= 0) {
+    const cur = { ...out[i] };
+    for (const k of ['contact', 'address']) if (String(c[k] || '').trim()) cur[k] = String(c[k]).trim();
+    out[i] = cur;
+    return { list: out, id: cur.id };
+  }
+  const id = uid('k');
+  out.push({ id, name, contact: String(c.contact || '').trim(), address: String(c.address || '').trim() });
+  out.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  return { list: out, id };
 }

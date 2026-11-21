@@ -107,3 +107,47 @@ test('analyzeModelFile: STL, ungeslicte und geslicte 3MF', async () => {
 
   await assert.rejects(analyzeModelFile(new File(['x'], 'bild.png')), /STL/);
 });
+
+function box(x0, y0, z0, x1, y1, z1) {
+  const v = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
+  const f = [[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7], [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5], [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7]];
+  return { v, f };
+}
+function joinMeshes(...ms) {
+  const v = [], f = [];
+  for (const m of ms) { const o = v.length; v.push(...m.v); f.push(...m.f.map((t) => t.map((i) => i + o))); }
+  return { v, f };
+}
+
+test('Stützen: Würfel auf dem Bett braucht keine, ein „Tisch“ schon – auch bei umgekehrter Orientierung', () => {
+  const cube = M.parseSTL(binarySTL(cubeTris(20)));
+  assert.equal(cube.overhangArea, 0);
+  assert.equal(M.needsSupport(cube), false);
+  const e0 = M.estimateGrams(cube, { density: 1.24 });
+  assert.equal(e0.supportGrams, 0);
+  assert.equal(e0.totalGrams, e0.grams);
+
+  // Bein 10×10×20 mittig, Platte 40×40×5 darüber (z 20–25)
+  const table = joinMeshes(box(15, 15, 0, 25, 25, 20), box(0, 0, 20, 40, 40, 25));
+  for (const mesh of [table, { v: table.v, f: table.f.map((t) => [t[0], t[2], t[1]]) }]) {
+    const st = M.parseSTL(binarySTL(mesh));
+    near(st.overhangArea, 1600);
+    near(st.supportVolume, 32000);
+    assert.equal(M.needsSupport(st), true);
+    assert.equal(M.supportLevel(st), 'needed');
+    const e = M.estimateGrams(st, { density: 1.24, extra: 5 });
+    assert.equal(e.usesSupport, true);
+    assert.equal(e.supportGrams, 6.2); // 32 cm³ × 15 % × 1,24 g/cm³ × 1,05
+    near(e.totalGrams, e.grams + e.supportGrams, 0.01);
+    assert.equal(M.estimateGrams(st, { density: 1.24, supports: 'off' }).supportGrams, 0);
+    assert.ok(e.hours > 0);
+  }
+});
+
+test('Stützen: kleine Überhänge (Brücken) zählen nicht', () => {
+  // Bügel: zwei Pfosten, 10×10-Brücke dazwischen → 1 cm² Überhang
+  const bridge = joinMeshes(box(0, 0, 0, 5, 10, 10), box(15, 0, 0, 20, 10, 10), box(0, 0, 10, 20, 10, 13));
+  const st = M.parseSTL(binarySTL(bridge));
+  assert.equal(M.supportLevel(st), 'small');
+  assert.equal(M.estimateGrams(st, { density: 1.24 }).supportGrams, 0);
+});

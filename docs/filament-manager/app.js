@@ -1049,29 +1049,13 @@ function orderDetail(id) {
   const pr = L.orderProgress(o, state.prints);
   const costs = L.orderCosts(o, state.prints, state.spools, state.settings);
   const prints = state.prints.filter((p) => p.orderId === o.id).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  // Passende Rollen aus dem Lager mit ihrem echten Preis (Material + Farbe des Auftrags)
-  const sc = o.material || o.colorHex ? L.orderSpoolCosts(o, state.spools, state.prints) : { rows: [], best: null };
-  const fits = sc.rows.slice(0, 6);
-  const avgPrice = (() => {
-    const s = state.spools.filter((x) => !x.archived && x.price && (!o.material || L.materialBase(x.material) === L.materialBase(o.material)));
-    return s.length ? s.reduce((t, x) => t + L.pricePerGram(x) * 1000, 0) / s.length : 20;
-  })();
-  const pricePerKg = sc.best ? sc.best.pricePerKg : avgPrice;
-  const priceSource = sc.best
-    ? `mit ${esc(L.spoolTitle(sc.best.spool))} (${esc(L.locationLabel(sc.best.spool.location))}) zu ${L.formatMoney(sc.best.pricePerKg)}/kg${sc.best.enough ? '' : ' – reicht nicht für alles'}`
-    : (state.spools.some((x) => !x.archived && x.price)
-      ? `mit Ø ${L.formatMoney(avgPrice)}/kg (keine passende Rolle mit Preis)`
-      : 'mit angenommenen 20 €/kg – trage bei deinen Rollen den Preis ein');
-  const pp = L.pricingFor(state.settings, o);
-  const pc = L.priceCalc({
-    gramsPerPiece: o.gramsPerPiece, hoursPerPiece: o.hoursPerPiece, quantity: pr.quantity,
-    pricePerKg, designHours: o.designHours, extraCost: o.extraCost,
-  }, pp);
-  const ov = o.pricing || {};
-  const isOv = (k) => ov[k] !== undefined && ov[k] !== '' && ov[k] !== null;
+  // Abgeleitete Werte (Zeilen, Gramm, Preis) mit aktuellen Rollen/Preisen neu rechnen
+  const before = JSON.stringify([o.lines, o.gramsPerPiece, o.hoursPerPiece, o.price]);
+  const pc = refreshDerived(o);
+  if (JSON.stringify([o.lines, o.gramsPerPiece, o.hoursPerPiece, o.price]) !== before) save();
   const idx = L.ORDER_STATUS.findIndex((s) => s.id === o.status);
-  const images = (o.photos || []).filter((p) => /^image\//.test(p.type || 'image/'));
-  const files = (o.photos || []).filter((p) => p.type && !/^image\//.test(p.type));
+  const images = (o.photos || []).filter((p) => /^image\//.test(p.type || 'image/') && !MODEL_RE.test(p.name || ''));
+  const files = (o.photos || []).filter((p) => !images.includes(p));
   openModal(`
     ${head(o.title)}
     <div class="mbody">
@@ -1084,8 +1068,8 @@ function orderDetail(id) {
         <dt>Art</dt><dd>${o.kind === 'eigen' ? '✏️ Eigene Konstruktion' : '🌐 Modell aus dem Netz'}</dd>
         <dt>Stückzahl</dt><dd><b>${pr.done} / ${pr.quantity}</b> gedruckt${pr.open ? ` · noch ${pr.open}` : ' ✓'}</dd>
         ${o.deadline ? `<dt>Termin</dt><dd>${fmtDate(o.deadline)} ${deadlineBadge(o)}</dd>` : ''}
-        <dt>Material</dt><dd>${esc(o.material || '–')} ${o.colorHex ? sw(o.colorHex, 's') : ''} ${esc(o.colorWish || '')}</dd>
-        <dt>Preis</dt><dd>${o.price ? L.formatMoney(o.price) : '–'} ${o.price ? (o.paid ? '<span class="badge ok">bezahlt</span>' : '<span class="badge warn">offen</span>') : ''}</dd>
+        <dt>Material</dt><dd>${esc(o.material || '–')} ${o.colorHex ? sw(o.colorHex, 's') : ''} ${esc(o.colorWish || '')}${o.gramsPerPiece ? ` · ${g1(o.gramsPerPiece)} g/Stück` : ''}${o.hoursPerPiece ? ` · ${L.round(o.hoursPerPiece, 1).toLocaleString('de-DE')} h` : ''}</dd>
+        <dt>Preis</dt><dd>${o.price ? L.formatMoney(o.price) : '–'}${o.price && !o.priceManual ? ' <small class="muted">(berechnet)</small>' : ''} ${o.price ? (o.paid ? '<span class="badge ok">bezahlt</span>' : '<span class="badge warn">offen</span>') : ''}</dd>
       </dl>
       <div class="bar"><i style="width:${pr.percent}%"></i></div>
 
@@ -1095,15 +1079,18 @@ function orderDetail(id) {
       ${o.measurements ? `<h3>Maße & Beschreibung</h3><div class="card pre">${esc(o.measurements)}</div>` : ''}
       ${images.length ? `<h3>Fotos</h3><div class="gallery">${images.map((ph) => `<div class="ph"><img data-blob="${esc(ph.id)}" data-act="zoom" alt=""></div>`).join('')}</div>` : ''}
       ${files.length ? `<h3>Dateien</h3>${files.map((f) => `<div class="filerow"><a href="#" data-act="download" data-blobid="${esc(f.id)}" data-name="${esc(f.name)}">📎 ${esc(f.name)}</a>
-        ${MODEL_RE.test(f.name) ? `<button class="small" data-act="calc-file" data-id="${o.id}" data-blobid="${esc(f.id)}" data-name="${esc(f.name)}">📐 berechnen</button>` : ''}</div>`).join('')}` : ''}
+        ${f.analysis ? `<small class="muted">${f.analysis.kind === 'sliced' ? 'geslict, exakt' : `${f.analysis.size.map((n) => Math.round(n)).join('×')} mm${M.fitsPrinter(f.analysis.size) ? '' : ' ⚠️ zu groß für P1S'}`}</small>` : ''}</div>`).join('')}` : ''}
       ${o.notes ? `<h3>Notizen</h3><div class="pre">${esc(o.notes)}</div>` : ''}
 
-      ${fits.length ? `<h3>Passende Rollen im Lager</h3><div class="list">${fits.map((x) => `
-        <div class="card click spool" data-act="spool" data-id="${x.spool.id}">${sw(x.spool.colorHex)}
-          <div><div class="t">${esc(L.spoolTitle(x.spool))} ${sc.best && sc.best.spool.id === x.spool.id ? '<span class="badge ok">für Preis</span>' : ''}</div>
-            <div class="meta">${L.formatGrams(x.remaining)}${x.need ? (x.enough ? ` · reicht für Rest (${L.formatGrams(x.need)})` : ` · <b style="color:var(--warn)">reicht nicht für ${L.formatGrams(x.need)}</b>${x.piecesPossible !== null ? `, nur ${x.piecesPossible} Stück` : ''}`) : ''}</div>
-            <div class="meta">${x.hasPrice ? `${L.formatMoney(x.pricePerKg)}/kg${o.gramsPerPiece ? ` · ${L.formatMoney(x.perPiece)} pro Stück · ${L.formatMoney(x.total)} für ${sc.open} offene` : ''}` : '<span style="color:var(--warn)">kein Preis eingetragen</span>'}</div></div>
-          ${locBadge(x.spool.location)}</div>`).join('')}</div>` : ((o.material || o.colorHex) ? '<p class="muted">Keine passende Rolle im Lager (Material/Farbe).</p>' : '')}
+      ${pc.plan.rows.length ? `<h3>Filament & Rollen</h3><div class="list">${pc.plan.rows.map((r, i) => `
+        <div class="card">
+          <div>${sw(r.line.colorHex, 's')} <b>${esc(r.line.name || [r.line.material, r.line.colorWish].filter(Boolean).join(' ') || `Zeile ${i + 1}`)}</b>
+            · ${esc(r.line.material || '?')} · ${g1(r.perPiece)} g/Stück${r.line.supportGrams ? ` (inkl. ${g1(r.line.supportGrams)} g Stützen)` : ''}
+            ${r.line.exact ? '<span class="badge ok">exakt</span>' : r.line.auto ? '<span class="badge info">geschätzt</span>' : ''}</div>
+          <div class="meta muted" style="margin-top:4px">Bedarf für ${pc.plan.open} offene Stück: ${L.formatGrams(r.need)}</div>
+          <div style="margin-top:4px">${lineSpoolHtml(r)}</div>
+          <div class="meta muted">${L.formatMoney(r.pricePerKg)}/kg${r.priceSource === 'avg' ? ' (Ø, Rolle ohne Preis)' : r.priceSource === 'default' ? ' (angenommen – Rollenpreis eintragen)' : ''} · ${L.formatMoney(r.costPiece)} pro Stück</div>
+        </div>`).join('')}</div>` : ''}
 
       <h3>Drucke (${prints.length})</h3>
       ${prints.length ? `<div class="list">${prints.map(printCard).join('')}</div>` : '<p class="muted">Noch keine. Beim Import einer Datei diesen Auftrag wählen.</p>'}
@@ -1114,22 +1101,9 @@ function orderDetail(id) {
         <dt>Bisher verbraucht</dt><dd>${L.formatGrams(costs.grams)} · ${L.formatMoney(costs.material)} Material${costs.hours ? ` · ${costs.hours} h` : ''}${costs.machine ? ` · ${L.formatMoney(costs.machine)} Maschine` : ''}</dd>
       </dl>
       <h3>Preiskalkulation</h3>
-      ${o.gramsPerPiece || o.designHours || o.extraCost ? `<div class="card">
-        <dl class="kv">
-          ${o.gramsPerPiece ? `<dt>Je Stück</dt><dd>${g1(o.gramsPerPiece)} g Material ${L.formatMoney(pc.materialPiece)}${pc.machinePiece ? ` + ${L.round(o.hoursPerPiece, 2).toLocaleString('de-DE')} h Maschine ${L.formatMoney(pc.machinePiece)}` : ''} = ${L.formatMoney(pc.costPiece)} Kosten</dd>
-          <dt>Marge</dt><dd>${L.round(pp.markup, 1).toLocaleString('de-DE')} %${isOv('markup') ? ' <span class="badge info">nur dieser Auftrag</span>' : ''} → <b>${L.formatMoney(pc.unit)}</b> pro Stück</dd>
-          <dt>${pc.qty} Stück</dt><dd>${L.formatMoney(pc.pieces)}</dd>` : ''}
-          ${pc.labor ? `<dt>Arbeitszeit</dt><dd>${L.round(o.designHours, 2).toLocaleString('de-DE')} h × ${L.formatMoney(pp.laborRate)}${isOv('laborRate') ? ' <span class="badge info">nur dieser Auftrag</span>' : ''} = ${L.formatMoney(pc.labor)}</dd>` : ''}
-          ${pc.extras ? `<dt>Versand/Sonst.</dt><dd>${L.formatMoney(pc.extras)}</dd>` : ''}
-          ${pc.minFill ? `<dt>Mindestpreis</dt><dd>+ ${L.formatMoney(pc.minFill)}</dd>` : ''}
-          <dt>Preis</dt><dd><b style="font-size:18px">${L.formatMoney(pc.total)}</b>${bizData().vatMode === 'ust' ? ' netto' : ''}</dd>
-          <dt>Gewinn</dt><dd>${L.formatMoney(pc.profit)} <small class="muted">(nach Material, Maschine und Versand)</small></dd>
-        </dl>
-        <small class="muted">${o.gramsPerPiece ? priceSource : ''}${o.calc ? ` · Gramm ${calcSummary(o.calc)}` : ''}</small>
-        <div class="row" style="margin-top:8px">
-          <button class="small" data-act="price-apply" data-id="${o.id}" data-v="${pc.total}">Als Preis übernehmen (${L.formatMoney(pc.total)})</button>
-        </div>
-      </div>` : '<p class="muted">„Gramm pro Stück“ (z. B. aus der STL), Arbeitszeit oder Versand im Auftrag eintragen – dann rechnet die App den Preis.</p>'}
+      ${pc.plan.rows.length || o.designHours || o.extraCost ? `<div class="card">${priceHtml(o, pc)}
+        ${o.priceManual ? `<p class="muted">Fester Preis ${L.formatMoney(o.price)} gilt (berechnet wären ${L.formatMoney(pc.calc.total)}).</p>` : '<p class="muted">Der Preis wird automatisch mitgeführt. Im Auftrag lässt sich ein fester Preis setzen.</p>'}
+      </div>` : '<p class="muted">Lade eine STL/3MF hoch oder trage Filament ein – dann rechnet die App den Preis.</p>'}
 
       <h3>Angebot & Rechnung</h3>
       ${(o.docs || []).length ? `<div class="list">${o.docs.slice().reverse().map((d) => `<div class="card filerow" style="justify-content:space-between">
@@ -1165,25 +1139,21 @@ function addDays(dateStr, days) {
   return d.toISOString().slice(0, 10);
 }
 
-function orderPricePerKg(o) {
-  const sc = o.material || o.colorHex ? L.orderSpoolCosts(o, state.spools, state.prints) : { best: null };
-  if (sc.best) return sc.best.pricePerKg;
-  const s = state.spools.filter((x) => !x.archived && x.price && (!o.material || L.materialBase(x.material) === L.materialBase(o.material)));
-  return s.length ? s.reduce((t, x) => t + L.pricePerGram(x) * 1000, 0) / s.length : 20;
-}
-
 function docDialog(orderId, type) {
   const o = orderById(orderId);
   const biz = bizData();
-  const pp = L.pricingFor(state.settings, o);
   const pr = L.orderProgress(o, state.prints);
-  const pc = L.priceCalc({
-    gramsPerPiece: o.gramsPerPiece, hoursPerPiece: o.hoursPerPiece, quantity: pr.quantity,
-    pricePerKg: orderPricePerKg(o), designHours: o.designHours, extraCost: o.extraCost,
-  }, pp);
+  const op = refreshDerived(o);
+  const pp = op.p;
+  const pc = op.calc;
   // Rechnung: Positionen des letzten Angebots übernehmen, falls vorhanden
   const lastOffer = (o.docs || []).filter((d) => d.type === 'angebot').pop();
   let lines = type === 'rechnung' && lastOffer ? lastOffer.lines.map((l) => ({ ...l })) : L.docLines(o, pc, pp);
+  // fester Preis: Stückpreis so anpassen, dass die Summe stimmt
+  if (!(type === 'rechnung' && lastOffer) && o.priceManual && Number(o.price) > 0 && lines.length) {
+    const others = lines.slice(1).reduce((t, l) => t + l.qty * l.unit, 0);
+    lines[0].unit = L.round(Math.max(0, Number(o.price) - others) / (lines[0].qty || 1), 2);
+  }
   if (!lines.length) lines = [{ text: o.title || '3D-Druck', detail: '', qty: pr.quantity, unit: 0 }];
   const isInv = type === 'rechnung';
   const number = isInv ? L.docNumber(biz.invoicePrefix, biz.nextInvoice) : L.docNumber(biz.offerPrefix, biz.nextOffer);
@@ -1262,6 +1232,7 @@ function docDialog(orderId, type) {
         o.docs = [...(o.docs || []), doc];
         if (!o.customerAddress && doc.customerAddress) o.customerAddress = doc.customerAddress;
         o.price = doc.totals.gross;
+        o.priceManual = true; // vereinbarter Preis
         if (isInv) biz.nextInvoice = (Number(biz.nextInvoice) || 1) + 1;
         else {
           biz.nextOffer = (Number(biz.nextOffer) || 1) + 1;
@@ -1317,335 +1288,448 @@ async function resizeImage(file, max = 1600) {
   }
 }
 
-// ---------- Filament aus 3D-Datei (STL / OBJ / 3MF) ----------
+// ---------- 3D-Dateien eines Auftrags automatisch auswerten ----------
 
 const MODEL_RE = /\.(stl|3mf|obj)$/i;
 
-function calcDefaults() {
+function sliceDefaults() {
   return { ...M.DEFAULT_SLICE, ...(state.settings.calc || {}) };
 }
 
-/** Rechnet aus dem Analyse-Ergebnis Gramm und Stunden pro Stück. */
-function calcValues(c, material) {
-  const st = c.res.stats;
-  if (c.res.kind === 'sliced') {
-    const plates = c.res.plates;
-    const grams = plates.reduce((t, p) => t + p.filaments.reduce((a, f) => a + f.grams, 0), 0);
-    const secs = plates.reduce((t, p) => t + (p.durationS || 0), 0);
-    const pieces = Math.max(1, Number(c.pieces) || 1);
-    return { exact: true, grams, perPiece: L.round(grams / pieces, 1), hours: L.round(secs / 3600 / pieces, 2), plates: plates.length };
-  }
-  const e = M.estimateGrams(st, { density: L.densityFor(material || 'PLA'), infill: c.infill, walls: c.walls, extra: c.extra });
-  const pieces = Math.max(1, Number(c.pieces) || 1);
-  return { exact: false, grams: e.grams, perPiece: L.round(e.grams / pieces, 1), solid: e.solidGrams, hours: 0 };
-}
-
-function newCalc(res, name, blobId) {
-  const d = calcDefaults();
-  let pieces = 1;
+/** Datei auswerten; das Ergebnis wird im Auftrag gespeichert (Neuberechnung ohne Datei, auch auf anderen Geräten). */
+async function analyzeForOrder(file) {
+  const res = await analyzeModelFile(file);
   if (res.kind === 'sliced') {
-    pieces = res.plates.reduce((t, p) => t + Math.max(1, (p.objects || []).length), 0);
-  } else if (res.stats.parts && res.stats.parts.length > 1) {
-    const v = res.stats.parts.map((x) => x.volume);
+    const bySlot = new Map();
+    let secs = 0, pieces = 0;
+    for (const p of res.plates) {
+      secs += p.durationS || 0;
+      pieces += Math.max(1, (p.objects || []).length);
+      for (const f of p.filaments) {
+        const cur = bySlot.get(f.slot) || { type: f.type, colorHex: f.colorHex, grams: 0 };
+        cur.grams += f.grams;
+        bySlot.set(f.slot, cur);
+      }
+    }
+    return {
+      kind: 'sliced', plates: res.plates.length, pieces: Math.max(1, pieces), hours: L.round(secs / 3600, 2),
+      filaments: [...bySlot.values()].map((f) => ({ ...f, grams: L.round(f.grams, 2) })),
+      size: res.stats ? res.stats.size : null,
+    };
+  }
+  const st = res.stats;
+  let pieces = 1;
+  if (st.parts && st.parts.length > 1) {
+    const v = st.parts.map((x) => x.volume);
     if (Math.max(...v) - Math.min(...v) <= Math.max(...v) * 0.01) pieces = v.length; // gleiche Teile = Kopien
   }
-  return { res, name, blobId, infill: d.infill, walls: d.walls, extra: d.extra, pieces };
-}
-
-function calcHtml(c, material) {
-  const st = c.res.stats;
-  const v = calcValues(c, material);
-  const fmt = (n) => L.round(n, 1).toLocaleString('de-DE');
-  let html = `<div class="calc-res"><div><b>📐 ${esc(c.name)}</b></div>`;
-  if (st) {
-    html += `<div class="muted">${st.size.map(fmt).join(' × ')} mm · ${fmt(st.volume / 1000)} cm³
-      ${M.fitsPrinter(st.size) ? '<span class="badge ok">passt auf den P1S</span>' : '<span class="badge danger">zu groß für den P1S (256 mm)</span>'}</div>`;
-  }
-  if (v.exact) {
-    html += `<p>Geslicte Datei aus Bambu Studio – <b>exakte Werte</b>: ${fmt(v.grams)} g auf ${v.plates} Platte${v.plates > 1 ? 'n' : ''}.</p>`;
-  } else {
-    html += `<div class="row">
-      <label class="f">Infill %<input data-calc="infill" type="number" min="0" max="100" value="${esc(c.infill)}"></label>
-      <label class="f">Wände<input data-calc="walls" type="number" min="1" max="10" value="${esc(c.walls)}"></label>
-      <label class="f">Zuschlag %<input data-calc="extra" type="number" min="0" max="200" value="${esc(c.extra)}" title="Stützen, Brim, Ausschuss"></label>
-    </div>
-    <p class="muted">Material ${esc(material || 'PLA')} (${L.densityFor(material || 'PLA')} g/cm³) · massiv wären es ${fmt(v.solid)} g. Grobe Schätzung – Stützen sind nur im Zuschlag enthalten.</p>`;
-  }
-  html += `<div class="row" style="align-items:center">
-      <label class="f" style="flex:0 0 130px">Stück in der Datei<input data-calc="pieces" type="number" min="1" value="${esc(c.pieces)}"></label>
-      <div><span style="font-size:22px;font-weight:700">${fmt(v.perPiece)} g</span> pro Stück${v.hours ? ` · ${fmt(v.hours)} h` : ''}${calcCostLine(v.perPiece, c.order)}</div>
-    </div></div>`;
-  return html;
-}
-
-// Materialkosten pro Stück mit der bestpassenden Rolle aus dem Lager
-function calcCostLine(gramsPerPiece, order) {
-  if (!order) return '';
-  const sc = L.orderSpoolCosts({ ...order, gramsPerPiece }, state.spools, state.prints);
-  if (!sc.best) return '';
-  return `<br><small class="muted">≈ ${L.formatMoney(sc.best.perPiece)} Material pro Stück mit ${esc(L.spoolTitle(sc.best.spool))} (${L.formatMoney(sc.best.pricePerKg)}/kg)</small>`;
-}
-
-function readCalcInputs(root, c) {
-  for (const el of $$('[data-calc]', root)) c[el.dataset.calc] = Number(el.value) || 0;
-}
-
-/** Ergebnis-Zeile für die Auftragsansicht */
-function calcSummary(calc) {
-  if (!calc) return '';
-  return calc.exact
-    ? `aus ${esc(calc.name)} (geslict, exakt)`
-    : `aus ${esc(calc.name)} geschätzt (${esc(calc.infill)} % Infill, ${esc(calc.walls)} Wände, +${esc(calc.extra)} %)`;
-}
-
-function calcRecord(c, material) {
-  const v = calcValues(c, material);
-  if (!v.exact) state.settings.calc = { infill: c.infill, walls: c.walls, extra: c.extra };
-  return { name: c.name, exact: v.exact, infill: c.infill, walls: c.walls, extra: c.extra, pieces: c.pieces, perPiece: v.perPiece, hours: v.hours };
-}
-
-/** Rechner für eine schon angehängte Datei (Auftragsansicht) */
-async function calcDialog(orderId, blobId, name) {
-  const o = orderById(orderId);
-  const blob = await getBlob(blobId);
-  if (!blob) { toast('Datei ist auf diesem Gerät noch nicht da – kurz warten (Abgleich) und nochmal'); return; }
-  let c;
-  try {
-    c = newCalc(await analyzeModelFile(new File([blob], name)), name, blobId);
-  } catch (err) { toast(err.message); return; }
-  c.order = o;
-  const draw = () => {
-    $('#calc-box').innerHTML = calcHtml(c, o.material);
+  return {
+    kind: 'mesh', pieces, volume: st.volume, area: st.area, size: st.size,
+    overhangArea: st.overhangArea || 0, supportVolume: st.supportVolume || 0,
   };
-  openModal(`${head('Filament berechnen')}
-    <div class="mbody"><div id="calc-box"></div></div>
-    <div class="mfoot"><button type="button" data-close>Schließen</button><button class="primary" id="calc-apply">Als „Gramm pro Stück“ übernehmen</button></div>`, (root) => {
-    draw();
-    root.addEventListener('change', (e) => { if (e.target.dataset.calc) { readCalcInputs(root, c); draw(); } });
-    $('#calc-apply', root).addEventListener('click', async () => {
-      readCalcInputs(root, c);
-      const rec = calcRecord(c, o.material);
-      o.gramsPerPiece = rec.perPiece;
-      if (rec.hours) o.hoursPerPiece = rec.hours;
-      o.calc = rec;
-      o.updated = new Date().toISOString();
-      await save();
-      render();
-      orderDetail(o.id);
-      toast(`${rec.perPiece} g pro Stück übernommen`);
-    });
-  });
+}
+
+const baseName = (n) => String(n || '').replace(/\.(gcode\.3mf|3mf|stl|obj)$/i, '');
+
+/**
+ * Filament-Zeilen aus den ausgewerteten Dateien + selbst hinzugefügten Zeilen.
+ * Bei Datei-Zeilen bleiben Material/Farbe/Rolle erhalten, die man selbst geändert hat.
+ */
+function buildLines(draft) {
+  const slice = { ...sliceDefaults(), ...(draft.slice || {}) };
+  const old = new Map((draft.lines || []).map((l) => [l.id, l]));
+  const lines = [];
+  let hours = 0;
+  for (const f of draft.photos || []) {
+    const a = f.analysis;
+    if (!a) continue;
+    if (a.kind === 'sliced') {
+      a.filaments.forEach((fil, i) => {
+        const id = `f:${f.id}:${i}`;
+        const prev = old.get(id) || {};
+        lines.push({
+          id, src: f.id, auto: true, exact: true,
+          name: a.filaments.length > 1 ? `${baseName(f.name)} · Farbe ${i + 1}` : baseName(f.name),
+          material: prev.own ? prev.material : L.materialBase(fil.type) || draft.material || '',
+          colorHex: prev.own ? prev.colorHex : fil.colorHex || draft.colorHex || '',
+          colorWish: prev.own ? prev.colorWish : '',
+          own: !!prev.own, spoolId: prev.spoolId || '',
+          grams: L.round(fil.grams / a.pieces, 1), supportGrams: 0,
+        });
+      });
+      hours += a.hours / a.pieces;
+    } else {
+      const id = `f:${f.id}`;
+      const prev = old.get(id) || {};
+      const material = prev.own ? prev.material : draft.material || 'PLA';
+      const e = M.estimateGrams(a, { ...slice, density: L.densityFor(material) });
+      lines.push({
+        id, src: f.id, auto: true, exact: false, name: baseName(f.name),
+        material, colorHex: prev.own ? prev.colorHex : draft.colorHex || '',
+        colorWish: prev.own ? prev.colorWish : draft.colorWish || '',
+        own: !!prev.own, spoolId: prev.spoolId || '',
+        grams: L.round(e.grams / a.pieces, 1), supportGrams: L.round(e.supportGrams / a.pieces, 1),
+        supportLevel: e.supportLevel,
+      });
+      hours += e.hours / a.pieces;
+    }
+  }
+  const fromFiles = lines.length > 0;
+  for (const l of draft.lines || []) {
+    if (l.auto) continue;
+    if (l.id === 'm:alt' && fromFiles) continue; // alte „Gramm pro Stück“ durch die Datei ersetzt
+    lines.push(l); // selbst hinzugefügte Zeilen
+  }
+  // ältere Aufträge: Zeile aus material/gramsPerPiece übernehmen, solange keine Datei da ist
+  if (!lines.length && !(draft.lines || []).length && (draft.gramsPerPiece || draft.material)) {
+    lines.push({ id: 'm:alt', auto: false, name: '', material: draft.material || '', colorHex: draft.colorHex || '', colorWish: draft.colorWish || '', grams: Number(draft.gramsPerPiece) || 0, supportGrams: 0, spoolId: '' });
+  }
+  return { lines, hours: L.round(hours, 2) };
+}
+
+/** Abgeleitete Werte eines Auftrags neu setzen (Zeilen, Gramm, Stunden, Preis) */
+function refreshDerived(o) {
+  const { lines, hours } = buildLines(o);
+  o.lines = lines;
+  o.gramsPerPiece = L.orderGramsPerPiece(o);
+  if (!o.hoursManual) o.hoursPerPiece = hours || o.hoursPerPiece || '';
+  const pr = L.orderPrice(o, state.spools, state.prints, state.settings);
+  if (!o.priceManual) o.price = pr.calc.total || '';
+  return pr;
+}
+
+function lineSpoolHtml(row) {
+  if (row.chosen) return `🎯 ${esc(L.spoolTitle(row.chosen))} · ${locBadge(row.chosen.location)}`;
+  if (!row.use.length) return '<span class="badge warn">keine passende Rolle im Lager</span>';
+  const parts = row.use.map((u) => `${esc(L.spoolTitle(u.spool))} ${locBadge(u.spool.location)}${row.use.length > 1 ? ` (${g1(u.grams)} g)` : ''}`);
+  return `${row.use.length > 1 ? '✂️ aufgeteilt: ' : '✓ '}${parts.join(' + ')}${row.enough ? '' : ` <span class="badge danger">es fehlen ${g1(row.rec.missing)} g</span>`}`;
+}
+
+function lineOptions(row) {
+  const cands = row.rec.candidates.map((c) => c.spool);
+  if (row.chosen && !cands.some((s) => s.id === row.chosen.id)) cands.unshift(row.chosen);
+  return `<option value="">Automatisch (Empfehlung)</option>${cands.map((s) => `<option value="${s.id}" ${row.line.spoolId === s.id ? 'selected' : ''}>${esc(L.spoolTitle(s))} · ${L.formatGrams(L.spoolRemaining(s, state.prints).remaining)} · ${esc(L.locationLabel(s.location))}</option>`).join('')}`;
+}
+
+function linesHtml(o, pr) {
+  const rows = pr.plan.rows;
+  if (!rows.length) {
+    return `<p class="muted">Noch nichts zu rechnen. Lade oben eine STL/3MF hoch oder füge eine Zeile hinzu.</p>`;
+  }
+  return rows.map((r, i) => {
+    const l = r.line;
+    return `<div class="fline" data-line="${esc(l.id)}">
+      <div class="fline-head">${sw(l.colorHex, 's')} <b>${esc(l.name || `Farbe/Material ${i + 1}`)}</b>
+        ${l.exact ? '<span class="badge ok">exakt (geslict)</span>' : l.auto ? '<span class="badge info">aus Datei geschätzt</span>' : ''}
+        ${l.supportLevel === 'needed' ? '<span class="badge warn">Stützen</span>' : l.supportLevel === 'small' ? '<span class="badge info">kleine Überhänge</span>' : ''}
+        ${!l.auto ? `<button type="button" class="small ghost" data-rmline="${esc(l.id)}" title="Zeile entfernen">🗑</button>` : ''}</div>
+      <div class="row">
+        <label class="f">Material<input data-lf="material" list="materials2" value="${esc(l.material)}"></label>
+        <label class="f shrink" style="width:64px">Farbe<input type="color" data-lf="colorHex" value="${esc(L.normHex(l.colorHex) || '#888888')}"></label>
+        <label class="f">Gramm/Stück<input data-lf="grams" inputmode="decimal" value="${esc(String(l.grams).replace('.', ','))}" ${l.auto ? 'readonly title="aus der Datei berechnet"' : ''}></label>
+        ${l.supportGrams ? `<label class="f" style="flex:0 0 90px">Stützen g<input value="${esc(String(l.supportGrams).replace('.', ','))}" readonly></label>` : ''}
+      </div>
+      <label class="f">Rolle<select data-lf="spoolId">${lineOptions(r)}</select></label>
+      <div class="muted small-line">${lineSpoolHtml(r)} · ${L.formatMoney(r.pricePerKg)}/kg${r.priceSource === 'avg' ? ' (Ø, Rolle ohne Preis)' : r.priceSource === 'default' ? ' (angenommen)' : ''} · ${L.formatMoney(r.costPiece)} pro Stück</div>
+    </div>`;
+  }).join('');
+}
+
+function priceHtml(o, pr) {
+  const c = pr.calc, p = pr.p;
+  const ust = bizData().vatMode === 'ust';
+  return `<dl class="kv">
+    <dt>Material</dt><dd>${g1(pr.plan.gramsPerPiece)} g = ${L.formatMoney(c.materialPiece)} pro Stück</dd>
+    ${c.machinePiece ? `<dt>Maschine</dt><dd>${L.round(o.hoursPerPiece, 2).toLocaleString('de-DE')} h × ${L.formatMoney(p.hourlyRate)} = ${L.formatMoney(c.machinePiece)} pro Stück</dd>` : ''}
+    <dt>Marge</dt><dd>${L.round(p.markup, 1).toLocaleString('de-DE')} % → <b>${L.formatMoney(c.unit)}</b> pro Stück × ${c.qty} = ${L.formatMoney(c.pieces)}</dd>
+    ${c.labor ? `<dt>Arbeit</dt><dd>${L.round(o.designHours, 2).toLocaleString('de-DE')} h × ${L.formatMoney(p.laborRate)} = ${L.formatMoney(c.labor)}</dd>` : ''}
+    ${c.extras ? `<dt>Versand/Sonst.</dt><dd>${L.formatMoney(c.extras)}</dd>` : ''}
+    ${c.minFill ? `<dt>Mindestpreis</dt><dd>+ ${L.formatMoney(c.minFill)}</dd>` : ''}
+    <dt>Berechnet</dt><dd><b style="font-size:18px">${L.formatMoney(c.total)}</b>${ust ? ' netto' : ''} · Gewinn ${L.formatMoney(c.profit)}</dd>
+    ${pr.manual ? `<dt>Fester Preis</dt><dd><b>${L.formatMoney(pr.total)}</b></dd>` : ''}
+  </dl>`;
 }
 
 function orderForm(id) {
   const existing = id ? orderById(id) : null;
-  const o = existing ? JSON.parse(JSON.stringify(existing)) : {
-    kind: 'modell', status: 'anfrage', quantity: 1, urls: [], photos: [], created: new Date().toISOString(),
+  const draft = existing ? JSON.parse(JSON.stringify(existing)) : {
+    kind: 'modell', status: 'anfrage', quantity: 1, urls: [], photos: [], lines: [], slice: {},
+    created: new Date().toISOString(),
   };
-  const photos = (o.photos || []).slice();
+  draft.photos = draft.photos || [];
+  draft.slice = { ...sliceDefaults(), ...(draft.slice || {}) };
   const added = [];
-  const renderPhotos = () => photos.map((ph, i) => /^image\//.test(ph.type || 'image/')
-    ? `<div class="ph"><img data-blob="${esc(ph.id)}" alt=""><button type="button" class="x" data-rm="${i}">✕</button></div>`
-    : `<div class="ph card" style="padding:6px;font-size:12px;word-break:break-all">📎 ${esc(ph.name)}<button type="button" class="x" data-rm="${i}">✕</button></div>`).join('');
+  const customers = state.customers || [];
+  const pr0 = L.pricingFor(state.settings, null);
+
+  const filesHtml = () => draft.photos.map((ph, i) => {
+    const a = ph.analysis;
+    const info = a ? (a.kind === 'sliced'
+      ? `geslict · ${a.filaments.length} Farbe${a.filaments.length > 1 ? 'n' : ''}`
+      : `${a.size.map((n) => Math.round(n)).join('×')} mm${M.fitsPrinter(a.size) ? '' : ' ⚠️ zu groß für P1S'}`) : '';
+    return /^image\//.test(ph.type || 'image/') && !MODEL_RE.test(ph.name || '')
+      ? `<div class="ph"><img data-blob="${esc(ph.id)}" alt=""><button type="button" class="x" data-rm="${i}">✕</button></div>`
+      : `<div class="ph card filecard">${MODEL_RE.test(ph.name) ? '🧊' : '📎'} ${esc(ph.name)}${info ? `<br><small class="muted">${esc(info)}</small>` : ''}<button type="button" class="x" data-rm="${i}">✕</button></div>`;
+  }).join('');
+
   openModal(`
-    <form id="order-form">
+    <form id="order-form" autocomplete="off">
     ${head(existing ? 'Auftrag bearbeiten' : 'Neuer Auftrag')}
     <div class="mbody">
-      <label class="f">Was soll gedruckt werden?<input name="title" value="${esc(o.title)}" required placeholder="z. B. Ersatz-Knopf Spülmaschine"></label>
+      <label class="f">Was soll gedruckt werden?<input name="title" value="${esc(draft.title)}" required placeholder="z. B. Ersatz-Knopf Spülmaschine"></label>
       <div class="row">
-        <label class="f">Kunde<input name="customer" value="${esc(o.customer)}" placeholder="Name"></label>
-        <label class="f">Kontakt<input name="contact" value="${esc(o.contact)}" placeholder="Telefon / E-Mail"></label>
+        <label class="f">Kunde<input name="customer" list="customers" value="${esc(draft.customer)}" placeholder="Name – gespeicherte werden vorgeschlagen"></label>
+        <label class="f" style="flex:0 0 80px">Stück<input name="quantity" type="number" min="1" value="${esc(draft.quantity || 1)}"></label>
+        <label class="f" style="flex:0 0 150px">Termin<input name="deadline" type="date" value="${esc(draft.deadline || '')}"></label>
       </div>
-      <label class="f">Anschrift (für Angebot/Rechnung)<textarea name="customerAddress" rows="2" placeholder="Straße Nr.&#10;PLZ Ort">${esc(o.customerAddress)}</textarea></label>
+      <datalist id="customers">${customers.map((c) => `<option value="${esc(c.name)}">`).join('')}</datalist>
       <div class="chips">
-        <label class="chip ${o.kind === 'modell' ? 'on' : ''}"><input type="radio" name="kind" value="modell" ${o.kind === 'modell' ? 'checked' : ''} hidden> 🌐 Modell aus dem Netz</label>
-        <label class="chip ${o.kind === 'eigen' ? 'on' : ''}"><input type="radio" name="kind" value="eigen" ${o.kind === 'eigen' ? 'checked' : ''} hidden> ✏️ Selbst konstruieren</label>
+        <label class="chip ${draft.kind === 'modell' ? 'on' : ''}"><input type="radio" name="kind" value="modell" ${draft.kind === 'modell' ? 'checked' : ''} hidden> 🌐 Modell aus dem Netz</label>
+        <label class="chip ${draft.kind === 'eigen' ? 'on' : ''}"><input type="radio" name="kind" value="eigen" ${draft.kind === 'eigen' ? 'checked' : ''} hidden> ✏️ Selbst konstruieren</label>
       </div>
-      <div data-kind="modell">
-        <label class="f">Links zum Modell (einer pro Zeile – MakerWorld, Printables, Thingiverse …)<textarea name="urls" placeholder="https://makerworld.com/…">${esc((o.urls || []).join('\n'))}</textarea></label>
-        <label class="f">Lizenz<select name="license">${L.LICENSES.map((l) => `<option value="${l.id}" ${o.license === l.id ? 'selected' : ''}>${esc(l.label)}</option>`).join('')}</select></label>
-      </div>
-      <label class="f"><span data-kind="eigen">Maße & Beschreibung (was muss passen, wofür ist es?)</span><span data-kind="modell">Hinweise (Größe/Skalierung, Varianten …)</span>
-        <textarea name="measurements" rows="4" placeholder="z. B. Innen-Ø 12 mm, Länge 40 mm, Loch für M3">${esc(o.measurements)}</textarea></label>
-      <h3>Fotos & Dateien</h3>
-      <div class="gallery" id="photo-list">${renderPhotos()}</div>
-      <p class="row">
-        <label class="btn">📷 Foto<input type="file" accept="image/*" capture="environment" id="photo-cam" hidden></label>
-        <label class="btn">🖼️ Bilder<input type="file" accept="image/*" multiple id="photo-add" hidden></label>
-        <label class="btn">📎 Datei (STL, 3MF, PDF …)<input type="file" multiple id="file-add" hidden></label>
-      </p>
+      <label class="f" data-kind="modell">Link(s) zum Modell<textarea name="urls" rows="2" placeholder="https://makerworld.com/…">${esc((draft.urls || []).join('\n'))}</textarea></label>
+      <label class="f" data-kind="eigen">Maße & Beschreibung<textarea name="measurements" rows="3" placeholder="z. B. Innen-Ø 12 mm, Länge 40 mm, Loch für M3">${esc(draft.measurements)}</textarea></label>
       <div class="row">
-        <label class="f">Stückzahl<input name="quantity" type="number" min="1" value="${esc(o.quantity || 1)}"></label>
-        <label class="f">Termin<input name="deadline" type="date" value="${esc(o.deadline || '')}"></label>
+        <label class="f">Material<input name="material" list="materials2" value="${esc(draft.material)}" placeholder="PLA"></label>
+        <label class="f">Farbwunsch<input name="colorWish" value="${esc(draft.colorWish)}" placeholder="z. B. schwarz matt"></label>
+        <label class="f shrink" style="width:64px">Farbe<input type="color" name="colorHex" value="${esc(L.normHex(draft.colorHex) || '#888888')}"></label>
       </div>
-      <div class="row">
-        <label class="f">Material<input name="material" list="materials2" value="${esc(o.material)}" placeholder="PLA"></label>
-        <label class="f">Farbwunsch<input name="colorWish" value="${esc(o.colorWish)}" placeholder="z. B. schwarz matt"></label>
-        <label class="f shrink" style="width:80px">Farbe<input type="color" name="colorHex" value="${esc(L.normHex(o.colorHex) || '#888888')}"></label>
-      </div>
-      <label class="check"><input type="checkbox" name="noColor" ${o.colorHex ? '' : 'checked'}> Farbe egal</label>
+      <label class="check"><input type="checkbox" name="noColor" ${draft.colorHex ? '' : 'checked'}> Farbe egal</label>
       <datalist id="materials2">${MATERIALS.map((b) => `<option value="${esc(b)}">`).join('')}</datalist>
-      <div class="row">
-        <label class="f">Gramm pro Stück<input name="gramsPerPiece" inputmode="decimal" value="${esc(o.gramsPerPiece ?? '')}" placeholder="aus 3D-Datei oder Slicer"></label>
-        <label class="f">Std. pro Stück<input name="hoursPerPiece" inputmode="decimal" value="${esc(o.hoursPerPiece ?? '')}"></label>
-      </div>
-      <div class="card calc">
-        <div class="row" style="align-items:center">
-          <div>📐 <b>Filament aus 3D-Datei berechnen</b><br><small class="muted">STL, OBJ oder 3MF – geslicte 3MF aus Bambu Studio liefern exakte Werte</small></div>
-          <label class="btn shrink">Datei wählen<input type="file" id="calc-file" accept=".stl,.3mf,.obj" hidden></label>
+
+      <div class="dropzone" id="order-drop">
+        <div><b>Fotos & Dateien</b> <small class="muted">– STL/3MF/OBJ werden automatisch berechnet, auch mehrere Teile/Farben</small></div>
+        <div class="gallery" id="photo-list">${filesHtml()}</div>
+        <div class="row">
+          <label class="btn">📷 Foto<input type="file" accept="image/*" capture="environment" id="photo-cam" hidden></label>
+          <label class="btn">📎 Dateien / Bilder<input type="file" multiple id="file-add" hidden></label>
         </div>
-        <div id="calc-area">${o.calc ? `<p class="muted">Zuletzt ${calcSummary(o.calc)}: ${esc(o.calc.perPiece)} g pro Stück</p>` : ''}</div>
+        <p id="file-msg" class="muted" hidden></p>
       </div>
-      <div class="row">
-        <label class="f">Status<select name="status">${L.ORDER_STATUS.map((s) => `<option value="${s.id}" ${o.status === s.id ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}</select></label>
-        <label class="f">Preis (€)<input name="price" inputmode="decimal" value="${esc(o.price ?? '')}"></label>
-      </div>
-      <label class="check"><input type="checkbox" name="paid" ${o.paid ? 'checked' : ''}> Bezahlt</label>
-      <label class="f">Zusätzlich fertig (ohne importierten Druck)<input name="manualDone" type="number" min="0" value="${esc(o.manualDone || 0)}"></label>
-      <h3>Preis für diesen Auftrag</h3>
-      <div class="row">
-        <label class="f">Arbeitszeit (h)<input name="designHours" inputmode="decimal" value="${esc(o.designHours ?? '')}" placeholder="z. B. Konstruktion"></label>
-        <label class="f">Versand / Sonstiges (€)<input name="extraCost" inputmode="decimal" value="${esc(o.extraCost ?? '')}"></label>
-      </div>
-      <div class="row">
-        <label class="f">Marge (%)<input name="p_markup" inputmode="decimal" value="${esc((o.pricing || {}).markup ?? '')}" placeholder="Vorgabe ${esc(L.pricingFor(state.settings, null).markup)}"></label>
-        <label class="f">Stundensatz (€/h)<input name="p_laborRate" inputmode="decimal" value="${esc((o.pricing || {}).laborRate ?? '')}" placeholder="Vorgabe ${esc(L.pricingFor(state.settings, null).laborRate)}"></label>
-        <label class="f">Maschine (€/h)<input name="p_hourlyRate" inputmode="decimal" value="${esc((o.pricing || {}).hourlyRate ?? '')}" placeholder="Vorgabe ${esc(L.pricingFor(state.settings, null).hourlyRate)}"></label>
-      </div>
-      <p class="muted">Leer lassen = Vorgabe aus den Einstellungen.</p>
-      <label class="f">Notizen<textarea name="notes">${esc(o.notes)}</textarea></label>
+
+      <details class="sect" id="sect-druck">
+        <summary>🧵 Druck & Filament <span class="sum" id="sum-druck"></span></summary>
+        <div id="lines-area"></div>
+        <p><button type="button" class="small" id="add-line">＋ Farbe / Material</button></p>
+        <div class="row">
+          <label class="f">Infill %<input name="s_infill" type="number" min="0" max="100" value="${esc(draft.slice.infill)}"></label>
+          <label class="f">Wände<input name="s_walls" type="number" min="1" max="10" value="${esc(draft.slice.walls)}"></label>
+          <label class="f">Zuschlag %<input name="s_extra" type="number" min="0" max="200" value="${esc(draft.slice.extra)}"></label>
+          <label class="f">Stützen<select name="s_supports">
+            <option value="auto" ${draft.slice.supports === 'auto' ? 'selected' : ''}>automatisch</option>
+            <option value="on" ${draft.slice.supports === 'on' ? 'selected' : ''}>immer</option>
+            <option value="off" ${draft.slice.supports === 'off' ? 'selected' : ''}>keine</option>
+          </select></label>
+        </div>
+        <div class="row">
+          <label class="f">Druckzeit pro Stück (h)<input name="hoursPerPiece" inputmode="decimal" value="${esc(String(draft.hoursPerPiece || '').replace('.', ','))}" placeholder="automatisch"></label>
+          <label class="check shrink" style="margin-top:22px"><input type="checkbox" name="hoursManual" ${draft.hoursManual ? 'checked' : ''}> selbst festgelegt</label>
+        </div>
+        <p class="muted">Schätzung aus STL: Wände + Infill + Zuschlag; Stützen werden aus Überhängen erkannt (Ausrichtung wie in der Datei). Geslicte 3MF aus Bambu Studio sind exakt.</p>
+      </details>
+
+      <details class="sect" id="sect-preis">
+        <summary>💶 Preis & Status <span class="sum" id="sum-preis"></span></summary>
+        <div id="price-area"></div>
+        <div class="row">
+          <label class="f">Arbeitszeit (h)<input name="designHours" inputmode="decimal" value="${esc(String(draft.designHours ?? '').replace('.', ','))}" placeholder="z. B. Konstruktion"></label>
+          <label class="f">Versand / Sonstiges (€)<input name="extraCost" inputmode="decimal" value="${esc(String(draft.extraCost ?? '').replace('.', ','))}"></label>
+        </div>
+        <div class="row">
+          <label class="f">Marge %<input name="p_markup" inputmode="decimal" value="${esc((draft.pricing || {}).markup ?? '')}" placeholder="${esc(pr0.markup)}"></label>
+          <label class="f">Stundensatz €<input name="p_laborRate" inputmode="decimal" value="${esc((draft.pricing || {}).laborRate ?? '')}" placeholder="${esc(pr0.laborRate)}"></label>
+          <label class="f">Maschine €/h<input name="p_hourlyRate" inputmode="decimal" value="${esc((draft.pricing || {}).hourlyRate ?? '')}" placeholder="${esc(pr0.hourlyRate)}"></label>
+        </div>
+        <div class="row">
+          <label class="check shrink"><input type="checkbox" name="priceManual" ${draft.priceManual ? 'checked' : ''}> fester Preis</label>
+          <label class="f">Preis (€)<input name="price" inputmode="decimal" value="${esc(draft.priceManual ? String(draft.price ?? '').replace('.', ',') : '')}" placeholder="automatisch"></label>
+        </div>
+        <div class="row">
+          <label class="f">Status<select name="status">${L.ORDER_STATUS.map((s) => `<option value="${s.id}" ${draft.status === s.id ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}</select></label>
+          <label class="check shrink" style="margin-top:22px"><input type="checkbox" name="paid" ${draft.paid ? 'checked' : ''}> bezahlt</label>
+        </div>
+      </details>
+
+      <details class="sect" id="sect-kunde">
+        <summary>👤 Kunde & Notizen <span class="sum" id="sum-kunde"></span></summary>
+        <label class="f">Kontakt<input name="contact" value="${esc(draft.contact)}" placeholder="Telefon / E-Mail"></label>
+        <label class="f">Anschrift (für Angebot/Rechnung)<textarea name="customerAddress" rows="2" placeholder="Straße Nr.&#10;PLZ Ort">${esc(draft.customerAddress)}</textarea></label>
+        <label class="f" data-kind="modell">Lizenz des Modells<select name="license">${L.LICENSES.map((l) => `<option value="${l.id}" ${draft.license === l.id ? 'selected' : ''}>${esc(l.label)}</option>`).join('')}</select></label>
+        <label class="f">Notizen<textarea name="notes" rows="2">${esc(draft.notes)}</textarea></label>
+        <label class="f">Zusätzlich fertig (ohne importierten Druck)<input name="manualDone" type="number" min="0" value="${esc(draft.manualDone || 0)}"></label>
+      </details>
     </div>
     <div class="mfoot">
       ${existing ? `<button type="button" class="danger left" data-act="del-order" data-id="${existing.id}">Löschen</button>` : ''}
-      <button type="button" data-close>Abbrechen</button><button class="primary" type="submit">Speichern</button>
+      <button type="button" data-close>Abbrechen</button><button class="primary" type="submit">${existing ? 'Speichern' : 'Anlegen'}</button>
     </div>
     </form>`, (root) => {
     const form = $('#order-form', root);
-    const syncKind = () => {
-      const k = form.kind.value;
-      $$('[data-kind]', root).forEach((el) => { el.style.display = el.dataset.kind === k ? '' : 'none'; });
+    const val = (n) => (form[n] ? form[n].value : '');
+
+    // Formular → draft (alles außer Dateien/Zeilen, die direkt im draft gepflegt werden)
+    const readForm = () => {
+      draft.title = val('title').trim();
+      draft.customer = val('customer').trim();
+      draft.quantity = Math.max(1, parseInt(val('quantity'), 10) || 1);
+      draft.deadline = val('deadline');
+      draft.kind = form.kind.value === 'eigen' ? 'eigen' : 'modell';
+      draft.urls = val('urls').split(/\s*\n\s*/).map((s) => s.trim()).filter(Boolean);
+      draft.measurements = val('measurements');
+      draft.material = val('material').trim();
+      draft.colorWish = val('colorWish').trim();
+      draft.colorHex = form.noColor.checked ? '' : L.normHex(val('colorHex'));
+      draft.slice = {
+        infill: num(val('s_infill'), 15), walls: num(val('s_walls'), 2), extra: num(val('s_extra'), 5), supports: val('s_supports') || 'auto',
+      };
+      draft.hoursManual = form.hoursManual.checked;
+      if (draft.hoursManual) draft.hoursPerPiece = num(val('hoursPerPiece'), 0) || '';
+      draft.designHours = num(val('designHours'), 0) || '';
+      draft.extraCost = num(val('extraCost'), 0) || '';
+      const ov = (n) => (val(n).trim() === '' ? '' : num(val(n), 0));
+      draft.pricing = { markup: ov('p_markup'), laborRate: ov('p_laborRate'), hourlyRate: ov('p_hourlyRate') };
+      draft.priceManual = form.priceManual.checked && num(val('price'), 0) > 0;
+      if (draft.priceManual) draft.price = num(val('price'), 0);
+      draft.status = val('status');
+      draft.paid = form.paid.checked;
+      draft.contact = val('contact').trim();
+      draft.customerAddress = val('customerAddress').trim();
+      draft.license = val('license');
+      draft.notes = val('notes');
+      draft.manualDone = Math.max(0, parseInt(val('manualDone'), 10) || 0);
+    };
+
+    const update = () => {
+      readForm();
+      const pr = refreshDerived(draft);
+      $('#lines-area', root).innerHTML = linesHtml(draft, pr);
+      $('#price-area', root).innerHTML = priceHtml(draft, pr);
+      if (!draft.hoursManual) form.hoursPerPiece.value = draft.hoursPerPiece ? String(draft.hoursPerPiece).replace('.', ',') : '';
+      const nColors = pr.plan.rows.length;
+      const sup = draft.lines.some((l) => l.supportGrams > 0);
+      $('#sum-druck', root).textContent = nColors
+        ? `${g1(pr.plan.gramsPerPiece)} g/Stück${nColors > 1 ? ` · ${nColors} Farben/Materialien` : ''}${draft.hoursPerPiece ? ` · ${L.round(draft.hoursPerPiece, 1).toLocaleString('de-DE')} h` : ''}${sup ? ' · Stützen' : ''}${pr.plan.rows.some((r) => !r.enough) ? ' · ⚠️ Rolle reicht nicht' : ''}`
+        : 'noch keine Datei';
+      $('#sum-preis', root).textContent = `${L.formatMoney(pr.total)}${pr.manual ? ' (fest)' : ''} · ${statusLabel(draft.status)}`;
+      $('#sum-kunde', root).textContent = [draft.contact, draft.customerAddress ? 'Anschrift ✓' : ''].filter(Boolean).join(' · ');
+      $$('[data-kind]', root).forEach((el) => { el.style.display = el.dataset.kind === draft.kind ? '' : 'none'; });
       $$('input[name=kind]', root).forEach((r) => r.parentElement.classList.toggle('on', r.checked));
     };
-    syncKind();
-    $$('input[name=kind]', root).forEach((r) => r.addEventListener('change', syncKind));
-    const refresh = () => { $('#photo-list', root).innerHTML = renderPhotos(); hydrate($('#photo-list', root)); };
-    $('#photo-list', root).addEventListener('click', (e) => {
-      const b = e.target.closest('[data-rm]');
-      if (b) { photos.splice(Number(b.dataset.rm), 1); refresh(); }
+
+    // Kunde aus der Liste gewählt → Kontakt und Anschrift übernehmen (nur leere Felder)
+    form.customer.addEventListener('change', () => {
+      const c = customers.find((x) => x.name.toLowerCase() === form.customer.value.trim().toLowerCase());
+      if (!c) return;
+      if (!form.contact.value && c.contact) form.contact.value = c.contact;
+      if (!form.customerAddress.value && c.address) form.customerAddress.value = c.address;
+      update();
     });
-    const addFiles = async (files, asImage) => {
+
+    // Dateien: Bilder verkleinern, 3D-Dateien auswerten
+    const msg = $('#file-msg', root);
+    const refreshFiles = () => { $('#photo-list', root).innerHTML = filesHtml(); hydrate($('#photo-list', root)); };
+    const addFiles = async (files, cameraImage = false) => {
       for (const f of files) {
-        const blob = asImage ? await resizeImage(f) : f;
+        const isModel = MODEL_RE.test(f.name || '');
+        const isImage = cameraImage || (!isModel && /^image\//.test(f.type || ''));
+        const blob = isImage ? await resizeImage(f) : f;
         const pid = L.uid('ph');
         await putBlob(pid, blob);
         added.push(pid);
-        photos.push({ id: pid, name: f.name, type: asImage ? 'image/jpeg' : (f.type || 'application/octet-stream') });
+        const entry = { id: pid, name: f.name || 'Foto.jpg', type: isImage ? 'image/jpeg' : (f.type || 'application/octet-stream') };
+        if (isModel) {
+          msg.hidden = false;
+          msg.textContent = `Rechne ${f.name} …`;
+          try {
+            entry.analysis = await analyzeForOrder(f);
+            msg.hidden = true;
+            $('#sect-druck', root).open = true;
+          } catch (err) {
+            msg.textContent = `${f.name}: ${err.message}`;
+          }
+        }
+        draft.photos.push(entry);
       }
-      refresh();
-    };
-    $('#photo-cam', root).addEventListener('change', (e) => addFiles([...e.target.files], true));
-    $('#photo-add', root).addEventListener('change', (e) => addFiles([...e.target.files], true));
-    $('#file-add', root).addEventListener('change', async (e) => {
-      const files = [...e.target.files];
-      await addFiles(files, false);
-      const model = files.find((f) => MODEL_RE.test(f.name));
-      if (model) runCalc(model, photos[photos.length - files.length + files.indexOf(model)].id);
-    });
-    // Rechner: Datei analysieren, Ergebnis im Formular zeigen, „Übernehmen“ füllt Gramm/Stunden
-    let calc = null;
-    let calcRec = o.calc || null;
-    const calcArea = $('#calc-area', root);
-    const drawCalc = () => {
-      if (!calc) return;
-      calc.order = {
-        id: o.id || '', quantity: Number(form.quantity.value) || 1, material: form.material.value,
-        colorHex: form.noColor.checked ? '' : L.normHex(form.colorHex.value),
-      };
-      calcArea.innerHTML = calcHtml(calc, form.material.value) +
-        '<p><button type="button" class="primary" id="calc-apply">Übernehmen</button></p>';
-    };
-    const runCalc = async (file, blobId) => {
-      calcArea.innerHTML = '<p class="muted">Rechne …</p>';
-      try {
-        calc = newCalc(await analyzeModelFile(file), file.name, blobId);
-        drawCalc();
-      } catch (err) {
-        calc = null;
-        calcArea.innerHTML = `<p style="color:var(--danger)">${esc(err.message)}</p>`;
-      }
-    };
-    $('#calc-file', root).addEventListener('change', async (e) => {
-      const f = e.target.files[0];
-      e.target.value = '';
-      if (!f) return;
-      await addFiles([f], false); // Datei gleich im Auftrag ablegen
-      runCalc(f, photos[photos.length - 1].id);
-    });
-    calcArea.addEventListener('change', (e) => { if (e.target.dataset.calc && calc) { readCalcInputs(calcArea, calc); drawCalc(); } });
-    // Material, Farbe oder Menge geändert → Rechnung und Rollen-Preis neu
-    form.addEventListener('change', (e) => { if (['material', 'colorHex', 'noColor', 'quantity'].includes(e.target.name)) drawCalc(); });
-    calcArea.addEventListener('click', (e) => {
-      if (e.target.id !== 'calc-apply' || !calc) return;
-      readCalcInputs(calcArea, calc);
-      calcRec = calcRecord(calc, form.material.value);
-      form.gramsPerPiece.value = String(calcRec.perPiece).replace('.', ',');
-      if (calcRec.hours) form.hoursPerPiece.value = String(calcRec.hours).replace('.', ',');
-      calcArea.innerHTML = `<p class="badge ok">✓ ${calcRec.perPiece} g pro Stück übernommen – speichern nicht vergessen</p>`;
       modalDirty = true;
+      refreshFiles();
+      update();
+    };
+    $('#photo-cam', root).addEventListener('change', (e) => { addFiles([...e.target.files], true); e.target.value = ''; });
+    $('#file-add', root).addEventListener('change', (e) => { addFiles([...e.target.files]); e.target.value = ''; });
+    $('#photo-list', root).addEventListener('click', (e) => {
+      const b = e.target.closest('[data-rm]');
+      if (!b) return;
+      draft.photos.splice(Number(b.dataset.rm), 1);
+      modalDirty = true;
+      refreshFiles();
+      update();
     });
+    // Dateien ins Formular ziehen (statt in den Druck-Import)
+    window.__orderDrop = (files) => addFiles(files);
+
+    // Zeilen bearbeiten
+    const linesArea = $('#lines-area', root);
+    linesArea.addEventListener('change', (e) => {
+      const el = e.target.closest('[data-lf]');
+      if (!el) return;
+      const line = draft.lines.find((l) => l.id === el.closest('[data-line]').dataset.line);
+      if (!line) return;
+      const k = el.dataset.lf;
+      if (k === 'grams') line.grams = num(el.value, 0);
+      else if (k === 'colorHex') { line.colorHex = L.normHex(el.value); line.own = true; }
+      else if (k === 'material') { line.material = el.value.trim(); line.own = true; }
+      else if (k === 'spoolId') line.spoolId = el.value;
+      update();
+    });
+    linesArea.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-rmline]');
+      if (!b) return;
+      draft.lines = draft.lines.filter((l) => l.id !== b.dataset.rmline);
+      modalDirty = true;
+      update();
+    });
+    $('#add-line', root).addEventListener('click', () => {
+      readForm();
+      draft.lines.push({ id: L.uid('m:'), auto: false, name: '', material: draft.material || 'PLA', colorHex: '', colorWish: '', grams: 0, supportGrams: 0, spoolId: '' });
+      modalDirty = true;
+      update();
+    });
+
+    form.addEventListener('change', (e) => { if (!e.target.closest('[data-lf]')) update(); });
+    update();
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const fd = new FormData(form);
-      const data = {
-        title: String(fd.get('title')).trim(),
-        customer: String(fd.get('customer') || '').trim(),
-        contact: String(fd.get('contact') || '').trim(),
-        kind: fd.get('kind') === 'eigen' ? 'eigen' : 'modell',
-        urls: String(fd.get('urls') || '').split(/\s*\n\s*/).map((s) => s.trim()).filter(Boolean),
-        license: fd.get('license') || '',
-        measurements: String(fd.get('measurements') || ''),
-        quantity: Math.max(1, parseInt(fd.get('quantity'), 10) || 1),
-        deadline: fd.get('deadline') || '',
-        material: String(fd.get('material') || '').trim(),
-        colorWish: String(fd.get('colorWish') || '').trim(),
-        colorHex: fd.get('noColor') === 'on' ? '' : L.normHex(fd.get('colorHex')),
-        gramsPerPiece: num(fd.get('gramsPerPiece'), 0) || '',
-        hoursPerPiece: num(fd.get('hoursPerPiece'), 0) || '',
-        status: fd.get('status'),
-        price: num(fd.get('price'), 0) || '',
-        paid: fd.get('paid') === 'on',
-        manualDone: Math.max(0, parseInt(fd.get('manualDone'), 10) || 0),
-        customerAddress: String(fd.get('customerAddress') || '').trim(),
-        designHours: num(fd.get('designHours'), 0) || '',
-        extraCost: num(fd.get('extraCost'), 0) || '',
-        pricing: {
-          markup: String(fd.get('p_markup') || '').trim() === '' ? '' : num(fd.get('p_markup'), 0),
-          laborRate: String(fd.get('p_laborRate') || '').trim() === '' ? '' : num(fd.get('p_laborRate'), 0),
-          hourlyRate: String(fd.get('p_hourlyRate') || '').trim() === '' ? '' : num(fd.get('p_hourlyRate'), 0),
-        },
-        notes: String(fd.get('notes') || ''),
-        photos,
-        calc: calcRec,
-        updated: new Date().toISOString(),
-      };
-      if (data.kind === 'eigen' && !data.license) data.license = 'eigen';
+      readForm();
+      refreshDerived(draft);
+      if (draft.kind === 'eigen' && !draft.license) draft.license = 'eigen';
+      // Kundenliste pflegen
+      if (draft.customer) {
+        const r = L.upsertCustomer(state.customers || [], { name: draft.customer, contact: draft.contact, address: draft.customerAddress });
+        state.customers = r.list;
+        draft.customerId = r.id;
+      }
+      state.settings.calc = { infill: draft.slice.infill, walls: draft.slice.walls, extra: draft.slice.extra, supports: draft.slice.supports };
+      draft.updated = new Date().toISOString();
       let target;
       if (existing) {
-        const removed = (existing.photos || []).filter((p) => !photos.some((x) => x.id === p.id));
+        const removed = (existing.photos || []).filter((p) => !draft.photos.some((x) => x.id === p.id));
         for (const r of removed) await deleteBlob(r.id).catch(() => {});
-        Object.assign(existing, data);
+        Object.assign(existing, draft);
         target = existing;
       } else {
-        target = { id: L.uid('o'), created: new Date().toISOString(), ...data };
+        target = { ...draft, id: L.uid('o') };
         state.orders.push(target);
       }
       added.length = 0;
+      window.__orderDrop = null;
       await save();
       render();
       orderDetail(target.id);
     });
     modal().addEventListener('close', async function cleanup() {
       modal().removeEventListener('close', cleanup);
+      window.__orderDrop = null;
       for (const pid of added) await deleteBlob(pid).catch(() => {});
     });
   });
@@ -2029,7 +2113,6 @@ document.addEventListener('click', async (e) => {
     }
     case 'sync-help': e.preventDefault(); syncHelp(); break;
     case 'upd-check': case 'upd-later': case 'upd-go': case 'upd-perm': updAction(act); break;
-    case 'calc-file': calcDialog(id, el.dataset.blobid, el.dataset.name); break;
     case 'doc-new': docDialog(id, el.dataset.t); break;
     case 'doc-pdf': docPdfAgain(id, el.dataset.n); break;
     case 'goto-biz': e.preventDefault(); closeModal(); setTab('mehr'); setTimeout(() => { const f = $('#biz-form'); if (f) f.scrollIntoView({ behavior: 'smooth' }); }, 50); break;
@@ -2179,6 +2262,7 @@ window.addEventListener('drop', async (e) => {
   document.body.classList.remove('dragging');
   const files = [...(e.dataTransfer.files || [])];
   if (!files.length) return;
+  if (window.__orderDrop && modal().open && $('#order-form')) { window.__orderDrop(files); return; }
   if (ui.tab !== 'drucke') setTab('drucke');
   await handleFiles(files);
 });

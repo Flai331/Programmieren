@@ -10,11 +10,26 @@ export const PRINTERS = {
 
 // ---------- Statistik-Sammler ----------
 
+// Überhänge: Flächen, die flacher als SUPPORT_ANGLE (gegen die Waagerechte) nach unten zeigen,
+// brauchen Stützen – wie die Voreinstellung „Schwellwinkel 30°“ in Bambu Studio.
+export const SUPPORT_ANGLE = 30;
+const SUPPORT_COS = Math.cos((SUPPORT_ANGLE * Math.PI) / 180);
+
 function newStats() {
   return {
     volume: 0, area: 0, triangles: 0,
     min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity],
+    overhang: [], // [projizierte Fläche mm², Schwerpunkt-z, Normale z (normiert, Vorzeichen roh)]
   };
+}
+
+// Umlaufsinn vereinheitlichen: positives Volumen = Normalen zeigen nach außen
+function normalize(st) {
+  if (st.volume < 0) {
+    st.volume = -st.volume;
+    for (const o of st.overhang) o[2] = -o[2];
+  }
+  return st;
 }
 
 function addTriangle(st, ax, ay, az, bx, by, bz, cx, cy, cz) {
@@ -23,8 +38,10 @@ function addTriangle(st, ax, ay, az, bx, by, bz, cx, cy, cz) {
   const ux = bx - ax, uy = by - ay, uz = bz - az;
   const vx = cx - ax, vy = cy - ay, vz = cz - az;
   const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-  st.area += Math.sqrt(nx * nx + ny * ny + nz * nz) / 2;
+  const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+  st.area += len / 2;
   st.triangles++;
+  if (len > 0 && Math.abs(nz) / len > SUPPORT_COS) st.overhang.push([Math.abs(nz) / 2, (az + bz + cz) / 3, nz / len]);
   for (const [x, y, z] of [[ax, ay, az], [bx, by, bz], [cx, cy, cz]]) {
     if (x < st.min[0]) st.min[0] = x; if (x > st.max[0]) st.max[0] = x;
     if (y < st.min[1]) st.min[1] = y; if (y > st.max[1]) st.max[1] = y;
@@ -34,17 +51,29 @@ function addTriangle(st, ax, ay, az, bx, by, bz, cx, cy, cz) {
 
 function finish(st, extra = {}) {
   if (!st.triangles) throw new Error('Keine Dreiecke im Modell gefunden');
+  normalize(st);
   const size = st.max.map((v, i) => v - st.min[i]);
+  // Nach unten zeigende Flächen, die nicht auf dem Druckbett liegen → Stützen; Raum darunter = Stützvolumen
+  let overhangArea = 0, supportVolume = 0;
+  for (const [a, zc, nz] of st.overhang) {
+    const h = zc - st.min[2];
+    if (nz < 0 && h > 0.5) { overhangArea += a; supportVolume += a * h; }
+  }
   return {
-    volume: Math.abs(st.volume), // mm³
+    volume: st.volume, // mm³
     area: st.area, // mm²
     triangles: st.triangles,
     size, // mm (x, y, z)
+    overhangArea, // mm² (Ausrichtung wie in der Datei)
+    supportVolume, // mm³ Raum unter Überhängen
     ...extra,
   };
 }
 
 function mergeStats(a, b) {
+  normalize(a);
+  normalize(b);
+  for (const o of b.overhang) a.overhang.push(o);
   a.volume += b.volume; a.area += b.area; a.triangles += b.triangles;
   for (let i = 0; i < 3; i++) { a.min[i] = Math.min(a.min[i], b.min[i]); a.max[i] = Math.max(a.max[i], b.max[i]); }
 }
@@ -224,7 +253,7 @@ export function stats3mf(models) {
     const st = objectStats(it.path || '/3D/3dmodel.model', it.objectid, it.transform);
     if (!st.triangles) continue;
     const name = (main.objects.get(String(it.objectid)) || {}).name || `Teil ${parts.length + 1}`;
-    parts.push({ name, ...finish({ ...st, min: [...st.min], max: [...st.max] }) });
+    parts.push({ name, ...finish({ ...st, min: [...st.min], max: [...st.max], overhang: st.overhang.map((o) => [...o]) }) });
     mergeStats(total, st);
   }
   return finish(total, { format: '3MF', parts });
@@ -237,7 +266,29 @@ function normPath(p) {
 
 // ---------- Filament-Schätzung ----------
 
-export const DEFAULT_SLICE = { infill: 15, walls: 2, lineWidth: 0.42, topBottom: 0.8, extra: 5 };
+export const DEFAULT_SLICE = {
+  infill: 15, walls: 2, lineWidth: 0.42, topBottom: 0.8,
+  extra: 5, // % Zuschlag (Brim, Spülen, Ausschuss)
+  supports: 'auto', // 'auto' = nur wenn nötig, 'on', 'off'
+  supportDensity: 15, // % des Raums unter Überhängen, der als Stütze gedruckt wird
+  gramsPerHour: 18, // grobe Druckgeschwindigkeit P1S (0,4-mm-Düse, Standardprofil)
+};
+
+/**
+ * Überhänge (Ausrichtung wie in der Datei):
+ * 'none' – keine nennenswerten, 'small' – bis 5 cm² (meist Brücken, z. B. Benchy-Kabinendach; ohne Stützen druckbar),
+ * 'needed' – größere Flächen in der Luft → Stützen.
+ */
+export function supportLevel(stats) {
+  const a = stats.overhangArea || 0, v = stats.supportVolume || 0;
+  if (a > 500 && v > 2000) return 'needed';
+  if (a > 100) return 'small';
+  return 'none';
+}
+
+export function needsSupport(stats) {
+  return supportLevel(stats) === 'needed';
+}
 
 /**
  * Gramm aus Volumen und Oberfläche.
@@ -251,9 +302,20 @@ export function estimateGrams(stats, opts = {}) {
   const shell = Math.min(stats.volume, stats.area * shellT);
   const inner = Math.max(0, stats.volume - shell);
   const printed = shell + inner * Math.min(100, Math.max(0, o.infill)) / 100; // mm³
-  const grams = (printed / 1000) * density * (1 + (Number(o.extra) || 0) / 100);
+  const factor = 1 + (Number(o.extra) || 0) / 100;
+  const grams = (printed / 1000) * density * factor;
+  const needed = needsSupport(stats);
+  const useSupport = o.supports === 'on' || (o.supports !== 'off' && needed);
+  const supportGrams = useSupport ? ((stats.supportVolume || 0) * (Number(o.supportDensity) || 0) / 100 / 1000) * density * factor : 0;
+  const total = grams + supportGrams;
   return {
-    grams: Math.round(grams * 10) / 10,
+    grams: Math.round(grams * 10) / 10, // Modell
+    supportGrams: Math.round(supportGrams * 10) / 10,
+    totalGrams: Math.round(total * 10) / 10,
+    needsSupport: needed,
+    supportLevel: supportLevel(stats),
+    usesSupport: useSupport,
+    hours: Math.round((total / (Number(o.gramsPerHour) || 18)) * 100) / 100,
     solidGrams: Math.round((stats.volume / 1000) * density * 10) / 10,
     shellShare: stats.volume ? Math.round((shell / stats.volume) * 100) : 0,
   };
