@@ -223,3 +223,36 @@ test('orderSpoolCosts: Kosten je passender Rolle, beste Rolle mit Preis die reic
   assert.equal(r.best.spool.id, 'c');
   assert.equal(r.best.total, 15);
 });
+
+test('Preiskalkulation: Vorgaben, Überschreiben im Auftrag, Marge, Rundung, Mindestpreis', () => {
+  const settings = { markup: 50, hourlyRate: 0.5, laborRate: 30, minOrder: 10, rounding: 0.5 };
+  assert.deepEqual(L.pricingFor(settings, {}), { markup: 50, hourlyRate: 0.5, laborRate: 30, minOrder: 10, rounding: 0.5 });
+  assert.equal(L.pricingFor(settings, { pricing: { markup: '80', laborRate: '' } }).markup, 80);
+  assert.equal(L.pricingFor(settings, { pricing: { markup: '80', laborRate: '' } }).laborRate, 30);
+  assert.equal(L.pricingFor({}, {}).markup, 30);
+
+  const p = L.pricingFor(settings, {});
+  // 20 g à 25 €/kg = 0,50 € + 1 h × 0,50 € = 1,00 € Kosten → × 1,5 = 1,50 €
+  const c = L.priceCalc({ gramsPerPiece: 20, hoursPerPiece: 1, quantity: 10, pricePerKg: 25, designHours: 2, extraCost: 4.9 }, p);
+  assert.equal(c.costPiece, 1);
+  assert.equal(c.unit, 1.5);
+  assert.equal(c.pieces, 15);
+  assert.equal(c.labor, 60);
+  assert.equal(c.total, 79.9);
+  assert.equal(c.minFill, 0);
+  assert.equal(c.profit, 65); // 79,90 − 10 Kosten − 4,90 Versand
+  // Aufrunden auf 0,50: 1,04 → 1,50
+  assert.equal(L.priceCalc({ gramsPerPiece: 20, quantity: 1, pricePerKg: 26 }, { ...p, markup: 100 }).unit, 1.5);
+  // Mindestpreis füllt auf
+  const small = L.priceCalc({ gramsPerPiece: 5, quantity: 1, pricePerKg: 20 }, p);
+  assert.equal(small.unit, 0.5);
+  assert.equal(small.minFill, 9.5);
+  assert.equal(small.total, 10);
+
+  const lines = L.docLines({ title: 'Halter', kind: 'eigen', material: 'PETG', colorWish: 'schwarz', designHours: 2, extraCost: 4.9 }, c, p);
+  assert.deepEqual(lines.map((l) => [l.text, l.qty, l.unit]), [['Halter', 10, 1.5], ['Konstruktion / Modellierung', 1, 60], ['Versand / Sonstiges', 1, 4.9]]);
+  assert.equal(lines[0].detail, '3D-Druck, PETG, schwarz');
+  assert.deepEqual(L.docTotals(lines, { vatMode: 'klein' }), { net: 79.9, vat: 0, rate: 0, gross: 79.9 });
+  assert.deepEqual(L.docTotals(lines, { vatMode: 'ust', vatRate: 19 }), { net: 79.9, vat: 15.18, rate: 19, gross: 95.08 });
+  assert.equal(L.docNumber('RE', 7, new Date(2026, 10, 21)), 'RE-2026-007');
+});

@@ -2,6 +2,7 @@ import * as L from './logic.js';
 import { loadState, saveState, putBlob, getBlob, deleteBlob, exportBackup, importBackup, loadMeta, saveMeta } from './db.js';
 import { parseFile, analyzeModelFile } from './importer.js';
 import * as M from './mesh.js';
+import { buildDocPdf, docFileName } from './pdfdoc.js';
 import * as S from './sync.js';
 
 let state = L.emptyState();
@@ -1061,10 +1062,13 @@ function orderDetail(id) {
     : (state.spools.some((x) => !x.archived && x.price)
       ? `mit Ø ${L.formatMoney(avgPrice)}/kg (keine passende Rolle mit Preis)`
       : 'mit angenommenen 20 €/kg – trage bei deinen Rollen den Preis ein');
-  const q = L.quote({
-    gramsPerPiece: o.gramsPerPiece, hoursPerPiece: o.hoursPerPiece, pieces: pr.quantity,
-    pricePerKg, hourlyRate: state.settings.hourlyRate, markup: state.settings.markup,
-  });
+  const pp = L.pricingFor(state.settings, o);
+  const pc = L.priceCalc({
+    gramsPerPiece: o.gramsPerPiece, hoursPerPiece: o.hoursPerPiece, quantity: pr.quantity,
+    pricePerKg, designHours: o.designHours, extraCost: o.extraCost,
+  }, pp);
+  const ov = o.pricing || {};
+  const isOv = (k) => ov[k] !== undefined && ov[k] !== '' && ov[k] !== null;
   const idx = L.ORDER_STATUS.findIndex((s) => s.id === o.status);
   const images = (o.photos || []).filter((p) => /^image\//.test(p.type || 'image/'));
   const files = (o.photos || []).filter((p) => p.type && !/^image\//.test(p.type));
@@ -1108,15 +1112,183 @@ function orderDetail(id) {
       <h3>Kosten</h3>
       <dl class="kv">
         <dt>Bisher verbraucht</dt><dd>${L.formatGrams(costs.grams)} · ${L.formatMoney(costs.material)} Material${costs.hours ? ` · ${costs.hours} h` : ''}${costs.machine ? ` · ${L.formatMoney(costs.machine)} Maschine` : ''}</dd>
-        ${o.gramsPerPiece ? `<dt>Kalkulation</dt><dd>${pr.quantity} × ${g1(o.gramsPerPiece)} g${o.hoursPerPiece ? ` / ${L.round(o.hoursPerPiece, 2).toLocaleString('de-DE')} h` : ''} = ${L.formatGrams(q.grams)}<br>
-          Material ${L.formatMoney(q.material)}${q.machine ? ` + Maschine ${L.formatMoney(q.machine)}` : ''}${state.settings.markup ? ` + ${state.settings.markup} % Aufschlag` : ''} → <b>${L.formatMoney(q.total)}</b>
-          <br><small class="muted">${priceSource}${o.calc ? ` · Gramm ${calcSummary(o.calc)}` : ''}</small></dd>` : '<dt>Kalkulation</dt><dd class="muted">„Gramm pro Stück“ im Auftrag eintragen für einen Preisvorschlag.</dd>'}
       </dl>
+      <h3>Preiskalkulation</h3>
+      ${o.gramsPerPiece || o.designHours || o.extraCost ? `<div class="card">
+        <dl class="kv">
+          ${o.gramsPerPiece ? `<dt>Je Stück</dt><dd>${g1(o.gramsPerPiece)} g Material ${L.formatMoney(pc.materialPiece)}${pc.machinePiece ? ` + ${L.round(o.hoursPerPiece, 2).toLocaleString('de-DE')} h Maschine ${L.formatMoney(pc.machinePiece)}` : ''} = ${L.formatMoney(pc.costPiece)} Kosten</dd>
+          <dt>Marge</dt><dd>${L.round(pp.markup, 1).toLocaleString('de-DE')} %${isOv('markup') ? ' <span class="badge info">nur dieser Auftrag</span>' : ''} → <b>${L.formatMoney(pc.unit)}</b> pro Stück</dd>
+          <dt>${pc.qty} Stück</dt><dd>${L.formatMoney(pc.pieces)}</dd>` : ''}
+          ${pc.labor ? `<dt>Arbeitszeit</dt><dd>${L.round(o.designHours, 2).toLocaleString('de-DE')} h × ${L.formatMoney(pp.laborRate)}${isOv('laborRate') ? ' <span class="badge info">nur dieser Auftrag</span>' : ''} = ${L.formatMoney(pc.labor)}</dd>` : ''}
+          ${pc.extras ? `<dt>Versand/Sonst.</dt><dd>${L.formatMoney(pc.extras)}</dd>` : ''}
+          ${pc.minFill ? `<dt>Mindestpreis</dt><dd>+ ${L.formatMoney(pc.minFill)}</dd>` : ''}
+          <dt>Preis</dt><dd><b style="font-size:18px">${L.formatMoney(pc.total)}</b>${bizData().vatMode === 'ust' ? ' netto' : ''}</dd>
+          <dt>Gewinn</dt><dd>${L.formatMoney(pc.profit)} <small class="muted">(nach Material, Maschine und Versand)</small></dd>
+        </dl>
+        <small class="muted">${o.gramsPerPiece ? priceSource : ''}${o.calc ? ` · Gramm ${calcSummary(o.calc)}` : ''}</small>
+        <div class="row" style="margin-top:8px">
+          <button class="small" data-act="price-apply" data-id="${o.id}" data-v="${pc.total}">Als Preis übernehmen (${L.formatMoney(pc.total)})</button>
+        </div>
+      </div>` : '<p class="muted">„Gramm pro Stück“ (z. B. aus der STL), Arbeitszeit oder Versand im Auftrag eintragen – dann rechnet die App den Preis.</p>'}
+
+      <h3>Angebot & Rechnung</h3>
+      ${(o.docs || []).length ? `<div class="list">${o.docs.slice().reverse().map((d) => `<div class="card filerow" style="justify-content:space-between">
+          <span>${d.type === 'rechnung' ? '🧾 Rechnung' : '📄 Angebot'} <b>${esc(d.number)}</b> · ${fmtDate(d.date)} · ${L.formatMoney(d.totals.gross)}</span>
+          <button class="small" data-act="doc-pdf" data-id="${o.id}" data-n="${esc(d.number)}">PDF</button></div>`).join('')}</div>` : ''}
+      <div class="row" style="margin-top:8px">
+        <button data-act="doc-new" data-id="${o.id}" data-t="angebot">📄 Angebot erstellen</button>
+        <button data-act="doc-new" data-id="${o.id}" data-t="rechnung">🧾 Rechnung erstellen</button>
+      </div>
     </div>
     <div class="mfoot">
       <button class="left" data-act="copy-order" data-id="${o.id}">Text kopieren</button>
       <button class="primary" data-act="edit-order" data-id="${o.id}">Bearbeiten</button>
     </div>`);
+}
+
+// ---------- Angebot / Rechnung ----------
+
+async function ensureJsPdf() {
+  if (window.jspdf) return;
+  await new Promise((resolve, reject) => {
+    const sc = document.createElement('script');
+    sc.src = 'lib/jspdf.umd.min.js';
+    sc.onload = resolve;
+    sc.onerror = () => reject(new Error('PDF-Bibliothek konnte nicht geladen werden'));
+    document.head.appendChild(sc);
+  });
+}
+
+function addDays(dateStr, days) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + (Number(days) || 0));
+  return d.toISOString().slice(0, 10);
+}
+
+function orderPricePerKg(o) {
+  const sc = o.material || o.colorHex ? L.orderSpoolCosts(o, state.spools, state.prints) : { best: null };
+  if (sc.best) return sc.best.pricePerKg;
+  const s = state.spools.filter((x) => !x.archived && x.price && (!o.material || L.materialBase(x.material) === L.materialBase(o.material)));
+  return s.length ? s.reduce((t, x) => t + L.pricePerGram(x) * 1000, 0) / s.length : 20;
+}
+
+function docDialog(orderId, type) {
+  const o = orderById(orderId);
+  const biz = bizData();
+  const pp = L.pricingFor(state.settings, o);
+  const pr = L.orderProgress(o, state.prints);
+  const pc = L.priceCalc({
+    gramsPerPiece: o.gramsPerPiece, hoursPerPiece: o.hoursPerPiece, quantity: pr.quantity,
+    pricePerKg: orderPricePerKg(o), designHours: o.designHours, extraCost: o.extraCost,
+  }, pp);
+  // Rechnung: Positionen des letzten Angebots übernehmen, falls vorhanden
+  const lastOffer = (o.docs || []).filter((d) => d.type === 'angebot').pop();
+  let lines = type === 'rechnung' && lastOffer ? lastOffer.lines.map((l) => ({ ...l })) : L.docLines(o, pc, pp);
+  if (!lines.length) lines = [{ text: o.title || '3D-Druck', detail: '', qty: pr.quantity, unit: 0 }];
+  const isInv = type === 'rechnung';
+  const number = isInv ? L.docNumber(biz.invoicePrefix, biz.nextInvoice) : L.docNumber(biz.offerPrefix, biz.nextOffer);
+  const missing = [!biz.name && 'Name', !biz.address && 'Anschrift', isInv && !biz.taxId && 'Steuernummer', isInv && !biz.iban && 'IBAN'].filter(Boolean);
+
+  const lineRow = (l, i) => `<div class="docline" data-i="${i}">
+      <input name="t" value="${esc(l.text)}" placeholder="Beschreibung">
+      <input name="d" value="${esc(l.detail)}" placeholder="Details (optional)" class="muted">
+      <div class="row">
+        <label class="f">Menge<input name="q" inputmode="decimal" value="${esc(String(l.qty).replace('.', ','))}"></label>
+        <label class="f">Einzelpreis €<input name="u" inputmode="decimal" value="${esc(String(l.unit).replace('.', ','))}"></label>
+        <button type="button" class="small ghost shrink" data-rmline="${i}" title="Position entfernen">🗑</button>
+      </div>
+    </div>`;
+  const readLines = (root) => $$('.docline', root).map((el) => ({
+    text: $('[name=t]', el).value.trim(),
+    detail: $('[name=d]', el).value.trim(),
+    qty: num($('[name=q]', el).value, 0),
+    unit: num($('[name=u]', el).value, 0),
+  })).filter((l) => l.text || l.unit);
+  const totalsHtml = (ls) => {
+    const t = L.docTotals(ls, biz);
+    return t.rate
+      ? `Netto ${L.formatMoney(t.net)} + ${t.rate} % USt ${L.formatMoney(t.vat)} = <b>${L.formatMoney(t.gross)}</b>`
+      : `<b>${L.formatMoney(t.gross)}</b> <small class="muted">(Kleinunternehmer, ohne USt)</small>`;
+  };
+
+  openModal(`
+    <form id="doc-form">
+    ${head(isInv ? 'Rechnung erstellen' : 'Angebot erstellen')}
+    <div class="mbody">
+      ${missing.length ? `<p class="card" style="background:var(--warn-soft)">Es fehlen noch Absenderangaben: ${missing.join(', ')}. <a href="#" data-act="goto-biz">Unter Mehr → Angebote & Rechnungen eintragen</a></p>` : ''}
+      <div class="row">
+        <label class="f">Nummer<input name="number" value="${esc(number)}"></label>
+        <label class="f">Datum<input type="date" name="date" value="${today()}"></label>
+        ${isInv ? `<label class="f">Leistungsdatum<input type="date" name="serviceDate" value="${today()}"></label>` : ''}
+      </div>
+      <label class="f">Kunde<input name="customer" value="${esc(o.customer)}"></label>
+      <label class="f">Anschrift<textarea name="customerAddress" rows="2">${esc(o.customerAddress)}</textarea></label>
+      <h3>Positionen</h3>
+      <div id="doc-lines">${lines.map(lineRow).join('')}</div>
+      <p><button type="button" class="small" id="doc-addline">＋ Position</button></p>
+      <p id="doc-totals" style="font-size:16px">${totalsHtml(lines)}</p>
+      <label class="f">Zusätzlicher Hinweis (optional)<textarea name="note" rows="2"></textarea></label>
+    </div>
+    <div class="mfoot"><button type="button" data-close>Abbrechen</button><button class="primary" type="submit">PDF erstellen</button></div>
+    </form>`, (root) => {
+    const form = $('#doc-form', root);
+    const linesEl = $('#doc-lines', root);
+    const upd = () => { $('#doc-totals', root).innerHTML = totalsHtml(readLines(root)); };
+    form.addEventListener('input', upd);
+    $('#doc-addline', root).addEventListener('click', () => {
+      linesEl.insertAdjacentHTML('beforeend', lineRow({ text: '', detail: '', qty: 1, unit: 0 }, linesEl.children.length));
+    });
+    linesEl.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-rmline]');
+      if (b) { b.closest('.docline').remove(); upd(); modalDirty = true; }
+    });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const ls = readLines(root);
+      if (!ls.length) { toast('Mindestens eine Position nötig'); return; }
+      const date = form.date.value || today();
+      const doc = {
+        type, number: form.number.value.trim() || number, date,
+        serviceDate: isInv ? (form.serviceDate.value || date) : '',
+        dueDate: isInv && biz.payDays ? addDays(date, biz.payDays) : '',
+        validUntil: !isInv && biz.offerDays ? addDays(date, biz.offerDays) : '',
+        customer: form.customer.value.trim(), customerAddress: form.customerAddress.value.trim(),
+        title: o.title, lines: ls, totals: L.docTotals(ls, biz), note: form.note.value.trim(),
+        created: new Date().toISOString(),
+      };
+      try {
+        await ensureJsPdf();
+        const blob = buildDocPdf(doc, biz);
+        o.docs = [...(o.docs || []), doc];
+        if (!o.customerAddress && doc.customerAddress) o.customerAddress = doc.customerAddress;
+        o.price = doc.totals.gross;
+        if (isInv) biz.nextInvoice = (Number(biz.nextInvoice) || 1) + 1;
+        else {
+          biz.nextOffer = (Number(biz.nextOffer) || 1) + 1;
+          if (o.status === 'anfrage') o.status = 'angebot';
+        }
+        state.settings.biz = biz;
+        o.updated = new Date().toISOString();
+        await save();
+        downloadBlob(blob, docFileName(doc));
+        render();
+        orderDetail(o.id);
+        toast(`${isInv ? 'Rechnung' : 'Angebot'} ${doc.number} erstellt`);
+      } catch (err) {
+        alert('PDF konnte nicht erstellt werden: ' + err.message);
+      }
+    });
+  });
+}
+
+async function docPdfAgain(orderId, number) {
+  const o = orderById(orderId);
+  const doc = (o.docs || []).find((d) => d.number === number);
+  if (!doc) return;
+  try {
+    await ensureJsPdf();
+    downloadBlob(buildDocPdf(doc, bizData()), docFileName(doc));
+  } catch (err) { alert(err.message); }
 }
 
 function safeUrl(u) {
@@ -1284,6 +1456,7 @@ function orderForm(id) {
         <label class="f">Kunde<input name="customer" value="${esc(o.customer)}" placeholder="Name"></label>
         <label class="f">Kontakt<input name="contact" value="${esc(o.contact)}" placeholder="Telefon / E-Mail"></label>
       </div>
+      <label class="f">Anschrift (für Angebot/Rechnung)<textarea name="customerAddress" rows="2" placeholder="Straße Nr.&#10;PLZ Ort">${esc(o.customerAddress)}</textarea></label>
       <div class="chips">
         <label class="chip ${o.kind === 'modell' ? 'on' : ''}"><input type="radio" name="kind" value="modell" ${o.kind === 'modell' ? 'checked' : ''} hidden> 🌐 Modell aus dem Netz</label>
         <label class="chip ${o.kind === 'eigen' ? 'on' : ''}"><input type="radio" name="kind" value="eigen" ${o.kind === 'eigen' ? 'checked' : ''} hidden> ✏️ Selbst konstruieren</label>
@@ -1329,6 +1502,17 @@ function orderForm(id) {
       </div>
       <label class="check"><input type="checkbox" name="paid" ${o.paid ? 'checked' : ''}> Bezahlt</label>
       <label class="f">Zusätzlich fertig (ohne importierten Druck)<input name="manualDone" type="number" min="0" value="${esc(o.manualDone || 0)}"></label>
+      <h3>Preis für diesen Auftrag</h3>
+      <div class="row">
+        <label class="f">Arbeitszeit (h)<input name="designHours" inputmode="decimal" value="${esc(o.designHours ?? '')}" placeholder="z. B. Konstruktion"></label>
+        <label class="f">Versand / Sonstiges (€)<input name="extraCost" inputmode="decimal" value="${esc(o.extraCost ?? '')}"></label>
+      </div>
+      <div class="row">
+        <label class="f">Marge (%)<input name="p_markup" inputmode="decimal" value="${esc((o.pricing || {}).markup ?? '')}" placeholder="Vorgabe ${esc(L.pricingFor(state.settings, null).markup)}"></label>
+        <label class="f">Stundensatz (€/h)<input name="p_laborRate" inputmode="decimal" value="${esc((o.pricing || {}).laborRate ?? '')}" placeholder="Vorgabe ${esc(L.pricingFor(state.settings, null).laborRate)}"></label>
+        <label class="f">Maschine (€/h)<input name="p_hourlyRate" inputmode="decimal" value="${esc((o.pricing || {}).hourlyRate ?? '')}" placeholder="Vorgabe ${esc(L.pricingFor(state.settings, null).hourlyRate)}"></label>
+      </div>
+      <p class="muted">Leer lassen = Vorgabe aus den Einstellungen.</p>
       <label class="f">Notizen<textarea name="notes">${esc(o.notes)}</textarea></label>
     </div>
     <div class="mfoot">
@@ -1431,6 +1615,14 @@ function orderForm(id) {
         price: num(fd.get('price'), 0) || '',
         paid: fd.get('paid') === 'on',
         manualDone: Math.max(0, parseInt(fd.get('manualDone'), 10) || 0),
+        customerAddress: String(fd.get('customerAddress') || '').trim(),
+        designHours: num(fd.get('designHours'), 0) || '',
+        extraCost: num(fd.get('extraCost'), 0) || '',
+        pricing: {
+          markup: String(fd.get('p_markup') || '').trim() === '' ? '' : num(fd.get('p_markup'), 0),
+          laborRate: String(fd.get('p_laborRate') || '').trim() === '' ? '' : num(fd.get('p_laborRate'), 0),
+          hourlyRate: String(fd.get('p_hourlyRate') || '').trim() === '' ? '' : num(fd.get('p_hourlyRate'), 0),
+        },
         notes: String(fd.get('notes') || ''),
         photos,
         calc: calcRec,
@@ -1476,8 +1668,14 @@ function orderText(o) {
 
 // ---------- Ansicht: Mehr ----------
 
+function bizData() {
+  return { ...L.DEFAULT_BIZ, ...(state.settings.biz || {}) };
+}
+
 function viewMore() {
   const st = state.settings;
+  const pr0 = L.pricingFor(st, null);
+  const biz = bizData();
   const active = state.spools.filter((s) => !s.archived);
   const total = active.reduce((t, s) => t + rem(s).remaining, 0);
   const value = active.reduce((t, s) => t + rem(s).remaining * L.pricePerGram(s), 0);
@@ -1510,12 +1708,57 @@ function viewMore() {
         <label class="f">Standard netto (g)<input name="defaultNet" type="number" min="0" value="${st.defaultNet}"></label>
         <label class="f">Standard Leerspule (g)<input name="defaultEmpty" type="number" min="0" value="${st.defaultEmpty}"></label>
       </div>
-      <div class="row">
-        <label class="f">Maschinenkosten (€/h, Strom + Verschleiß)<input name="hourlyRate" inputmode="decimal" value="${st.hourlyRate}"></label>
-        <label class="f">Aufschlag für Preisvorschlag (%)<input name="markup" type="number" min="0" value="${st.markup}"></label>
-      </div>
       <p class="muted">Leerspulen-Gewicht: Bambu-Kunststoffspule ca. 250 g, Pappspule ca. 140–180 g – am besten eine leere Spule wiegen.</p>
+      <h3>Preise (Vorgaben – im Auftrag änderbar)</h3>
+      <div class="row">
+        <label class="f">Marge (%)<input name="markup" inputmode="decimal" value="${esc(pr0.markup)}"></label>
+        <label class="f">Maschinenkosten (€/Druckstunde)<input name="hourlyRate" inputmode="decimal" value="${esc(pr0.hourlyRate)}"></label>
+        <label class="f">Stundensatz Arbeit (€/h)<input name="laborRate" inputmode="decimal" value="${esc(pr0.laborRate)}"></label>
+      </div>
+      <div class="row">
+        <label class="f">Mindestpreis je Auftrag (€)<input name="minOrder" inputmode="decimal" value="${esc(pr0.minOrder)}"></label>
+        <label class="f">Stückpreis aufrunden auf<select name="rounding">
+          ${[0.01, 0.1, 0.5, 1].map((r) => `<option value="${r}" ${Number(pr0.rounding) === r ? 'selected' : ''}>${r.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</option>`).join('')}
+        </select></label>
+      </div>
+      <p class="muted">Stückpreis = (Material mit dem Preis der passenden Rolle + Druckzeit × Maschinenkosten) × (1 + Marge). Arbeitszeit (z. B. Konstruktion) und Versand kommen im Auftrag dazu.</p>
       <button class="primary">Einstellungen speichern</button>
+    </form>
+
+    <h2>Angebote & Rechnungen</h2>
+    <form id="biz-form" class="card">
+      <label class="f">Name / Firma<input name="name" value="${esc(biz.name)}" placeholder="z. B. Klaas 3D-Druck"></label>
+      <label class="f">Anschrift<textarea name="address" rows="3" placeholder="Straße Nr.&#10;PLZ Ort">${esc(biz.address)}</textarea></label>
+      <div class="row">
+        <label class="f">E-Mail<input name="email" value="${esc(biz.email)}"></label>
+        <label class="f">Telefon<input name="phone" value="${esc(biz.phone)}"></label>
+      </div>
+      <div class="row">
+        <label class="f">Steuernummer / USt-IdNr.<input name="taxId" value="${esc(biz.taxId)}"></label>
+        <label class="f">Umsatzsteuer<select name="vatMode">
+          <option value="klein" ${biz.vatMode !== 'ust' ? 'selected' : ''}>Kleinunternehmer (§ 19 UStG)</option>
+          <option value="ust" ${biz.vatMode === 'ust' ? 'selected' : ''}>mit Umsatzsteuer</option>
+        </select></label>
+        <label class="f" style="flex:0 0 90px">USt %<input name="vatRate" inputmode="decimal" value="${esc(biz.vatRate)}"></label>
+      </div>
+      <div class="row">
+        <label class="f">Bank<input name="bank" value="${esc(biz.bank)}"></label>
+        <label class="f">IBAN<input name="iban" value="${esc(biz.iban)}"></label>
+        <label class="f" style="flex:0 0 140px">BIC<input name="bic" value="${esc(biz.bic)}"></label>
+      </div>
+      <div class="row">
+        <label class="f">Zahlungsziel (Tage)<input name="payDays" type="number" min="0" value="${esc(biz.payDays)}"></label>
+        <label class="f">Angebot gültig (Tage)<input name="offerDays" type="number" min="0" value="${esc(biz.offerDays)}"></label>
+      </div>
+      <div class="row">
+        <label class="f">Rechnungsnr. Präfix<input name="invoicePrefix" value="${esc(biz.invoicePrefix)}"></label>
+        <label class="f">nächste Rechnungsnr.<input name="nextInvoice" type="number" min="1" value="${esc(biz.nextInvoice)}"></label>
+        <label class="f">Angebotsnr. Präfix<input name="offerPrefix" value="${esc(biz.offerPrefix)}"></label>
+        <label class="f">nächste Angebotsnr.<input name="nextOffer" type="number" min="1" value="${esc(biz.nextOffer)}"></label>
+      </div>
+      <label class="f">Fußzeile (optional)<input name="footer" value="${esc(biz.footer)}" placeholder="z. B. Vielen Dank für Ihr Vertrauen!"></label>
+      <p class="muted">Diese Angaben stehen auf jedem Angebot und jeder Rechnung. Für eine Rechnung in Deutschland nötig: Name und Anschrift, Steuernummer, fortlaufende Nummer, Datum, Leistung und Betrag.</p>
+      <button class="primary">Speichern</button>
     </form>
 
     <h2>Abgleich zwischen Geräten</h2>
@@ -1787,6 +2030,16 @@ document.addEventListener('click', async (e) => {
     case 'sync-help': e.preventDefault(); syncHelp(); break;
     case 'upd-check': case 'upd-later': case 'upd-go': case 'upd-perm': updAction(act); break;
     case 'calc-file': calcDialog(id, el.dataset.blobid, el.dataset.name); break;
+    case 'doc-new': docDialog(id, el.dataset.t); break;
+    case 'doc-pdf': docPdfAgain(id, el.dataset.n); break;
+    case 'goto-biz': e.preventDefault(); closeModal(); setTab('mehr'); setTimeout(() => { const f = $('#biz-form'); if (f) f.scrollIntoView({ behavior: 'smooth' }); }, 50); break;
+    case 'price-apply': {
+      const o = orderById(id);
+      o.price = Number(el.dataset.v) || 0;
+      o.updated = new Date().toISOString();
+      await save(); render(); orderDetail(id); toast('Preis übernommen');
+      break;
+    }
     case 'inbox-open': openInbox(); break;
     case 'bambu-login': bambuLoginDialog(); break;
     case 'bambu-now': {
@@ -1887,9 +2140,32 @@ document.addEventListener('submit', async (e) => {
   s.defaultEmpty = num(fd.get('defaultEmpty'), 250);
   s.hourlyRate = num(fd.get('hourlyRate'), 0);
   s.markup = num(fd.get('markup'), 0);
+  s.laborRate = num(fd.get('laborRate'), 0);
+  s.minOrder = num(fd.get('minOrder'), 0);
+  s.rounding = num(fd.get('rounding'), 0.1);
   await save();
   render();
   toast('Einstellungen gespeichert');
+});
+
+document.addEventListener('submit', async (e) => {
+  if (e.target.id !== 'biz-form') return;
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const b = bizData();
+  for (const k of ['name', 'address', 'email', 'phone', 'taxId', 'vatMode', 'bank', 'iban', 'bic', 'invoicePrefix', 'offerPrefix', 'footer']) {
+    b[k] = String(fd.get(k) || '').trim();
+  }
+  b.iban = b.iban.toUpperCase();
+  b.vatRate = num(fd.get('vatRate'), 19);
+  b.payDays = Math.max(0, parseInt(fd.get('payDays'), 10) || 0);
+  b.offerDays = Math.max(0, parseInt(fd.get('offerDays'), 10) || 0);
+  b.nextInvoice = Math.max(1, parseInt(fd.get('nextInvoice'), 10) || 1);
+  b.nextOffer = Math.max(1, parseInt(fd.get('nextOffer'), 10) || 1);
+  state.settings.biz = b;
+  await save();
+  render();
+  toast('Gespeichert');
 });
 
 // Drag & Drop überall

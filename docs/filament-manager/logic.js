@@ -46,8 +46,12 @@ export function emptyState() {
       lowThreshold: 150,
       defaultNet: 1000,
       defaultEmpty: 250,
-      hourlyRate: 0,
-      markup: 0,
+      hourlyRate: 0.3,
+      markup: 30,
+      laborRate: 25,
+      minOrder: 0,
+      rounding: 0.1,
+      biz: {},
     },
     boxes: {},
     spools: [],
@@ -669,4 +673,97 @@ export function orderSpoolCosts(order, spools, prints) {
   const priced = rows.filter((r) => r.hasPrice);
   const best = priced.find((r) => r.enough) || priced[0] || null;
   return { rows, best, open, gramsPerPiece: gpp };
+}
+
+// ---------- Preiskalkulation, Angebot und Rechnung ----------
+
+export const DEFAULT_PRICING = {
+  markup: 30, // Marge in % auf Material + Maschine
+  hourlyRate: 0.3, // Maschinenkosten €/Druckstunde (Strom, Verschleiß)
+  laborRate: 25, // Stundensatz Arbeit (Konstruktion, Nacharbeit) €/h
+  minOrder: 0, // Mindestpreis je Auftrag €
+  rounding: 0.1, // Stückpreis aufrunden auf …
+};
+
+export const DEFAULT_BIZ = {
+  name: '', address: '', email: '', phone: '', taxId: '',
+  vatMode: 'klein', vatRate: 19, // 'klein' = Kleinunternehmer § 19 UStG, 'ust' = mit Umsatzsteuer
+  iban: '', bic: '', bank: '',
+  payDays: 14, offerDays: 30,
+  invoicePrefix: 'RE', nextInvoice: 1, offerPrefix: 'AN', nextOffer: 1,
+  footer: '',
+};
+
+/** Preis-Einstellungen: Vorgaben aus den Einstellungen, im Auftrag überschreibbar (leer = Vorgabe). */
+export function pricingFor(settings, order) {
+  const base = { ...DEFAULT_PRICING };
+  for (const k of Object.keys(base)) {
+    if (settings && settings[k] !== undefined && settings[k] !== '' && Number.isFinite(Number(settings[k]))) base[k] = Number(settings[k]);
+  }
+  const ov = (order && order.pricing) || {};
+  for (const k of Object.keys(base)) {
+    if (ov[k] !== undefined && ov[k] !== '' && ov[k] !== null && Number.isFinite(Number(ov[k]))) base[k] = Number(ov[k]);
+  }
+  return base;
+}
+
+function roundUp(v, step) {
+  const s = Number(step) || 0.01;
+  return round(Math.ceil(round(v / s, 6)) * s, 2);
+}
+
+/**
+ * Kalkulation: Stückpreis = (Material + Maschine) × (1 + Marge), aufgerundet.
+ * Arbeit = Stunden × Stundensatz, Extras = Versand/Sonstiges, Mindestpreis füllt auf.
+ */
+export function priceCalc({ gramsPerPiece, hoursPerPiece, quantity, pricePerKg, designHours, extraCost }, p) {
+  const qty = Math.max(1, Number(quantity) || 1);
+  const material = (Number(gramsPerPiece) || 0) * (Number(pricePerKg) || 0) / 1000;
+  const machine = (Number(hoursPerPiece) || 0) * p.hourlyRate;
+  const cost = material + machine;
+  const unit = cost > 0 ? roundUp(cost * (1 + p.markup / 100), p.rounding) : 0;
+  const pieces = round(unit * qty, 2);
+  const labor = round((Number(designHours) || 0) * p.laborRate, 2);
+  const extras = round(Number(extraCost) || 0, 2);
+  let total = round(pieces + labor + extras, 2);
+  const minFill = p.minOrder > total ? round(p.minOrder - total, 2) : 0;
+  total = round(total + minFill, 2);
+  return {
+    qty,
+    materialPiece: round(material, 3),
+    machinePiece: round(machine, 3),
+    costPiece: round(cost, 3),
+    unit, pieces, labor, extras, minFill, total,
+    costTotal: round(cost * qty + extras, 2),
+    profit: round(total - cost * qty - extras, 2), // Gewinn inkl. eigener Arbeitszeit
+  };
+}
+
+/** Positionen für Angebot/Rechnung aus der Kalkulation. */
+export function docLines(order, calc, p) {
+  const lines = [];
+  const detail = [order.material, order.colorWish].filter(Boolean).join(', ');
+  if (calc.unit > 0) lines.push({ text: order.title || '3D-Druck', detail: detail ? `3D-Druck, ${detail}` : '3D-Druck', qty: calc.qty, unit: calc.unit });
+  if (calc.labor > 0) {
+    lines.push({
+      text: order.kind === 'eigen' ? 'Konstruktion / Modellierung' : 'Arbeitszeit (Vorbereitung, Nacharbeit)',
+      detail: `${String(Number(order.designHours) || 0).replace('.', ',')} h à ${String(p.laborRate).replace('.', ',')} €`,
+      qty: 1, unit: calc.labor,
+    });
+  }
+  if (calc.extras > 0) lines.push({ text: order.extraLabel || 'Versand / Sonstiges', detail: '', qty: 1, unit: calc.extras });
+  if (calc.minFill > 0) lines.push({ text: 'Ausgleich Mindestauftragswert', detail: '', qty: 1, unit: calc.minFill });
+  return lines;
+}
+
+/** Summen eines Dokuments (Netto/Umsatzsteuer/Brutto; Kleinunternehmer ohne USt). */
+export function docTotals(lines, biz) {
+  const net = round(lines.reduce((t, l) => t + (Number(l.qty) || 0) * (Number(l.unit) || 0), 0), 2);
+  const rate = biz && biz.vatMode === 'ust' ? Number(biz.vatRate) || 0 : 0;
+  const vat = round(net * rate / 100, 2);
+  return { net, vat, rate, gross: round(net + vat, 2) };
+}
+
+export function docNumber(prefix, n, date = new Date()) {
+  return `${prefix || ''}${prefix ? '-' : ''}${date.getFullYear()}-${String(Math.max(1, Number(n) || 1)).padStart(3, '0')}`;
 }
