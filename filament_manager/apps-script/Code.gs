@@ -172,6 +172,215 @@ function dateienLoeschen_(req) {
   return { ok: true };
 }
 
+// ---------- Bambu-Cloud: Druckhistorie automatisch abholen ----------
+// Anmeldung aus der App (E-Mail + Passwort, dann Code aus der Bambu-Mail). Gespeichert wird nur
+// das Zugangs-Token (Skripteigenschaften), nie das Passwort. Ein Zeitauslöser ("bambuAbrufen",
+// alle 30 Minuten) legt neue, fertige Drucke im Blatt "Eingang" ab; die App zeigt sie zum Bestätigen.
+// Die Bambu-Schnittstelle ist nicht offiziell dokumentiert.
+
+var BAMBU_API = 'https://api.bambulab.com';
+var EINGANG = 'Eingang';
+var EINGANG_KOPF = ['TaskID', 'Abgerufen', 'Erledigt', 'Daten', 'Datum', 'Name', 'Gramm', 'Status'];
+var HALTEN_MS = 24 * 3600 * 1000; // Drucke ohne klaren Status erst nach 24 h übernehmen
+
+function bambuRuf_(methode, pfad, body, token) {
+  var opt = {
+    method: methode,
+    contentType: 'application/json',
+    muteHttpExceptions: true,
+    headers: token ? { Authorization: 'Bearer ' + token } : {}
+  };
+  if (body) opt.payload = JSON.stringify(body);
+  var res = UrlFetchApp.fetch(BAMBU_API + pfad, opt);
+  var code = res.getResponseCode();
+  var json = {};
+  try { json = JSON.parse(res.getContentText() || '{}'); } catch (e) { json = { roh: String(res.getContentText()).slice(0, 200) }; }
+  return { code: code, json: json };
+}
+
+function tokenSpeichern_(j) {
+  var p = props_();
+  p.setProperty('bambuToken', j.accessToken);
+  if (j.refreshToken) p.setProperty('bambuRefresh', j.refreshToken);
+  var sek = Number(j.expiresIn) || 90 * 24 * 3600;
+  p.setProperty('bambuBis', String(Date.now() + sek * 1000));
+  p.deleteProperty('bambuFehler');
+  p.deleteProperty('bambuEmail');
+}
+
+function bambuLogin_(req) {
+  var email = String(req.email || '').trim();
+  if (!email || !req.password) return { ok: false, fehler: 'E-Mail und Passwort angeben' };
+  var p = props_();
+  if (req.ab) p.setProperty('bambuAb', String(Number(req.ab) || 0));
+  var r = bambuRuf_('post', '/v1/user-service/user/login', { account: email, password: String(req.password) });
+  if (r.json.accessToken) { tokenSpeichern_(r.json); return { ok: true, angemeldet: true }; }
+  if (r.json.loginType === 'verifyCode') {
+    p.setProperty('bambuEmail', email);
+    var c = bambuRuf_('post', '/v1/user-service/user/sendemail/code', { email: email, type: 'codeLogin' });
+    if (c.code >= 300) return { ok: false, fehler: 'Bambu konnte keinen Code senden (' + c.code + ')' };
+    return { ok: true, code: true };
+  }
+  if (r.json.loginType === 'tfa') return { ok: false, fehler: 'Konto nutzt eine Authenticator-App – wird nicht unterstützt' };
+  return { ok: false, fehler: 'Anmeldung abgelehnt (' + r.code + '): ' + (r.json.message || r.json.error || JSON.stringify(r.json).slice(0, 120)) };
+}
+
+function bambuCode_(req) {
+  var email = props_().getProperty('bambuEmail');
+  if (!email) return { ok: false, fehler: 'Bitte zuerst mit E-Mail und Passwort anmelden' };
+  var r = bambuRuf_('post', '/v1/user-service/user/login', { account: email, code: String(req.code || '').trim() });
+  if (r.json.accessToken) { tokenSpeichern_(r.json); return { ok: true, angemeldet: true }; }
+  return { ok: false, fehler: 'Code falsch oder abgelaufen' };
+}
+
+function bambuAbmelden_() {
+  var p = props_();
+  ['bambuToken', 'bambuRefresh', 'bambuBis', 'bambuFehler', 'bambuEmail', 'bambuZuletzt'].forEach(function (k) { p.deleteProperty(k); });
+  return { ok: true };
+}
+
+function bambuErneuern_() {
+  var p = props_();
+  var rt = p.getProperty('bambuRefresh');
+  if (!rt) return false;
+  var r = bambuRuf_('post', '/v1/user-service/user/refreshtoken', { refreshToken: rt });
+  if (r.json.accessToken) { tokenSpeichern_(r.json); return true; }
+  return false;
+}
+
+function bambuStatus_() {
+  var p = props_();
+  return {
+    angemeldet: !!p.getProperty('bambuToken'),
+    bis: Number(p.getProperty('bambuBis')) || 0,
+    zuletzt: Number(p.getProperty('bambuZuletzt')) || 0,
+    fehler: p.getProperty('bambuFehler') || '',
+    ab: Number(p.getProperty('bambuAb')) || 0
+  };
+}
+
+function eingangBlatt_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(EINGANG);
+  if (!sh) {
+    sh = ss.insertSheet(EINGANG);
+    sh.getRange(1, 1, 1, EINGANG_KOPF.length).setValues([EINGANG_KOPF]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function eingangZeilen_(sh) {
+  var last = sh.getLastRow();
+  return last < 2 ? [] : sh.getRange(2, 1, last - 1, EINGANG_KOPF.length).getValues();
+}
+
+function zeit_(t) {
+  if (!t) return 0;
+  var n = new Date(t).getTime();
+  return isNaN(n) ? 0 : n;
+}
+
+// Nur die Felder, die die App braucht.
+function taskKurz_(t) {
+  return {
+    id: t.id, designTitle: t.designTitle, title: t.title, status: t.status, weight: t.weight,
+    length: t.length, costTime: t.costTime, startTime: t.startTime, endTime: t.endTime,
+    deviceName: t.deviceName, deviceModel: t.deviceModel, plateIndex: t.plateIndex,
+    amsDetailMapping: (t.amsDetailMapping || []).map(function (m) {
+      return { ams: m.ams, sourceColor: m.sourceColor, targetColor: m.targetColor, filamentId: m.filamentId,
+        filamentType: m.filamentType, targetFilamentType: m.targetFilamentType, weight: m.weight };
+    })
+  };
+}
+
+/** Neue fertige Drucke in den Eingang legen. Gibt die Anzahl neuer Einträge zurück. */
+function eingangAufnehmen_(tasks, jetzt) {
+  var sh = eingangBlatt_();
+  var bekannt = {};
+  eingangZeilen_(sh).forEach(function (r) { bekannt[String(r[0])] = true; });
+  var ab = Number(props_().getProperty('bambuAb')) || 0;
+  var neu = [];
+  (tasks || []).forEach(function (t) {
+    if (!t || t.id === undefined || t.id === null || bekannt[String(t.id)]) return;
+    var start = zeit_(t.startTime), ende = zeit_(t.endTime);
+    if (ab && (ende || start) && (ende || start) < ab) return;
+    var fertig = t.status === 2 || t.status === 3;
+    if (!fertig && !(start && jetzt - start > HALTEN_MS)) return; // läuft vermutlich noch
+    bekannt[String(t.id)] = true;
+    var kurz = taskKurz_(t);
+    var gramm = Number(t.weight) || 0;
+    neu.push([String(t.id), jetzt, '', JSON.stringify(kurz),
+      zelle_(t.endTime || t.startTime || ''), zelle_(t.designTitle || t.title || ''), gramm, t.status]);
+    if (t.cover) vorschauSichern_('cthumb_' + t.id, t.cover);
+  });
+  if (neu.length) sh.getRange(sh.getLastRow() + 1, 1, neu.length, EINGANG_KOPF.length).setValues(neu);
+  return neu.length;
+}
+
+function vorschauSichern_(id, url) {
+  try {
+    if (!/^https:\/\//.test(url) || dateiFinden_(id)) return;
+    var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return;
+    var blob = res.getBlob().setName(id);
+    if (blob.getBytes().length > 2 * 1024 * 1024) return;
+    ordner_().createFile(blob);
+  } catch (e) { /* Vorschau ist nur nett, nicht nötig */ }
+}
+
+function bambuHolen_() {
+  var p = props_();
+  var token = p.getProperty('bambuToken');
+  if (!token) return { ok: false, fehler: 'nicht angemeldet' };
+  var bis = Number(p.getProperty('bambuBis')) || 0;
+  if (bis && bis - Date.now() < 14 * 24 * 3600 * 1000 && bambuErneuern_()) token = p.getProperty('bambuToken');
+  var r = bambuRuf_('get', '/v1/user-service/my/tasks?limit=50', null, token);
+  if ((r.code === 401 || r.code === 403) && bambuErneuern_()) {
+    r = bambuRuf_('get', '/v1/user-service/my/tasks?limit=50', null, p.getProperty('bambuToken'));
+  }
+  if (r.code === 401 || r.code === 403) {
+    p.setProperty('bambuFehler', 'Anmeldung abgelaufen – bitte in der App neu anmelden');
+    return { ok: false, fehler: 'anmeldung' };
+  }
+  if (r.code >= 300 || !r.json.hits) {
+    p.setProperty('bambuFehler', 'Bambu antwortet nicht wie erwartet (' + r.code + ')');
+    return { ok: false, fehler: 'bambu_' + r.code };
+  }
+  var n = eingangAufnehmen_(r.json.hits, Date.now());
+  p.setProperty('bambuZuletzt', String(Date.now()));
+  p.deleteProperty('bambuFehler');
+  return { ok: true, neu: n };
+}
+
+// Zeitauslöser (von setup eingerichtet). Ohne Anmeldung passiert nichts.
+function bambuAbrufen() {
+  if (!props_().getProperty('bambuToken')) return;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return;
+  try { bambuHolen_(); } catch (e) { props_().setProperty('bambuFehler', String(e && e.message || e)); } finally { lock.releaseLock(); }
+}
+
+function eingang_() {
+  var items = [];
+  eingangZeilen_(eingangBlatt_()).forEach(function (r) {
+    if (!r[0] || r[2]) return;
+    try { items.push(JSON.parse(r[3])); } catch (e) { /* kaputte Zeile überspringen */ }
+  });
+  return { ok: true, items: items, bambu: bambuStatus_() };
+}
+
+function eingangErledigt_(req) {
+  var ids = {};
+  (req.ids || []).forEach(function (id) { ids[String(id)] = true; });
+  var sh = eingangBlatt_();
+  var jetzt = Date.now();
+  eingangZeilen_(sh).forEach(function (r, i) {
+    if (ids[String(r[0])] && !r[2]) sh.getRange(i + 2, 3, 1, 1).setValues([[jetzt]]);
+  });
+  return { ok: true };
+}
+
 // ---------- Einstieg ----------
 
 function doPost(e) {
@@ -194,6 +403,13 @@ function doPost(e) {
       case 'put': return antwort_(dateiAblegen_(req));
       case 'get': return antwort_(dateiHolen_(req));
       case 'del': return antwort_(dateienLoeschen_(req));
+      case 'inbox': return antwort_(eingang_());
+      case 'inboxDone': return antwort_(eingangErledigt_(req));
+      case 'inboxAdd': return antwort_({ ok: true, neu: eingangAufnehmen_(req.tasks, Date.now()) });
+      case 'bambuLogin': return antwort_(bambuLogin_(req));
+      case 'bambuCode': return antwort_(bambuCode_(req));
+      case 'bambuLogout': return antwort_(bambuAbmelden_());
+      case 'bambuNow': return antwort_(bambuHolen_());
       default: return antwort_({ ok: false, fehler: 'aktion' });
     }
   } catch (err) {
@@ -216,6 +432,10 @@ function setup() {
     p.setProperty('schluessel', key);
   }
   Object.keys(BLAETTER).forEach(function (c) { blatt_(c); });
+  eingangBlatt_();
+  // Zeitauslöser für die Bambu-Druckhistorie (alle 30 Minuten), nur einmal anlegen
+  var hat = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'bambuAbrufen'; });
+  if (!hat) ScriptApp.newTrigger('bambuAbrufen').timeBased().everyMinutes(30).create();
   var ordner = ordner_();
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName('Einrichtung') || ss.insertSheet('Einrichtung', 0);

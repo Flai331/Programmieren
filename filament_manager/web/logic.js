@@ -490,7 +490,9 @@ export function parseGcode(text, fileName, dateIso) {
 
 // ---------- Parser: Bambu Cloud Druckhistorie (JSON) ----------
 
-const CLOUD_STATUS = { 1: 'running', 2: 'ok', 3: 'failed', 4: 'failed', 5: 'failed' };
+// Bambu dokumentiert die Status-Codes nicht: 2 = fertig, 3 = abgebrochen/fehlgeschlagen sind sicher,
+// 1 = läuft. Andere Codes werden als "unklar" markiert, damit man das Ergebnis selbst prüft.
+const CLOUD_STATUS = { 1: 'running', 2: 'ok', 3: 'failed' };
 
 /** Akzeptiert die Antwort von /v1/user-service/my/tasks ({hits:[…]}) oder ein Array. */
 export function parseCloudTasks(json) {
@@ -500,6 +502,7 @@ export function parseCloudTasks(json) {
   for (const t of tasks) {
     if (!t || typeof t !== 'object') continue;
     const status = CLOUD_STATUS[t.status] || 'ok';
+    const statusUnsure = !CLOUD_STATUS[t.status];
     if (status === 'running') continue;
     const mapping = Array.isArray(t.amsDetailMapping) ? t.amsDetailMapping : [];
     let filaments = mapping
@@ -527,7 +530,10 @@ export function parseCloudTasks(json) {
       objects: [],
       filaments,
       status,
+      statusUnsure,
       progress: status === 'failed' ? 50 : 100,
+      taskId: t.id != null ? String(t.id) : '',
+      thumbId: t.id != null ? 'cthumb_' + t.id : '',
       device: t.deviceName || t.deviceModel || '',
       fingerprint: 'cloud:' + (t.id != null ? t.id : fingerprint('c', t.title, t.plateIndex, filaments)),
     });

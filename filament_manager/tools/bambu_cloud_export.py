@@ -9,6 +9,10 @@ Nur Python 3 nötig (keine Zusatzpakete). Aufruf:
     python bambu_cloud_export.py --token XYZ     # mit vorhandenem Access-Token
     python bambu_cloud_export.py --china         # für Konten auf bambulab.cn
 
+    # Direkt in den Eingang der Google-Tabelle schicken (falls der automatische
+    # Abruf im Google-Script von Bambu blockiert wird):
+    python bambu_cloud_export.py --save-token --server https://script.google.com/macros/s/…/exec --key SCHLUESSEL
+
 Zugangsdaten werden nirgends gespeichert; das Token wird nur auf Wunsch
 (--save-token) in bambu_token.txt neben dem Skript abgelegt.
 
@@ -72,6 +76,8 @@ def main():
     ap.add_argument("--limit", type=int, default=500, help="max. Anzahl Drucke (Standard 500)")
     ap.add_argument("--out", default="bambu_history.json", help="Ausgabedatei")
     ap.add_argument("--save-token", action="store_true", help="Token in bambu_token.txt speichern")
+    ap.add_argument("--server", help="Web-App-Adresse des Filament-Managers (Google Apps Script)")
+    ap.add_argument("--key", help="Schlüssel aus dem Blatt 'Einrichtung'")
     args = ap.parse_args()
 
     base = "https://api.bambulab.cn" if args.china else "https://api.bambulab.com"
@@ -87,6 +93,18 @@ def main():
 
     res = call(base, "GET", f"/v1/user-service/my/tasks?limit={args.limit}", token=token)
     hits = res.get("hits") or []
+    if args.server:
+        if not args.key:
+            raise SystemExit("--key fehlt")
+        body = json.dumps({"a": "inboxAdd", "key": args.key, "tasks": hits}).encode()
+        req = urllib.request.Request(args.server, data=body, method="POST",
+                                     headers={"Content-Type": "text/plain;charset=utf-8"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            ans = json.loads(r.read().decode() or "{}")
+        if not ans.get("ok"):
+            raise SystemExit("Server-Fehler: " + str(ans.get("fehler")))
+        print(f"{ans.get('neu', 0)} neue Drucke im Eingang – die App zeigt sie zum Bestätigen.")
+        return
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump({"hits": hits, "total": res.get("total", len(hits))}, f, ensure_ascii=False, indent=1)
     print(f"{len(hits)} Drucke gespeichert in {os.path.abspath(args.out)}")

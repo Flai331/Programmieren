@@ -170,12 +170,19 @@ async function hydrate(root = document) {
   for (const img of $$('img[data-blob]', root)) {
     const id = img.dataset.blob;
     if (!urlCache.has(id)) {
-      const b = await getBlob(id).catch(() => null);
+      let b = await getBlob(id).catch(() => null);
+      if (!b && meta.url && navigator.onLine) {
+        // noch nicht abgeglichen (z. B. Vorschaubild aus der Bambu-Cloud) → direkt vom Server holen
+        try {
+          const r = await S.makeCaller(meta.url, meta.key)({ a: 'get', id });
+          if (r && r.ok) { b = b64ToBlob(r.b64, r.type); await putBlob(id, b); meta.blobs[id] = 1; }
+        } catch { /* offline */ }
+      }
       urlCache.set(id, b ? URL.createObjectURL(b) : '');
     }
     const url = urlCache.get(id);
     if (url) img.src = url;
-    else img.replaceWith(Object.assign(document.createElement('div'), { className: 'thumb', textContent: '🖼️' }));
+    else img.replaceWith(Object.assign(document.createElement('div'), { className: img.className || 'thumb', textContent: '🧊' }));
   }
 }
 
@@ -208,6 +215,12 @@ function setTab(tab) {
 
 function render() {
   $$('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
+  const nIn = inboxDrafts().length;
+  const tb = $('#tabs [data-tab=drucke]');
+  let cnt = $('.cnt', tb);
+  if (!cnt) { cnt = document.createElement('i'); cnt.className = 'cnt'; tb.appendChild(cnt); }
+  cnt.textContent = nIn || '';
+  cnt.hidden = !nIn;
   $('#title').textContent = TITLES[ui.tab];
   const hadFocus = document.activeElement && document.activeElement.id === 'q' ? document.activeElement.selectionStart : null;
   $('#top-actions').innerHTML = '<button id="sync-badge" class="small ghost" data-act="sync-now" hidden></button>';
@@ -667,6 +680,14 @@ function viewPrints() {
       <button data-act="manual-print">✎ Manuell eintragen</button></p>
       <p><a href="#" data-act="import-help">Wie komme ich an die Dateien?</a></p>
     </div>`;
+  const inbox = inboxDrafts();
+  if (inbox.length) {
+    html = `<div class="card inbox">
+      <div><b>📥 ${inbox.length} neue${inbox.length === 1 ? 'r' : ''} Druck${inbox.length === 1 ? '' : 'e'} vom Drucker</b><br>
+      <small class="muted">aus der Bambu-Cloud: ${inbox.slice(0, 3).map((d) => esc(d.name)).join(', ')}${inbox.length > 3 ? ' …' : ''}</small></div>
+      <button class="primary" data-act="inbox-open">Prüfen & buchen</button>
+    </div>` + html;
+  }
   if (unassigned) html += `<p><span class="badge warn">${unassigned} Druck(e) ohne zugeordnete Rolle</span> – antippen und Rolle wählen, sonst zählt der Verbrauch nicht.</p>`;
   if (!prints.length) {
     html += '<div class="empty"><div class="big">🖨️</div><p>Noch keine Drucke importiert.</p></div>';
@@ -780,6 +801,11 @@ async function handleFiles(files) {
     alert(errors.join('\n\n') || 'Nichts gefunden');
     return;
   }
+  prepareDrafts(drafts);
+  importDialog(drafts, errors);
+}
+
+function prepareDrafts(drafts) {
   const printing = state.orders.filter((o) => o.status === 'druck');
   for (const d of drafts) {
     d.duplicate = state.prints.some((p) => p.fingerprint === d.fingerprint);
@@ -790,23 +816,45 @@ async function handleFiles(files) {
     d.orderId = printing.length === 1 ? printing[0].id : '';
     d.filaments = d.filaments.map((f) => ({ ...f, spoolId: (L.suggestSpool(f, state.spools, state.prints) || {}).id || '' }));
   }
-  importDialog(drafts, errors);
+  return drafts;
 }
 
-function importDialog(drafts, errors) {
+// ---------- Eingang: neue Drucke aus der Bambu-Cloud ----------
+
+function inboxDrafts() {
+  const items = (meta.inbox || []).filter((t) => !(meta.inboxDone || []).includes(String(t.id)));
+  const drafts = L.parseCloudTasks({ hits: items });
+  const known = new Set(state.prints.map((p) => p.fingerprint));
+  return drafts.filter((d) => !known.has(d.fingerprint));
+}
+
+async function markInboxDone(ids) {
+  meta.inboxDone = [...new Set([...(meta.inboxDone || []), ...ids.map(String)])];
+  meta.inbox = (meta.inbox || []).filter((t) => !meta.inboxDone.includes(String(t.id)));
+  await saveMeta(meta);
+  scheduleSync(1000);
+}
+
+function openInbox() {
+  const drafts = prepareDrafts(inboxDrafts());
+  if (!drafts.length) { toast('Keine neuen Drucke'); return; }
+  importDialog(drafts, [], { inbox: true });
+}
+
+function importDialog(drafts, errors, opts = {}) {
   const thumbUrls = drafts.map((d) => (d.thumb ? URL.createObjectURL(d.thumb) : ''));
   openModal(`
     <form id="import-form">
-    ${head(`${drafts.length} Druck${drafts.length > 1 ? 'e' : ''} importieren`)}
+    ${head(opts.inbox ? `${drafts.length} neue${drafts.length > 1 ? '' : 'r'} Druck${drafts.length > 1 ? 'e' : ''} vom Drucker` : `${drafts.length} Druck${drafts.length > 1 ? 'e' : ''} importieren`)}
     <div class="mbody">
       ${errors.length ? `<div class="card" style="background:var(--warn-soft)"><b>Nicht gelesen:</b><br>${errors.map(esc).join('<br>')}</div>` : ''}
-      <p class="muted">Prüfe die Rollen-Zuordnung. Vorschläge kommen aus Material, Farbe und AMS-Slot.</p>
+      <p class="muted">Prüfe die Rollen-Zuordnung. Vorschläge kommen aus Material, Farbe und AMS-Slot.${opts.inbox ? ' Nicht angehakte Drucke werden verworfen (z. B. Testdrucke).' : ''}</p>
       ${drafts.map((d, i) => `
         <div class="card draft ${d.include ? '' : 'off'}" data-draft="${i}">
           <div class="row" style="align-items:center">
             <label class="check shrink"><input type="checkbox" name="d${i}_inc" ${d.include ? 'checked' : ''}> übernehmen</label>
-            ${thumbUrls[i] ? `<img class="thumb shrink" src="${thumbUrls[i]}" alt="">` : ''}
-            <div>${d.duplicate ? '<span class="badge warn">schon importiert</span> ' : ''}<small>${esc(d.source)} · ${L.formatDuration(d.durationS)}${d.device ? ' · ' + esc(d.device) : ''}</small></div>
+            ${thumbUrls[i] ? `<img class="thumb shrink" src="${thumbUrls[i]}" alt="">` : d.thumbId ? `<img class="thumb shrink" data-blob="${esc(d.thumbId)}" alt="">` : ''}
+            <div>${d.duplicate ? '<span class="badge warn">schon importiert</span> ' : ''}${d.statusUnsure ? '<span class="badge warn">Ergebnis prüfen</span> ' : ''}<small>${esc(d.source)} · ${L.formatDuration(d.durationS)}${d.device ? ' · ' + esc(d.device) : ''}</small></div>
           </div>
           ${printFields(d, i)}
         </div>`).join('')}
@@ -833,12 +881,16 @@ function importDialog(drafts, errors) {
         if (d.thumb) {
           p.thumbId = 'thumb_' + p.id;
           await putBlob(p.thumbId, d.thumb);
+        } else if (d.thumbId) {
+          p.thumbId = d.thumbId;
         }
+        if (d.device) p.device = d.device;
         state.prints.push(p);
         orderIds.push(p.orderId);
         n++;
       }
       thumbUrls.forEach((u) => u && URL.revokeObjectURL(u));
+      if (opts.inbox) await markInboxDone(drafts.map((d) => d.taskId).filter(Boolean));
       const low = await afterBooking(orderIds);
       await save();
       closeModal();
@@ -910,8 +962,10 @@ function importHelp() {
       <p class="muted">Tipp: Lege dir einen Ordner „Gedruckt“ an und exportiere jeden Druck dorthin – dann einfach alle neuen Dateien auf einmal importieren. Doppelte werden erkannt.</p>
       <h3>Variante B: G-Code</h3>
       <p>Auch <code>.gcode</code>-Dateien (Bambu Studio, Orca, PrusaSlicer) werden gelesen – z. B. von der SD-Karte des Druckers.</p>
-      <h3>Variante C: komplette Cloud-Historie</h3>
-      <p>Wenn du über die Bambu-Cloud druckst, speichert Bambu jeden Druck mit Verbrauch pro AMS-Slot. Das Hilfsskript <code>tools/bambu_cloud_export.py</code> im Repo lädt die Historie als <code>bambu_history.json</code> herunter (Login mit deinem Bambu-Konto, nur auf deinem PC). Die JSON-Datei hier importieren.</p>
+      <h3>Am bequemsten: automatisch aus der Bambu-Cloud</h3>
+      <p>Mit eingerichtetem Abgleich (Google-Tabelle) unter <b>Mehr → Bambu-Cloud</b> anmelden. Dein Google-Script holt dann alle 30 Minuten neue Drucke; hier erscheint „Neue Drucke vom Drucker“ zum Bestätigen.</p>
+      <h3>Variante C: Cloud-Historie als Datei</h3>
+      <p>Das Hilfsskript <code>tools/bambu_cloud_export.py</code> lädt die Historie als <code>bambu_history.json</code> herunter (Login mit deinem Bambu-Konto, nur auf deinem PC). Die JSON-Datei hier importieren.</p>
       <p class="muted">Abgebrochene Drucke: Die Cloud meldet den geplanten Verbrauch. Gib bei „Gedruckt bis (%)“ an, wie weit er kam – die App zieht nur diesen Anteil ab.</p>
       <h3>Genauigkeit</h3>
       <p>Die Slicer-Werte sind Schätzungen (Spülen beim Farbwechsel ist enthalten, Fehlversuche nicht). Wiege die Rolle ab und zu (⚖️ in der Rolle) – ab dann wird von diesem Wert aus weitergerechnet.</p>
@@ -1265,6 +1319,9 @@ function viewMore() {
     <h2>Abgleich zwischen Geräten</h2>
     ${syncCard()}
 
+    <h2>Bambu-Cloud (Drucke automatisch)</h2>
+    ${bambuCard()}
+
     <h2>Daten</h2>
     <div class="card">
       <p>${meta.url ? 'Die Daten liegen auf diesem Gerät und in deiner Google-Tabelle.' : 'Ohne Abgleich liegen alle Daten nur auf diesem Gerät (im Browser).'} Eine Sicherungsdatei (inkl. Fotos) ist trotzdem sinnvoll – z. B. vor größeren Änderungen.</p>
@@ -1308,6 +1365,97 @@ function syncCard() {
       <button data-act="sync-disconnect">Trennen</button>
     </div>
   </div>`;
+}
+
+function bambuCard() {
+  if (!meta.url) {
+    return `<div class="card"><p class="muted">Zuerst oben den Abgleich mit der Google-Tabelle einrichten – dein Google-Script holt dann alle 30 Minuten die neuen Drucke aus der Bambu-Cloud, auch wenn kein Gerät an ist.</p></div>`;
+  }
+  const b = meta.bambu;
+  if (!b || !b.angemeldet) {
+    return `<div class="card">
+      <p>Dein Google-Script holt alle 30 Minuten neue Drucke aus der Bambu-Cloud (Gramm je AMS-Slot, Farbe, Material, Vorschaubild). Du bestätigst sie hier nur noch.</p>
+      ${b && b.fehler ? `<p style="color:var(--danger)">${esc(b.fehler)}</p>` : ''}
+      <button class="primary" data-act="bambu-login">Bei Bambu anmelden</button>
+    </div>`;
+  }
+  const tage = b.bis ? Math.round((b.bis - Date.now()) / 86400000) : null;
+  return `<div class="card">
+    <p>✅ Mit Bambu verbunden${b.ab ? ` · Drucke ab ${fmtDate(b.ab)}` : ''}.</p>
+    <dl class="kv">
+      <dt>Zuletzt geholt</dt><dd>${b.zuletzt ? fmtDateTime(b.zuletzt) : 'noch nicht'}</dd>
+      ${tage !== null ? `<dt>Anmeldung</dt><dd>${tage > 0 ? `gültig noch ca. ${tage} Tage (wird automatisch verlängert)` : 'abgelaufen'}</dd>` : ''}
+      ${b.fehler ? `<dt>Fehler</dt><dd style="color:var(--danger)">${esc(b.fehler)}</dd>` : ''}
+    </dl>
+    <div class="row">
+      <button class="primary" data-act="bambu-now">Jetzt abrufen</button>
+      ${b.fehler ? '<button data-act="bambu-login">Neu anmelden</button>' : ''}
+      <button data-act="bambu-logout">Abmelden</button>
+    </div>
+  </div>`;
+}
+
+function bambuLoginDialog() {
+  openModal(`
+    <form id="bambu-form">
+    ${head('Bei Bambu anmelden')}
+    <div class="mbody">
+      <p class="muted">Die Anmeldung läuft über dein eigenes Google-Script. Gespeichert wird dort nur das Zugangs-Token, nicht dein Passwort.</p>
+      <div id="bambu-step1">
+        <label class="f">E-Mail (Bambu-Konto)<input name="email" type="email" autocomplete="username" required></label>
+        <label class="f">Passwort<input name="password" type="password" autocomplete="current-password" required></label>
+        <label class="f">Drucke übernehmen ab<input name="ab" type="date" value="${today()}"></label>
+        <p class="muted">Frühere Drucke bleiben außen vor – sonst würden alte Drucke von Rollen abgezogen, die du schon gewogen oder neu erfasst hast.</p>
+      </div>
+      <div id="bambu-step2" hidden>
+        <p>Bambu hat dir einen <b>Code per E-Mail</b> geschickt.</p>
+        <label class="f">Code<input name="code" inputmode="numeric" autocomplete="one-time-code"></label>
+      </div>
+      <p id="bambu-msg" style="color:var(--danger)"></p>
+    </div>
+    <div class="mfoot"><button type="button" data-close>Abbrechen</button><button class="primary" type="submit">Anmelden</button></div>
+    </form>`, (root) => {
+    const f = $('#bambu-form', root);
+    let step = 1;
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = $('button[type=submit]', f);
+      const msg = $('#bambu-msg', root);
+      btn.disabled = true;
+      msg.textContent = '';
+      try {
+        const call = S.makeCaller(meta.url, meta.key);
+        let r;
+        if (step === 1) {
+          const ab = f.ab.value ? new Date(f.ab.value + 'T00:00:00').getTime() : 0;
+          r = await call({ a: 'bambuLogin', email: f.email.value, password: f.password.value, ab });
+          f.password.value = '';
+          if (r.ok && r.code) {
+            step = 2;
+            $('#bambu-step1', root).hidden = true;
+            $('#bambu-step2', root).hidden = false;
+            f.email.required = false;
+            f.password.required = false;
+            f.code.focus();
+            btn.textContent = 'Code bestätigen';
+            return;
+          }
+        } else {
+          r = await call({ a: 'bambuCode', code: f.code.value });
+        }
+        if (!r.ok) throw new Error(r.fehler || 'Anmeldung fehlgeschlagen');
+        closeModal();
+        toast('Mit Bambu verbunden – hole Drucke …');
+        await call({ a: 'bambuNow' }).catch(() => null);
+        await syncNow();
+        render();
+      } catch (err) {
+        msg.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 function syncHelp() {
@@ -1433,6 +1581,25 @@ document.addEventListener('click', async (e) => {
       break;
     }
     case 'sync-help': e.preventDefault(); syncHelp(); break;
+    case 'inbox-open': openInbox(); break;
+    case 'bambu-login': bambuLoginDialog(); break;
+    case 'bambu-now': {
+      el.disabled = true;
+      try {
+        const r = await S.makeCaller(meta.url, meta.key)({ a: 'bambuNow' });
+        if (!r.ok) throw new Error(r.fehler === 'anmeldung' ? 'Anmeldung abgelaufen – bitte neu anmelden' : (r.fehler || 'Fehler'));
+        await syncNow();
+        toast(r.neu ? `${r.neu} neue Drucke` : 'Keine neuen Drucke');
+      } catch (err) { toast('Abruf fehlgeschlagen: ' + err.message); }
+      render();
+      break;
+    }
+    case 'bambu-logout': {
+      if (!confirm('Bambu-Konto abmelden? Neue Drucke werden dann nicht mehr automatisch geholt.')) return;
+      try { await S.makeCaller(meta.url, meta.key)({ a: 'bambuLogout' }); await syncNow(); } catch (err) { toast(err.message); }
+      render();
+      break;
+    }
     case 'backup': {
       const text = await exportBackup(state);
       downloadBlob(new Blob([text], { type: 'application/json' }), `filament-sicherung-${today()}.json`);

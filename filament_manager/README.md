@@ -39,6 +39,12 @@ Online (nach Merge in `main`): `https://flai331.github.io/Programmieren/filament
 - Pro Eintrag gewinnt die neuere Änderung; geschützt durch geheimen Schlüssel
 - Die Tabelle zeigt eine lesbare Übersicht (Restmenge, Lagerplatz, Auftragsstand) zum Filtern/Drucken
 
+**Bambu-Cloud: Drucke automatisch**
+- Anmeldung in der App (E-Mail + Code aus der Bambu-Mail); das Google-Script speichert nur das Token
+- Alle 30 Minuten holt das Script neue, fertige Drucke (Gramm je AMS-Slot, Farbe, Material, Vorschaubild) in den „Eingang“ – ohne dass ein Gerät an sein muss
+- Die App zeigt „Neue Drucke vom Drucker“ mit vorgeschlagenen Rollen (AMS-Slot) zum Bestätigen; erledigte verschwinden auf allen Geräten
+- Rückfall vom Laptop: `tools/bambu_cloud_export.py --server … --key …`
+
 **Sonstiges**
 - Statistik: Lagerbestand, Restwert, Verbrauch im Monat
 - Sicherung als JSON (inkl. Fotos) speichern/laden – zum Übertragen zwischen PC und Handy

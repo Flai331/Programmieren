@@ -9,7 +9,7 @@
 import * as L from './logic.js';
 
 export function emptyMeta() {
-  return { url: '', key: '', since: 0, rec: {}, blobs: {}, lastSync: null, lastError: '' };
+  return { url: '', key: '', since: 0, rec: {}, blobs: {}, lastSync: null, lastError: '', inbox: [], inboxDone: [], bambu: null };
 }
 
 export function hash(str) {
@@ -200,10 +200,26 @@ export async function runSync(state, meta, call, blobs) {
   check(res);
   changed += applyResponse(state, meta, push, res);
 
+  await syncInbox(meta, call);
   const { uploaded, downloaded } = await syncBlobs(state, meta, call, blobs);
   meta.lastSync = new Date().toISOString();
   meta.lastError = '';
   return { changed, uploaded, downloaded, pushed: push.length };
+}
+
+/** Eingang (neue Drucke aus der Bambu-Cloud): Erledigte melden, offene holen. */
+async function syncInbox(meta, call) {
+  meta.inboxDone = meta.inboxDone || [];
+  if (meta.inboxDone.length) {
+    const sent = meta.inboxDone.slice();
+    const r = await call({ a: 'inboxDone', ids: sent });
+    if (r && r.ok) meta.inboxDone = meta.inboxDone.filter((id) => !sent.includes(id));
+  }
+  const ib = await call({ a: 'inbox' });
+  if (ib && ib.ok) {
+    meta.inbox = (ib.items || []).filter((t) => !meta.inboxDone.includes(String(t.id)));
+    meta.bambu = ib.bambu || null;
+  }
 }
 
 async function syncBlobs(state, meta, call, blobs) {

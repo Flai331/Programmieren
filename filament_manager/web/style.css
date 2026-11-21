@@ -275,3 +275,10 @@ code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 1
 
 #sync-badge { font-size: 15px; min-width: 44px; }
 #sync-badge.err { color: var(--danger); }
+
+.tabs button { position: relative; }
+.tabs .cnt {
+  position: absolute; top: 3px; left: calc(50% + 6px); font-style: normal; font-size: 10px; font-weight: 700;
+  background: var(--danger); color: #fff; border-radius: 999px; min-width: 17px; padding: 1px 5px; line-height: 15px;
+}
+.card.inbox { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; border-color: var(--accent); background: var(--accent-soft); }

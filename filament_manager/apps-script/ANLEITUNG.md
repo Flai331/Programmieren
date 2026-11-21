@@ -19,9 +19,10 @@ wieder Internet da ist. Am Computer geht die Einrichtung am einfachsten.
 1. Oben neben „Ausführen“ die Funktion **`setup`** auswählen → **Ausführen**.
 2. Google fragt nach Berechtigungen: **Berechtigung prüfen** → Konto wählen → **Erweitert** →
    **„Filament-Server (unsicher) öffnen“** → **Zulassen**. Das ist normal bei eigenen Skripten.
-   Benötigt werden: Tabelle bearbeiten und Drive (für den Foto-Ordner).
+   Benötigt werden: Tabelle bearbeiten, Drive (Foto-Ordner), externe Dienste (Bambu-Cloud) und
+   Zeitauslöser (Drucke alle 30 Minuten holen).
 3. In der Tabelle gibt es jetzt die Blätter **Einrichtung**, **Rollen**, **Drucke**,
-   **Auftraege**, **Einstellungen** und in Drive den Ordner
+   **Auftraege**, **Einstellungen**, **Eingang** und in Drive den Ordner
    **„Filament-Manager Fotos & Dateien“**.
 
 ## 4. Als Web-App veröffentlichen
@@ -40,6 +41,29 @@ durch den **Schlüssel**: Ohne ihn antwortet der Server nur mit „Falscher Schl
 
 Oben rechts zeigt die App den Stand: ☁️✓ abgeglichen · ☁️• Änderungen offen · ⟳ läuft · ⚠️ Fehler
 (antippen = sofort abgleichen).
+
+## 6. Bambu-Cloud: Drucke automatisch holen (optional)
+1. In der App: **Mehr → Bambu-Cloud → Bei Bambu anmelden**.
+2. E-Mail und Passwort deines Bambu-Kontos eingeben, Datum „Drucke übernehmen ab“ wählen
+   (Standard: heute – ältere Drucke würden sonst von Rollen abgezogen, die du schon frisch erfasst hast).
+3. Bambu schickt einen **Code per E-Mail** → in der App eingeben.
+4. Fertig. Das Google-Script holt jetzt **alle 30 Minuten** neue, fertige Drucke (auch wenn PC und Handy aus
+   sind). In der App erscheint unter „Drucke“ **„Neue Drucke vom Drucker“** – Rollen prüfen, **Buchen**.
+
+- Gespeichert wird im Script nur das Zugangs-Token, **nicht das Passwort**. Das Token wird automatisch
+  verlängert; falls nicht, zeigt die App „bitte neu anmelden“.
+- Abgebrochene Drucke: Bambu meldet den geplanten Verbrauch – bei „Gedruckt bis (%)“ angeben, wie weit er kam.
+- Drucke mit unklarem Status (Bambu nennt die Codes nicht) bekommen den Hinweis „Ergebnis prüfen“.
+- Die Bambu-Schnittstelle ist nicht offiziell dokumentiert. Falls der Abruf vom Google-Server aus nicht
+  klappt (Fehler in „Mehr → Bambu-Cloud“), geht es vom Laptop aus:
+  `python tools/bambu_cloud_export.py --save-token --server <Web-App-URL> --key <Schlüssel>`
+  – das legt die Drucke in denselben Eingang.
+
+## Update von einer älteren Code.gs-Version
+1. Code.gs komplett ersetzen und speichern.
+2. **`setup` erneut ausführen** – neue Berechtigungen erlauben (Zugriff auf externe Dienste für Bambu,
+   Zeitauslöser). Daten und Schlüssel bleiben erhalten.
+3. **Bereitstellen → Bereitstellungen verwalten → Bearbeiten → Version: Neue Version → Bereitstellen.**
 
 ## Gut zu wissen
 - **Konflikte:** Ändern zwei Geräte denselben Eintrag, gewinnt die spätere Änderung.

@@ -36,10 +36,43 @@ function makeSheet(name) {
   return sheet;
 }
 
-export function createServer() {
+// Nachgebaute Bambu-Cloud (nur was Code.gs benutzt).
+export function createBambu() {
+  const b = {
+    tasks: [], validTokens: new Set(), calls: [], codeSent: 0,
+    response(method, url, opt) {
+      const body = opt.payload ? JSON.parse(opt.payload) : {};
+      const auth = (opt.headers || {}).Authorization || '';
+      b.calls.push(url);
+      if (url.startsWith('https://cover/')) return { code: 200, bytes: Buffer.from('JPEGDATA'), type: 'image/jpeg' };
+      const path = url.replace('https://api.bambulab.com', '');
+      if (path === '/v1/user-service/user/login') {
+        if (body.password === 'pw') return { code: 200, json: { loginType: 'verifyCode' } };
+        if (body.password === 'direkt') { b.validTokens.add('tok0'); return { code: 200, json: { accessToken: 'tok0', refreshToken: 'ref0', expiresIn: 7776000 } }; }
+        if (body.code === '123456') { b.validTokens.add('tok1'); return { code: 200, json: { accessToken: 'tok1', refreshToken: 'ref1', expiresIn: 7776000 } }; }
+        return { code: 400, json: { message: 'Incorrect password' } };
+      }
+      if (path === '/v1/user-service/user/sendemail/code') { b.codeSent++; return { code: 200, json: {} }; }
+      if (path === '/v1/user-service/user/refreshtoken') {
+        if (body.refreshToken === 'ref1') { b.validTokens.add('tok2'); return { code: 200, json: { accessToken: 'tok2', refreshToken: 'ref2', expiresIn: 7776000 } }; }
+        return { code: 401, json: {} };
+      }
+      if (path.startsWith('/v1/user-service/my/tasks')) {
+        const tok = auth.replace('Bearer ', '');
+        if (!b.validTokens.has(tok)) return { code: 401, json: { message: 'unauthorized' } };
+        return { code: 200, json: { total: b.tasks.length, hits: b.tasks } };
+      }
+      return { code: 404, json: {} };
+    },
+  };
+  return b;
+}
+
+export function createServer({ bambu = createBambu() } = {}) {
   const sheets = new Map();
   const props = new Map();
   const files = [];
+  const triggers = [];
   const folder = {
     getId: () => 'folder1',
     getUrl: () => 'https://drive.google.com/folder1',
@@ -63,8 +96,25 @@ export function createServer() {
       }),
     },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (text) => ({ text, setMimeType() { return this; } }) },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props.get(k) ?? null, setProperty: (k, v) => props.set(k, v) }) },
-    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props.get(k) ?? null, setProperty: (k, v) => props.set(k, String(v)), deleteProperty: (k) => props.delete(k) }) },
+    LockService: { getScriptLock: () => ({ waitLock() {}, tryLock: () => true, releaseLock() {} }) },
+    ScriptApp: {
+      getProjectTriggers: () => triggers.map((f) => ({ getHandlerFunction: () => f })),
+      newTrigger: (f) => ({ timeBased: () => ({ everyMinutes: () => ({ create: () => triggers.push(f) }) }) }),
+    },
+    UrlFetchApp: {
+      fetch(url, opt = {}) {
+        const r = bambu.response((opt.method || 'get').toLowerCase(), url, opt);
+        return {
+          getResponseCode: () => r.code,
+          getContentText: () => JSON.stringify(r.json || {}),
+          getBlob: () => {
+            const blob = { bytes: r.bytes, type: r.type, name: '', getContentType: () => r.type, getBytes: () => r.bytes, setName(n) { this.name = n; return this; } };
+            return blob;
+          },
+        };
+      },
+    },
     DriveApp: { createFolder: () => folder, getFolderById: () => folder },
     Utilities: {
       getUuid: () => crypto.randomUUID(),
@@ -80,5 +130,5 @@ export function createServer() {
   ctx.setup();
   const key = props.get('schluessel');
   const post = (body) => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(body) } }).text);
-  return { ctx, sheets, files, key, post, doGet: () => ctx.doGet().text };
+  return { ctx, sheets, files, key, post, props, triggers, bambu, doGet: () => ctx.doGet().text };
 }
