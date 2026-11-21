@@ -1,3 +1,4 @@
+import '../scan/background_work.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -190,15 +191,18 @@ class _NetworkScannerScreenState extends State<NetworkScannerScreen> {
     });
     final client = EsclClient(scanner);
     try {
-      final pages = await client.scan(
-        _settings,
-        caps,
-        onPage: (n) {
-          if (mounted) setState(() => _pages = n);
-        },
-        cancelled: () => _cancel,
-      );
-      final paths = await _savePages(pages);
+      final paths = await BackgroundWork.run('Scanne …', () async {
+        final pages = await client.scan(
+          _settings,
+          caps,
+          onPage: (n) {
+            BackgroundWork.update('Scanne … Seite $n');
+            if (mounted) setState(() => _pages = n);
+          },
+          cancelled: () => _cancel,
+        );
+        return _savePages(pages);
+      }, done: 'Scan fertig – zum Weitermachen tippen');
       if (!mounted) return;
       final duplex =
           _settings.duplex && caps.hasDuplex && (_settings.feeder || !caps.hasPlaten);

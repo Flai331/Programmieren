@@ -26,6 +26,7 @@ import '../data/finance.dart';
 import '../extract/extractors.dart';
 import '../extract/suggestion_service.dart';
 import '../lock/lock_gate.dart';
+import '../scan/background_work.dart';
 import '../scan/blank_pages.dart';
 import '../scan/pdf_import_service.dart';
 import '../scan/scan_service.dart';
@@ -501,7 +502,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
     ).whenComplete(() => dialogOpen = false);
     try {
-      return await work();
+      // Läuft auch weiter, wenn die App in den Hintergrund geht.
+      return await BackgroundWork.run(text, work,
+          done: 'Fertig – zum Bestätigen tippen');
     } finally {
       if (mounted && dialogOpen) {
         Navigator.of(context, rootNavigator: true).pop();

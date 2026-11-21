@@ -10,6 +10,10 @@
     <!-- Netzwerk-Scanner im WLAN finden (mDNS/Bonjour) -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <!-- Scan läuft im Hintergrund weiter (Vordergrunddienst) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- Aktualisieren-Knopf: neue APK aus dem GitHub-Release installieren -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
@@ -55,6 +59,10 @@
                 <data android:mimeType="application/pdf"/>
             </intent-filter>
         </activity>
+        <service
+            android:name=".BackgroundWorkService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
         <!-- E-Mail mit Anhang an eine bestimmte Adresse (dokubox/email) -->
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -86,6 +86,24 @@ class MainActivity : FlutterFragmentActivity() {
                     result.error("email", e.message, null)
                 }
             }
+        // Scan im Hintergrund weiterlaufen lassen (Vordergrunddienst).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dokubox/background")
+            .setMethodCallHandler { call, result ->
+                try {
+                    when (call.method) {
+                        "start", "update" -> BackgroundWorkService.start(
+                            this, call.argument<String>("text") ?: "Scan läuft …")
+                        "stop" -> BackgroundWorkService.stop(this, call.argument<String>("done"))
+                        else -> {
+                            result.notImplemented()
+                            return@setMethodCallHandler
+                        }
+                    }
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("background", e.message, null)
+                }
+            }
         // Update: heruntergeladene APK dem System-Installer übergeben.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dokubox/update")
             .setMethodCallHandler { call, result ->
