@@ -1338,6 +1338,8 @@ function viewMore() {
       <p><b>AMS:</b> „Ins AMS legen“ merkt sich den Box-Platz. „Zurück in Box …“ legt die Rolle wieder an ihren Platz.</p>
       <p><b>Aufträge:</b> Beim Import einer Druckdatei den Auftrag und die Stückzahl wählen – dann zählt der Fortschritt automatisch hoch und die Materialkosten werden berechnet.</p>
     </div>
+    <h2>App</h2>
+    ${appCard()}
     <p class="muted" style="text-align:center">Filament-Manager v2</p>`;
 }
 
@@ -1581,6 +1583,7 @@ document.addEventListener('click', async (e) => {
       break;
     }
     case 'sync-help': e.preventDefault(); syncHelp(); break;
+    case 'upd-check': case 'upd-later': case 'upd-go': case 'upd-perm': updAction(act); break;
     case 'inbox-open': openInbox(); break;
     case 'bambu-login': bambuLoginDialog(); break;
     case 'bambu-now': {
@@ -1610,6 +1613,11 @@ document.addEventListener('click', async (e) => {
 });
 
 function downloadBlob(blob, name) {
+  // Android-App: Speichern über die Hülle (Android fragt nach dem Ort); <a download> geht dort nicht
+  if (window.AndroidBridge && window.AndroidBridge.saveFile) {
+    blobToB64(blob).then((b64) => window.AndroidBridge.saveFile(name || 'datei', blob.type || 'application/octet-stream', b64));
+    return;
+  }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = name || 'datei';
@@ -1698,6 +1706,136 @@ window.addEventListener('drop', async (e) => {
 
 modal().addEventListener('click', (e) => { if (e.target === modal()) closeModal(); });
 
+// ---------- App-Version und Selbst-Update (Android-App und Windows-App) ----------
+// Die Hülle (Android: Updater.kt, Windows: electron-updater) prüft im GitHub-Release, ob es eine neuere
+// Version gibt, lädt sie und startet die Installation. Antworten kommen über window.fmUpdate({state, …}).
+
+const RELEASE = 'https://github.com/Flai331/Programmieren/releases/download/filament-manager/';
+const nativeBridge = window.AndroidBridge || window.DesktopBridge || null;
+const upd = { installed: null, avail: null, later: false, busy: false, manual: false, msg: '', waitInstall: false };
+
+function appCard() {
+  if (!upd.installed) {
+    return `<div class="card">
+      <p>Den Filament-Manager gibt es auch als App mit automatischen Updates:</p>
+      <div class="row">
+        <a class="btn" href="${RELEASE}Filament-Manager.apk">🤖 Android-App (APK)</a>
+        <a class="btn" href="${RELEASE}Filament-Manager-Setup.exe">🪟 Windows-App</a>
+      </div>
+      <p class="muted">Die App hat ihre eigenen Daten. Mit dem Abgleich über die Google-Tabelle ist alles sofort da.</p>
+    </div>`;
+  }
+  const kind = window.AndroidBridge ? 'Android' : 'Windows';
+  return `<div class="card">
+    <p>${kind}-App · Version <b>${esc(upd.installed.name)}</b></p>
+    ${upd.msg ? `<p class="muted">${esc(upd.msg)}</p>` : ''}
+    <button data-act="upd-check" ${upd.busy ? 'disabled' : ''}>Nach Updates suchen</button>
+  </div>`;
+}
+
+function updRefresh() { if (ui.tab === 'mehr' && !modal().open && !typingInForm()) render(); }
+
+function updOffer(manual) {
+  if (!upd.avail || upd.busy) return;
+  if (!manual && (upd.later || modal().open)) return;
+  upd.busy = true;
+  openModal(`${head('⬇️ Update verfügbar')}
+    <div class="mbody">
+      <p>Neue Version <b>${esc(upd.avail.name)}</b> (installiert ${esc(upd.installed.name)}). Jetzt aktualisieren? Deine Daten bleiben erhalten.</p>
+      <p id="upd-progress" class="muted"></p>
+    </div>
+    <div class="mfoot">
+      <button type="button" data-act="upd-later">Später</button>
+      <button class="primary" data-act="upd-go">Jetzt aktualisieren</button>
+    </div>`);
+}
+
+function updInstall() {
+  if (nativeBridge.updateCanInstall && !nativeBridge.updateCanInstall()) {
+    upd.waitInstall = true;
+    openModal(`${head('⬇️ Update bereit')}
+      <div class="mbody"><p>Android fragt jetzt einmalig, ob der Filament-Manager Apps installieren darf – bitte erlauben und danach hierher zurückkommen.</p></div>
+      <div class="mfoot"><button type="button" data-close>Abbrechen</button><button class="primary" data-act="upd-perm">Weiter</button></div>`);
+    return;
+  }
+  upd.waitInstall = false;
+  closeModal();
+  nativeBridge.updateInstall();
+  upd.busy = false;
+  upd.later = true;
+}
+
+window.fmUpdate = (s) => {
+  if (!s || !upd.installed) return;
+  if (s.state === 'available') {
+    upd.avail = { code: s.code, name: s.name || `1.0.${s.code}` };
+    upd.msg = `Version ${upd.avail.name} verfügbar.`;
+    const manual = upd.manual;
+    upd.manual = false;
+    updOffer(manual);
+  } else if (s.state === 'none') {
+    if (upd.manual) { upd.manual = false; upd.msg = `✓ Du hast die neueste Version (${upd.installed.name}).`; updRefresh(); }
+  } else if (s.state === 'progress') {
+    const el = $('#upd-progress');
+    if (el) el.textContent = `Lädt … ${s.pct || 0} %`;
+  } else if (s.state === 'ready') {
+    upd.downloading = false;
+    updInstall();
+  } else if (s.state === 'error') {
+    upd.busy = false;
+    upd.downloading = false;
+    upd.manual = false;
+    closeModal();
+    toast(`Update fehlgeschlagen: ${s.msg || 'unbekannter Fehler'}`);
+    upd.msg = 'Update fehlgeschlagen – die neueste Version gibt es auch im GitHub-Release.';
+    updRefresh();
+  }
+};
+// Update-Fenster mit ✕ geschlossen (ohne Download) → später wieder anbieten können
+modal().addEventListener('close', () => { if (upd.busy && !upd.downloading && !upd.waitInstall) upd.busy = false; });
+// Windows-App liefert die Meldungen per postMessage (contextIsolation)
+window.addEventListener('message', (e) => {
+  if (e.source === window && e.data && e.data.type === 'fm-update') window.fmUpdate(e.data.state);
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && upd.waitInstall && nativeBridge && (!nativeBridge.updateCanInstall || nativeBridge.updateCanInstall())) updInstall();
+});
+
+function updAction(act) {
+  if (act === 'upd-check') {
+    if (!upd.installed.enabled) { upd.msg = 'Diese Version hat keine Update-Suche (Testbau).'; updRefresh(); return; }
+    if (upd.busy) return;
+    if (upd.avail) { updOffer(true); return; }
+    upd.manual = true;
+    upd.msg = 'Suche läuft …';
+    updRefresh();
+    nativeBridge.updateCheck();
+  } else if (act === 'upd-later') {
+    upd.later = true;
+    upd.busy = false;
+    closeModal();
+  } else if (act === 'upd-go') {
+    const el = $('#upd-progress');
+    if (el) el.textContent = 'Lädt …';
+    $$('#modal .mfoot button').forEach((b) => { b.disabled = true; });
+    upd.downloading = true;
+    nativeBridge.updateDownload();
+  } else if (act === 'upd-perm') {
+    nativeBridge.updateInstall(); // öffnet die Einstellung; zurück in der App geht es weiter
+  }
+}
+
+// Druckdatei per „Teilen“ / „Öffnen mit“ an die Android-App
+window.onSharedFile = async () => {
+  if (!window.AndroidBridge || !window.AndroidBridge.takeSharedFile) return;
+  let f;
+  try { f = JSON.parse(window.AndroidBridge.takeSharedFile() || 'null'); } catch { f = null; }
+  if (!f || !f.data) return;
+  const file = new File([b64ToBlob(f.data)], f.name || 'Datei', { lastModified: Date.now() });
+  if (ui.tab !== 'drucke') setTab('drucke');
+  await handleFiles([file]);
+};
+
 // ---------- Start ----------
 
 (async function start() {
@@ -1713,7 +1851,16 @@ modal().addEventListener('click', (e) => { if (e.target === modal()) closeModal(
   }
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') scheduleSync(300); });
   window.addEventListener('online', () => scheduleSync(300));
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  // In der Android-/Windows-App kommen die Dateien aus der App selbst – kein Service Worker (sonst alte Stände nach Updates)
+  if (!nativeBridge && 'serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+  if (nativeBridge && nativeBridge.appVersion) {
+    try { upd.installed = JSON.parse(nativeBridge.appVersion()); } catch { upd.installed = null; }
+    if (upd.installed && upd.installed.enabled) setTimeout(() => nativeBridge.updateCheck(), 4000);
+    if (ui.tab === 'mehr') render();
+  }
+  window.onSharedFile();
+  // Startmeldung (die automatischen Starttests der Android- und Windows-App warten darauf)
+  console.info(`Filament-Manager bereit (${window.AndroidBridge ? 'Android-App' : window.DesktopBridge ? 'Windows-App' : 'Browser'})`);
 })();

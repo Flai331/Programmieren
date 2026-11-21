@@ -1,0 +1,40 @@
+{
+  "name": "filament-manager",
+  "productName": "Filament-Manager",
+  "version": "1.0.0",
+  "description": "Filament-Lager, Restmengen aus der Bambu-Druckhistorie und 3D-Druck-Aufträge",
+  "author": "Klaas",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "prepare-web": "node copy-web.js",
+    "start": "node copy-web.js && electron .",
+    "smoke": "node copy-web.js && electron . --smoke-test",
+    "dist": "node copy-web.js && electron-builder --win nsis --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "6.3.9"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "de.klaas.filament",
+    "productName": "Filament-Manager",
+    "artifactName": "Filament-Manager-Setup.${ext}",
+    "files": ["main.js", "preload.js", "web/**/*", "package.json"],
+    "directories": { "output": "dist", "buildResources": "build" },
+    "win": { "target": ["nsis"], "icon": "build/icon.png" },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "shortcutName": "Filament-Manager"
+    },
+    "publish": [{
+      "provider": "generic",
+      "url": "https://github.com/Flai331/Programmieren/releases/download/filament-manager/"
+    }]
+  }
+}

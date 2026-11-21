@@ -50,6 +50,17 @@ Online (nach Merge in `main`): `https://flai331.github.io/Programmieren/filament
 - Sicherung als JSON (inkl. Fotos) speichern/laden – zum Übertragen zwischen PC und Handy
 - Drag & Drop von Dateien überall im Fenster
 
+## Android- und Windows-App
+
+Beide Apps zeigen dieselbe Web-App (`web/`) und aktualisieren sich selbst aus dem GitHub-Release `filament-manager`:
+
+- **Android:** `android/` – WebView-Hülle (wie RHS Einsatz), Dateiauswahl (mehrere .3mf), Kamera für Auftragsfotos, „Teilen/Öffnen mit“ für Druckdateien, Speichern der Sicherung, Selbst-Update (`Updater.kt`, `version.json`). Signiert mit dem festen Schlüssel aus `spotify_merker_android` (Secret `MERKER_KEYSTORE_PASSWORD`).
+  Download: https://github.com/Flai331/Programmieren/releases/download/filament-manager/Filament-Manager.apk
+- **Windows:** `desktop/` – Electron-App mit Installer, Selbst-Update über electron-updater (`latest.yml`). Lokal: `cd desktop && npm install && npm start`.
+  Download: https://github.com/Flai331/Programmieren/releases/download/filament-manager/Filament-Manager-Setup.exe
+
+Gebaut wird bei jedem Push (main, `claude/filament-**`) von `.github/workflows/filament-manager-apps.yml`: Web-Tests, Android-Build mit Starttest im Emulator, Windows-Build mit Starttest und stiller Installation, danach Release-Update. Versionsnummer `1.0.<Build>`.
+
 ## Druckhistorie aus Bambu Studio
 
 1. Platte slicen → **Datei → Exportieren → Geslicte Datei exportieren** (`.gcode.3mf`)

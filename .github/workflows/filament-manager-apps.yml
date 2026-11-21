@@ -1,0 +1,224 @@
+name: Filament-Manager Apps (Android + Windows)
+
+# Baut die Android-App (WebView-Hülle) und die Windows-App (Electron) um filament_manager/web
+# und aktualisiert das Release, aus dem sich beide Apps selbst aktualisieren:
+#   https://github.com/Flai331/Programmieren/releases/download/filament-manager/Filament-Manager.apk
+#   https://github.com/Flai331/Programmieren/releases/download/filament-manager/Filament-Manager-Setup.exe
+# version.json (Android) und latest.yml (Windows) im Release sagen den Apps, dass es eine neue Version gibt.
+
+on:
+  push:
+    branches:
+      - main
+      - claude/filament-**
+    paths:
+      - 'filament_manager/**'
+      - '.github/workflows/filament-manager-apps.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: filament-manager-apps
+  cancel-in-progress: false
+
+env:
+  # Fortlaufende Versionsnummer für beide Apps: 1.0.<Build>
+  APP_VERSION: 1.0.${{ github.run_number }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Tests der Web-App
+        working-directory: filament_manager
+        run: npm test
+
+  android:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Signatur-Secret prüfen
+        env:
+          MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
+        run: |
+          # Ohne festen Schlüssel ließe sich die APK nicht als Update installieren
+          if [ -z "$MERKER_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Secret MERKER_KEYSTORE_PASSWORD fehlt – kein signierter Build möglich."
+            exit 1
+          fi
+
+      - name: Build APK
+        working-directory: filament_manager/android
+        env:
+          MERKER_KEYSTORE_PASSWORD: ${{ secrets.MERKER_KEYSTORE_PASSWORD }}
+        run: gradle assembleRelease -PversionCode=${{ github.run_number }} -PupdateTag=filament-manager --no-daemon
+
+      - name: Signatur der APK prüfen
+        run: |
+          APK=filament_manager/android/app/build/outputs/apk/release/app-release.apk
+          CERT=$(keytool -printcert -jarfile "$APK")
+          echo "$CERT" | head -5
+          if echo "$CERT" | grep -q "Android Debug"; then
+            echo "::error::APK ist mit dem Debug-Schlüssel signiert."
+            exit 1
+          fi
+
+      - name: KVM für den Emulator aktivieren
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Emulator vorab laden (mit Wiederholung)
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          SM="$(command -v sdkmanager || echo "$SDK/cmdline-tools/latest/bin/sdkmanager")"
+          for i in 1 2 3; do
+            yes | "$SM" --install emulator --channel=0 > /dev/null || true
+            if [ -x "$SDK/emulator/emulator" ]; then echo "Emulator bereit (Versuch $i)"; exit 0; fi
+            echo "Emulator-Download fehlgeschlagen (Versuch $i), neuer Versuch …"
+            rm -rf "$SDK/emulator" "$SDK/.temp" 2>/dev/null || true
+            sleep 15
+          done
+          echo "Emulator konnte nicht geladen werden"; exit 1
+
+      - name: Starttest im Android-Emulator
+        # Die App muss starten und die Web-App ohne JavaScript-Fehler laden.
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: false
+          script: |
+            adb install -r filament_manager/android/app/build/outputs/apk/release/app-release.apk
+            adb logcat -c
+            adb shell monkey -p de.klaas.filament -c android.intent.category.LAUNCHER 1
+            sleep 25
+            adb logcat -d > /tmp/logcat.txt
+            grep -E "FilamentJS|FATAL EXCEPTION" -A8 /tmp/logcat.txt | head -80 || true
+            adb shell pidof de.klaas.filament
+            ! grep -qE "FATAL EXCEPTION" /tmp/logcat.txt
+            ! grep -E "E FilamentJS" /tmp/logcat.txt | grep -q .
+            grep -q "Filament-Manager bereit (Android-App)" /tmp/logcat.txt
+            adb exec-out screencap -p > /tmp/start.png
+
+      - name: Startbild hochladen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Filament-Android-Startbild-${{ github.sha }}
+          path: /tmp/start.png
+          if-no-files-found: ignore
+
+      - name: APK als Artefakt
+        run: cp filament_manager/android/app/build/outputs/apk/release/app-release.apk Filament-Manager.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: filament-android
+          path: Filament-Manager.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: filament_manager/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Abhängigkeiten
+        run: npm ci
+
+      - name: Windows-App bauen
+        run: |
+          node copy-web.js
+          npx electron-builder --win nsis --publish never "-c.extraMetadata.version=${{ env.APP_VERSION }}"
+
+      - name: Starttest (ohne Installation)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist\win-unpacked\Filament-Manager.exe" -ArgumentList "--smoke-test" -Wait -PassThru
+          Write-Host "Exit-Code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { throw "Die Windows-App startet nicht sauber (Code $($p.ExitCode))" }
+
+      - name: Installer-Test (stille Installation)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist\Filament-Manager-Setup.exe" -ArgumentList "/S" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Installer fehlgeschlagen (Code $($p.ExitCode))" }
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter "Filament-Manager.exe" | Select-Object -First 1
+          if (-not $exe) { throw "Installierte App nicht gefunden" }
+          Write-Host "Installiert: $($exe.FullName)"
+          $r = Start-Process -FilePath $exe.FullName -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($r.ExitCode -ne 0) { throw "Installierte App startet nicht sauber (Code $($r.ExitCode))" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: filament-windows
+          path: |
+            filament_manager/desktop/dist/Filament-Manager-Setup.exe
+            filament_manager/desktop/dist/Filament-Manager-Setup.exe.blockmap
+            filament_manager/desktop/dist/latest.yml
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    needs: [android, windows]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/claude/filament-')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Release aktualisieren
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd out
+          ls -la
+          # zusätzlich als ZIP (manche Messenger blockieren .apk-Anhänge)
+          zip -q Filament-Manager-APK.zip Filament-Manager.apk
+          # version.json: daran erkennt die Android-App eine neue Version
+          printf '{"code": %s, "name": "%s", "at": "%s"}\n' "${{ github.run_number }}" "$APP_VERSION" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > version.json
+          FILES="Filament-Manager.apk Filament-Manager-APK.zip version.json Filament-Manager-Setup.exe Filament-Manager-Setup.exe.blockmap latest.yml"
+          TAG=filament-manager
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" $FILES --clobber
+            gh release edit "$TAG" --title "Filament-Manager $APP_VERSION"
+          else
+            gh release create "$TAG" $FILES --target "${{ github.sha }}" --title "Filament-Manager $APP_VERSION" \
+              --notes "Filament-Lager, Restmengen aus der Bambu-Druckhistorie und 3D-Druck-Aufträge. Automatisch gebaut.
+
+          **Android:** Filament-Manager.apk herunterladen und installieren (einmalig „Unbekannte Apps installieren“ erlauben).
+          **Windows:** Filament-Manager-Setup.exe herunterladen und starten (SmartScreen: „Weitere Informationen“ → „Trotzdem ausführen“).
+
+          Beide Apps aktualisieren sich danach selbst."
+          fi
