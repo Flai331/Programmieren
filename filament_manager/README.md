@@ -1,6 +1,6 @@
 # Filament-Manager
 
-Web-App (PWA) für Filament-Lager und 3D-Druck-Aufträge. Läuft im Browser auf PC und Handy, ist installierbar und funktioniert offline. Alle Daten bleiben lokal im Browser (IndexedDB).
+Web-App (PWA) für Filament-Lager und 3D-Druck-Aufträge. Läuft im Browser auf PC und Handy, ist installierbar und funktioniert offline. Daten liegen lokal im Browser (IndexedDB) und werden optional über eine eigene Google-Tabelle zwischen Geräten abgeglichen (Fotos über Google Drive).
 
 Online (nach Merge in `main`): `https://flai331.github.io/Programmieren/filament-manager/`
 
@@ -31,6 +31,13 @@ Online (nach Merge in `main`): `https://flai331.github.io/Programmieren/filament
 - Importierte Drucke einem Auftrag zuordnen → Stückzahl zählt hoch, Status springt automatisch auf „Im Druck“/„Fertig“
 - Materialkosten aus den echten Rollenpreisen, Preisvorschlag aus Gramm/Stück, Stunden/Stück, Maschinenkosten und Aufschlag
 - Zeigt passende Rollen mit Lagerplatz und ob sie für den Rest reichen
+
+**Abgleich zwischen Geräten (Google-Tabelle)**
+- Eigene Google-Tabelle als Server (Apps Script, `apps-script/Code.gs`, Anleitung in `apps-script/ANLEITUNG.md`)
+- Rollen, Drucke, Aufträge, Boxen und Einstellungen; Fotos/Dateien im eigenen Google-Drive-Ordner
+- Automatisch beim Öffnen, nach Änderungen und alle 1½ Minuten; offline weiterarbeiten
+- Pro Eintrag gewinnt die neuere Änderung; geschützt durch geheimen Schlüssel
+- Die Tabelle zeigt eine lesbare Übersicht (Restmenge, Lagerplatz, Auftragsstand) zum Filtern/Drucken
 
 **Sonstiges**
 - Statistik: Lagerbestand, Restwert, Verbrauch im Monat
@@ -65,5 +72,7 @@ Struktur:
 - `web/zip.js` – kleiner ZIP-Leser (liest nur benötigte Einträge, nie den G-Code)
 - `web/importer.js` – Datei → Druck-Entwürfe
 - `web/db.js` – IndexedDB (Zustand + Fotos), Sicherung
+- `web/sync.js` – Abgleich mit der Google-Tabelle (in `test/sync.test.mjs` gegen den echten `Code.gs` mit nachgebauten Google-Diensten getestet)
+- `apps-script/Code.gs` – Server (Google Apps Script)
 - `web/app.js` – Oberfläche
 - `tools/bambu_cloud_export.py` – Cloud-Historie herunterladen

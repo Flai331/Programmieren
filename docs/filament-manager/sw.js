@@ -1,6 +1,6 @@
 // Service Worker: App-Shell offline verfügbar (Daten liegen in IndexedDB).
-const CACHE = 'filament-manager-v1';
-const ASSETS = ['./', './index.html', './style.css', './app.js', './logic.js', './db.js', './zip.js', './importer.js', './manifest.json', './icon.svg'];
+const CACHE = 'filament-manager-v2';
+const ASSETS = ['./', './index.html', './style.css', './app.js', './logic.js', './db.js', './zip.js', './importer.js', './sync.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));

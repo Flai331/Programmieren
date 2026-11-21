@@ -1,8 +1,11 @@
 import * as L from './logic.js';
-import { loadState, saveState, putBlob, getBlob, deleteBlob, exportBackup, importBackup } from './db.js';
+import { loadState, saveState, putBlob, getBlob, deleteBlob, exportBackup, importBackup, loadMeta, saveMeta } from './db.js';
 import { parseFile } from './importer.js';
+import * as S from './sync.js';
 
 let state = L.emptyState();
+let meta = S.emptyMeta();
+const syncUi = { busy: false, timer: null, pending: false };
 const ui = {
   tab: 'filament',
   q: '',
@@ -38,9 +41,103 @@ const num = (v, def = 0) => {
 async function save() {
   try {
     await saveState(state);
+    if (meta.url && S.stamp(state, meta)) {
+      await saveMeta(meta);
+      scheduleSync(3000);
+    }
   } catch (e) {
     toast('Speichern fehlgeschlagen: ' + e.message);
   }
+}
+
+// ---------- Abgleich mit Google-Tabelle ----------
+
+function blobToB64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+
+function b64ToBlob(b64, type) {
+  const bin = atob(b64 || '');
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: type || 'application/octet-stream' });
+}
+
+const blobAdapter = {
+  get: (id) => getBlob(id).catch(() => null),
+  put: (id, b) => putBlob(id, b),
+  toB64: blobToB64,
+  fromB64: b64ToBlob,
+};
+
+// Nicht neu zeichnen, während jemand in einem Formular der Seite tippt.
+function typingInForm() {
+  const a = document.activeElement;
+  return !!(a && a.closest && a.closest('#view form'));
+}
+
+function scheduleSync(ms = 3000) {
+  if (!meta.url) return;
+  clearTimeout(syncUi.timer);
+  syncUi.timer = setTimeout(() => syncNow(), ms);
+}
+
+async function syncNow({ manual = false } = {}) {
+  if (!meta.url) return;
+  if (syncUi.busy) { syncUi.pending = true; return; }
+  if (!navigator.onLine) { if (manual) toast('Offline – Abgleich später'); return; }
+  syncUi.busy = true;
+  renderSyncBadge();
+  try {
+    const call = S.makeCaller(meta.url, meta.key);
+    const r = await S.runSync(state, meta, call, blobAdapter);
+    await saveMeta(meta);
+    if (r.changed || r.downloaded) {
+      await saveState(state);
+      for (const [k, v] of urlCache) if (!v) urlCache.delete(k);
+      if (!typingInForm()) render();
+    }
+    if (manual) toast(`Abgeglichen${r.changed ? ` · ${r.changed} neu vom anderen Gerät` : ''}${r.uploaded ? ` · ${r.uploaded} Datei(en) hochgeladen` : ''}`);
+  } catch (e) {
+    meta.lastError = e.message;
+    await saveMeta(meta).catch(() => {});
+    if (manual) toast('Abgleich fehlgeschlagen: ' + e.message);
+  } finally {
+    syncUi.busy = false;
+    renderSyncBadge();
+    if (ui.tab === 'mehr' && !modal().open && !typingInForm()) render();
+    if (syncUi.pending) { syncUi.pending = false; scheduleSync(500); }
+  }
+}
+
+function renderSyncBadge() {
+  const el = $('#sync-badge');
+  if (!el) return;
+  if (!meta.url) { el.hidden = true; return; }
+  el.hidden = false;
+  const dirty = S.planPush(state, meta).length;
+  el.textContent = syncUi.busy ? '⟳' : meta.lastError ? '⚠️' : dirty ? '☁️•' : '☁️✓';
+  el.title = syncUi.busy ? 'Gleiche ab …' : meta.lastError ? 'Fehler: ' + meta.lastError
+    : (dirty ? `${dirty} Änderung(en) noch nicht abgeglichen` : 'Abgeglichen') + (meta.lastSync ? ` (zuletzt ${fmtDateTime(meta.lastSync)})` : '');
+  el.classList.toggle('err', !!meta.lastError && !syncUi.busy);
+}
+
+async function connectSync(url, key) {
+  url = String(url || '').trim();
+  key = String(key || '').trim();
+  if (!S.validUrl(url)) throw new Error('Die Adresse muss mit https://script.google.com/ beginnen.');
+  if (!key) throw new Error('Bitte den Schlüssel aus dem Blatt „Einrichtung“ eintragen.');
+  const res = await S.makeCaller(url, key)({ a: 'ping' });
+  if (!res || !res.ok) throw new Error(res && res.fehler === 'schluessel' ? 'Falscher Schlüssel.' : 'Server antwortet nicht richtig (' + ((res && res.fehler) || '?') + ').');
+  meta = { ...S.emptyMeta(), url, key, sheetName: res.name || '' };
+  S.stamp(state, meta);
+  await saveMeta(meta);
+  await syncNow({ manual: true });
 }
 
 let toastTimer;
@@ -112,7 +209,9 @@ function setTab(tab) {
 function render() {
   $$('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
   $('#title').textContent = TITLES[ui.tab];
-  $('#top-actions').innerHTML = '';
+  const hadFocus = document.activeElement && document.activeElement.id === 'q' ? document.activeElement.selectionStart : null;
+  $('#top-actions').innerHTML = '<button id="sync-badge" class="small ghost" data-act="sync-now" hidden></button>';
+  renderSyncBadge();
   const v = $('#view');
   if (ui.tab === 'filament') v.innerHTML = viewFilament();
   else if (ui.tab === 'boxen') v.innerHTML = viewBoxes();
@@ -120,6 +219,7 @@ function render() {
   else if (ui.tab === 'auftraege') v.innerHTML = viewOrders();
   else v.innerHTML = viewMore();
   hydrate(v);
+  if (hadFocus !== null && $('#q')) { $('#q').focus(); $('#q').setSelectionRange(hadFocus, hadFocus); }
   if (ui.tab === 'boxen' && ui.highlightBox) {
     const el = $(`[data-box-card="${ui.highlightBox}"]`);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1162,9 +1262,12 @@ function viewMore() {
       <button class="primary">Einstellungen speichern</button>
     </form>
 
+    <h2>Abgleich zwischen Geräten</h2>
+    ${syncCard()}
+
     <h2>Daten</h2>
     <div class="card">
-      <p>Alle Daten liegen nur auf diesem Gerät (im Browser). Mit einer Sicherung kannst du sie auf ein anderes Gerät übertragen, z. B. vom PC (Import aus Bambu Studio) aufs Handy (Suchen im Lager).</p>
+      <p>${meta.url ? 'Die Daten liegen auf diesem Gerät und in deiner Google-Tabelle.' : 'Ohne Abgleich liegen alle Daten nur auf diesem Gerät (im Browser).'} Eine Sicherungsdatei (inkl. Fotos) ist trotzdem sinnvoll – z. B. vor größeren Änderungen.</p>
       <div class="row">
         <button data-act="backup">⬇️ Sicherung speichern</button>
         <label class="btn">⬆️ Sicherung laden<input type="file" id="restore" accept=".json,application/json" hidden></label>
@@ -1178,7 +1281,51 @@ function viewMore() {
       <p><b>AMS:</b> „Ins AMS legen“ merkt sich den Box-Platz. „Zurück in Box …“ legt die Rolle wieder an ihren Platz.</p>
       <p><b>Aufträge:</b> Beim Import einer Druckdatei den Auftrag und die Stückzahl wählen – dann zählt der Fortschritt automatisch hoch und die Materialkosten werden berechnet.</p>
     </div>
-    <p class="muted" style="text-align:center">Filament-Manager v1</p>`;
+    <p class="muted" style="text-align:center">Filament-Manager v2</p>`;
+}
+
+function syncCard() {
+  if (!meta.url) {
+    return `<form id="sync-form" class="card">
+      <p>Mit einer eigenen <b>Google-Tabelle</b> als Server siehst du auf PC und Handy denselben Stand – inklusive Fotos (in deinem Google Drive).
+        <a href="#" data-act="sync-help">Einrichtung (ca. 10 Minuten)</a></p>
+      <label class="f">Web-App-Adresse<input name="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
+      <label class="f">Schlüssel (aus dem Blatt „Einrichtung“)<input name="key" autocomplete="off"></label>
+      <button class="primary">Verbinden</button>
+    </form>`;
+  }
+  const dirty = S.planPush(state, meta).length;
+  return `<div class="card">
+    <p>☁️ Verbunden${meta.sheetName ? ` mit <b>${esc(meta.sheetName)}</b>` : ''}.</p>
+    <dl class="kv">
+      <dt>Zuletzt</dt><dd>${meta.lastSync ? fmtDateTime(meta.lastSync) : 'noch nie'}</dd>
+      <dt>Offen</dt><dd>${dirty ? `${dirty} Änderung(en)` : 'nichts'}</dd>
+      ${meta.lastError ? `<dt>Fehler</dt><dd style="color:var(--danger)">${esc(meta.lastError)}</dd>` : ''}
+    </dl>
+    <p class="muted">Gleicht automatisch ab: beim Öffnen, nach Änderungen und alle 1½ Minuten. Ohne Internet arbeitest du normal weiter.</p>
+    <div class="row">
+      <button class="primary" data-act="sync-now" ${syncUi.busy ? 'disabled' : ''}>${syncUi.busy ? 'Gleiche ab …' : 'Jetzt abgleichen'}</button>
+      <button data-act="sync-disconnect">Trennen</button>
+    </div>
+  </div>`;
+}
+
+function syncHelp() {
+  openModal(`${head('Google-Tabelle einrichten')}
+    <div class="mbody help">
+      <ol>
+        <li>Auf <a href="https://sheets.google.com" target="_blank" rel="noopener">sheets.google.com</a> eine <b>leere Tabelle</b> anlegen, z. B. „Filament-Manager“.</li>
+        <li>Menü <b>Erweiterungen → Apps Script</b>. Den vorhandenen Text löschen und den Inhalt von <code>filament_manager/apps-script/Code.gs</code> einfügen. Speichern (Disketten-Symbol).</li>
+        <li>Oben die Funktion <b>setup</b> auswählen → <b>Ausführen</b>. Berechtigung erlauben (Konto wählen → „Erweitert“ → „… öffnen (unsicher)“ → Zulassen – das ist normal bei eigenen Skripten).</li>
+        <li><b>Bereitstellen → Neue Bereitstellung</b> → Zahnrad → <b>Web-App</b>. „Ausführen als: <b>Ich</b>“, „Zugriff: <b>Jeder</b>“ → Bereitstellen. Die <b>Web-App-URL</b> kopieren.</li>
+        <li>In der Tabelle steht im Blatt <b>Einrichtung</b> der <b>Schlüssel</b>.</li>
+        <li>Adresse und Schlüssel hier eintragen → <b>Verbinden</b>. Auf jedem Gerät (PC, Handy) einmal.</li>
+      </ol>
+      <p><b>Sicherheit:</b> Ohne den Schlüssel kann niemand lesen oder schreiben. Gib ihn nicht weiter.</p>
+      <p><b>Tabelle:</b> Reiter Rollen, Drucke, Auftraege zeigen deinen Stand zum Ansehen/Filtern. Bitte dort nichts ändern – Änderungen in der App machen.</p>
+      <p><b>Fotos & Dateien</b> liegen im Drive-Ordner „Filament-Manager Fotos & Dateien“.</p>
+      <p><b>Code geändert?</b> Nach einer neuen Version von Code.gs: Bereitstellen → Bereitstellungen verwalten → Bearbeiten → Version „Neu“ – dann bleibt die Adresse gleich.</p>
+    </div>`);
 }
 
 // ---------- Ereignisse ----------
@@ -1277,6 +1424,15 @@ document.addEventListener('click', async (e) => {
       if (b) downloadBlob(b, el.dataset.name);
       break;
     }
+    case 'sync-now': syncNow({ manual: true }); break;
+    case 'sync-disconnect': {
+      if (!confirm('Abgleich auf diesem Gerät beenden? Die Daten hier und in der Tabelle bleiben erhalten.')) return;
+      meta = S.emptyMeta();
+      await saveMeta(meta);
+      render();
+      break;
+    }
+    case 'sync-help': e.preventDefault(); syncHelp(); break;
     case 'backup': {
       const text = await exportBackup(state);
       downloadBlob(new Blob([text], { type: 'application/json' }), `filament-sicherung-${today()}.json`);
@@ -1311,10 +1467,11 @@ document.addEventListener('change', async (e) => {
   if (t.id === 'colorpick') { ui.color = L.normHex(t.value); render(); }
   if (t.id === 'import-files' && t.files.length) { await handleFiles([...t.files]); t.value = ''; }
   if (t.id === 'restore' && t.files[0]) {
-    if (!confirm('Sicherung laden? Die aktuellen Daten auf diesem Gerät werden ersetzt.')) { t.value = ''; return; }
+    if (!confirm('Sicherung laden? Die aktuellen Daten auf diesem Gerät werden ersetzt.' + (meta.url ? '\n\nAchtung: Der Abgleich ist aktiv – der Stand der Sicherung wird danach auch in die Google-Tabelle übertragen.' : ''))) { t.value = ''; return; }
     try {
       state = await importBackup(await t.files[0].text());
       urlCache.clear();
+      if (meta.url && S.stamp(state, meta)) { await saveMeta(meta); scheduleSync(500); }
       render();
       toast('Sicherung geladen');
     } catch (err) {
@@ -1325,6 +1482,21 @@ document.addEventListener('change', async (e) => {
 });
 
 document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'sync-form') {
+    e.preventDefault();
+    const btn = $('button', e.target);
+    btn.disabled = true;
+    btn.textContent = 'Verbinde …';
+    try {
+      await connectSync(e.target.url.value, e.target.key.value);
+      render();
+    } catch (err) {
+      alert(err.message);
+      btn.disabled = false;
+      btn.textContent = 'Verbinden';
+    }
+    return;
+  }
   if (e.target.id !== 'settings-form') return;
   e.preventDefault();
   const fd = new FormData(e.target);
@@ -1363,10 +1535,17 @@ modal().addEventListener('click', (e) => { if (e.target === modal()) closeModal(
 
 (async function start() {
   state = await loadState();
+  meta = { ...S.emptyMeta(), ...((await loadMeta()) || {}) };
   try { ui.tab = localStorage.getItem('fm-tab') || 'filament'; } catch { /* egal */ }
   if (!TITLES[ui.tab]) ui.tab = 'filament';
   render();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  if (meta.url) {
+    syncNow();
+    setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, 90_000);
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') scheduleSync(300); });
+  window.addEventListener('online', () => scheduleSync(300));
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }

@@ -99,3 +99,17 @@ export async function importBackup(text) {
   await saveState(state);
   return state;
 }
+
+// ---------- Abgleich-Status (nicht Teil der Sicherung) ----------
+
+export async function loadMeta() {
+  try {
+    return (await tx('kv', 'readonly', (s) => s.get('sync'))) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveMeta(meta) {
+  return tx('kv', 'readwrite', (s) => s.put(meta, 'sync'));
+}
