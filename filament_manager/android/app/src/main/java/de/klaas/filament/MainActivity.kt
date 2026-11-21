@@ -174,9 +174,9 @@ class MainActivity : ComponentActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                // Offenes Fenster schließen statt die App zu beenden
+                // Offenes Fenster schließen statt die App zu beenden (bei Eingaben fragt die Web-App nach)
                 webView.evaluateJavascript(
-                    "(function(){var d=document.getElementById('modal');if(d&&d.open){d.close();return true}return false})()"
+                    "(function(){return !!(window.fmBack&&window.fmBack())})()"
                 ) { closed ->
                     if (closed != "true") {
                         isEnabled = false

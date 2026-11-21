@@ -646,3 +646,27 @@ export function daysUntil(dateStr, now = new Date()) {
   const t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.round((d - t) / 86400000);
 }
+
+/**
+ * Materialkosten eines Auftrags mit den passenden Rollen aus dem Lager.
+ * Je Rolle: €/kg, Kosten pro Stück und für die offenen Stück, ob sie reicht, für wie viele Stück sie reicht.
+ * best = bestpassende Rolle mit Preis, die für den Rest reicht (sonst die bestpassende mit Preis).
+ */
+export function orderSpoolCosts(order, spools, prints) {
+  const gpp = Number(order.gramsPerPiece) || 0;
+  const open = orderProgress(order, prints).open;
+  const rows = spoolsForOrder(order, spools, prints).map((x) => {
+    const ppg = pricePerGram(x.spool);
+    return {
+      ...x,
+      hasPrice: ppg > 0,
+      pricePerKg: round(ppg * 1000, 2),
+      perPiece: round(gpp * ppg, 2),
+      total: round(gpp * open * ppg, 2),
+      piecesPossible: gpp > 0 ? Math.floor(x.remaining / gpp) : null,
+    };
+  });
+  const priced = rows.filter((r) => r.hasPrice);
+  const best = priced.find((r) => r.enough) || priced[0] || null;
+  return { rows, best, open, gramsPerPiece: gpp };
+}

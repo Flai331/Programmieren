@@ -282,3 +282,9 @@ code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 1
   background: var(--danger); color: #fff; border-radius: 999px; min-width: 17px; padding: 1px 5px; line-height: 15px;
 }
 .card.inbox { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; border-color: var(--accent); background: var(--accent-soft); }
+
+/* Filament aus 3D-Datei */
+.card.calc { margin: 6px 0 10px; background: var(--bg); }
+.calc-res { margin-top: 8px; }
+.calc-res .row label.f { margin: 4px 0; }
+.filerow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0; }

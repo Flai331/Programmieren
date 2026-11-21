@@ -1,6 +1,7 @@
 import * as L from './logic.js';
 import { loadState, saveState, putBlob, getBlob, deleteBlob, exportBackup, importBackup, loadMeta, saveMeta } from './db.js';
-import { parseFile } from './importer.js';
+import { parseFile, analyzeModelFile } from './importer.js';
+import * as M from './mesh.js';
 import * as S from './sync.js';
 
 let state = L.emptyState();
@@ -189,17 +190,32 @@ async function hydrate(root = document) {
 // ---------- Dialog ----------
 
 const modal = () => $('#modal');
+let modalDirty = false; // in einem Formular des Fensters wurde etwas eingegeben
 function openModal(html, onMount) {
   $('#modal-body').innerHTML = html;
+  modalDirty = false;
   if (!modal().open) modal().showModal();
   modal().scrollTop = 0;
   hydrate($('#modal-body'));
   if (onMount) onMount($('#modal-body'));
 }
 function closeModal() {
+  modalDirty = false;
   if (modal().open) modal().close();
   $('#modal-body').innerHTML = '';
 }
+// Schließen auf Wunsch (✕, Abbrechen, Esc, Android-Zurück): bei Eingaben erst nachfragen
+function requestClose() {
+  if (modalDirty && !confirm('Eingaben verwerfen?')) return false;
+  closeModal();
+  return true;
+}
+// Android-Zurück-Taste (MainActivity): true = Fenster war offen und wurde behandelt
+window.fmBack = () => {
+  if (!modal().open) return false;
+  requestClose();
+  return true;
+};
 const head = (title) => `<div class="mhead"><h2>${esc(title)}</h2><button type="button" class="ghost" data-close>✕</button></div>`;
 
 // ---------- Navigation ----------
@@ -1032,14 +1048,22 @@ function orderDetail(id) {
   const pr = L.orderProgress(o, state.prints);
   const costs = L.orderCosts(o, state.prints, state.spools, state.settings);
   const prints = state.prints.filter((p) => p.orderId === o.id).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  const fits = o.material || o.colorHex ? L.spoolsForOrder(o, state.spools, state.prints).slice(0, 6) : [];
+  // Passende Rollen aus dem Lager mit ihrem echten Preis (Material + Farbe des Auftrags)
+  const sc = o.material || o.colorHex ? L.orderSpoolCosts(o, state.spools, state.prints) : { rows: [], best: null };
+  const fits = sc.rows.slice(0, 6);
   const avgPrice = (() => {
     const s = state.spools.filter((x) => !x.archived && x.price && (!o.material || L.materialBase(x.material) === L.materialBase(o.material)));
     return s.length ? s.reduce((t, x) => t + L.pricePerGram(x) * 1000, 0) / s.length : 20;
   })();
+  const pricePerKg = sc.best ? sc.best.pricePerKg : avgPrice;
+  const priceSource = sc.best
+    ? `mit ${esc(L.spoolTitle(sc.best.spool))} (${esc(L.locationLabel(sc.best.spool.location))}) zu ${L.formatMoney(sc.best.pricePerKg)}/kg${sc.best.enough ? '' : ' – reicht nicht für alles'}`
+    : (state.spools.some((x) => !x.archived && x.price)
+      ? `mit Ø ${L.formatMoney(avgPrice)}/kg (keine passende Rolle mit Preis)`
+      : 'mit angenommenen 20 €/kg – trage bei deinen Rollen den Preis ein');
   const q = L.quote({
     gramsPerPiece: o.gramsPerPiece, hoursPerPiece: o.hoursPerPiece, pieces: pr.quantity,
-    pricePerKg: avgPrice, hourlyRate: state.settings.hourlyRate, markup: state.settings.markup,
+    pricePerKg, hourlyRate: state.settings.hourlyRate, markup: state.settings.markup,
   });
   const idx = L.ORDER_STATUS.findIndex((s) => s.id === o.status);
   const images = (o.photos || []).filter((p) => /^image\//.test(p.type || 'image/'));
@@ -1066,13 +1090,16 @@ function orderDetail(id) {
 
       ${o.measurements ? `<h3>Maße & Beschreibung</h3><div class="card pre">${esc(o.measurements)}</div>` : ''}
       ${images.length ? `<h3>Fotos</h3><div class="gallery">${images.map((ph) => `<div class="ph"><img data-blob="${esc(ph.id)}" data-act="zoom" alt=""></div>`).join('')}</div>` : ''}
-      ${files.length ? `<h3>Dateien</h3>${files.map((f) => `<div><a href="#" data-act="download" data-blobid="${esc(f.id)}" data-name="${esc(f.name)}">📎 ${esc(f.name)}</a></div>`).join('')}` : ''}
+      ${files.length ? `<h3>Dateien</h3>${files.map((f) => `<div class="filerow"><a href="#" data-act="download" data-blobid="${esc(f.id)}" data-name="${esc(f.name)}">📎 ${esc(f.name)}</a>
+        ${MODEL_RE.test(f.name) ? `<button class="small" data-act="calc-file" data-id="${o.id}" data-blobid="${esc(f.id)}" data-name="${esc(f.name)}">📐 berechnen</button>` : ''}</div>`).join('')}` : ''}
       ${o.notes ? `<h3>Notizen</h3><div class="pre">${esc(o.notes)}</div>` : ''}
 
-      ${fits.length ? `<h3>Passende Rollen</h3><div class="list">${fits.map((x) => `
+      ${fits.length ? `<h3>Passende Rollen im Lager</h3><div class="list">${fits.map((x) => `
         <div class="card click spool" data-act="spool" data-id="${x.spool.id}">${sw(x.spool.colorHex)}
-          <div><div class="t">${esc(L.spoolTitle(x.spool))}</div><div class="meta">${L.formatGrams(x.remaining)}${x.need ? (x.enough ? ` · reicht für Rest (${L.formatGrams(x.need)})` : ` · <b style="color:var(--warn)">reicht nicht für ${L.formatGrams(x.need)}</b>`) : ''}</div></div>
-          ${locBadge(x.spool.location)}</div>`).join('')}</div>` : ''}
+          <div><div class="t">${esc(L.spoolTitle(x.spool))} ${sc.best && sc.best.spool.id === x.spool.id ? '<span class="badge ok">für Preis</span>' : ''}</div>
+            <div class="meta">${L.formatGrams(x.remaining)}${x.need ? (x.enough ? ` · reicht für Rest (${L.formatGrams(x.need)})` : ` · <b style="color:var(--warn)">reicht nicht für ${L.formatGrams(x.need)}</b>${x.piecesPossible !== null ? `, nur ${x.piecesPossible} Stück` : ''}`) : ''}</div>
+            <div class="meta">${x.hasPrice ? `${L.formatMoney(x.pricePerKg)}/kg${o.gramsPerPiece ? ` · ${L.formatMoney(x.perPiece)} pro Stück · ${L.formatMoney(x.total)} für ${sc.open} offene` : ''}` : '<span style="color:var(--warn)">kein Preis eingetragen</span>'}</div></div>
+          ${locBadge(x.spool.location)}</div>`).join('')}</div>` : ((o.material || o.colorHex) ? '<p class="muted">Keine passende Rolle im Lager (Material/Farbe).</p>' : '')}
 
       <h3>Drucke (${prints.length})</h3>
       ${prints.length ? `<div class="list">${prints.map(printCard).join('')}</div>` : '<p class="muted">Noch keine. Beim Import einer Datei diesen Auftrag wählen.</p>'}
@@ -1081,9 +1108,9 @@ function orderDetail(id) {
       <h3>Kosten</h3>
       <dl class="kv">
         <dt>Bisher verbraucht</dt><dd>${L.formatGrams(costs.grams)} · ${L.formatMoney(costs.material)} Material${costs.hours ? ` · ${costs.hours} h` : ''}${costs.machine ? ` · ${L.formatMoney(costs.machine)} Maschine` : ''}</dd>
-        ${o.gramsPerPiece ? `<dt>Kalkulation</dt><dd>${pr.quantity} × ${esc(o.gramsPerPiece)} g${o.hoursPerPiece ? ` / ${esc(o.hoursPerPiece)} h` : ''} = ${L.formatGrams(q.grams)}<br>
+        ${o.gramsPerPiece ? `<dt>Kalkulation</dt><dd>${pr.quantity} × ${g1(o.gramsPerPiece)} g${o.hoursPerPiece ? ` / ${L.round(o.hoursPerPiece, 2).toLocaleString('de-DE')} h` : ''} = ${L.formatGrams(q.grams)}<br>
           Material ${L.formatMoney(q.material)}${q.machine ? ` + Maschine ${L.formatMoney(q.machine)}` : ''}${state.settings.markup ? ` + ${state.settings.markup} % Aufschlag` : ''} → <b>${L.formatMoney(q.total)}</b>
-          <br><small class="muted">mit Ø ${L.formatMoney(avgPrice)}/kg</small></dd>` : '<dt>Kalkulation</dt><dd class="muted">„Gramm pro Stück“ im Auftrag eintragen für einen Preisvorschlag.</dd>'}
+          <br><small class="muted">${priceSource}${o.calc ? ` · Gramm ${calcSummary(o.calc)}` : ''}</small></dd>` : '<dt>Kalkulation</dt><dd class="muted">„Gramm pro Stück“ im Auftrag eintragen für einen Preisvorschlag.</dd>'}
       </dl>
     </div>
     <div class="mfoot">
@@ -1116,6 +1143,126 @@ async function resizeImage(file, max = 1600) {
   } catch {
     return file;
   }
+}
+
+// ---------- Filament aus 3D-Datei (STL / OBJ / 3MF) ----------
+
+const MODEL_RE = /\.(stl|3mf|obj)$/i;
+
+function calcDefaults() {
+  return { ...M.DEFAULT_SLICE, ...(state.settings.calc || {}) };
+}
+
+/** Rechnet aus dem Analyse-Ergebnis Gramm und Stunden pro Stück. */
+function calcValues(c, material) {
+  const st = c.res.stats;
+  if (c.res.kind === 'sliced') {
+    const plates = c.res.plates;
+    const grams = plates.reduce((t, p) => t + p.filaments.reduce((a, f) => a + f.grams, 0), 0);
+    const secs = plates.reduce((t, p) => t + (p.durationS || 0), 0);
+    const pieces = Math.max(1, Number(c.pieces) || 1);
+    return { exact: true, grams, perPiece: L.round(grams / pieces, 1), hours: L.round(secs / 3600 / pieces, 2), plates: plates.length };
+  }
+  const e = M.estimateGrams(st, { density: L.densityFor(material || 'PLA'), infill: c.infill, walls: c.walls, extra: c.extra });
+  const pieces = Math.max(1, Number(c.pieces) || 1);
+  return { exact: false, grams: e.grams, perPiece: L.round(e.grams / pieces, 1), solid: e.solidGrams, hours: 0 };
+}
+
+function newCalc(res, name, blobId) {
+  const d = calcDefaults();
+  let pieces = 1;
+  if (res.kind === 'sliced') {
+    pieces = res.plates.reduce((t, p) => t + Math.max(1, (p.objects || []).length), 0);
+  } else if (res.stats.parts && res.stats.parts.length > 1) {
+    const v = res.stats.parts.map((x) => x.volume);
+    if (Math.max(...v) - Math.min(...v) <= Math.max(...v) * 0.01) pieces = v.length; // gleiche Teile = Kopien
+  }
+  return { res, name, blobId, infill: d.infill, walls: d.walls, extra: d.extra, pieces };
+}
+
+function calcHtml(c, material) {
+  const st = c.res.stats;
+  const v = calcValues(c, material);
+  const fmt = (n) => L.round(n, 1).toLocaleString('de-DE');
+  let html = `<div class="calc-res"><div><b>📐 ${esc(c.name)}</b></div>`;
+  if (st) {
+    html += `<div class="muted">${st.size.map(fmt).join(' × ')} mm · ${fmt(st.volume / 1000)} cm³
+      ${M.fitsPrinter(st.size) ? '<span class="badge ok">passt auf den P1S</span>' : '<span class="badge danger">zu groß für den P1S (256 mm)</span>'}</div>`;
+  }
+  if (v.exact) {
+    html += `<p>Geslicte Datei aus Bambu Studio – <b>exakte Werte</b>: ${fmt(v.grams)} g auf ${v.plates} Platte${v.plates > 1 ? 'n' : ''}.</p>`;
+  } else {
+    html += `<div class="row">
+      <label class="f">Infill %<input data-calc="infill" type="number" min="0" max="100" value="${esc(c.infill)}"></label>
+      <label class="f">Wände<input data-calc="walls" type="number" min="1" max="10" value="${esc(c.walls)}"></label>
+      <label class="f">Zuschlag %<input data-calc="extra" type="number" min="0" max="200" value="${esc(c.extra)}" title="Stützen, Brim, Ausschuss"></label>
+    </div>
+    <p class="muted">Material ${esc(material || 'PLA')} (${L.densityFor(material || 'PLA')} g/cm³) · massiv wären es ${fmt(v.solid)} g. Grobe Schätzung – Stützen sind nur im Zuschlag enthalten.</p>`;
+  }
+  html += `<div class="row" style="align-items:center">
+      <label class="f" style="flex:0 0 130px">Stück in der Datei<input data-calc="pieces" type="number" min="1" value="${esc(c.pieces)}"></label>
+      <div><span style="font-size:22px;font-weight:700">${fmt(v.perPiece)} g</span> pro Stück${v.hours ? ` · ${fmt(v.hours)} h` : ''}${calcCostLine(v.perPiece, c.order)}</div>
+    </div></div>`;
+  return html;
+}
+
+// Materialkosten pro Stück mit der bestpassenden Rolle aus dem Lager
+function calcCostLine(gramsPerPiece, order) {
+  if (!order) return '';
+  const sc = L.orderSpoolCosts({ ...order, gramsPerPiece }, state.spools, state.prints);
+  if (!sc.best) return '';
+  return `<br><small class="muted">≈ ${L.formatMoney(sc.best.perPiece)} Material pro Stück mit ${esc(L.spoolTitle(sc.best.spool))} (${L.formatMoney(sc.best.pricePerKg)}/kg)</small>`;
+}
+
+function readCalcInputs(root, c) {
+  for (const el of $$('[data-calc]', root)) c[el.dataset.calc] = Number(el.value) || 0;
+}
+
+/** Ergebnis-Zeile für die Auftragsansicht */
+function calcSummary(calc) {
+  if (!calc) return '';
+  return calc.exact
+    ? `aus ${esc(calc.name)} (geslict, exakt)`
+    : `aus ${esc(calc.name)} geschätzt (${esc(calc.infill)} % Infill, ${esc(calc.walls)} Wände, +${esc(calc.extra)} %)`;
+}
+
+function calcRecord(c, material) {
+  const v = calcValues(c, material);
+  if (!v.exact) state.settings.calc = { infill: c.infill, walls: c.walls, extra: c.extra };
+  return { name: c.name, exact: v.exact, infill: c.infill, walls: c.walls, extra: c.extra, pieces: c.pieces, perPiece: v.perPiece, hours: v.hours };
+}
+
+/** Rechner für eine schon angehängte Datei (Auftragsansicht) */
+async function calcDialog(orderId, blobId, name) {
+  const o = orderById(orderId);
+  const blob = await getBlob(blobId);
+  if (!blob) { toast('Datei ist auf diesem Gerät noch nicht da – kurz warten (Abgleich) und nochmal'); return; }
+  let c;
+  try {
+    c = newCalc(await analyzeModelFile(new File([blob], name)), name, blobId);
+  } catch (err) { toast(err.message); return; }
+  c.order = o;
+  const draw = () => {
+    $('#calc-box').innerHTML = calcHtml(c, o.material);
+  };
+  openModal(`${head('Filament berechnen')}
+    <div class="mbody"><div id="calc-box"></div></div>
+    <div class="mfoot"><button type="button" data-close>Schließen</button><button class="primary" id="calc-apply">Als „Gramm pro Stück“ übernehmen</button></div>`, (root) => {
+    draw();
+    root.addEventListener('change', (e) => { if (e.target.dataset.calc) { readCalcInputs(root, c); draw(); } });
+    $('#calc-apply', root).addEventListener('click', async () => {
+      readCalcInputs(root, c);
+      const rec = calcRecord(c, o.material);
+      o.gramsPerPiece = rec.perPiece;
+      if (rec.hours) o.hoursPerPiece = rec.hours;
+      o.calc = rec;
+      o.updated = new Date().toISOString();
+      await save();
+      render();
+      orderDetail(o.id);
+      toast(`${rec.perPiece} g pro Stück übernommen`);
+    });
+  });
 }
 
 function orderForm(id) {
@@ -1166,8 +1313,15 @@ function orderForm(id) {
       <label class="check"><input type="checkbox" name="noColor" ${o.colorHex ? '' : 'checked'}> Farbe egal</label>
       <datalist id="materials2">${MATERIALS.map((b) => `<option value="${esc(b)}">`).join('')}</datalist>
       <div class="row">
-        <label class="f">Gramm pro Stück<input name="gramsPerPiece" inputmode="decimal" value="${esc(o.gramsPerPiece ?? '')}" placeholder="aus Slicer"></label>
+        <label class="f">Gramm pro Stück<input name="gramsPerPiece" inputmode="decimal" value="${esc(o.gramsPerPiece ?? '')}" placeholder="aus 3D-Datei oder Slicer"></label>
         <label class="f">Std. pro Stück<input name="hoursPerPiece" inputmode="decimal" value="${esc(o.hoursPerPiece ?? '')}"></label>
+      </div>
+      <div class="card calc">
+        <div class="row" style="align-items:center">
+          <div>📐 <b>Filament aus 3D-Datei berechnen</b><br><small class="muted">STL, OBJ oder 3MF – geslicte 3MF aus Bambu Studio liefern exakte Werte</small></div>
+          <label class="btn shrink">Datei wählen<input type="file" id="calc-file" accept=".stl,.3mf,.obj" hidden></label>
+        </div>
+        <div id="calc-area">${o.calc ? `<p class="muted">Zuletzt ${calcSummary(o.calc)}: ${esc(o.calc.perPiece)} g pro Stück</p>` : ''}</div>
       </div>
       <div class="row">
         <label class="f">Status<select name="status">${L.ORDER_STATUS.map((s) => `<option value="${s.id}" ${o.status === s.id ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}</select></label>
@@ -1207,7 +1361,54 @@ function orderForm(id) {
     };
     $('#photo-cam', root).addEventListener('change', (e) => addFiles([...e.target.files], true));
     $('#photo-add', root).addEventListener('change', (e) => addFiles([...e.target.files], true));
-    $('#file-add', root).addEventListener('change', (e) => addFiles([...e.target.files], false));
+    $('#file-add', root).addEventListener('change', async (e) => {
+      const files = [...e.target.files];
+      await addFiles(files, false);
+      const model = files.find((f) => MODEL_RE.test(f.name));
+      if (model) runCalc(model, photos[photos.length - files.length + files.indexOf(model)].id);
+    });
+    // Rechner: Datei analysieren, Ergebnis im Formular zeigen, „Übernehmen“ füllt Gramm/Stunden
+    let calc = null;
+    let calcRec = o.calc || null;
+    const calcArea = $('#calc-area', root);
+    const drawCalc = () => {
+      if (!calc) return;
+      calc.order = {
+        id: o.id || '', quantity: Number(form.quantity.value) || 1, material: form.material.value,
+        colorHex: form.noColor.checked ? '' : L.normHex(form.colorHex.value),
+      };
+      calcArea.innerHTML = calcHtml(calc, form.material.value) +
+        '<p><button type="button" class="primary" id="calc-apply">Übernehmen</button></p>';
+    };
+    const runCalc = async (file, blobId) => {
+      calcArea.innerHTML = '<p class="muted">Rechne …</p>';
+      try {
+        calc = newCalc(await analyzeModelFile(file), file.name, blobId);
+        drawCalc();
+      } catch (err) {
+        calc = null;
+        calcArea.innerHTML = `<p style="color:var(--danger)">${esc(err.message)}</p>`;
+      }
+    };
+    $('#calc-file', root).addEventListener('change', async (e) => {
+      const f = e.target.files[0];
+      e.target.value = '';
+      if (!f) return;
+      await addFiles([f], false); // Datei gleich im Auftrag ablegen
+      runCalc(f, photos[photos.length - 1].id);
+    });
+    calcArea.addEventListener('change', (e) => { if (e.target.dataset.calc && calc) { readCalcInputs(calcArea, calc); drawCalc(); } });
+    // Material, Farbe oder Menge geändert → Rechnung und Rollen-Preis neu
+    form.addEventListener('change', (e) => { if (['material', 'colorHex', 'noColor', 'quantity'].includes(e.target.name)) drawCalc(); });
+    calcArea.addEventListener('click', (e) => {
+      if (e.target.id !== 'calc-apply' || !calc) return;
+      readCalcInputs(calcArea, calc);
+      calcRec = calcRecord(calc, form.material.value);
+      form.gramsPerPiece.value = String(calcRec.perPiece).replace('.', ',');
+      if (calcRec.hours) form.hoursPerPiece.value = String(calcRec.hours).replace('.', ',');
+      calcArea.innerHTML = `<p class="badge ok">✓ ${calcRec.perPiece} g pro Stück übernommen – speichern nicht vergessen</p>`;
+      modalDirty = true;
+    });
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(form);
@@ -1232,6 +1433,7 @@ function orderForm(id) {
         manualDone: Math.max(0, parseInt(fd.get('manualDone'), 10) || 0),
         notes: String(fd.get('notes') || ''),
         photos,
+        calc: calcRec,
         updated: new Date().toISOString(),
       };
       if (data.kind === 'eigen' && !data.license) data.license = 'eigen';
@@ -1483,7 +1685,7 @@ function syncHelp() {
 document.addEventListener('click', async (e) => {
   const tabBtn = e.target.closest('#tabs button');
   if (tabBtn) return setTab(tabBtn.dataset.tab);
-  if (e.target.closest('[data-close]')) return closeModal();
+  if (e.target.closest('[data-close]')) return requestClose();
   const el = e.target.closest('[data-act]');
   if (!el) return;
   const act = el.dataset.act;
@@ -1584,6 +1786,7 @@ document.addEventListener('click', async (e) => {
     }
     case 'sync-help': e.preventDefault(); syncHelp(); break;
     case 'upd-check': case 'upd-later': case 'upd-go': case 'upd-perm': updAction(act); break;
+    case 'calc-file': calcDialog(id, el.dataset.blobid, el.dataset.name); break;
     case 'inbox-open': openInbox(); break;
     case 'bambu-login': bambuLoginDialog(); break;
     case 'bambu-now': {
@@ -1704,7 +1907,13 @@ window.addEventListener('drop', async (e) => {
   await handleFiles(files);
 });
 
-modal().addEventListener('click', (e) => { if (e.target === modal()) closeModal(); });
+// Klick neben das Fenster: nur reine Ansichten schließen, Formulare bleiben offen
+modal().addEventListener('click', (e) => { if (e.target === modal() && !$('#modal-body form')) closeModal(); });
+// Esc-Taste: wie ✕ (bei Eingaben nachfragen)
+modal().addEventListener('cancel', (e) => { e.preventDefault(); requestClose(); });
+// Eingaben in einem Formular merken
+modal().addEventListener('input', (e) => { if (e.target.closest('form')) modalDirty = true; });
+modal().addEventListener('change', (e) => { if (e.target.closest('form')) modalDirty = true; });
 
 // ---------- App-Version und Selbst-Update (Android-App und Windows-App) ----------
 // Die Hülle (Android: Updater.kt, Windows: electron-updater) prüft im GitHub-Release, ob es eine neuere

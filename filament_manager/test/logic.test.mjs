@@ -203,3 +203,23 @@ test('modelSite und daysUntil', () => {
   assert.equal(L.modelSite('https://example.org/x'), 'example.org');
   assert.equal(L.daysUntil('2026-11-25', new Date(2026, 10, 21, 15)), 4);
 });
+
+test('orderSpoolCosts: Kosten je passender Rolle, beste Rolle mit Preis die reicht', () => {
+  const order = { id: 'o', quantity: 10, gramsPerPiece: 50, material: 'PLA', colorHex: '#FFFFFF' };
+  const spools = [
+    spool({ id: 'a', price: 0 }), // ohne Preis
+    spool({ id: 'b', price: 25, weighings: [{ date: '2020-01-01', remaining: 200 }] }), // reicht nicht (500 g nötig)
+    spool({ id: 'c', price: 30, colorHex: '#F4F4F4' }),
+    spool({ id: 'd', material: 'PETG', price: 10 }), // falsches Material
+  ];
+  const r = L.orderSpoolCosts(order, spools, []);
+  assert.deepEqual(r.rows.map((x) => x.spool.id).sort(), ['a', 'b', 'c']);
+  const b = r.rows.find((x) => x.spool.id === 'b');
+  assert.equal(b.pricePerKg, 25);
+  assert.equal(b.perPiece, 1.25);
+  assert.equal(b.piecesPossible, 4);
+  assert.equal(b.enough, false);
+  assert.equal(r.rows.find((x) => x.spool.id === 'a').hasPrice, false);
+  assert.equal(r.best.spool.id, 'c');
+  assert.equal(r.best.total, 15);
+});
