@@ -1,0 +1,17 @@
+{
+  "name": "Filament-Manager",
+  "short_name": "Filament",
+  "description": "Filament-Lager mit Box-Plätzen, Restmengen aus der Bambu-Studio-Druckhistorie und 3D-Druck-Aufträge.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#0E9F6E",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "file_handlers": [
+    { "action": "./index.html", "accept": { "application/octet-stream": [".3mf", ".gcode"], "application/json": [".json"] } }
+  ]
+}

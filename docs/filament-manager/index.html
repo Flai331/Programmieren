@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="Filament-Lager, Restmengen aus der Bambu-Studio-Druckhistorie und 3D-Druck-Aufträge">
+  <meta name="theme-color" content="#0E9F6E">
+  <title>Filament-Manager</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1 id="title">Filament</h1>
+    <div id="top-actions"></div>
+  </header>
+
+  <main id="view"></main>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="filament"><span class="ic">🧵</span><span>Filament</span></button>
+    <button data-tab="boxen"><span class="ic">📦</span><span>Boxen</span></button>
+    <button data-tab="drucke"><span class="ic">🖨️</span><span>Drucke</span></button>
+    <button data-tab="auftraege"><span class="ic">📋</span><span>Aufträge</span></button>
+    <button data-tab="mehr"><span class="ic">⚙️</span><span>Mehr</span></button>
+  </nav>
+
+  <dialog id="modal"><div id="modal-body"></div></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div id="drop-overlay">Dateien hier ablegen<br><small>.gcode.3mf · .gcode · Cloud-JSON</small></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
