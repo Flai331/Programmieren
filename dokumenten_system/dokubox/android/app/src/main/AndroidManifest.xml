@@ -16,6 +16,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- Aktualisieren-Knopf: neue APK aus dem GitHub-Release installieren -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <application
         android:label="DokuBox"
         android:name="${applicationName}"
@@ -63,6 +65,12 @@
             android:name=".BackgroundWorkService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <!-- Automatisches Update: Ergebnis der Installation / „wurde aktualisiert“ -->
+        <receiver android:name=".UpdateReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+            </intent-filter>
+        </receiver>
         <!-- E-Mail mit Anhang an eine bestimmte Adresse (dokubox/email) -->
         <provider
             android:name="androidx.core.content.FileProvider"

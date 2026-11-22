@@ -11,6 +11,9 @@ class BackgroundWork {
   static const _ch = MethodChannel('dokubox/background');
   static int _depth = 0;
 
+  /// Läuft gerade ein Scan/eine Verarbeitung?
+  static bool get active => _depth > 0;
+
   static bool get _supported => !kIsWeb && Platform.isAndroid;
 
   static Future<T> run<T>(String text, Future<T> Function() work,

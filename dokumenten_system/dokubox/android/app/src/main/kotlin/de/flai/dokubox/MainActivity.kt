@@ -107,6 +107,21 @@ class MainActivity : FlutterFragmentActivity() {
         // Update: heruntergeladene APK dem System-Installer übergeben.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dokubox/update")
             .setMethodCallHandler { call, result ->
+                if (call.method == "isMetered") {
+                    val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+                    result.success(cm.isActiveNetworkMetered)
+                    return@setMethodCallHandler
+                }
+                if (call.method == "installSession") {
+                    try {
+                        result.success(UpdateInstaller.install(
+                            this, File(call.argument<String>("path")!!),
+                            call.argument<Boolean>("silent") ?: false))
+                    } catch (e: Exception) {
+                        result.error("update", e.message, null)
+                    }
+                    return@setMethodCallHandler
+                }
                 if (call.method != "install") {
                     result.notImplemented()
                     return@setMethodCallHandler

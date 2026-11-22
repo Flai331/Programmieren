@@ -535,6 +535,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 : 'Installiert: Build $kBuildNumber'),
             onTap: () => checkForUpdate(context),
           ),
+          FutureBuilder<bool>(
+            future: Updater.autoEnabled(),
+            builder: (context, snap) => SwitchListTile(
+              secondary: const Icon(Icons.autorenew),
+              title: const Text('Automatisch aktualisieren'),
+              subtitle: Text(isDesktop
+                  ? 'Lädt im Hintergrund, installiert beim nächsten Start'
+                  : 'Lädt im WLAN im Hintergrund und installiert, sobald du '
+                      'die App verlässt – wie im Play Store'),
+              value: snap.data ?? true,
+              onChanged: (v) async {
+                await Updater.setAuto(v);
+                setState(() {});
+              },
+            ),
+          ),
           ListTile(
             leading: const Icon(Icons.account_balance),
             title: const Text('Steuer-Mappe'),

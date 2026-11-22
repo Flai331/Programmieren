@@ -41,7 +41,7 @@ import 'finance_screen.dart';
 import 'network_scanner_screen.dart';
 import 'number_list_screen.dart';
 import 'settings_screen.dart';
-import 'update_ui.dart';
+import '../update/updater.dart';
 import 'task_widgets.dart';
 import 'tasks_screen.dart';
 import 'wlan_scan_screen.dart';
@@ -61,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   DocumentFilter _filter = const DocumentFilter();
   bool _scanning = false;
   Timer? _backupTimer;
+  Timer? _updateTimer;
 
   /// Am PC: fällige Backups schreiben (alle 15 min prüfen → USB-Stick
   /// wird erkannt, sobald er steckt) und an alte Backups erinnern.
@@ -97,10 +98,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     SetupMode.autoEnable(services.repository.finalNumberedCount).then((_) {
       if (mounted) setState(() {});
     });
-    // Einmal beim Start still nach einer neuen Version schauen.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) checkForUpdate(context, silent: true);
+    // Automatisch aktualisieren (wie im Play Store): PC spielt ein fertig
+    // geladenes Update beim Start ein, sonst wird im Hintergrund geladen.
+    (isDesktop ? Updater.autoInstall() : Future.value(false)).then((installing) {
+      if (!installing) Updater.autoFetch();
     });
+    _updateTimer =
+        Timer.periodic(const Duration(hours: 6), (_) => Updater.autoFetch());
     ShareReceiver.listen(_importShared);
     WidgetsBinding.instance.addPostFrameCallback((_) => _importShared());
   }
@@ -111,6 +115,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       autoSync().then((_) {
         if (mounted) setState(() {});
       });
+      Updater.autoFetch();
+    }
+    // Handy: Update einspielen, wenn man die App verlässt (nicht mitten
+    // in einer Eingabe oder einem Scan).
+    if (state == AppLifecycleState.paused &&
+        isMobile &&
+        !_scanning &&
+        !LockController.suppressAutoLock && // Teilen/Dateiauswahl offen
+        (ModalRoute.of(context)?.isCurrent ?? false)) {
+      Updater.autoInstall().ignore();
     }
   }
 
@@ -118,6 +132,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _backupTimer?.cancel();
+    _updateTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }

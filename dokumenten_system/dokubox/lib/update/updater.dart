@@ -5,6 +5,9 @@ import 'package:archive/archive_io.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../scan/background_work.dart';
 
 /// Eigene Build-Nummer (vom GitHub-Build per --dart-define gesetzt; lokal 0).
 const int kBuildNumber = int.fromEnvironment('BUILD_NUMBER');
@@ -22,13 +25,21 @@ int? parseBuild(String? body) {
   return m == null ? null : int.parse(m.group(1)!);
 }
 
-/// Aktualisierung über die GitHub-Releases (Handy: APK, PC: ZIP).
+/// Aktualisierung über die GitHub-Releases (Handy: APK, PC: ZIP) – auf
+/// Wunsch automatisch wie im Play Store: im Hintergrund laden (Handy nur im
+/// WLAN), installieren, sobald man die App verlässt (PC: beim nächsten Start).
 class Updater {
   static const _repo = 'Flai331/Programmieren';
   static const _ch = MethodChannel('dokubox/update');
+  static const _kAuto = 'auto_update';
 
   static String get _tag => Platform.isWindows ? 'windows-latest' : 'apk-latest';
   static String get _asset => Platform.isWindows ? 'DokuBox-Windows.zip' : 'DokuBox.apk';
+
+  static Future<bool> autoEnabled() async =>
+      (await SharedPreferences.getInstance()).getBool(_kAuto) ?? true;
+  static Future<void> setAuto(bool on) async =>
+      (await SharedPreferences.getInstance()).setBool(_kAuto, on);
 
   /// Neuere Version vorhanden? `null` = aktuell.
   static Future<UpdateInfo?> check() async {
@@ -54,12 +65,40 @@ class Updater {
     }
   }
 
-  /// Lädt herunter (Fortschritt 0…1) und startet die Installation.
-  static Future<void> install(UpdateInfo info, void Function(double) progress) async {
-    final dir = Directory(p.join((await getTemporaryDirectory()).path, 'update'));
-    if (await dir.exists()) await dir.delete(recursive: true);
-    await dir.create(recursive: true);
-    final file = File(p.join(dir.path, _asset));
+  static Future<Directory> _dir() async {
+    final d = Directory(p.join((await getApplicationSupportDirectory()).path, 'update'));
+    await d.create(recursive: true);
+    return d;
+  }
+
+  static String _name(int build) =>
+      Platform.isWindows ? 'DokuBox-$build.zip' : 'DokuBox-$build.apk';
+
+  /// Fertig geladenes, noch nicht installiertes Update (neuer als installiert).
+  static Future<File?> ready() async {
+    final dir = await _dir();
+    File? best;
+    var bestBuild = kBuildNumber;
+    await for (final e in dir.list()) {
+      final m = RegExp(r'DokuBox-(\d+)\.(apk|zip)$').firstMatch(e.path);
+      if (e is! File || m == null) continue;
+      final b = int.parse(m.group(1)!);
+      if (b > bestBuild) {
+        best = e;
+        bestBuild = b;
+      } else {
+        await e.delete(); // altes/installiertes Update aufräumen
+      }
+    }
+    return best;
+  }
+
+  /// Lädt [info] (falls nicht schon da) und liefert die Datei.
+  static Future<File> download(UpdateInfo info, {void Function(double)? progress}) async {
+    final dir = await _dir();
+    final file = File(p.join(dir.path, _name(info.build)));
+    if (await file.exists() && await file.length() == info.size) return file;
+    final part = File('${file.path}.part');
     final client = HttpClient();
     try {
       final req = await client.getUrl(Uri.parse(info.url));
@@ -68,30 +107,75 @@ class Updater {
       if (res.statusCode != 200) throw HttpException('Download: ${res.statusCode}');
       final total = res.contentLength > 0 ? res.contentLength : info.size;
       var got = 0;
-      final sink = file.openWrite();
-      await for (final chunk in res) {
-        sink.add(chunk);
-        got += chunk.length;
-        if (total > 0) progress(got / total);
+      final sink = part.openWrite();
+      try {
+        await for (final chunk in res) {
+          sink.add(chunk);
+          got += chunk.length;
+          if (total > 0) progress?.call(got / total);
+        }
+      } finally {
+        await sink.close();
       }
-      await sink.close();
     } finally {
       client.close();
     }
-    if (Platform.isWindows) {
-      await _installWindows(file, dir);
-    } else {
-      final r = await _ch.invokeMethod<String>('install', {'path': file.path});
-      if (r == 'permission') {
-        throw const UpdateException(
-            'Bitte „Unbekannte Apps installieren“ für DokuBox erlauben und '
-            'dann nochmal auf Aktualisieren tippen.');
+    return part.rename(file.path);
+  }
+
+  static bool _busy = false;
+
+  /// Automatik: prüfen und im Hintergrund laden. Still bei Fehlern.
+  static Future<void> autoFetch() async {
+    if (_busy || !await autoEnabled()) return;
+    _busy = true;
+    try {
+      final info = await check();
+      if (info == null) return;
+      if (!Platform.isWindows &&
+          await _ch.invokeMethod<bool>('isMetered') == true) {
+        return; // große APK nicht über mobile Daten
       }
+      await download(info);
+    } catch (_) {
+    } finally {
+      _busy = false;
+    }
+  }
+
+  /// Automatik: fertiges Update einspielen, wenn gerade nichts läuft.
+  /// Handy: beim Verlassen der App; PC: beim Start.
+  static Future<bool> autoInstall() async {
+    if (_busy || BackgroundWork.active || !await autoEnabled()) return false;
+    final file = await ready();
+    if (file == null) return false;
+    await installFile(file, silent: true);
+    return true;
+  }
+
+  /// Knopf „Nach Update suchen“: laden und sofort installieren.
+  static Future<void> install(UpdateInfo info, void Function(double) progress) async {
+    final file = await download(info, progress: progress);
+    await installFile(file);
+  }
+
+  static Future<void> installFile(File file, {bool silent = false}) async {
+    if (Platform.isWindows) {
+      await _installWindows(file);
+      return;
+    }
+    final r = await _ch.invokeMethod<String>(
+        'installSession', {'path': file.path, 'silent': silent});
+    if (r == 'permission') {
+      throw const UpdateException(
+          'Bitte „Unbekannte Apps installieren“ für DokuBox erlauben und '
+          'dann nochmal auf Aktualisieren tippen.');
     }
   }
 
   /// Entpackt, ersetzt die Programmdateien nach dem Beenden und startet neu.
-  static Future<void> _installWindows(File zip, Directory dir) async {
+  static Future<void> _installWindows(File zip) async {
+    final dir = await Directory.systemTemp.createTemp('dokubox_update');
     final out = Directory(p.join(dir.path, 'neu'));
     await extractFileToDisk(zip.path, out.path);
     final appDir = p.dirname(Platform.resolvedExecutable);
@@ -103,10 +187,10 @@ class Updater {
       'tasklist /FI "PID eq $pid" | find "$pid" >nul',
       'if not errorlevel 1 (timeout /t 1 /nobreak >nul & goto warte)',
       'robocopy "${out.path}" "$appDir" /E /NFL /NDL /NJH /NJS >nul',
+      'del "${zip.path}"',
       'start "" "$exe"',
     ].join('\r\n'));
-    await Process.start('cmd', ['/c', bat.path],
-        mode: ProcessStartMode.detached);
+    await Process.start('cmd', ['/c', bat.path], mode: ProcessStartMode.detached);
     exit(0);
   }
 }
