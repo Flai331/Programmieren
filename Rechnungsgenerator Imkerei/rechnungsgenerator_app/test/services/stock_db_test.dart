@@ -185,6 +185,7 @@ void main() {
       expect(gelesen.jarSizeG, 500);
       expect(gelesen.variety, HoneyVarieties.summer);
       expect(gelesen.isFilledJar, isTrue);
+      expect(gelesen.isEmptyJar, isFalse);
       expect(gelesen.jarSizeKg, 0.5);
     });
 
@@ -326,7 +327,9 @@ void main() {
 StockItemModel _glas() => StockItemModel(
       id: 'glas-500',
       name: '500-g-Gläser Sommerblüte',
-      category: StockCategories.jars,
+      // Abgefüllter Honig ist Ware, nicht Verpackung – deshalb Warengruppe
+      // Honig. Leergut läge in der Gruppe Gläser, ohne Sorte.
+      category: StockCategories.honey,
       unit: 'Stk',
       minQuantity: 50,
       pricePerUnit: 0.45,

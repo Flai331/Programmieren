@@ -54,8 +54,17 @@ class StockItemModel {
 
   bool get hasMinimum => minQuantity != null && minQuantity! > 0;
 
-  /// Posten für abgefüllte Gläser – erkennbar am Füllgewicht.
-  bool get isFilledJar => jarSizeG != null && jarSizeG! > 0;
+  /// Hat der Posten ein Füllgewicht? Gilt für gefüllte wie für leere
+  /// Gläser – das Füllgewicht allein sagt noch nicht, ob Honig drin ist.
+  bool get hasJarSize => jarSizeG != null && jarSizeG! > 0;
+
+  /// Abgefüllter Honig: ein Glas einer Sorte in einer Größe. Steht in der
+  /// Warengruppe Honig, weil es Ware ist und keine Verpackung.
+  bool get isFilledJar => category == StockCategories.honey && hasJarSize;
+
+  /// Leergut: Gläser einer Größe, noch ohne Inhalt. Beim Abfüllen gehen sie
+  /// ab, während die gefüllten zugehen – aber nur, wenn sie geführt werden.
+  bool get isEmptyJar => category == StockCategories.jars && hasJarSize;
 
   /// Füllgewicht in kg, z.B. 0,5 bei einem 500-g-Glas.
   double? get jarSizeKg => jarSizeG == null ? null : jarSizeG! / 1000;

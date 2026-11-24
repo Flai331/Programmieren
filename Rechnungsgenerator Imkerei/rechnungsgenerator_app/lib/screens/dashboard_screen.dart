@@ -5,8 +5,14 @@ import '../services/season_service.dart';
 import '../models/models.dart';
 import '../utils/feedback_service.dart';
 import '../utils/utils.dart';
+import '../services/honey_service.dart';
+import '../services/stock_service.dart';
+import 'honey_bucket_screen.dart';
+import 'honey_stock_screen.dart';
 import 'invoice_edit_screen.dart';
 import 'season_task_detail_screen.dart';
+import 'stock_item_screen.dart';
+import 'stock_screen.dart';
 
 // ── Kachel-Definition ────────────────────────────────────────────
 class _TileDef {
@@ -38,6 +44,16 @@ class _DashboardStats {
   /// Saison-Aufgaben, die diesen Monat anstehen und noch offene Völker haben.
   final List<SeasonTaskStatus> seasonOpen;
 
+  /// Honig in Eimern, für die Kachel – z.B. „125 kg".
+  final String honeyKg;
+
+  /// Eimer, an denen etwas zu tun ist: impfen, rühren, oder weil der Honig
+  /// grob geworden ist.
+  final List<HoneyBucketStatus> honeyOpen;
+
+  /// Posten unter ihrem Mindestbestand, größte Fehlmenge zuerst.
+  final List<StockBalance> stockLow;
+
   const _DashboardStats({
     required this.revenue,
     required this.total,
@@ -50,6 +66,9 @@ class _DashboardStats {
     required this.doneQuotes,
     required this.customerMap,
     required this.seasonOpen,
+    required this.honeyKg,
+    required this.honeyOpen,
+    required this.stockLow,
   });
 
   String valueFor(String tileId) => switch (tileId) {
@@ -59,6 +78,7 @@ class _DashboardStats {
         'paid' => '$paid',
         'sent' => '$sent',
         'draft' => '$draft',
+        'honey' => honeyKg,
         _ => '–',
       };
 }
@@ -97,6 +117,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const _TileDef('paid',      'Bezahlt',     Icons.check_circle_outline,  _C.success),
       const _TileDef('sent',      'Gestellt',    Icons.send_outlined,         _C.warning),
       const _TileDef('draft',     'Entwurf',     Icons.edit_outlined,         _C.neutral),
+      const _TileDef('honey',     'Honig',       Icons.hive_outlined,         _C.warning),
     ];
     _statsFuture = _load();
   }
@@ -123,6 +144,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final saison = SeasonService.due(await SeasonService().loadAll())
         .where((s) => s.openCount > 0)
         .toList(growable: false);
+
+    // Lager: Eimer, die auf den Imker warten, und knappe Posten.
+    final eimer = await HoneyService().loadBuckets();
+    final bestaende = await StockService().loadBalances();
     double revenue = 0;
     int paid = 0, sent = 0, draft = 0;
     for (final inv in invoices) {
@@ -163,6 +188,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       doneQuotes:   doneQuotes,
       customerMap:  customerMap,
       seasonOpen:   saison,
+      honeyKg:      '${AppUtils.formatNumber(HoneyService.totalKg(eimer))} kg',
+      honeyOpen:    HoneyService.needingAttention(eimer),
+      stockLow:     StockService.belowMinimum(bestaende),
     );
     return stats;
   }
@@ -264,6 +292,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Status-Kacheln öffnen die Rechnungsliste direkt mit dem passenden Filter,
   // damit dort exakt die Datensätze stehen, die die Kachel gezählt hat.
   void _onTileTap(String id) {
+    if (id == 'honey') {
+      // Das Lager hängt nicht in der Navigationsleiste – die trägt schon
+      // neun Ziele. Es wird deshalb aufgeschoben wie ein Detail.
+      _openHoneyStock();
+      return;
+    }
     if (id == 'customers') {
       widget.onNavigate?.call(3); // Kunden
       return;
@@ -351,6 +385,145 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       fontSize: 10,
                       color: Color(0xFFfda085),
                       fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openHoneyStock() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const HoneyStockScreen()),
+    );
+    _reload();
+  }
+
+  Future<void> _openStock() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const StockScreen()),
+    );
+    _reload();
+  }
+
+  Future<void> _openBucket(String id) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => HoneyBucketScreen(bucketId: id)),
+    );
+    _reload();
+  }
+
+  Future<void> _openStockItem(String id) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => StockItemScreen(itemId: id)),
+    );
+    _reload();
+  }
+
+  /// Ein Eimer, an dem etwas zu tun ist. Der nächste Schritt steht dran –
+  /// „noch zu rühren" allein sagt nicht, was zu tun ist.
+  Widget _honeyRow(HoneyBucketStatus s) {
+    final farbe = Color(HoneyStates.colorOf(s.bucket.state));
+    return InkWell(
+      onTap: () => _openBucket(s.bucket.id),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF18181c),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0x14ffffff)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.inventory_2_outlined, size: 16, color: farbe),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${s.bucket.code} · ${s.bucket.varietyLabel}',
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis),
+                  Text('${s.bucket.stateLabel} · ${s.currentLabel}',
+                      style: const TextStyle(
+                          fontSize: 10, color: Color(0xFF8a8a94))),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: farbe.withAlpha(38),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: farbe, width: 1),
+              ),
+              child: Text(
+                HoneyStates.next(s.bucket.state) == null
+                    ? 'ansehen'
+                    : HoneyStates.labelOf(HoneyStates.next(s.bucket.state)!),
+                style: TextStyle(
+                    fontSize: 10, color: farbe, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Ein Posten unter Mindestbestand. Die Fehlmenge steht dran, denn sie
+  /// ist das, was auf den Einkaufszettel kommt.
+  Widget _stockRow(StockBalance b) {
+    const rot = Color(0xFFff6b7a);
+    return InkWell(
+      onTap: () => _openStockItem(b.item.id),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF18181c),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: rot.withAlpha(90)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, size: 16, color: rot),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(b.item.name,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis),
+                  Text(
+                      '${b.quantityLabel} da · '
+                      'min. ${StockBalance.formatQuantity(b.item.minQuantity!, b.unit)}',
+                      style: const TextStyle(
+                          fontSize: 10, color: Color(0xFF8a8a94))),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: rot.withAlpha(38),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: rot, width: 1),
+              ),
+              child: Text(
+                  '${StockBalance.formatQuantity(b.shortfall, b.unit)} fehlen',
+                  style: const TextStyle(
+                      fontSize: 10, color: rot, fontWeight: FontWeight.w600)),
             ),
           ],
         ),
@@ -524,6 +697,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       _sectionHeader(
                           'Jetzt im Bienenjahr', stats.seasonOpen.length),
                       ...stats.seasonOpen.map(_seasonRow),
+                    ],
+
+                    // ── Lager: nur zeigen, wenn es etwas zu melden gibt ──
+                    if (stats.honeyOpen.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      _sectionHeader('Eimer warten auf dich',
+                          stats.honeyOpen.length),
+                      ...stats.honeyOpen.map(_honeyRow),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: _openHoneyStock,
+                          child: const Text('Honiglager öffnen',
+                              style: TextStyle(fontSize: 11)),
+                        ),
+                      ),
+                    ],
+
+                    if (stats.stockLow.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      _sectionHeader(
+                          'Unter Mindestbestand', stats.stockLow.length),
+                      ...stats.stockLow.map(_stockRow),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: _openStock,
+                          child: const Text('Lager öffnen',
+                              style: TextStyle(fontSize: 11)),
+                        ),
+                      ),
                     ],
 
                     const SizedBox(height: 16),

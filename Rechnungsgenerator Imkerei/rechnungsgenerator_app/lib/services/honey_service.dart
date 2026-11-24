@@ -343,10 +343,7 @@ class HoneyService {
     if (jarSizeG == null || jarSizeG <= 0) return null;
     final alle = await _db.getAllStockItems();
     for (final item in alle) {
-      if (item.category == StockCategories.jars &&
-          item.jarSizeG == jarSizeG) {
-        return item;
-      }
+      if (item.isEmptyJar && item.jarSizeG == jarSizeG) return item;
     }
     return null;
   }
@@ -358,7 +355,7 @@ class HoneyService {
   }) async {
     final alle = await _db.getAllStockItems();
     for (final item in alle) {
-      if (item.category == StockCategories.honey &&
+      if (item.isFilledJar &&
           item.variety == variety &&
           item.jarSizeG == jarSizeG) {
         return item;

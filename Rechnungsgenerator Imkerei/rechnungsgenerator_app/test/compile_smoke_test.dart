@@ -36,5 +36,14 @@ void main() {
     expect(const ReportListScreen(), isNotNull);
     expect(const ImportScreen(), isNotNull);
     expect(ImportRunner(), isNotNull);
+    // Lager – prüft zugleich, dass die Screens aus dem Barrel kommen.
+    expect(const HoneyStockScreen(), isNotNull);
+    expect(const HoneyBucketNewScreen(), isNotNull);
+    expect(const StockScreen(), isNotNull);
+    expect(const StockItemScreen(), isNotNull);
+    expect(HoneyService(), isNotNull);
+    expect(StockService(), isNotNull);
+    expect(HoneyStates.all, isNotEmpty);
+    expect(StockCategories.all, isNotEmpty);
   });
 }

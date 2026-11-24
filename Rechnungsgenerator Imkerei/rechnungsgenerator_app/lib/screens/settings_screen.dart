@@ -5,8 +5,10 @@ import '../models/models.dart';
 import '../utils/utils.dart';
 import '../utils/feedback_service.dart';
 import 'company_screen.dart';
+import 'honey_stock_screen.dart';
 import 'report_list_screen.dart';
 import 'import_screen.dart';
+import 'stock_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -301,6 +303,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: const Icon(Icons.download_outlined),
                 label: const Text('Daten aus dem Rechnungsgenerator '
                     'übernehmen'),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // ── Lager ─────────────────────────────────────────────
+            // Die Navigationsleiste trägt schon neun Ziele; ein zehntes
+            // wäre nicht mehr lesbar. Das Lager ist deshalb von hier und
+            // über die Dashboard-Kachel erreichbar.
+            const Text(
+              'Lager',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Honig in Eimern mit Zustand und Lagerplatz, dazu Gläser, '
+              'Futter, Mittelwände und Behandlungsmittel mit '
+              'Mindestbestand.',
+              style: TextStyle(fontSize: 12, color: Color(0xFF8a8a94)),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const HoneyStockScreen()),
+                  );
+                },
+                icon: const Icon(Icons.hive_outlined),
+                label: const Text('Honiglager'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const StockScreen()),
+                  );
+                },
+                icon: const Icon(Icons.inventory_2_outlined),
+                label: const Text('Gläser und Material'),
               ),
             ),
             const SizedBox(height: 32),
