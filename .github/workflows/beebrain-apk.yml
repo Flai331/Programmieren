@@ -4,9 +4,11 @@ name: BeeBrain APK
 # vorhanden; in manchen Entwicklungsumgebungen ist dl.google.com gesperrt,
 # sodass sich SDK und Android-Gradle-Plugin lokal nicht laden lassen.
 #
-# Gebaut wird die Release-Variante: Das Debug-APK war rund 100 MiB groß,
-# was für eine App, die sich selbst aktualisiert, über Mobilfunk nicht
-# zumutbar ist.
+# Gebaut wird die Release-Variante, und ohne x86_64. Die Größe war der
+# Anlass: Ein Update, das im Bienenstand über Mobilfunk gezogen wird, muss
+# klein sein. Der Release-Bau allein hat dafür wenig gebracht (100 MiB →
+# 92 MiB), denn verkleinert wird dabei Java-Code, und der macht nur 0,9 MB
+# aus. Die Architekturen machen die Größe — siehe beim Bau-Schritt.
 #
 # Signiert wird mit dem Schlüssel aus den Repo-Secrets. Das ist die
 # Voraussetzung dafür, dass eine neue Fassung eine installierte ersetzen
@@ -104,7 +106,17 @@ jobs:
           echo "Signaturschlüssel eingerichtet ($(wc -c < android/app/beebrain.jks) Bytes)."
 
       - name: APK bauen
-        run: flutter build apk --release
+        # Ohne x86_64. Gemessen am Paket von Build 13 waren 97 % der Größe
+        # native Bibliotheken, verteilt auf drei Architekturen:
+        #
+        #   lib/x86_64       33,1 MB   nur Emulatoren
+        #   lib/arm64-v8a    31,0 MB   jedes Handy seit etwa 2015
+        #   lib/armeabi-v7a  25,1 MB   ältere 32-Bit-Geräte
+        #
+        # Der Java-Code, an dem R8 arbeitet, war 0,9 MB — darum hat der
+        # Release-Bau allein die Größe kaum gedrückt (100 MiB → 92 MiB).
+        # x86_64 ist auf einem Handy toter Ballast.
+        run: flutter build apk --release --target-platform android-arm64,android-arm
 
       - name: APK benennen
         id: apk
