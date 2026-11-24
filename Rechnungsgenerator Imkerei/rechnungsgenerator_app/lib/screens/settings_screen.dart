@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../build_info.dart';
 import '../services/services.dart';
 import '../models/models.dart';
 import '../utils/utils.dart';
@@ -25,6 +28,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _patternCtrl;
   bool _patternSaving = false;
   String _patternPreview = '';
+
+  // ── Aktualisierung ──
+  final UpdateService _updates = UpdateService();
+
+  /// Prüfen oder Laden läuft. Sperrt den Knopf, damit nicht zwei Läufe
+  /// gleichzeitig unterwegs sind.
+  bool _updateBusy = false;
+
+  /// Die gefundene neuere Fassung, falls es eine gibt.
+  UpdateInfo? _updateFound;
+
+  /// Klartext für die Anzeige — auch und gerade, wenn es nicht geklappt hat.
+  String? _updateMessage;
+
+  /// Anteil des Ladens zwischen 0 und 1, null wenn nicht geladen wird.
+  double? _updateProgress;
+
+  /// Das schon geladene Paket. Wichtig für den häufigsten Stolperstein:
+  /// Fehlt die Installationserlaubnis, schickt Android in die
+  /// Einstellungen — und danach soll das Tippen installieren, nicht
+  /// vierzig Megabyte erneut holen.
+  String? _updateFile;
 
   @override
   void initState() {
@@ -395,6 +420,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 8),
                     _buildInfoRow('Version', AppConstants.appVersion),
                     const SizedBox(height: 8),
+                    _buildInfoRow('Build', '#$kBuildNumber'),
+                    const SizedBox(height: 8),
                     _buildInfoRow('Datenbankversion',
                         AppConstants.dbVersion.toString()),
                     const SizedBox(height: 8),
@@ -406,10 +433,230 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 32),
+
+            // ── Aktualisierung ────────────────────────────────────
+            const Text(
+              'Aktualisierung',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'BeeBrain sieht auf Knopfdruck nach, ob eine neuere Fassung '
+              'veröffentlicht ist, lädt sie und übergibt sie Android zur '
+              'Installation. Von selbst passiert das nie — am Bienenstand '
+              'wäre ein überraschender Download eine Zumutung.',
+              style: TextStyle(fontSize: 12, color: Color(0xFF8a8a94)),
+            ),
+            const SizedBox(height: 12),
+            _buildUpdateCard(),
+            const SizedBox(height: 32),
           ],
         ),
       ),
     );
+  }
+
+  // ── Aktualisierungs-Karte ──────────────────────────────────────
+  Widget _buildUpdateCard() {
+    final gefunden = _updateFound;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (gefunden != null) ...[
+              Row(
+                children: [
+                  const Icon(Icons.system_update_outlined,
+                      color: Color(0xFF22c55e)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Build #${gefunden.buildNumber} steht bereit'
+                      ' · ${gefunden.readableSize}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              if (gefunden.notes.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  gefunden.notes,
+                  style: const TextStyle(
+                      fontSize: 12, color: Color(0xFF8a8a94)),
+                ),
+              ],
+              const SizedBox(height: 12),
+            ],
+
+            if (_updateMessage != null) ...[
+              Text(
+                _updateMessage!,
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            if (_updateProgress != null) ...[
+              LinearProgressIndicator(value: _updateProgress),
+              const SizedBox(height: 6),
+              Text(
+                '${((_updateProgress ?? 0) * 100).round()} % von '
+                '${gefunden?.readableSize ?? ''}',
+                style: const TextStyle(
+                    fontSize: 12, color: Color(0xFF8a8a94)),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            SizedBox(
+              width: double.infinity,
+              child: gefunden == null
+                  ? ElevatedButton.icon(
+                      onPressed: _updateBusy ? null : _checkForUpdate,
+                      icon: _updateBusy
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.refresh),
+                      label: Text(_updateBusy
+                          ? 'Wird nachgesehen …'
+                          : 'Nach neuer Fassung sehen'),
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: _updateBusy ? null : _downloadAndInstall,
+                      icon: Icon(_updateFile == null
+                          ? Icons.download_outlined
+                          : Icons.install_mobile_outlined),
+                      label: Text(
+                        _updateBusy
+                            ? 'Wird geladen …'
+                            : _updateFile == null
+                                ? 'Herunterladen und installieren'
+                                : 'Installieren',
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _checkForUpdate() async {
+    setState(() {
+      _updateBusy = true;
+      _updateMessage = null;
+      _updateFound = null;
+      _updateFile = null;
+    });
+
+    try {
+      // Erst das Gerät fragen: Ohne Verbindung einen ehrlichen Satz, statt
+      // zwanzig Sekunden auf einen Zeitablauf zu warten.
+      if (!await ConnectivityService().checkConnection()) {
+        if (!mounted) return;
+        setState(() => _updateMessage =
+            'Keine Internetverbindung. Zum Nachsehen braucht BeeBrain '
+            'einmal Netz — im Keller also später.');
+        return;
+      }
+
+      final ergebnis = await _updates.check();
+      if (!mounted) return;
+      setState(() {
+        if (ergebnis.status == UpdateStatus.available) {
+          _updateFound = ergebnis.info;
+        } else if (ergebnis.status == UpdateStatus.upToDate) {
+          _updateMessage = 'BeeBrain ist aktuell (Build #$kBuildNumber).';
+        } else {
+          _updateMessage =
+              ergebnis.detail ?? 'Die Prüfung hat nicht geklappt.';
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _updateBusy = false);
+    }
+  }
+
+  Future<void> _downloadAndInstall() async {
+    final fassung = _updateFound;
+    if (fassung == null) return;
+
+    // Liegt das Paket vom vorigen Versuch noch da, nicht erneut laden.
+    final schonDa = _updateFile;
+    if (schonDa != null && await File(schonDa).exists()) {
+      if (!mounted) return;
+      setState(() {
+        _updateBusy = true;
+        _updateMessage = null;
+      });
+      await _installFile(schonDa);
+      return;
+    }
+
+    setState(() {
+      _updateBusy = true;
+      _updateMessage = null;
+      _updateProgress = 0;
+    });
+
+    final pfad = await _updates.download(
+      fassung,
+      onProgress: (anteil, geladen, gesamt) {
+        if (!mounted) return;
+        // Nur bei jedem ganzen Prozent neu zeichnen. Sonst baut sich die
+        // Oberfläche bei vierzig Megabyte hunderte Male neu auf.
+        final bisher = _updateProgress ?? 0;
+        if (anteil < 1 && (anteil - bisher).abs() < 0.01) return;
+        setState(() => _updateProgress = anteil);
+      },
+    );
+
+    if (!mounted) return;
+    if (pfad == null) {
+      setState(() {
+        _updateBusy = false;
+        _updateProgress = null;
+        _updateMessage = 'Das Herunterladen ist abgebrochen. Die halbe Datei '
+            'wurde gelöscht; mit stabilerem Netz noch einmal versuchen.';
+      });
+      return;
+    }
+
+    setState(() {
+      _updateProgress = null;
+      _updateFile = pfad;
+    });
+    await _installFile(pfad);
+  }
+
+  Future<void> _installFile(String pfad) async {
+    final ergebnis = await _updates.install(pfad);
+    if (!mounted) return;
+    setState(() {
+      _updateBusy = false;
+      _updateProgress = null;
+      if (ergebnis == InstallOutcome.started) {
+        _updateMessage = 'Android übernimmt und fragt gleich um Erlaubnis. '
+            'Deine Daten bleiben dabei erhalten.';
+      } else if (ergebnis == InstallOutcome.permissionNeeded) {
+        _updateMessage = 'BeeBrain darf noch keine Apps installieren. Die '
+            'Einstellung dafür ist jetzt offen — erlauben, zurückkommen und '
+            'hier noch einmal tippen. Das Paket ist schon geladen.';
+      } else if (ergebnis == InstallOutcome.unsupported) {
+        _updateMessage = 'Installieren geht nur auf Android.';
+      } else {
+        _updateMessage = 'Die Installation ließ sich nicht starten. Das '
+            'Paket liegt im Zwischenspeicher und lässt sich auch über die '
+            'Dateien-App öffnen.';
+      }
+    });
   }
 
   // ── Rechnungsnummer-Karte ──────────────────────────────────────

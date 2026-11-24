@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Welche Dateien der FileProvider herausgeben darf.
+
+  Nur das Zwischenverzeichnis, denn genau dorthin legt UpdateService das
+  geladene Paket (path_provider getTemporaryDirectory liefert unter Android
+  getCacheDir). Mehr freizugeben wäre unnötig: Der Installer braucht genau
+  diese eine Datei, und die Freigabe gilt ohnehin nur für die Dauer der
+  einen Absicht.
+-->
+<paths>
+    <cache-path name="aktualisierungen" path="." />
+</paths>

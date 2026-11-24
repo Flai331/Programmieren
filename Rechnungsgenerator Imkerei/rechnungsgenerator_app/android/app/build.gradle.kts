@@ -99,6 +99,15 @@ android {
     }
 }
 
+dependencies {
+    // Für androidx.core.content.FileProvider in MainActivity.kt. Die
+    // Flutter-Einbettung zieht androidx.core zwar mit herein, aber als
+    // durchgereichte Abhängigkeit — darauf zu bauen heißt, dass der Bau
+    // bricht, sobald Flutter daran etwas ändert. Gradle nimmt ohnehin die
+    // höchste geforderte Fassung, diese Zeile kann also nichts verdrängen.
+    implementation("androidx.core:core:1.13.1")
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17

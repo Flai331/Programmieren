@@ -5,6 +5,11 @@
          Suche nach einer neueren Fassung – mit einer SocketException. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- Eine neue Fassung installieren dürfen. Installiert wird nicht von
+         der App, sondern von Android — der Imker wird dabei gefragt. Ohne
+         diese Zeile lehnt das System die Absicht schon vorher ab. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
@@ -31,6 +36,25 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Gibt dem System-Installer Lesezugriff auf das geladene Paket.
+             Seit Android 7 wirft ein file://-Verweis an eine fremde App
+             eine FileUriExposedException; es muss also ein content://-
+             Verweis sein, und der kommt von hier.
+
+             Eigene Kennung mit ${applicationId}: share_plus, image_picker
+             und printing bringen jeweils eigene Provider mit, und zwei
+             Provider mit derselben Kennung lassen sich nicht installieren.
+             Das Suffix wächst bei Testbauten automatisch mit. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
