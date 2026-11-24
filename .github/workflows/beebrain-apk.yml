@@ -6,9 +6,17 @@ name: BeeBrain APK
 #
 # Gebaut wird die Release-Variante, und ohne x86_64. Die Größe war der
 # Anlass: Ein Update, das im Bienenstand über Mobilfunk gezogen wird, muss
-# klein sein. Der Release-Bau allein hat dafür wenig gebracht (100 MiB →
-# 92 MiB), denn verkleinert wird dabei Java-Code, und der macht nur 0,9 MB
-# aus. Die Architekturen machen die Größe — siehe beim Bau-Schritt.
+# klein sein. Gemessen an den veröffentlichten Paketen:
+#
+#   Debug                             100,3 MiB
+#   Release                            91,9 MB   nur 4 % weniger
+#   Release ohne x86_64                58,9 MB
+#
+# Der Release-Bau allein brachte wenig, weil R8 Java-Code verkleinert und
+# der nur 0,9 MB ausmacht. Die Architekturen machen die Größe — siehe beim
+# Bau-Schritt und in android/app/build.gradle.kts. Ein Paket für alle
+# Geräte, 64-Bit wie 32-Bit; getrennte Pakete je Architektur wären
+# kleiner, aber dann müsste die App das richtige auswählen.
 #
 # Signiert wird mit dem Schlüssel aus den Repo-Secrets. Das ist die
 # Voraussetzung dafür, dass eine neue Fassung eine installierte ersetzen
