@@ -33,7 +33,7 @@ class DatabaseService {
 
   /// Schema-Version. Bei Erhöhung immer auch [_onUpgrade] ergänzen, sonst
   /// verlieren bestehende Installationen beim Update ihre Tabellen.
-  static const int _dbVersion = 4;
+  static const int _dbVersion = 5;
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     FeedbackService.log('🗄️ SQLite-Migration $oldVersion → $newVersion');
@@ -47,6 +47,9 @@ class DatabaseService {
     }
     if (oldVersion < 4) {
       await addColumnIfMissing(db, 'hives', 'position', 'TEXT');
+    }
+    if (oldVersion < 5) {
+      await createStockTables(db);
     }
   }
 
@@ -95,6 +98,110 @@ class DatabaseService {
   Future<void> _createHiveActionsTable(Database db) async {
     await db.execute(hiveActionsTableSql);
     await db.execute(hiveActionsIndexSql);
+  }
+
+  /// DDL des Lagers. Der Bestand ist keine Spalte: Er ergibt sich aus der
+  /// Summe der Bewegungen, damit es zu jedem Bestand eine Historie gibt.
+  @visibleForTesting
+  static const String stockItemsTableSql = '''
+      CREATE TABLE IF NOT EXISTS stock_items (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        unit TEXT NOT NULL,
+        min_quantity REAL,
+        price_per_unit REAL,
+        variety TEXT,
+        jar_size_g INTEGER,
+        note TEXT,
+        created_at TEXT,
+        updated_at TEXT
+      )
+    ''';
+
+  @visibleForTesting
+  static const String stockMovementsTableSql = '''
+      CREATE TABLE IF NOT EXISTS stock_movements (
+        id TEXT PRIMARY KEY,
+        item_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        reason TEXT NOT NULL,
+        note TEXT,
+        hive_action_id TEXT,
+        invoice_id TEXT,
+        created_at TEXT,
+        FOREIGN KEY (item_id) REFERENCES stock_items (id) ON DELETE CASCADE
+      )
+    ''';
+
+  @visibleForTesting
+  static const String stockMovementsIndexSql =
+      'CREATE INDEX IF NOT EXISTS idx_stock_movements_item '
+      'ON stock_movements (item_id, date DESC)';
+
+  /// DDL der Honig-Eimer. Ein Eimer ist ein Einzelstück: eigene Sorte,
+  /// eigenes Erntedatum, eigener Zustand, eigener Platz. Der aktuelle
+  /// Inhalt ist keine Spalte – er ergibt sich aus der Einwaage minus allem,
+  /// was abgefüllt wurde.
+  @visibleForTesting
+  static const String honeyBucketsTableSql = '''
+      CREATE TABLE IF NOT EXISTS honey_buckets (
+        id TEXT PRIMARY KEY,
+        code TEXT UNIQUE NOT NULL,
+        number INTEGER NOT NULL,
+        variety TEXT NOT NULL,
+        variety_name TEXT,
+        harvest_date TEXT NOT NULL,
+        bucket_size_kg REAL,
+        filled_kg REAL NOT NULL,
+        water_content REAL,
+        state TEXT NOT NULL,
+        location TEXT,
+        label_photo TEXT,
+        note TEXT,
+        created_at TEXT,
+        updated_at TEXT
+      )
+    ''';
+
+  /// DDL des Eimer-Verlaufs. Ein Protokoll mit typabhängig leeren Spalten,
+  /// wie es [hiveActionsTableSql] für die Stockkarte eines Volkes verwendet.
+  @visibleForTesting
+  static const String honeyEventsTableSql = '''
+      CREATE TABLE IF NOT EXISTS honey_bucket_events (
+        id TEXT PRIMARY KEY,
+        bucket_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        state TEXT,
+        removed_kg REAL,
+        jar_item_id TEXT,
+        jar_count INTEGER,
+        location TEXT,
+        note TEXT,
+        photo TEXT,
+        created_at TEXT,
+        FOREIGN KEY (bucket_id) REFERENCES honey_buckets (id) ON DELETE CASCADE
+      )
+    ''';
+
+  @visibleForTesting
+  static const String honeyEventsIndexSql =
+      'CREATE INDEX IF NOT EXISTS idx_honey_events_bucket '
+      'ON honey_bucket_events (bucket_id, date DESC)';
+
+  /// Der Migrationsschritt auf Version 5, vollständig. Als statische
+  /// Methode, damit ein Test genau diesen Schritt gegen eine echte
+  /// Datenbank fahren kann statt die Reihenfolge nachzubauen.
+  @visibleForTesting
+  static Future<void> createStockTables(Database db) async {
+    await db.execute(stockItemsTableSql);
+    await db.execute(stockMovementsTableSql);
+    await db.execute(stockMovementsIndexSql);
+    await db.execute(honeyBucketsTableSql);
+    await db.execute(honeyEventsTableSql);
+    await db.execute(honeyEventsIndexSql);
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -270,6 +377,7 @@ class DatabaseService {
     ''');
 
     await _createHiveActionsTable(db);
+    await createStockTables(db);
 
     FeedbackService.log('🗄️ SQLite-Schema erstellt (v$_dbVersion)');
   }
@@ -924,6 +1032,299 @@ class DatabaseService {
     }
   }
 
+  // ============ STOCK OPERATIONS (Lager) ============
+
+  Future<List<StockItemModel>> getAllStockItems() async {
+    try {
+      final db = await database;
+      final result = await db.query('stock_items', orderBy: 'name COLLATE NOCASE ASC');
+      return result.map((m) => StockItemModel.fromMap(m)).toList();
+    } catch (e) {
+      FeedbackService.logError('getAllStockItems: $e', context: 'stock_items');
+      return [];
+    }
+  }
+
+  Future<StockItemModel?> getStockItem(String id) async {
+    final db = await database;
+    final result =
+        await db.query('stock_items', where: 'id = ?', whereArgs: [id]);
+    return result.isNotEmpty ? StockItemModel.fromMap(result.first) : null;
+  }
+
+  Future<void> insertStockItem(StockItemModel item) async {
+    final db = await database;
+    await db.insert(
+      'stock_items',
+      item.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    FeedbackService.logDbOperation('INSERT', 'stock_items', id: item.id);
+  }
+
+  Future<void> updateStockItem(StockItemModel item) async {
+    final db = await database;
+    await db.update(
+      'stock_items',
+      item.toMap(),
+      where: 'id = ?',
+      whereArgs: [item.id],
+    );
+    FeedbackService.logDbOperation('UPDATE', 'stock_items', id: item.id);
+  }
+
+  Future<void> deleteStockItem(String id) async {
+    final db = await database;
+    // Bewegungen hängen am Posten. Fremdschlüssel sind in sqflite
+    // standardmäßig nicht aktiv, deshalb explizit löschen.
+    await db.delete('stock_movements', where: 'item_id = ?', whereArgs: [id]);
+    await db.delete('stock_items', where: 'id = ?', whereArgs: [id]);
+    FeedbackService.logDbOperation('DELETE', 'stock_items', id: id);
+  }
+
+  /// Abfrage hinter [getStockBalances]. Als Konstante, damit ein Test
+  /// genau die Abfrage prüft, die auch die App stellt.
+  @visibleForTesting
+  static const String stockBalancesSql =
+      'SELECT item_id, SUM(quantity) AS bestand '
+      'FROM stock_movements GROUP BY item_id';
+
+  /// Bestand je Posten: die Summe aller Bewegungen.
+  ///
+  /// Posten ohne Bewegung fehlen in der Rückgabe – der Aufrufer behandelt
+  /// einen fehlenden Eintrag als Bestand 0.
+  Future<Map<String, double>> getStockBalances() async {
+    try {
+      final db = await database;
+      final result = await db.rawQuery(stockBalancesSql);
+      return {
+        for (final r in result)
+          r['item_id'] as String: (r['bestand'] as num?)?.toDouble() ?? 0,
+      };
+    } catch (e) {
+      FeedbackService.logError('getStockBalances: $e',
+          context: 'stock_movements');
+      return {};
+    }
+  }
+
+  /// Bewegungen eines Postens, neueste zuerst.
+  Future<List<StockMovementModel>> getStockMovements(String itemId,
+      {int? limit}) async {
+    try {
+      final db = await database;
+      final result = await db.query(
+        'stock_movements',
+        where: 'item_id = ?',
+        whereArgs: [itemId],
+        orderBy: 'date DESC, created_at DESC',
+        limit: limit,
+      );
+      return result.map((m) => StockMovementModel.fromMap(m)).toList();
+    } catch (e) {
+      FeedbackService.logError('getStockMovements: $e',
+          context: 'stock_movements');
+      return [];
+    }
+  }
+
+  Future<void> insertStockMovement(StockMovementModel movement) async {
+    final db = await database;
+    await db.insert(
+      'stock_movements',
+      movement.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    FeedbackService.logDbOperation('INSERT', 'stock_movements',
+        id: movement.id);
+  }
+
+  Future<void> deleteStockMovement(String id) async {
+    final db = await database;
+    await db.delete('stock_movements', where: 'id = ?', whereArgs: [id]);
+    FeedbackService.logDbOperation('DELETE', 'stock_movements', id: id);
+  }
+
+  /// Bewegungen einer Maßnahme – damit eine geänderte oder gelöschte
+  /// Maßnahme ihre Buchung nicht im Lager zurücklässt.
+  Future<List<StockMovementModel>> getStockMovementsForAction(
+      String hiveActionId) async {
+    try {
+      final db = await database;
+      final result = await db.query(
+        'stock_movements',
+        where: 'hive_action_id = ?',
+        whereArgs: [hiveActionId],
+      );
+      return result.map((m) => StockMovementModel.fromMap(m)).toList();
+    } catch (e) {
+      FeedbackService.logError('getStockMovementsForAction: $e',
+          context: 'stock_movements');
+      return [];
+    }
+  }
+
+  Future<void> deleteStockMovementsForAction(String hiveActionId) async {
+    final db = await database;
+    await db.delete('stock_movements',
+        where: 'hive_action_id = ?', whereArgs: [hiveActionId]);
+  }
+
+  // ============ HONEY BUCKET OPERATIONS (Eimer) ============
+
+  /// Alle Eimer, neueste Ernte zuerst.
+  Future<List<HoneyBucketModel>> getAllHoneyBuckets() async {
+    try {
+      final db = await database;
+      final result = await db.query('honey_buckets',
+          orderBy: 'harvest_date DESC, number DESC');
+      return result.map((m) => HoneyBucketModel.fromMap(m)).toList();
+    } catch (e) {
+      FeedbackService.logError('getAllHoneyBuckets: $e',
+          context: 'honey_buckets');
+      return [];
+    }
+  }
+
+  Future<HoneyBucketModel?> getHoneyBucket(String id) async {
+    final db = await database;
+    final result =
+        await db.query('honey_buckets', where: 'id = ?', whereArgs: [id]);
+    return result.isNotEmpty ? HoneyBucketModel.fromMap(result.first) : null;
+  }
+
+  /// Eimer über den Code, der auf ihm steht – z.B. 'SO-042'.
+  Future<HoneyBucketModel?> getHoneyBucketByCode(String code) async {
+    final db = await database;
+    final result =
+        await db.query('honey_buckets', where: 'code = ?', whereArgs: [code]);
+    return result.isNotEmpty ? HoneyBucketModel.fromMap(result.first) : null;
+  }
+
+  Future<void> insertHoneyBucket(HoneyBucketModel bucket) async {
+    final db = await database;
+    await db.insert(
+      'honey_buckets',
+      bucket.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    FeedbackService.logDbOperation('INSERT', 'honey_buckets', id: bucket.id);
+  }
+
+  Future<void> updateHoneyBucket(HoneyBucketModel bucket) async {
+    final db = await database;
+    await db.update(
+      'honey_buckets',
+      bucket.toMap(),
+      where: 'id = ?',
+      whereArgs: [bucket.id],
+    );
+    FeedbackService.logDbOperation('UPDATE', 'honey_buckets', id: bucket.id);
+  }
+
+  Future<void> deleteHoneyBucket(String id) async {
+    final db = await database;
+    // Der Verlauf hängt am Eimer. Fremdschlüssel sind in sqflite
+    // standardmäßig nicht aktiv, deshalb explizit löschen.
+    await db
+        .delete('honey_bucket_events', where: 'bucket_id = ?', whereArgs: [id]);
+    await db.delete('honey_buckets', where: 'id = ?', whereArgs: [id]);
+    FeedbackService.logDbOperation('DELETE', 'honey_buckets', id: id);
+  }
+
+  /// Höchste bisher vergebene Eimernummer. 0, wenn es keine gibt.
+  ///
+  /// Die Nummer ist global laufend, nicht je Sorte: Dadurch genügen die
+  /// drei Ziffern zur Identifikation, auch wenn das Sortenkürzel auf dem
+  /// Eimer verwischt ist.
+  Future<int> getHighestBucketNumber() async {
+    try {
+      final db = await database;
+      final result = await db
+          .rawQuery('SELECT MAX(number) AS max_num FROM honey_buckets');
+      return (result.first['max_num'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Alle vergebenen Codes – Grundlage für den Abgleich einer Kamera-Lesung.
+  Future<List<String>> getAllBucketCodes() async {
+    try {
+      final db = await database;
+      final result = await db.query('honey_buckets', columns: ['code']);
+      return result
+          .map((r) => (r['code'] as String?) ?? '')
+          .where((c) => c.isNotEmpty)
+          .toList();
+    } catch (e) {
+      FeedbackService.logError('getAllBucketCodes: $e',
+          context: 'honey_buckets');
+      return [];
+    }
+  }
+
+  /// Verlauf eines Eimers, neuestes Ereignis zuerst.
+  Future<List<HoneyBucketEventModel>> getHoneyEvents(String bucketId) async {
+    try {
+      final db = await database;
+      final result = await db.query(
+        'honey_bucket_events',
+        where: 'bucket_id = ?',
+        whereArgs: [bucketId],
+        orderBy: 'date DESC, created_at DESC',
+      );
+      return result.map((m) => HoneyBucketEventModel.fromMap(m)).toList();
+    } catch (e) {
+      FeedbackService.logError('getHoneyEvents: $e',
+          context: 'honey_bucket_events');
+      return [];
+    }
+  }
+
+  /// Abfrage hinter [getBottledKgPerBucket]. Erwartet die Ereignisart als
+  /// Parameter. Als Konstante, damit ein Test dieselbe Abfrage prüft.
+  @visibleForTesting
+  static const String bottledKgSql =
+      'SELECT bucket_id, SUM(removed_kg) AS entnommen '
+      'FROM honey_bucket_events WHERE kind = ? GROUP BY bucket_id';
+
+  /// Abgefüllte Menge je Eimer. Eimer ohne Abfüllung fehlen in der Rückgabe –
+  /// der Aufrufer behandelt einen fehlenden Eintrag als 0.
+  Future<Map<String, double>> getBottledKgPerBucket() async {
+    try {
+      final db = await database;
+      final result =
+          await db.rawQuery(bottledKgSql, [HoneyEventKinds.bottling]);
+      return {
+        for (final r in result)
+          r['bucket_id'] as String:
+              (r['entnommen'] as num?)?.toDouble() ?? 0,
+      };
+    } catch (e) {
+      FeedbackService.logError('getBottledKgPerBucket: $e',
+          context: 'honey_bucket_events');
+      return {};
+    }
+  }
+
+  Future<void> insertHoneyEvent(HoneyBucketEventModel event) async {
+    final db = await database;
+    await db.insert(
+      'honey_bucket_events',
+      event.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    FeedbackService.logDbOperation('INSERT', 'honey_bucket_events',
+        id: event.id);
+  }
+
+  Future<void> deleteHoneyEvent(String id) async {
+    final db = await database;
+    await db.delete('honey_bucket_events', where: 'id = ?', whereArgs: [id]);
+    FeedbackService.logDbOperation('DELETE', 'honey_bucket_events', id: id);
+  }
+
   // ============ UTILITY OPERATIONS ============
 
   Future<void> clearAllData() async {
@@ -938,6 +1339,10 @@ class DatabaseService {
     await db.delete('hive_actions');
     await db.delete('hives');
     await db.delete('articles');
+    await db.delete('stock_movements');
+    await db.delete('stock_items');
+    await db.delete('honey_bucket_events');
+    await db.delete('honey_buckets');
     FeedbackService.log('🗄️ Alle Daten gelöscht');
   }
 

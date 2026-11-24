@@ -9,3 +9,6 @@ export 'letter_model.dart';
 export 'hive_model.dart';
 export 'hive_action_model.dart';
 export 'season_task_model.dart';
+export 'stock_item_model.dart';
+export 'stock_movement_model.dart';
+export 'honey_bucket_model.dart';
