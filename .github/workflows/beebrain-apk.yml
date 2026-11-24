@@ -27,12 +27,36 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Zum Anlegen des Releases samt Tag.
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: 'Rechnungsgenerator Imkerei/rechnungsgenerator_app'
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Build-Nummer lesen
+        id: fassung
+        run: |
+          # Eine Zahl, zwei Orte: Androids versionCode kommt aus dem pubspec,
+          # Anzeige und Release-Tag aus lib/build_info.dart. Das prüft auch
+          # test/build_number_test.dart — hier noch einmal, weil es dort erst
+          # nach Minuten auffällt und ein Release sonst eine Fassung
+          # verspricht, die die App anders benennt.
+          pubspec="$(sed -n 's/^version: *[0-9]*\.[0-9]*\.[0-9]*+\([0-9]\+\) *$/\1/p' pubspec.yaml)"
+          dart="$(sed -n 's/^const int kBuildNumber = \([0-9]\+\); *$/\1/p' lib/build_info.dart)"
+          if [ -z "$pubspec" ] || [ -z "$dart" ]; then
+            echo "::error::Build-Nummer nicht lesbar (pubspec='$pubspec', build_info='$dart')."
+            exit 1
+          fi
+          if [ "$pubspec" != "$dart" ]; then
+            echo "::error::Build-Nummer läuft auseinander: pubspec.yaml sagt $pubspec, lib/build_info.dart sagt $dart."
+            exit 1
+          fi
+          echo "nummer=$pubspec" >> "$GITHUB_OUTPUT"
+          echo "Build #$pubspec"
 
       - name: JDK einrichten
         uses: actions/setup-java@v4
@@ -86,7 +110,7 @@ jobs:
         id: apk
         run: |
           quelle="build/app/outputs/flutter-apk/app-release.apk"
-          ziel="BeeBrain-${GITHUB_SHA::7}.apk"
+          ziel="BeeBrain-build-${{ steps.fassung.outputs.nummer }}.apk"
           cp "$quelle" "$ziel"
           echo "name=$ziel" >> "$GITHUB_OUTPUT"
           ls -lh "$ziel"
@@ -98,3 +122,29 @@ jobs:
           path: 'Rechnungsgenerator Imkerei/rechnungsgenerator_app/${{ steps.apk.outputs.name }}'
           retention-days: 30
           if-no-files-found: error
+
+      # Der Zweig, von dem veröffentlicht wird. Releases gelten repo-weit,
+      # nicht je Zweig: Ohne diese Grenze würde sich ein halbfertiger
+      # Nebenzweig der App als Update anbieten. Wird woanders entwickelt,
+      # ist das die eine Zeile, die sich ändert.
+      - name: Fassung veröffentlichen
+        if: github.ref == 'refs/heads/claude/youthful-ride-ps4nsg'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMMER: ${{ steps.fassung.outputs.nummer }}
+          APK: ${{ steps.apk.outputs.name }}
+        run: |
+          tag="build-$NUMMER"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::notice::Release $tag gibt es schon, es wurde nichts veröffentlicht. Für eine neue Fassung die Build-Nummer erhöhen."
+            exit 0
+          fi
+          # Kein --prerelease: Die API-Abfrage releases/latest, in der die App
+          # nachsieht, überspringt Vorab-Veröffentlichungen.
+          hinweise="$(git log -1 --pretty=%B | sed '/^Co-Authored-By:/d; /^Claude-Session:/d')"
+          gh release create "$tag" "$APK" \
+            --target "$GITHUB_SHA" \
+            --title "BeeBrain Build #$NUMMER" \
+            --latest \
+            --notes "$hinweise"
+          echo "Veröffentlicht: $tag mit $APK"
