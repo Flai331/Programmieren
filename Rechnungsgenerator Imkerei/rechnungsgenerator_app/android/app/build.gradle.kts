@@ -75,6 +75,26 @@ android {
 
     buildTypes {
         release {
+            // Keine x86_64-Bibliotheken ins Paket. Das ist nicht dasselbe
+            // wie `--target-platform` beim Bau-Befehl, und beides ist
+            // nötig:
+            //
+            //   --target-platform  bestimmt, welche Flutter-Engine
+            //                      eingepackt wird
+            //   abiFilters         bestimmt, welche nativen Bibliotheken
+            //                      der Pakete (ML Kit, sqflite …) aus
+            //                      ihren AARs mitkommen
+            //
+            // Gemessen: Mit `--target-platform` allein blieben in Build 14
+            // noch 11,2 MB lib/x86_64 übrig — die Engine war weg, die
+            // Pakete nicht. Auf einem Handy ist das durchweg toter Ballast.
+            //
+            // Nur hier, nicht in defaultConfig: Ein Debug-Bau soll weiter
+            // alle Architekturen enthalten, damit er im Emulator läuft.
+            ndk {
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            }
+
             signingConfig = if (eigeneSignatur) {
                 signingConfigs.getByName("veroeffentlichung")
             } else {

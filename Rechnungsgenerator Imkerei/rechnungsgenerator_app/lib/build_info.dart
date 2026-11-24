@@ -7,4 +7,4 @@
 //
 // Beim Erhöhen auch `version: 1.0.0+N` in pubspec.yaml mitziehen — daraus
 // kommt Androids versionCode. test/build_number_test.dart besteht darauf.
-const int kBuildNumber = 14;
+const int kBuildNumber = 15;
