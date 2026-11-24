@@ -8,4 +8,5 @@ export 'pdf_hive_service.dart';
 export 'season_service.dart';
 export 'stock_service.dart';
 export 'honey_service.dart';
+export 'bucket_scan_service.dart';
 export 'import_service.dart';

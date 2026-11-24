@@ -381,6 +381,22 @@ class HoneyService {
     return HoneyCodeLookup(match: treffer, bucket: bucket);
   }
 
+  /// Eine Kamera-Lesung einem Eimer zuordnen.
+  ///
+  /// Wie [lookupCode], nur mit vielen Bruchstücken statt einer Eingabe:
+  /// Ein Foto liefert immer mehr Text als den Code. Welches Bruchstück
+  /// gewinnt, entscheidet [BucketCode.matchAny] – zeichengenau schlägt
+  /// korrigiert, und bei Gleichstand wird gefragt.
+  Future<HoneyCodeLookup> lookupReading(List<String> fragments) async {
+    final codes = await _db.getAllBucketCodes();
+    final treffer = BucketCode.matchAny(fragments, codes);
+    if (treffer.code == null) {
+      return HoneyCodeLookup(match: treffer, candidates: const []);
+    }
+    final bucket = await _db.getHoneyBucketByCode(treffer.code!);
+    return HoneyCodeLookup(match: treffer, bucket: bucket);
+  }
+
   // ── intern ─────────────────────────────────────────────────────
 
   Future<void> _logEvent({

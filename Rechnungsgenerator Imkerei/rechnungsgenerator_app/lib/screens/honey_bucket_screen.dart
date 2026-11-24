@@ -19,8 +19,16 @@ import '../utils/photo_storage.dart';
 class HoneyBucketScreen extends StatefulWidget {
   final String bucketId;
 
-  const HoneyBucketScreen({Key? key, required this.bucketId})
-      : super(key: key);
+  /// Gleich den Abfüll-Dialog öffnen. Kommt von der Kamera-Lesung: Wer
+  /// „abgefüllt" antippt, während er den Eimer in der Hand hat, soll
+  /// nicht erst durch den Bildschirm suchen müssen.
+  final bool startBottling;
+
+  const HoneyBucketScreen({
+    Key? key,
+    required this.bucketId,
+    this.startBottling = false,
+  }) : super(key: key);
 
   @override
   State<HoneyBucketScreen> createState() => _HoneyBucketScreenState();
@@ -43,6 +51,11 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
   /// Hat sich etwas geändert, das die Liste dahinter neu laden muss?
   bool _dirty = false;
 
+  /// Wurde der Abfüll-Dialog aus [HoneyBucketScreen.startBottling] schon
+  /// geöffnet? Nur beim ersten Laden – danach lädt der Bildschirm nach
+  /// jeder Buchung neu, und ein zweiter Dialog wäre eine Falle.
+  bool _bottlingOffered = false;
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +75,14 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
         _events = events;
         _loading = false;
       });
+      if (widget.startBottling && !_bottlingOffered && bucket != null) {
+        _bottlingOffered = true;
+        // Erst nach dem Aufbau: Der Dialog braucht einen fertigen
+        // Bildschirm hinter sich, sonst steht er über dem Ladekreis.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _bottle();
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);

@@ -224,6 +224,133 @@ class BucketCode {
     return vorige[b.length];
   }
 
+  // ── Kamera-Lesung ──────────────────────────────────────────────
+
+  /// Länge der längsten Zeichengruppe, die aus Nachbar-Stücken gebildet
+  /// wird. Drei genügt: `SO`, `-`, `042` ist der schlimmste Fall, in dem
+  /// ein Code in Einzelteilen ankommt.
+  static const int _maxFenster = 3;
+
+  /// Aus einer Kamera-Lesung alle Bruchstücke bilden, die einen Code
+  /// enthalten könnten.
+  ///
+  /// [lines] ist die Lesung, wie die Texterkennung sie liefert: je Zeile
+  /// die einzelnen erkannten Stücke. Das ist nötig, weil `SO-042` je nach
+  /// Handschrift als ein Stück ankommt, als `SO` und `042`, oder als `SO`,
+  /// `-`, `042`. Nur die Zeile als Ganzes zu prüfen reicht nicht, denn auf
+  /// dem Eimer steht neben dem Code noch anderes.
+  ///
+  /// Zurück kommt eine geordnete Liste, von der aussichtsreichsten
+  /// Zusammensetzung zur dürftigsten: erst ganze Zeilen, dann Nachbarn,
+  /// dann einzelne Stücke. Doppelte fallen weg.
+  ///
+  /// Reine Funktion – damit ist der Weg von der Lesung zum Eimer ohne
+  /// Kamera prüfbar.
+  static List<String> fragments(List<List<String>> lines) {
+    final heraus = <String>[];
+    final gesehen = <String>{};
+
+    void nimm(String rohling) {
+      final vergleich = normalize(rohling);
+      // Was nach dem Normalisieren leer ist, trägt kein Zeichen bei.
+      if (vergleich.isEmpty) return;
+      if (!gesehen.add(vergleich)) return;
+      heraus.add(rohling);
+    }
+
+    // Erst jede Zeile als Ganzes: Steht nur der Code darauf, trifft das
+    // zeichengenau.
+    for (final zeile in lines) {
+      if (zeile.length > 1) nimm(zeile.join());
+    }
+
+    // Dann Nachbarn innerhalb einer Zeile, von lang nach kurz.
+    for (var breite = _maxFenster; breite >= 2; breite--) {
+      for (final zeile in lines) {
+        for (var i = 0; i + breite <= zeile.length; i++) {
+          nimm(zeile.sublist(i, i + breite).join());
+        }
+      }
+    }
+
+    // Zuletzt die einzelnen Stücke. Sie tragen den Fall, in dem der Code
+    // vollständig in einem Stück ankam – und den, in dem nur die Ziffern
+    // übrig sind.
+    for (final zeile in lines) {
+      for (final stueck in zeile) {
+        nimm(stueck);
+      }
+    }
+
+    return heraus;
+  }
+
+  /// Aus vielen Bruchstücken einer Lesung den einen Eimer finden.
+  ///
+  /// Ein Foto liefert immer mehr Text als den Code – Sorte, Datum,
+  /// Gewicht, was der Imker sonst notiert hat. Deshalb wird jedes
+  /// Bruchstück geprüft und erst am Ende entschieden:
+  ///
+  /// 1. Genau ein zeichengenauer Treffer → der ist es.
+  /// 2. Mehrere zeichengenaue → zwei Eimer im Bild, also fragen.
+  /// 3. Kein zeichengenauer, genau ein korrigierter → zur Bestätigung
+  ///    zeigen.
+  /// 4. Mehrere korrigierte oder mehrdeutige → zur Auswahl zeigen.
+  ///
+  /// Zeichengenau schlägt korrigiert, und das ist der Grund, warum eine
+  /// mitfotografierte Zahl wie „17,2" (Wassergehalt) keinen Schaden
+  /// anrichtet: Sie kann über die Ziffern-Stufe zwar auf Eimer 172 passen,
+  /// verliert aber gegen den richtig gelesenen Code. Wird auch der Code
+  /// nur ungenau gelesen, stehen beide gleichauf – dann wird gefragt,
+  /// nicht geraten.
+  static BucketCodeMatch matchAny(
+      List<String> fragments, List<String> candidates) {
+    if (candidates.isEmpty) return const BucketCodeMatch.none();
+
+    final exakt = <String>[];
+    final korrigiert = <String>[];
+    final unklar = <String>[];
+
+    void merke(List<String> liste, String code) {
+      if (!liste.contains(code)) liste.add(code);
+    }
+
+    for (final bruchstueck in fragments) {
+      final treffer = match(bruchstueck, candidates);
+      if (treffer.confidence == BucketCodeConfidence.exact) {
+        merke(exakt, treffer.code!);
+      } else if (treffer.confidence == BucketCodeConfidence.corrected) {
+        merke(korrigiert, treffer.code!);
+      } else if (treffer.confidence == BucketCodeConfidence.ambiguous) {
+        for (final kandidat in treffer.candidates) {
+          merke(unklar, kandidat);
+        }
+      }
+    }
+
+    if (exakt.length == 1) {
+      return BucketCodeMatch(
+          code: exakt.first, confidence: BucketCodeConfidence.exact);
+    }
+    if (exakt.length > 1) {
+      return BucketCodeMatch(
+          candidates: exakt, confidence: BucketCodeConfidence.ambiguous);
+    }
+    if (korrigiert.length == 1) {
+      return BucketCodeMatch(
+          code: korrigiert.first, confidence: BucketCodeConfidence.corrected);
+    }
+    if (korrigiert.length > 1) {
+      return BucketCodeMatch(
+          candidates: korrigiert, confidence: BucketCodeConfidence.ambiguous);
+    }
+    if (unklar.isNotEmpty) {
+      return BucketCodeMatch(
+          candidates: unklar, confidence: BucketCodeConfidence.ambiguous);
+    }
+    return const BucketCodeMatch.none();
+  }
+
   /// Taugt der Code als Eingabe von Hand? Prüft nur die Gestalt, nicht ob
   /// es den Eimer gibt.
   static bool isWellFormed(String raw) {

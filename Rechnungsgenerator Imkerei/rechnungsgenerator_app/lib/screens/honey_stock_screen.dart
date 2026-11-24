@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
+import '../services/bucket_scan_service.dart';
 import '../services/honey_service.dart';
 import '../utils/app_utils.dart';
 import '../utils/bucket_code.dart';
@@ -22,9 +24,11 @@ class HoneyStockScreen extends StatefulWidget {
 class _HoneyStockScreenState extends State<HoneyStockScreen> {
   static const _peach = Color(0xFFfda085);
   static const _muted = Color(0xFF8a8a94);
+  static const _green = Color(0xFF22c55e);
   static const _red = Color(0xFFff6b7a);
 
   final _honey = HoneyService();
+  final _scan = BucketScanService();
 
   List<HoneyBucketStatus> _all = [];
   bool _loading = true;
@@ -38,11 +42,22 @@ class _HoneyStockScreenState extends State<HoneyStockScreen> {
   /// Leere Eimer ausblenden – sie sind erledigt, aber als Nachweis da.
   bool _hideEmpty = true;
 
+  /// Läuft gerade eine Texterkennung? Sie dauert einen Augenblick, und so
+  /// lange soll der Knopf nicht ein zweites Mal gedrückt werden.
+  bool _scanning = false;
+
   @override
   void initState() {
     super.initState();
     FeedbackService.logScreenLoad('Honiglager');
     _load();
+  }
+
+  @override
+  void dispose() {
+    // Die Texterkennung hält natives Gerät und muss zurückgegeben werden.
+    _scan.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -62,9 +77,12 @@ class _HoneyStockScreenState extends State<HoneyStockScreen> {
         return true;
       }).toList(growable: false);
 
-  Future<void> _openBucket(String id) async {
+  Future<void> _openBucket(String id, {bool startBottling = false}) async {
     await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => HoneyBucketScreen(bucketId: id)),
+      MaterialPageRoute(
+        builder: (_) =>
+            HoneyBucketScreen(bucketId: id, startBottling: startBottling),
+      ),
     );
     // Immer neu laden: Im Eimer kann abgefüllt oder gelöscht worden sein,
     // und über die Systemgeste verlassen meldet er nichts zurück.
@@ -136,14 +154,34 @@ class _HoneyStockScreenState extends State<HoneyStockScreen> {
     await _resolveCode(eingabe);
   }
 
-  /// Eine Lesung einem Eimer zuordnen – oder fragen, statt zu raten.
+  /// Eine getippte Eingabe einem Eimer zuordnen.
   Future<void> _resolveCode(String read) async {
     final treffer = await _honey.lookupCode(read);
     if (!mounted) return;
+    await _present(treffer, read: read, fromCamera: false);
+  }
+
+  /// Eine Kamera-Lesung einem Eimer zuordnen.
+  ///
+  /// Der Abgleich ist derselbe; der Unterschied liegt danach. Wer den
+  /// Eimer gerade in der Hand hält, will ihm einen Platz geben oder ihn
+  /// abfüllen – nicht erst einen Bildschirm lesen.
+  Future<void> _resolveReading(BucketScanReading reading) async {
+    final treffer = await _honey.lookupReading(reading.fragments);
+    if (!mounted) return;
+    await _present(treffer, read: reading.rawText, fromCamera: true);
+  }
+
+  /// Das Ergebnis eines Abgleichs zeigen – oder fragen, statt zu raten.
+  Future<void> _present(
+    HoneyCodeLookup treffer, {
+    required String read,
+    required bool fromCamera,
+  }) async {
 
     // Eindeutig und Zeichen für Zeichen getroffen: direkt öffnen.
     if (treffer.isResolved && !treffer.needsConfirmation) {
-      await _openBucket(treffer.bucket!.id);
+      await _onFound(treffer.bucket!, fromCamera: fromCamera);
       return;
     }
 
@@ -172,7 +210,10 @@ class _HoneyStockScreenState extends State<HoneyStockScreen> {
                 style: const TextStyle(fontSize: 12, color: _muted),
               ),
               const SizedBox(height: 10),
-              Text('Gelesen: „$read"',
+              Text('Gelesen: „${_readable(read)}"',
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 10, color: _muted)),
             ],
           ),
@@ -189,7 +230,9 @@ class _HoneyStockScreenState extends State<HoneyStockScreen> {
           ],
         ),
       );
-      if (ja == true && mounted) await _openBucket(bucket.id);
+      if (ja == true && mounted) {
+        await _onFound(bucket, fromCamera: fromCamera);
+      }
       return;
     }
 
@@ -230,24 +273,317 @@ class _HoneyStockScreenState extends State<HoneyStockScreen> {
         ),
       );
       if (gewaehlt == null || !mounted) return;
-      String? id;
-      for (final s in _all) {
-        if (s.bucket.code == gewaehlt) id = s.bucket.id;
-      }
-      if (id != null) {
-        await _openBucket(id);
-      } else {
+      var gefunden = _bucketByCode(gewaehlt);
+      if (gefunden == null) {
         // Der Code kommt frisch aus der Datenbank, die geladene Liste ist
-        // also veraltet. Ein zweiter Durchgang trifft ihn genau.
-        await _resolveCode(gewaehlt);
+        // also veraltet. Einmal neu laden und noch einmal nachsehen.
+        await _load();
+        if (!mounted) return;
+        gefunden = _bucketByCode(gewaehlt);
+      }
+      if (gefunden != null) {
+        await _onFound(gefunden, fromCamera: fromCamera);
+      } else {
+        _snack('Eimer „$gewaehlt" nicht gefunden');
       }
       return;
     }
 
-    // Nichts gefunden.
+    // Nichts gefunden. Aus der Kamera heraus ist das bei schlechtem Licht
+    // der Regelfall und keine Panne – der Weg führt deshalb zur Tastatur
+    // und nicht in eine Sackgasse.
+    if (fromCamera) {
+      await _scanFailed(read);
+      return;
+    }
     _snack(BucketCode.isWellFormed(read)
         ? 'Keinen Eimer mit „$read" gefunden'
         : '„$read" sieht nach keinem Eimer-Code aus');
+  }
+
+  /// Eimer aus der geladenen Liste, null wenn sie ihn nicht kennt.
+  HoneyBucketModel? _bucketByCode(String code) {
+    for (final s in _all) {
+      if (s.bucket.code == code) return s.bucket;
+    }
+    return null;
+  }
+
+  /// Eine Lesung auf eine Zeile bringen. Aus der Kamera kommt der ganze
+  /// Text des Etiketts, nicht nur der Code.
+  String _readable(String read) {
+    final eine = read.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return eine.length <= 48 ? eine : '${eine.substring(0, 48)}…';
+  }
+
+  // ── Code abfotografieren ───────────────────────────────────────
+
+  /// Den handgeschriebenen Code mit der Kamera lesen.
+  ///
+  /// Ehrlich zur Erwartung: Handschrift auf gewölbtem Eimer, bei
+  /// Kellerlicht, womöglich mit klebriger Linse – das trifft nicht immer.
+  /// Der Abgleich gegen die vergebenen Codes rettet die meisten
+  /// Lesefehler, aber nicht alle. Die Tastatur daneben ist deshalb kein
+  /// Notnagel, sondern der gleichwertige Weg.
+  Future<void> _scanCode() async {
+    try {
+      final bild = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        // Reichlich Auflösung: Handschrift lebt von Kanten, und das Bild
+        // wird nicht aufbewahrt – es ist nur Zwischenstand der Lesung.
+        maxWidth: 2400,
+        imageQuality: 95,
+      );
+      if (bild == null || !mounted) return;
+      setState(() => _scanning = true);
+      final lesung = await _scan.read(bild.path);
+      if (!mounted) return;
+      setState(() => _scanning = false);
+      if (lesung.isEmpty) {
+        await _scanFailed('');
+        return;
+      }
+      await _resolveReading(lesung);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _scanning = false);
+      _snack('Kamera nicht verfügbar: $e');
+    }
+  }
+
+  /// Nichts erkannt: zeigen, was gelesen wurde, und weiterhelfen.
+  ///
+  /// „Nicht erkannt" allein lässt den Imker ratlos vor dem Eimer stehen.
+  /// Der gelesene Text sagt ihm, ob die Kamera daneben gehalten hat oder
+  /// ob der Code selbst unleserlich geworden ist.
+  Future<void> _scanFailed(String rawText) async {
+    final kurz = _readable(rawText);
+    final weg = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Kein Code erkannt'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              kurz.isEmpty
+                  ? 'Auf dem Bild war kein Text zu finden.'
+                  : 'Gelesen wurde „$kurz" – darin steckt kein vergebener '
+                      'Eimer-Code.',
+              style: const TextStyle(fontSize: 12, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Hilft meistens: den Code groß und gerade ins Bild, Licht '
+              'von vorn, Schatten der Hand vermeiden. Und wenn nicht: die '
+              'drei Ziffern eintippen geht immer.',
+              style: TextStyle(fontSize: 11, color: _muted, height: 1.4),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Abbrechen')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, 'nochmal'),
+              child: const Text('Noch mal')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, 'tippen'),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: _peach, foregroundColor: Colors.white),
+            child: const Text('Eintippen'),
+          ),
+        ],
+      ),
+    );
+    if (weg == null || !mounted) return;
+    if (weg == 'nochmal') {
+      await _scanCode();
+    } else {
+      await _enterCode();
+    }
+  }
+
+  /// Was nach einem Treffer passiert – und das hängt am Weg dorthin.
+  Future<void> _onFound(HoneyBucketModel bucket,
+      {required bool fromCamera}) async {
+    if (!fromCamera) {
+      await _openBucket(bucket.id);
+      return;
+    }
+    await _quickActions(bucket);
+  }
+
+  /// Nach einer erkannten Lesung: die beiden Handgriffe, um die es am
+  /// Eimer geht.
+  ///
+  /// Genau das wollte der Imker vom Scannen – „dem dann einen Lagerplatz
+  /// oder wurde abgefüllt geben". Der Weg in den Eimer steht daneben,
+  /// für alles andere.
+  Future<void> _quickActions(HoneyBucketModel bucket) async {
+    final beschreibung = _describeCode(bucket.code);
+    final wahl = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 2),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle, size: 18, color: _green),
+                  const SizedBox(width: 8),
+                  Text(bucket.code,
+                      style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 2)),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  beschreibung.isEmpty
+                      ? bucket.varietyLabel
+                      : beschreibung,
+                  style: const TextStyle(fontSize: 11, color: _muted),
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.place_outlined,
+                  size: 20, color: _peach),
+              title: const Text('Lagerplatz setzen'),
+              subtitle: Text(
+                bucket.location == null || bucket.location!.isEmpty
+                    ? 'bisher kein Platz vermerkt'
+                    : 'steht jetzt: ${bucket.location}',
+                style: const TextStyle(fontSize: 10, color: _muted),
+              ),
+              onTap: () => Navigator.pop(ctx, 'platz'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.local_drink_outlined,
+                  size: 20, color: _peach),
+              title: const Text('Abfüllen'),
+              subtitle: const Text('in Gläser umfüllen und buchen',
+                  style: TextStyle(fontSize: 10, color: _muted)),
+              onTap: () => Navigator.pop(ctx, 'abfuellen'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.inventory_2_outlined,
+                  size: 20, color: _muted),
+              title: const Text('Eimer öffnen'),
+              subtitle: const Text('Zustand, Verlauf, alles andere',
+                  style: TextStyle(fontSize: 10, color: _muted)),
+              onTap: () => Navigator.pop(ctx, 'oeffnen'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (wahl == null || !mounted) return;
+    if (wahl == 'platz') {
+      await _setLocationFor(bucket);
+    } else if (wahl == 'abfuellen') {
+      await _openBucket(bucket.id, startBottling: true);
+    } else {
+      await _openBucket(bucket.id);
+    }
+  }
+
+  /// Lagerplatz setzen, ohne den Eimer zu öffnen.
+  ///
+  /// Die schon benutzten Plätze stehen als Knöpfe bereit: Beim Einlagern
+  /// wandern mehrere Eimer ins selbe Regal, und Tippen mit klebrigen
+  /// Fingern ist nichts, was man zehnmal will.
+  Future<void> _setLocationFor(HoneyBucketModel bucket) async {
+    final bekannt = <String>{
+      for (final s in _all)
+        if (s.bucket.location != null && s.bucket.location!.trim().isNotEmpty)
+          s.bucket.location!.trim(),
+    }.toList()
+      ..sort();
+
+    final ctrl = TextEditingController(text: bucket.location ?? '');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Lagerplatz für ${bucket.code}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                labelText: 'Wo steht der Eimer?',
+                hintText: 'z.B. Keller Regal B3',
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                isDense: true,
+              ),
+              onSubmitted: (_) => Navigator.pop(ctx, true),
+            ),
+            if (bekannt.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text('Schon benutzt:',
+                  style: TextStyle(fontSize: 10, color: _muted)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final ort in bekannt)
+                    ActionChip(
+                      label: Text(ort, style: const TextStyle(fontSize: 11)),
+                      onPressed: () {
+                        // Der Regler verständigt das Textfeld von selbst,
+                        // ein setState ist dafür nicht nötig.
+                        ctrl.text = ort;
+                        ctrl.selection = TextSelection.collapsed(
+                            offset: ort.length);
+                      },
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Abbrechen')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: _peach, foregroundColor: Colors.white),
+            child: const Text('Übernehmen'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final platz = ctrl.text.trim();
+    if (platz.isEmpty) return;
+    try {
+      await _honey.setLocation(bucket, platz);
+      if (!mounted) return;
+      _snack('${bucket.code} steht jetzt: $platz');
+      await _load();
+    } catch (e) {
+      if (mounted) _snack('Fehler: $e');
+    }
   }
 
   /// Kurzbeschreibung zu einem Code aus der geladenen Liste.
@@ -277,11 +613,22 @@ class _HoneyStockScreenState extends State<HoneyStockScreen> {
         title: const Text('Honiglager'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.photo_camera_outlined),
+            tooltip: 'Code abfotografieren',
+            onPressed: _scanning ? null : _scanCode,
+          ),
+          IconButton(
             icon: const Icon(Icons.keyboard_alt_outlined),
             tooltip: 'Code eingeben',
             onPressed: _enterCode,
           ),
         ],
+        bottom: _scanning
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(2),
+                child: LinearProgressIndicator(minHeight: 2),
+              )
+            : null,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

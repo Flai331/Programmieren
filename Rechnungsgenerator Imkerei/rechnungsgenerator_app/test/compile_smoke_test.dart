@@ -44,6 +44,11 @@ void main() {
     expect(HoneyService(), isNotNull);
     expect(StockService(), isNotNull);
     expect(HoneyStates.all, isNotEmpty);
+    // Texterkennung: nur anlegen, nicht benutzen – das native Modell gibt
+    // es im Test nicht. Geprüft ist damit, dass die Bibliothek übersetzt
+    // und über das Barrel erreichbar ist.
+    expect(BucketScanService(), isNotNull);
+    expect(const BucketScanReading.empty().isEmpty, isTrue);
     expect(StockCategories.all, isNotEmpty);
   });
 }

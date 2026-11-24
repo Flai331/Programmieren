@@ -169,4 +169,159 @@ void main() {
       expect(treffer.confidence, BucketCodeConfidence.exact);
     });
   });
+
+  group('Aus einer Kamera-Lesung Bruchstücke bilden', () {
+    test('setzt getrennt erkannte Stücke einer Zeile zusammen', () {
+      // Handschrift kommt selten in einem Stück an.
+      final teile = BucketCode.fragments([
+        ['SO', '042']
+      ]);
+      expect(teile, contains('SO042'));
+    });
+
+    test('bringt auch den Bindestrich als eigenes Stück unter', () {
+      final teile = BucketCode.fragments([
+        ['SO', '-', '042']
+      ]);
+      // Ein Fenster über drei Nachbarn deckt den schlimmsten Fall ab.
+      expect(teile.map(BucketCode.normalize), contains('SO042'));
+    });
+
+    test('lässt doppelte Zusammensetzungen weg', () {
+      final teile = BucketCode.fragments([
+        ['SO-042'],
+        ['SO', '042'],
+      ]);
+      final normalisiert = teile.map(BucketCode.normalize).toList();
+      expect(normalisiert.where((t) => t == 'SO042').length, 1);
+    });
+
+    test('verwirft, was nach dem Normalisieren leer ist', () {
+      final teile = BucketCode.fragments([
+        ['·', '—', ' ']
+      ]);
+      expect(teile, isEmpty);
+    });
+
+    test('ganze Zeilen stehen vor den einzelnen Stücken', () {
+      final teile = BucketCode.fragments([
+        ['SO', '042']
+      ]);
+      // Die Reihenfolge ist kein Zufall: Die vollständige Zeile ist die
+      // aussichtsreichste Zusammensetzung und wird zuerst geprüft.
+      expect(BucketCode.normalize(teile.first), 'SO042');
+    });
+
+    test('kommt mit einer leeren Lesung zurecht', () {
+      expect(BucketCode.fragments(const []), isEmpty);
+      expect(BucketCode.fragments(const [[]]), isEmpty);
+    });
+  });
+
+  group('Aus vielen Bruchstücken den einen Eimer finden', () {
+    test('findet den Code zwischen allem anderen auf dem Etikett', () {
+      // So sieht ein echtes Foto aus: Der Code steht da, aber nicht
+      // allein.
+      final lesung = BucketCode.fragments([
+        ['Sommerblüte'],
+        ['SO', '042'],
+        ['17,2', '%'],
+        ['25', 'kg'],
+      ]);
+      final treffer = BucketCode.matchAny(lesung, _vergeben);
+      expect(treffer.code, 'SO-042');
+      expect(treffer.confidence, BucketCodeConfidence.exact);
+    });
+
+    test('ein zeichengenauer Treffer schlägt eine mitfotografierte Zahl',
+        () {
+      // „103" ist der Wassergehalt nicht, aber LI-103 gibt es. Der
+      // richtig gelesene Code muss gewinnen, sonst wäre jede Notiz auf
+      // dem Eimer eine Falle.
+      final lesung = BucketCode.fragments([
+        ['SO-042'],
+        ['103'],
+      ]);
+      final treffer = BucketCode.matchAny(lesung, _vergeben);
+      expect(treffer.code, 'SO-042');
+      expect(treffer.confidence, BucketCodeConfidence.exact);
+    });
+
+    test('korrigiert, wenn nur ungenau gelesen wurde', () {
+      final treffer = BucketCode.matchAny(['5O-O42'], _vergeben);
+      expect(treffer.code, 'SO-042');
+      expect(treffer.confidence, BucketCodeConfidence.corrected);
+      expect(treffer.needsConfirmation, isTrue);
+    });
+
+    test('zwei Eimer im Bild führen zur Auswahl, nicht zum Rateschluss',
+        () {
+      final lesung = BucketCode.fragments([
+        ['SO-042'],
+        ['FR-017'],
+      ]);
+      final treffer = BucketCode.matchAny(lesung, _vergeben);
+      expect(treffer.confidence, BucketCodeConfidence.ambiguous);
+      expect(treffer.code, isNull);
+      expect(treffer.candidates, containsAll(['SO-042', 'FR-017']));
+    });
+
+    test('zwei bloße Ziffernblöcke führen zur Auswahl', () {
+      // Der gefürchtete Fall: Vom Sortenkürzel ist nichts übrig, und auf
+      // dem Eimer steht noch eine zweite dreistellige Zahl. Beide passen
+      // über die Ziffern-Stufe, keine ist zeichengenau – also stehen sie
+      // gleichauf, und dann wird gefragt statt geraten.
+      final treffer = BucketCode.matchAny(['042', '103'], _vergeben);
+      expect(treffer.confidence, BucketCodeConfidence.ambiguous);
+      expect(treffer.code, isNull);
+      expect(treffer.candidates, containsAll(['SO-042', 'LI-103']));
+    });
+
+    test('eine Notiz, die keine Eimernummer ist, bleibt wirkungslos', () {
+      // „1O3" liest sich wie 103, trifft aber nicht: Die Ziffern-Stufe
+      // nimmt den letzten Ziffernblock, hier also die 3 – und einen
+      // Eimer 3 gibt es nicht. Der eine saubere Treffer bleibt eindeutig.
+      final treffer = BucketCode.matchAny(['O42', '1O3'], _vergeben);
+      expect(treffer.code, 'SO-042');
+      expect(treffer.confidence, BucketCodeConfidence.corrected);
+    });
+
+    test('ohne Bruchstücke und ohne Eimer gibt es keinen Treffer', () {
+      expect(BucketCode.matchAny(const [], _vergeben).confidence,
+          BucketCodeConfidence.none);
+      expect(BucketCode.matchAny(['SO-042'], const []).confidence,
+          BucketCodeConfidence.none);
+    });
+
+    test('Lesemüll bleibt ohne Treffer', () {
+      final lesung = BucketCode.fragments([
+        ['Honig', 'aus', 'eigener', 'Imkerei'],
+        ['vor', 'Wärme', 'schützen'],
+      ]);
+      final treffer = BucketCode.matchAny(lesung, _vergeben);
+      expect(treffer.confidence, BucketCodeConfidence.none);
+      expect(treffer.code, isNull);
+    });
+
+    test('jeder vergebene Code wird in einer Lesung zeichengenau gefunden',
+        () {
+      // Die tragende Eigenschaft: Was die App vergeben hat, erkennt sie
+      // auch wieder – zwischen anderem Text und in Stücke zerlegt.
+      final alle = <String>[
+        for (final sorte in HoneyVarieties.all)
+          for (var n = 1; n <= 25; n++) BucketCode.format(sorte, n),
+      ];
+      for (final code in alle) {
+        final lesung = BucketCode.fragments([
+          ['Honig'],
+          [code.substring(0, 2), code.substring(3)],
+          ['vor', 'Wärme', 'schützen'],
+        ]);
+        final treffer = BucketCode.matchAny(lesung, alle);
+        expect(treffer.code, code,
+            reason: '$code muss sich in der Lesung wiederfinden');
+        expect(treffer.confidence, BucketCodeConfidence.exact);
+      }
+    });
+  });
 }

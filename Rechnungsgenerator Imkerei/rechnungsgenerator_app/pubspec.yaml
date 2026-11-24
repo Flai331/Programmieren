@@ -49,6 +49,12 @@ dependencies:
 
   # Charts & Graphs
   fl_chart: ^0.65.0
+
+  # Handschrift lesen (Imkerei: der Code auf dem Eimer).
+  # Das lateinische Modell liegt dem Paket bei – die Erkennung läuft ohne
+  # Netz, und das ist hier der Punkt: Im Keller gibt es keins.
+  google_mlkit_text_recognition: ^1.0.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
