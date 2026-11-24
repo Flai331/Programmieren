@@ -283,6 +283,135 @@ void main() {
     });
   });
 
+  group('Gefüllte Gläser und Leergut sind zweierlei', () {
+    test('abgefüllter Honig ist Ware: Warengruppe Honig, mit Sorte', () {
+      final glas = _item(
+        id: 'h500',
+        name: '500-g-Glas Sommerblüte',
+        category: StockCategories.honey,
+        variety: HoneyVarieties.summer,
+        jarSizeG: 500,
+      );
+      expect(glas.isFilledJar, isTrue);
+      expect(glas.isEmptyJar, isFalse);
+      expect(glas.jarSizeKg, 0.5);
+    });
+
+    test('Leergut ist Verpackung: Warengruppe Gläser, ohne Sorte', () {
+      final leer = _item(
+        id: 'g500',
+        name: 'Gläser 500 g leer',
+        category: StockCategories.jars,
+        jarSizeG: 500,
+      );
+      expect(leer.isEmptyJar, isTrue);
+      // Der entscheidende Punkt: Beide tragen ein Füllgewicht. Das allein
+      // darf Leergut nicht zu Ware machen – sonst würde beim Abfüllen in
+      // die leeren Gläser hineingebucht.
+      expect(leer.isFilledJar, isFalse);
+    });
+
+    test('ein Eimer-Posten hat kein Füllgewicht', () {
+      final eimer = _item(
+          id: 'e', name: 'Hobbock 25 kg', category: StockCategories.honey);
+      expect(eimer.hasJarSize, isFalse);
+      expect(eimer.isFilledJar, isFalse);
+      expect(eimer.isEmptyJar, isFalse);
+    });
+
+    test('Futter bleibt Futter, auch mit Füllgewicht im Datensatz', () {
+      // Sollte durch einen Wechsel der Warengruppe doch eine Glasgröße am
+      // Posten hängen, darf daraus kein Glas werden.
+      final futter = _item(
+          id: 'f',
+          name: 'Futtersirup',
+          category: StockCategories.feed,
+          jarSizeG: 500);
+      expect(futter.isFilledJar, isFalse);
+      expect(futter.isEmptyJar, isFalse);
+    });
+  });
+
+  group('Rechnungsposten dem Lager zuordnen', () {
+    StockBalance bestand(String name, double menge,
+            {String id = 'i',
+            String category = StockCategories.honey,
+            String unit = 'Stk'}) =>
+        StockBalance(
+            item: _item(id: id, name: name, category: category, unit: unit),
+            quantity: menge);
+
+    InvoiceItemModel zeile(String beschreibung, double menge,
+            {String id = 'z1'}) =>
+        InvoiceItemModel(
+          id: id,
+          invoiceId: 'r1',
+          description: beschreibung,
+          quantity: menge,
+          unit: 'Stk',
+          price: 6.5,
+          taxRate: 7,
+          createdAt: DateTime(2026, 9, 1),
+        );
+
+    test('findet den Posten über den Namen', () {
+      final treffer = StockService.matchInvoiceLines(
+        [zeile('500-g-Glas Sommerblüte', 12)],
+        [bestand('500-g-Glas Sommerblüte', 80, id: 'h500')],
+      );
+      expect(treffer, hasLength(1));
+      expect(treffer.single.balance.item.id, 'h500');
+      expect(treffer.single.quantity, 12);
+      expect(treffer.single.exceedsStock, isFalse);
+    });
+
+    test('lässt aus, was zu keinem Posten passt', () {
+      // Rechnungsposten sind Freitext. Eine Zeile über Arbeitszeit darf
+      // kein Lager mindern.
+      final treffer = StockService.matchInvoiceLines(
+        [
+          zeile('500-g-Glas Sommerblüte', 12, id: 'z1'),
+          zeile('Anfahrt und Beratung', 1, id: 'z2'),
+        ],
+        [bestand('500-g-Glas Sommerblüte', 80, id: 'h500')],
+      );
+      expect(treffer, hasLength(1));
+      expect(treffer.single.line.id, 'z1');
+    });
+
+    test('merkt, wenn mehr verkauft als vorhanden ist', () {
+      final treffer = StockService.matchInvoiceLines(
+        [zeile('500-g-Glas Sommerblüte', 100)],
+        [bestand('500-g-Glas Sommerblüte', 80, id: 'h500')],
+      );
+      // Gebucht würde es trotzdem – aber der Imker soll es sehen.
+      expect(treffer.single.exceedsStock, isTrue);
+    });
+
+    test('überspringt Zeilen ohne Menge', () {
+      final treffer = StockService.matchInvoiceLines(
+        [zeile('500-g-Glas Sommerblüte', 0)],
+        [bestand('500-g-Glas Sommerblüte', 80, id: 'h500')],
+      );
+      expect(treffer, isEmpty);
+    });
+
+    test('findet den Posten auch über Umlaute und Teiltreffer', () {
+      final treffer = StockService.matchInvoiceLines(
+        [zeile('500-g-Gläser Sommerblüte, Charge 12', 6)],
+        [bestand('500-g-Glaeser Sommerbluete', 40, id: 'h500')],
+      );
+      expect(treffer, hasLength(1));
+    });
+
+    test('ohne Lagerposten gibt es nichts zuzuordnen', () {
+      expect(
+          StockService.matchInvoiceLines(
+              [zeile('500-g-Glas Sommerblüte', 12)], const []),
+          isEmpty);
+    });
+  });
+
   group('Namen vergleichbar machen', () {
     test('faltet Umlaute, Schreibweise und Leerraum', () {
       expect(StockItemModel.normalizeName('Mittelwände'), 'mittelwaende');

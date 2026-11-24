@@ -96,19 +96,38 @@ class StockBookingSuggestion {
 
   final String reason;
 
+  /// Die bereits vorhandene Buchung dieser Maßnahme, falls es eine gibt.
+  ///
+  /// Dann geht es nicht um eine neue Buchung, sondern um das Nachziehen
+  /// einer geänderten Menge. Ohne diesen Fall bliebe eine nachträglich
+  /// korrigierte Fütterung mit der alten Menge im Lager stehen.
+  final StockMovementModel? existing;
+
   const StockBookingSuggestion({
     required this.action,
     required this.candidates,
     required this.quantity,
     required this.reason,
+    this.existing,
   });
 
   bool get isInbound => quantity > 0;
 
-  /// Der naheliegendste Posten: Bei einer Behandlung der, dessen Name zum
-  /// eingesetzten Mittel passt; sonst der einzige der Warengruppe.
+  /// Ersetzt der Vorschlag eine frühere Buchung?
+  bool get isUpdate => existing != null;
+
+  /// Der naheliegendste Posten: der schon gebuchte, bei einer Behandlung
+  /// der, dessen Name zum eingesetzten Mittel passt; sonst der einzige der
+  /// Warengruppe.
   StockBalance? get preselected {
     if (candidates.isEmpty) return null;
+    // Beim Nachziehen bleibt es beim Posten, auf den schon gebucht wurde.
+    final frueher = existing?.itemId;
+    if (frueher != null) {
+      for (final k in candidates) {
+        if (k.item.id == frueher) return k;
+      }
+    }
     final mittel = action.treatment;
     if (mittel != null && mittel.trim().isNotEmpty) {
       final gesucht = StockItemModel.normalizeName(mittel);
@@ -124,6 +143,44 @@ class StockBookingSuggestion {
     }
     return candidates.length == 1 ? candidates.first : null;
   }
+}
+
+/// Ein Rechnungsposten, dem ein Lagerposten zugeordnet werden konnte.
+///
+/// Rechnungsposten sind Freitext. Die Zuordnung über den Namen ist deshalb
+/// ein Vorschlag und keine Tatsache – deswegen wird sie dem Imker gezeigt
+/// und nicht stillschweigend gebucht.
+class StockSaleLine {
+  final InvoiceItemModel line;
+  final StockBalance balance;
+
+  const StockSaleLine({required this.line, required this.balance});
+
+  /// Verkaufte Menge, wie sie auf der Rechnung steht.
+  double get quantity => line.quantity;
+
+  /// Reicht der Bestand? Negativ darf er werden – aber man soll es sehen.
+  bool get exceedsStock => quantity > balance.quantity;
+
+  String get label => line.description;
+}
+
+/// Vorschlag, den Verkauf einer Rechnung aus dem Lager abzubuchen.
+class StockSaleSuggestion {
+  final String invoiceId;
+  final List<StockSaleLine> lines;
+
+  /// Wurde diese Rechnung schon einmal gebucht? Dann geht es um das
+  /// Nachziehen geänderter Posten, nicht um eine neue Buchung.
+  final bool alreadyBooked;
+
+  const StockSaleSuggestion({
+    required this.invoiceId,
+    required this.lines,
+    this.alreadyBooked = false,
+  });
+
+  bool get isEmpty => lines.isEmpty;
 }
 
 /// Lager: Bestände, Warnungen und Buchungen.
@@ -266,9 +323,6 @@ class StockService {
     final kategorie = StockCategories.forActionType(action.type);
     if (kategorie == null) return null;
 
-    final bereitsGebucht = await _db.getStockMovementsForAction(action.id);
-    if (bereitsGebucht.isNotEmpty) return null;
-
     final alle = await loadBalances();
     final kandidaten = alle
         .where((b) => b.item.category == kategorie)
@@ -277,12 +331,126 @@ class StockService {
 
     // Ernte füllt das Lager, alles andere zehrt daran.
     final vorzeichen = action.type == HiveActionTypes.harvest ? 1 : -1;
+    final signierteMenge = menge * vorzeichen;
+
+    final bereitsGebucht = await _db.getStockMovementsForAction(action.id);
+    if (bereitsGebucht.isNotEmpty) {
+      // Schon gebucht. Stimmt die Menge noch, gibt es nichts zu fragen.
+      // Weicht sie ab, weil die Maßnahme nachträglich geändert wurde, soll
+      // die Buchung nachziehen können – sonst steht im Lager eine Zahl,
+      // die ihrer eigenen Quelle widerspricht.
+      final vorhanden = bereitsGebucht.first;
+      final summe = bereitsGebucht.fold<double>(0, (a, b) => a + b.quantity);
+      if ((summe - signierteMenge).abs() < 0.0001) return null;
+      return StockBookingSuggestion(
+        action: action,
+        candidates: kandidaten,
+        quantity: signierteMenge,
+        reason: StockReasons.forActionType(action.type),
+        existing: vorhanden,
+      );
+    }
+
     return StockBookingSuggestion(
       action: action,
       candidates: kandidaten,
-      quantity: menge * vorzeichen,
+      quantity: signierteMenge,
       reason: StockReasons.forActionType(action.type),
     );
+  }
+
+  /// Rechnungsposten den Glas-Posten im Lager zuordnen.
+  ///
+  /// Reine Funktion ohne Datenbank. Zugeordnet wird über den Namen, mit
+  /// demselben Abgleich wie bei der Packliste: exakt, sonst Teiltreffer.
+  /// Was nicht passt, bleibt außen vor – geraten wird nicht.
+  static List<StockSaleLine> matchInvoiceLines(
+    List<InvoiceItemModel> items,
+    List<StockBalance> bestand,
+  ) {
+    final nachName = <String, StockBalance>{
+      for (final b in bestand) b.item.matchKey: b,
+    };
+    final treffer = <StockSaleLine>[];
+    for (final zeile in items) {
+      if (zeile.quantity <= 0) continue;
+      final posten = _findMatch(nachName, zeile.description);
+      if (posten == null) continue;
+      treffer.add(StockSaleLine(line: zeile, balance: posten));
+    }
+    return treffer;
+  }
+
+  /// Soll der Verkauf dieser Rechnung ins Lager gebucht werden?
+  ///
+  /// Null, wenn sich kein Posten zuordnen ließ oder die Rechnung schon mit
+  /// genau diesen Mengen gebucht ist. Nur Honig und Gläser werden
+  /// angeboten – eine Rechnung über Arbeitszeit mindert kein Lager.
+  Future<StockSaleSuggestion?> suggestSale({
+    required String invoiceId,
+    required List<InvoiceItemModel> items,
+  }) async {
+    final alle = await loadBalances();
+    final verkaeuflich = alle
+        .where((b) =>
+            b.item.category == StockCategories.honey ||
+            b.item.category == StockCategories.jars)
+        .toList(growable: false);
+    final zeilen = matchInvoiceLines(items, verkaeuflich);
+    if (zeilen.isEmpty) return null;
+
+    final gebucht = await _db.getStockMovementsForInvoice(invoiceId);
+    if (gebucht.isNotEmpty) {
+      // Stimmen die gebuchten Mengen noch mit der Rechnung überein, gibt
+      // es nichts zu fragen.
+      final gebuchtJePosten = <String, double>{};
+      for (final b in gebucht) {
+        gebuchtJePosten[b.itemId] =
+            (gebuchtJePosten[b.itemId] ?? 0) + b.quantity;
+      }
+      final sollJePosten = <String, double>{};
+      for (final z in zeilen) {
+        sollJePosten[z.balance.item.id] =
+            (sollJePosten[z.balance.item.id] ?? 0) - z.quantity;
+      }
+      var gleich = gebuchtJePosten.length == sollJePosten.length;
+      if (gleich) {
+        for (final e in sollJePosten.entries) {
+          final ist = gebuchtJePosten[e.key];
+          if (ist == null || (ist - e.value).abs() > 0.0001) {
+            gleich = false;
+            break;
+          }
+        }
+      }
+      if (gleich) return null;
+      return StockSaleSuggestion(
+          invoiceId: invoiceId, lines: zeilen, alreadyBooked: true);
+    }
+
+    return StockSaleSuggestion(invoiceId: invoiceId, lines: zeilen);
+  }
+
+  /// Verkauf einer Rechnung buchen.
+  ///
+  /// Frühere Buchungen derselben Rechnung weichen den neuen, damit eine
+  /// nachträglich geänderte Rechnung nicht doppelt zählt.
+  Future<void> bookSale({
+    required String invoiceId,
+    required List<StockSaleLine> lines,
+    required DateTime date,
+  }) async {
+    await _db.deleteStockMovementsForInvoice(invoiceId);
+    for (final z in lines) {
+      await book(
+        itemId: z.balance.item.id,
+        quantity: -z.quantity,
+        reason: StockReasons.sale,
+        date: date,
+        note: z.label,
+        invoiceId: invoiceId,
+      );
+    }
   }
 
   /// Buchung einer Maßnahme übernehmen.

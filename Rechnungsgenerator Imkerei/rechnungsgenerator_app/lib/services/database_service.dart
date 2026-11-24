@@ -1170,6 +1170,31 @@ class DatabaseService {
         where: 'hive_action_id = ?', whereArgs: [hiveActionId]);
   }
 
+  /// Bewegungen, die zu einer Rechnung gehören. Grundlage dafür, dass eine
+  /// zweimal gespeicherte Rechnung den Bestand nicht zweimal mindert.
+  Future<List<StockMovementModel>> getStockMovementsForInvoice(
+      String invoiceId) async {
+    try {
+      final db = await database;
+      final result = await db.query(
+        'stock_movements',
+        where: 'invoice_id = ?',
+        whereArgs: [invoiceId],
+      );
+      return result.map((m) => StockMovementModel.fromMap(m)).toList();
+    } catch (e) {
+      FeedbackService.logError('getStockMovementsForInvoice: $e',
+          context: 'stock_movements');
+      return [];
+    }
+  }
+
+  Future<void> deleteStockMovementsForInvoice(String invoiceId) async {
+    final db = await database;
+    await db.delete('stock_movements',
+        where: 'invoice_id = ?', whereArgs: [invoiceId]);
+  }
+
   // ============ HONEY BUCKET OPERATIONS (Eimer) ============
 
   /// Alle Eimer, neueste Ernte zuerst.

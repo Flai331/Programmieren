@@ -4,9 +4,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
+import '../services/stock_service.dart';
 import '../utils/app_utils.dart';
 import '../utils/feedback_service.dart';
 import '../utils/photo_storage.dart';
+import 'honey_bucket_new_screen.dart';
+import 'stock_item_screen.dart';
 
 /// Maßnahme an einem Volk erfassen oder bearbeiten.
 class HiveActionEditScreen extends StatefulWidget {
@@ -158,16 +161,218 @@ class _HiveActionEditScreenState extends State<HiveActionEditScreen> {
       }
       FeedbackService.logUserAction('Maßnahme gespeichert',
           context: {'typ': _type});
-      if (mounted) {
-        _snack('✓ Maßnahme gespeichert');
-        Navigator.of(context).pop(true);
+      if (!mounted) return;
+      _snack('✓ Maßnahme gespeichert');
+
+      // Erst speichern, dann das Lager anbieten. Nie automatisch buchen:
+      // Was ins Lager geht, entscheidet der Imker.
+      if (action.type == HiveActionTypes.harvest) {
+        await _offerBucket(action);
+      } else {
+        await _offerStockBooking(action);
       }
+
+      if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       FeedbackService.logError(e.toString(), context: 'HiveActionEdit._save');
       _snack('Fehler: $e', err: true);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  // ── Anschluss ans Lager ────────────────────────────────────────
+
+  /// Nach einer Ernte anbieten, den Honig als Eimer anzulegen.
+  ///
+  /// Nur beim Anlegen, nicht beim Bearbeiten: Wer eine alte Ernte
+  /// nachträglich korrigiert, will nicht jedes Mal nach einem Eimer
+  /// gefragt werden.
+  Future<void> _offerBucket(HiveActionModel action) async {
+    if (_current != null) return;
+    final kg = action.amount;
+    if (kg == null || kg <= 0) return;
+
+    final ja = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eimer anlegen?'),
+        content: Text(
+          '${AppUtils.formatNumber(kg)} kg geerntet. Soll daraus ein Eimer '
+          'im Honiglager werden? Die App vergibt dann einen Code zum '
+          'Aufschreiben und führt Zustand und Lagerplatz mit.',
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Nein')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: _peach, foregroundColor: Colors.white),
+            child: const Text('Eimer anlegen'),
+          ),
+        ],
+      ),
+    );
+    if (ja != true || !mounted) return;
+
+    await Navigator.of(context).push<HoneyBucketModel>(
+      MaterialPageRoute(
+        builder: (_) => HoneyBucketNewScreen(
+          // Menge und Datum stehen in der Maßnahme; die Sorte wählt der
+          // Imker, denn die Maßnahme führt sie nicht.
+          initialKg: kg,
+          initialDate: action.date,
+        ),
+      ),
+    );
+  }
+
+  /// Nach einer Fütterung oder Behandlung anbieten, das Material
+  /// abzubuchen – oder eine geänderte Menge nachzuziehen.
+  Future<void> _offerStockBooking(HiveActionModel action) async {
+    final vorschlag = await StockService().suggestBooking(action);
+    if (!mounted) return;
+    if (vorschlag == null) {
+      // Kein Vorschlag. Liegt es daran, dass die Warengruppe im Lager noch
+      // gar nicht geführt wird, soll das gesagt werden – sonst sieht es
+      // aus, als könne die App es nicht.
+      await _hintMissingStockItem(action);
+      return;
+    }
+
+    var ziel = vorschlag.preselected ?? vorschlag.candidates.first;
+    final menge = vorschlag.quantity;
+
+    final ja = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text(vorschlag.isUpdate
+              ? 'Buchung nachziehen?'
+              : 'Ins Lager buchen?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  vorschlag.isUpdate
+                      ? 'Diese Maßnahme ist schon gebucht, aber mit einer '
+                          'anderen Menge. Soll die Buchung auf '
+                          '${StockBalance.formatQuantity(menge.abs(), ziel.unit)} '
+                          'geändert werden?'
+                      : '${action.typeLabel}: '
+                          '${StockBalance.formatQuantity(menge.abs(), ziel.unit)} '
+                          '${menge < 0 ? 'abbuchen' : 'zubuchen'}?',
+                  style: const TextStyle(fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 14),
+                if (vorschlag.candidates.length > 1) ...[
+                  const Text('Von welchem Posten?',
+                      style: TextStyle(fontSize: 11, color: _muted)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final k in vorschlag.candidates)
+                        ChoiceChip(
+                          label: Text('${k.name} · ${k.quantityLabel}',
+                              style: const TextStyle(fontSize: 11)),
+                          selected: ziel.item.id == k.item.id,
+                          onSelected: (_) => setLocal(() => ziel = k),
+                          selectedColor: _peach.withAlpha(51),
+                        ),
+                    ],
+                  ),
+                ] else
+                  Text('${ziel.name} · ${ziel.quantityLabel} im Lager',
+                      style: const TextStyle(fontSize: 11, color: _muted)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Nicht buchen')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: _peach, foregroundColor: Colors.white),
+              child: Text(vorschlag.isUpdate ? 'Ändern' : 'Buchen'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ja != true) return;
+
+    try {
+      await StockService().bookFromAction(
+          action: action, itemId: ziel.item.id, quantity: menge);
+      if (!mounted) return;
+      _snack('✓ ${ziel.name}: '
+          '${StockBalance.formatQuantity(menge, ziel.unit)}');
+    } catch (e) {
+      _snack('Lagerbuchung fehlgeschlagen: $e', err: true);
+    }
+  }
+
+  /// Hinweis, wenn zu dieser Maßnahme kein Lagerposten passt.
+  ///
+  /// Nur beim Anlegen und nur, wenn eine Menge erfasst wurde: Sonst ist das
+  /// Ausbleiben eines Vorschlags richtig und braucht keine Erklärung.
+  Future<void> _hintMissingStockItem(HiveActionModel action) async {
+    if (_current != null) return;
+    final menge = action.amount;
+    if (menge == null || menge <= 0) return;
+    final kategorie = StockCategories.forActionType(action.type);
+    if (kategorie == null) return;
+
+    final alle = await StockService().loadBalances();
+    if (!mounted) return;
+    final gibtEs = alle.any((b) => b.item.category == kategorie);
+    // Es gibt Posten – dann war das Ausbleiben ein anderer Grund
+    // (schon gebucht, Menge unverändert) und braucht kein Wort.
+    if (gibtEs) return;
+
+    final anlegen = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Noch kein Posten im Lager'),
+        content: Text(
+          'Für ${action.typeLabel} führt das Lager noch keinen Posten in '
+          'der Warengruppe „${StockCategories.labelOf(kategorie)}". '
+          'Mit einem Posten bucht die App den Verbrauch künftig gleich '
+          'beim Speichern mit.',
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Später')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: _peach, foregroundColor: Colors.white),
+            child: const Text('Posten anlegen'),
+          ),
+        ],
+      ),
+    );
+    if (anlegen != true || !mounted) return;
+
+    final erstellt = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => StockItemScreen(initialCategory: kategorie),
+      ),
+    );
+    if (erstellt != true || !mounted) return;
+    // Jetzt gibt es einen Posten – also doch noch fragen, ob gebucht wird.
+    await _offerStockBooking(action);
   }
 
   Future<void> _delete() async {

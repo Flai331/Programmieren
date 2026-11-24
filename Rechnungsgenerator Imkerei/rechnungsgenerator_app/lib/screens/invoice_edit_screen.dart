@@ -312,11 +312,11 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
 
       FeedbackService.logUserAction('Rechnung gespeichert',
           context: {'nr': invoice.invoiceNumber});
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('✓ Rechnung gespeichert')));
-        Navigator.of(context).pop();
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✓ Rechnung gespeichert')));
+      await _offerStockSale(invoice);
+      if (mounted) Navigator.of(context).pop();
     } catch (e) {
       FeedbackService.logError(e.toString(), context: 'saveInvoice');
       if (mounted) {
@@ -409,11 +409,11 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
         ));
       }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('✓ $_docLabel gespeichert & gesendet')));
-        Navigator.of(context).pop();
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('✓ $_docLabel gespeichert & gesendet')));
+      await _offerStockSale(invoice);
+      if (mounted) Navigator.of(context).pop();
     } catch (e) {
       FeedbackService.logError(e.toString(), context: 'saveAndSend');
       if (mounted) {
@@ -422,6 +422,116 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ── Anschluss ans Lager ─────────────────────────────────────
+
+  /// Nach dem Speichern anbieten, die verkauften Gläser abzubuchen.
+  ///
+  /// Ein Angebot, nie automatisch: Rechnungsposten sind Freitext, und die
+  /// Zuordnung über den Namen ist ein Vorschlag. Stillschweigend Bestand
+  /// abzubuchen würde überraschen – und wäre bei einem Fehltreffer falsch.
+  ///
+  /// Angebote bleiben außen vor: Ein Angebot ist kein Verkauf.
+  Future<void> _offerStockSale(InvoiceModel invoice) async {
+    if (_isQuote) return;
+
+    final vorschlag = await StockService()
+        .suggestSale(invoiceId: invoice.id, items: _items);
+    if (vorschlag == null || !mounted) return;
+
+    // Vorauswahl: alle gefundenen Zeilen. Abwählen ist möglich, denn ein
+    // Namenstreffer muss nicht bedeuten, dass es derselbe Posten ist.
+    final gewaehlt = {for (final z in vorschlag.lines) z.line.id: true};
+
+    final ja = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text(vorschlag.alreadyBooked
+              ? 'Lagerbuchung nachziehen?'
+              : 'Aus dem Lager abbuchen?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  vorschlag.alreadyBooked
+                      ? 'Diese Rechnung ist schon gebucht, aber mit anderen '
+                          'Mengen. Soll die Buchung der Rechnung folgen?'
+                      : 'Diese Posten der Rechnung passen zu Lagerposten. '
+                          'Abbuchen?',
+                  style: const TextStyle(fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 12),
+                for (final z in vorschlag.lines)
+                  CheckboxListTile(
+                    value: gewaehlt[z.line.id] ?? false,
+                    onChanged: (v) =>
+                        setLocal(() => gewaehlt[z.line.id] = v ?? false),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(z.balance.name,
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600)),
+                    subtitle: Text(
+                      '${StockBalance.formatQuantity(z.quantity, z.balance.unit)} '
+                      'von ${z.balance.quantityLabel}'
+                      '${z.exceedsStock ? ' · mehr als vorhanden' : ''}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: z.exceedsStock
+                            ? const Color(0xFFff6b7a)
+                            : const Color(0xFF8a8a94),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Die Zuordnung geht über den Namen des Postens. Passt sie '
+                  'nicht, Haken weg.',
+                  style: TextStyle(
+                      fontSize: 10, color: Color(0xFF8a8a94), height: 1.4),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Nicht buchen')),
+            ElevatedButton(
+              onPressed: gewaehlt.values.any((v) => v)
+                  ? () => Navigator.pop(ctx, true)
+                  : null,
+              child: Text(vorschlag.alreadyBooked ? 'Nachziehen' : 'Buchen'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ja != true) return;
+
+    final zeilen = vorschlag.lines
+        .where((z) => gewaehlt[z.line.id] == true)
+        .toList(growable: false);
+    if (zeilen.isEmpty) return;
+
+    try {
+      await StockService().bookSale(
+          invoiceId: invoice.id, lines: zeilen, date: invoice.date);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('✓ ${zeilen.length} '
+              '${zeilen.length == 1 ? "Posten" : "Posten"} abgebucht')));
+    } catch (e) {
+      FeedbackService.logError(e.toString(), context: 'offerStockSale');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lagerbuchung fehlgeschlagen: $e')));
     }
   }
 
