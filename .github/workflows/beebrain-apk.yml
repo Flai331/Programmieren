@@ -1,12 +1,19 @@
 name: BeeBrain APK
 
-# Baut das Test-APK auf einem GitHub-Runner. Dort ist das Android-SDK
+# Baut das APK auf einem GitHub-Runner. Dort ist das Android-SDK
 # vorhanden; in manchen Entwicklungsumgebungen ist dl.google.com gesperrt,
 # sodass sich SDK und Android-Gradle-Plugin lokal nicht laden lassen.
 #
-# Das Ergebnis trägt die Anwendungs-ID com.klaasotte.beebrain.test und
-# installiert sich damit NEBEN einer vorhandenen BeeBrain, mit eigenem
-# Datenbestand. Siehe android/app/build.gradle.kts.
+# Gebaut wird die Release-Variante: Das Debug-APK war rund 100 MiB groß,
+# was für eine App, die sich selbst aktualisiert, über Mobilfunk nicht
+# zumutbar ist.
+#
+# Signiert wird mit dem Schlüssel aus den Repo-Secrets. Das ist die
+# Voraussetzung dafür, dass eine neue Fassung eine installierte ersetzen
+# kann: Android verlangt dieselbe Signatur. Fehlen die Secrets, baut der
+# Lauf trotzdem durch – dann aber mit einer Debug-Signatur, die eine
+# vorhandene Installation nicht ersetzen kann. Siehe
+# android/app/build.gradle.kts.
 
 on:
   workflow_dispatch:
@@ -51,14 +58,35 @@ jobs:
       - name: Tests
         run: flutter test
 
+      - name: Signaturschlüssel einrichten
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::Kein ANDROID_KEYSTORE_BASE64 hinterlegt. Es wird mit einer Debug-Signatur gebaut, und dieses APK kann eine vorhandene Installation NICHT ersetzen."
+            exit 0
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/app/beebrain.jks
+          # Die Passwörter landen nur in dieser Datei, nicht im Protokoll.
+          {
+            echo "storeFile=beebrain.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/key.properties
+          echo "Signaturschlüssel eingerichtet ($(wc -c < android/app/beebrain.jks) Bytes)."
+
       - name: APK bauen
-        run: flutter build apk --debug
+        run: flutter build apk --release
 
       - name: APK benennen
         id: apk
         run: |
-          quelle="build/app/outputs/flutter-apk/app-debug.apk"
-          ziel="BeeBrain-Test-${GITHUB_SHA::7}.apk"
+          quelle="build/app/outputs/flutter-apk/app-release.apk"
+          ziel="BeeBrain-${GITHUB_SHA::7}.apk"
           cp "$quelle" "$ziel"
           echo "name=$ziel" >> "$GITHUB_OUTPUT"
           ls -lh "$ziel"

@@ -1,4 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Netzzugang. Steht hier und nicht nur im Debug-Manifest, weil ein
+         Release-Bau dessen Berechtigungen nicht erbt: Ohne diese Zeile
+         scheitert jeder Netzaufruf der veröffentlichten App – etwa die
+         Suche nach einer neueren Fassung – mit einer SocketException. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"

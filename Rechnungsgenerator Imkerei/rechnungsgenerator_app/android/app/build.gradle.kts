@@ -1,8 +1,31 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Signatur für Veröffentlichungen.
+//
+// Android lässt eine installierte App nur durch ein Paket mit DERSELBEN
+// Signatur ersetzen. Ohne festen Schlüssel erzeugt sich jeder Bau-Rechner
+// seinen eigenen Debug-Schlüssel – zwei Bauten derselben App könnten sich
+// dann gegenseitig nicht aktualisieren, und genau das macht einen
+// Aktualisierungsknopf in der App unmöglich.
+//
+// `android/key.properties` liegt NICHT im Repository (siehe .gitignore); die
+// CI schreibt sie aus den Repo-Secrets. Fehlt sie, fällt der Bau auf die
+// Debug-Signatur zurück: Ein lokales `flutter build` läuft damit weiter, das
+// Ergebnis kann aber keine vorhandene Installation ersetzen.
+val signaturDatei = rootProject.file("key.properties")
+val signatur = Properties().apply {
+    if (signaturDatei.exists()) {
+        FileInputStream(signaturDatei).use { load(it) }
+    }
+}
+val eigeneSignatur = signatur.getProperty("storeFile") != null
 
 android {
     namespace = "com.klaasotte.beebrain"
@@ -38,12 +61,26 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (eigeneSignatur) {
+            create("veroeffentlichung") {
+                // Der Pfad gilt ab diesem Modul-Ordner (android/app).
+                storeFile = file(signatur.getProperty("storeFile"))
+                storePassword = signatur.getProperty("storePassword")
+                keyAlias = signatur.getProperty("keyAlias")
+                keyPassword = signatur.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Eigenen Signaturschlüssel für Veröffentlichungen anlegen.
-            // Vorerst mit dem Debug-Schlüssel, damit `flutter run --release`
-            // funktioniert.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (eigeneSignatur) {
+                signingConfigs.getByName("veroeffentlichung")
+            } else {
+                // Kein Schlüssel hinterlegt: bauen ja, ersetzen nein.
+                signingConfigs.getByName("debug")
+            }
             resValue("string", "app_name", "BeeBrain")
         }
         debug {
