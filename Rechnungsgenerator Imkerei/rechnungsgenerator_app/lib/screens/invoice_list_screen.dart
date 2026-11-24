@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:share_plus/share_plus.dart' show Share, XFile;
+import 'package:share_plus/share_plus.dart'
+    show SharePlus, ShareParams, XFile;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../services/services.dart';
@@ -128,11 +129,11 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
       final body = invoice.isQuote
           ? 'Moin,\n\nanbei unser Angebot.'
           : 'Moin,\n\nanbei die Rechnung für die letzte Honiglieferung.';
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(file.path, mimeType: 'application/pdf')],
         subject: subject,
         text: body,
-      );
+      ));
       await _dbService.updateInvoiceStatus(invoice.id, 'sent');
       _reload();
     } catch (e) {

@@ -1,2 +1,2 @@
 // Wird bei jeder Änderung manuell hochgezählt — nur für Fehlerberichte.
-const int kBuildNumber = 8;
+const int kBuildNumber = 9;

@@ -37,10 +37,10 @@ dependencies:
   qr_flutter: ^4.1.0
 
   # File Sharing
-  share_plus: ^7.2.0
+  share_plus: ^13.3.0
 
   # Netzwerk-Status (Anzeige offline/online)
-  connectivity_plus: ^5.0.0
+  connectivity_plus: ^7.3.1
 
   # Feedback / Fehlerberichte: teilen, kopieren, per Mail öffnen.
   # Kein Direktversand an einen Dienst – dafür müsste ein Zugangsschlüssel

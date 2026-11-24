@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:share_plus/share_plus.dart' show Share, XFile;
+import 'package:share_plus/share_plus.dart'
+    show SharePlus, ShareParams, XFile;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../services/services.dart';
@@ -401,11 +402,11 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
         final body = _isQuote
             ? 'Moin,\n\nanbei unser Angebot.'
             : 'Moin,\n\nanbei die Rechnung für die letzte Honiglieferung.';
-        await Share.shareXFiles(
-          [XFile(file.path, mimeType: 'application/pdf')],
+        await SharePlus.instance.share(ShareParams(
+          files: [XFile(file.path, mimeType: 'application/pdf')],
           subject: subject,
           text: body,
-        );
+        ));
       }
 
       if (mounted) {

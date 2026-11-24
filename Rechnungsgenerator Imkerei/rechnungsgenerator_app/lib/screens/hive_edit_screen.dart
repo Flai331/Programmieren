@@ -2,7 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:share_plus/share_plus.dart' show Share, XFile;
+import 'package:share_plus/share_plus.dart'
+    show SharePlus, ShareParams, XFile;
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
@@ -175,10 +176,10 @@ class _HiveEditScreenState extends State<HiveEditScreen> {
       final file =
           File('${tmp.path}/Stockkarte_${num.toString().padLeft(3, '0')}.pdf');
       await file.writeAsBytes(bytes);
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(file.path, mimeType: 'application/pdf')],
         subject: 'Stockkarte ${h.displayLabel}',
-      );
+      ));
     } catch (e) {
       _snack('PDF-Fehler: $e', err: true);
     }

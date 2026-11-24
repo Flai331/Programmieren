@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart' show Share, XFile;
+import 'package:share_plus/share_plus.dart'
+    show SharePlus, ShareParams, XFile;
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
@@ -181,11 +182,11 @@ class _LetterEditScreenState extends State<LetterEditScreen> {
       final subjectText = (letter.subject != null && letter.subject!.trim().isNotEmpty)
           ? letter.subject!
           : AppUtils.formatDate(letter.letterDate ?? DateTime.now());
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(file.path, mimeType: 'application/pdf')],
         subject: 'Brief: $subjectText',
         text: 'Moin,\n\nanbei mein Brief.',
-      );
+      ));
       if (_current != null) {
         await _db.updateLetterStatus(_current!.id, 'sent');
       }

@@ -7,7 +7,8 @@ import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:share_plus/share_plus.dart' show Share, XFile;
+import 'package:share_plus/share_plus.dart'
+    show SharePlus, ShareParams, XFile;
 
 import 'feedback_report.dart';
 import 'report_store.dart';
@@ -412,13 +413,14 @@ class FeedbackService {
     try {
       final bilder = await ReportStore.photoPaths(report);
       if (bilder.isNotEmpty && !kIsWeb) {
-        await Share.shareXFiles(
-          [for (final pfad in bilder) XFile(pfad, mimeType: 'image/png')],
+        await SharePlus.instance.share(ShareParams(
+          files: [for (final pfad in bilder) XFile(pfad, mimeType: 'image/png')],
           subject: '[$_appName] ${report.title}',
           text: text,
-        );
+        ));
       } else {
-        await Share.share(text, subject: '[$_appName] ${report.title}');
+        await SharePlus.instance.share(
+            ShareParams(text: text, subject: '[$_appName] ${report.title}'));
       }
       await ReportStore.save(report.copyWith(exported: true));
       return true;

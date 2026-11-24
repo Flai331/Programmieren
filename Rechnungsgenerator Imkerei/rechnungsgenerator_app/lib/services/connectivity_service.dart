@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 class ConnectivityService with ChangeNotifier {
   final Connectivity _connectivity = Connectivity();
   bool _isOnline = true;
-  late ConnectivityResult _lastResult;
 
   bool get isOnline => _isOnline;
   bool get isOffline => !_isOnline;
@@ -19,16 +18,11 @@ class ConnectivityService with ChangeNotifier {
 
   Future<void> initialize() async {
     try {
-      final result = await _connectivity.checkConnectivity();
-      _lastResult = result;
-      _updateConnectionStatus(result);
+      _updateConnectionStatus(await _connectivity.checkConnectivity());
 
       // Listen to connectivity changes
       _connectivity.onConnectivityChanged.listen(
-        (ConnectivityResult result) {
-          _lastResult = result;
-          _updateConnectionStatus(result);
-        },
+        _updateConnectionStatus,
         onError: (_) {
           // Windows NetworkManager-Bug ignorieren — Default: online
           _isOnline = true;
@@ -40,9 +34,12 @@ class ConnectivityService with ChangeNotifier {
     }
   }
 
-  void _updateConnectionStatus(ConnectivityResult result) {
+  /// Ab connectivity_plus 7 liefert die Abfrage eine Liste: Ein Gerät kann
+  /// über mehrere Wege gleichzeitig verbunden sein (z.B. WLAN und Mobilfunk).
+  /// Online ist es, sobald mindestens ein Weg taugt.
+  void _updateConnectionStatus(List<ConnectivityResult> results) {
     final wasOnline = _isOnline;
-    _isOnline = result != ConnectivityResult.none;
+    _isOnline = results.any((r) => r != ConnectivityResult.none);
 
     // Notify listeners if connection status changed
     if (wasOnline != _isOnline) {
@@ -52,9 +49,7 @@ class ConnectivityService with ChangeNotifier {
 
   Future<bool> checkConnection() async {
     try {
-      final result = await _connectivity.checkConnectivity();
-      _lastResult = result;
-      _updateConnectionStatus(result);
+      _updateConnectionStatus(await _connectivity.checkConnectivity());
     } catch (_) {
       _isOnline = true;
     }
