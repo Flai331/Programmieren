@@ -75,26 +75,6 @@ android {
 
     buildTypes {
         release {
-            // Keine x86_64-Bibliotheken ins Paket. Das ist nicht dasselbe
-            // wie `--target-platform` beim Bau-Befehl, und beides ist
-            // nötig:
-            //
-            //   --target-platform  bestimmt, welche Flutter-Engine
-            //                      eingepackt wird
-            //   abiFilters         bestimmt, welche nativen Bibliotheken
-            //                      der Pakete (ML Kit, sqflite …) aus
-            //                      ihren AARs mitkommen
-            //
-            // Gemessen: Mit `--target-platform` allein blieben in Build 14
-            // noch 11,2 MB lib/x86_64 übrig — die Engine war weg, die
-            // Pakete nicht. Auf einem Handy ist das durchweg toter Ballast.
-            //
-            // Nur hier, nicht in defaultConfig: Ein Debug-Bau soll weiter
-            // alle Architekturen enthalten, damit er im Emulator läuft.
-            ndk {
-                abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-            }
-
             signingConfig = if (eigeneSignatur) {
                 signingConfigs.getByName("veroeffentlichung")
             } else {
@@ -116,6 +96,33 @@ android {
             applicationIdSuffix = ".test"
             resValue("string", "app_name", "BeeBrain Test")
         }
+    }
+}
+
+// Keine x86_64-Bibliotheken im Release-Paket.
+//
+// Das ist nicht dasselbe wie `--target-platform` beim Bau-Befehl, und
+// beides ist nötig:
+//
+//   --target-platform   bestimmt, welche Flutter-Engine eingepackt wird
+//   diese Ausnahme hier bestimmt, welche nativen Bibliotheken der Pakete
+//                       (ML Kit, sqflite …) aus ihren AARs mitkommen
+//
+// Gemessen im veröffentlichten Build 14: Mit `--target-platform` allein
+// blieben 11,2 MB lib/x86_64 übrig — die Engine war weg, ML Kits
+// OCR-Pipeline nicht. Auf einem Handy ist das durchweg toter Ballast.
+//
+// Und es geht ausdrücklich NICHT über `ndk { abiFilters }` im
+// Release-Typ: Build 15 hatte das, Gradle nahm es an, und das Paket war
+// byteweise unverändert. Die Ausnahme beim Verpacken greift dagegen auf
+// Datei-Ebene.
+//
+// Nur für Release: Ein Debug-Bau behält alle Architekturen, damit er im
+// Emulator läuft.
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variante ->
+        variante.packaging.jniLibs.excludes.add("**/x86_64/**")
+        variante.packaging.jniLibs.excludes.add("**/x86/**")
     }
 }
 
