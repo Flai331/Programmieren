@@ -99,19 +99,67 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          set -u
           if [ -z "$KEYSTORE_BASE64" ]; then
             echo "::warning::Kein ANDROID_KEYSTORE_BASE64 hinterlegt. Es wird mit einer Debug-Signatur gebaut, und dieses APK kann eine vorhandene Installation NICHT ersetzen."
             exit 0
           fi
-          printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/app/beebrain.jks
+
+          speicher="android/app/beebrain.jks"
+          if ! printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$speicher" 2>/dev/null; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 ist kein gültiges Base64. Beim Kopieren ist etwas verloren gegangen – den Text noch einmal vollständig einsetzen."
+            exit 1
+          fi
+          groesse="$(wc -c < "$speicher")"
+          if [ "$groesse" -lt 1000 ]; then
+            echo "::error::Der Schlüsselspeicher ist nur $groesse Bytes groß, das kann nicht stimmen: ANDROID_KEYSTORE_BASE64 ist unvollständig."
+            exit 1
+          fi
+
+          # Hier prüfen und nicht erst in Gradle. Dort fällt ein falsches
+          # Passwort erst nach Minuten Bauzeit auf, und dann als „Failed to
+          # read key … Given final block not properly padded" — das klingt nach
+          # einem kaputten Schlüssel und ist doch nur ein Passwort. Die
+          # Meldungen hier sagen stattdessen, welches Secret gemeint ist. Die
+          # Werte selbst stehen in keiner Zeile.
+          if ! keytool -list -keystore "$speicher" -storepass "$KEYSTORE_PASSWORD" > /dev/null 2>&1; then
+            echo "::error::ANDROID_KEYSTORE_PASSWORD öffnet den Schlüsselspeicher nicht."
+            exit 1
+          fi
+          if ! keytool -list -keystore "$speicher" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" > /dev/null 2>&1; then
+            echo "::error::Im Schlüsselspeicher gibt es keinen Eintrag mit dem Namen aus ANDROID_KEY_ALIAS."
+            exit 1
+          fi
+
+          # Ein PKCS12-Speicher — das Standardformat von keytool — verschlüsselt
+          # den Schlüssel mit dem Passwort des Speichers. Ein eigenes
+          # Schlüsselpasswort kann es dort nicht geben: `keytool -keypasswd`
+          # lehnt es ausdrücklich ab („not supported if -storetype is PKCS12").
+          # Gradle nimmt keyPassword trotzdem wörtlich und bricht ab, sobald es
+          # abweicht — daran scheiterte Lauf 21. Also bei PKCS12 immer das
+          # Speicherpasswort nehmen; ANDROID_KEY_PASSWORD zählt nur bei einem
+          # Format, das ein eigenes Schlüsselpasswort tragen kann.
+          format="$(keytool -list -keystore "$speicher" -storepass "$KEYSTORE_PASSWORD" 2>/dev/null \
+            | sed -n 's/^Keystore type: *//p' | head -1)"
+          schluesselpasswort="$KEYSTORE_PASSWORD"
+          if [ -n "$format" ] && [ "$format" != "PKCS12" ] && [ -n "$KEY_PASSWORD" ]; then
+            schluesselpasswort="$KEY_PASSWORD"
+          elif [ -n "$KEY_PASSWORD" ] && [ "$KEY_PASSWORD" != "$KEYSTORE_PASSWORD" ]; then
+            echo "::notice::ANDROID_KEY_PASSWORD weicht von ANDROID_KEYSTORE_PASSWORD ab und wird übergangen: ein PKCS12-Speicher kennt kein eigenes Schlüsselpasswort. Das Secret kann gelöscht werden."
+          fi
+
+          # In einer .properties-Datei ist der Rückstrich ein Fluchtzeichen:
+          # „a\b" käme als „ab" an. Ein Passwort mit Rückstrich wäre also
+          # falsch angekommen — mit derselben rätselhaften Gradle-Meldung.
+          fluchten() { printf '%s' "$1" | sed 's/\\/\\\\/g'; }
           # Die Passwörter landen nur in dieser Datei, nicht im Protokoll.
           {
             echo "storeFile=beebrain.jks"
-            echo "storePassword=$KEYSTORE_PASSWORD"
-            echo "keyAlias=$KEY_ALIAS"
-            echo "keyPassword=$KEY_PASSWORD"
+            echo "storePassword=$(fluchten "$KEYSTORE_PASSWORD")"
+            echo "keyAlias=$(fluchten "$KEY_ALIAS")"
+            echo "keyPassword=$(fluchten "$schluesselpasswort")"
           } > android/key.properties
-          echo "Signaturschlüssel eingerichtet ($(wc -c < android/app/beebrain.jks) Bytes)."
+          echo "Signaturschlüssel eingerichtet: $format, $groesse Bytes."
 
       - name: APK bauen
         # Ohne x86_64. Gemessen am Paket von Build 13 waren 97 % der Größe
