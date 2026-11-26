@@ -806,6 +806,12 @@ class _HoneyStockScreenState extends State<HoneyStockScreen> {
     final bucket = s.bucket;
     final farbe = Color(HoneyStates.colorOf(bucket.state));
     final striche = HoneyStates.strokeHint(bucket.state);
+    final markierung = bucket.crystallization;
+    // Eine Markierung sticht hervor: sie ist der Grund, warum der Eimer
+    // wartet, nicht der Zustand.
+    final hinweisFarbe = markierung == null
+        ? farbe
+        : Color(HoneyCrystallization.colorOf(markierung));
 
     return InkWell(
       onTap: () => _openBucket(bucket.id),
@@ -818,7 +824,7 @@ class _HoneyStockScreenState extends State<HoneyStockScreen> {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: s.needsAttention && !bucket.isEmpty
-                ? farbe.withAlpha(140)
+                ? hinweisFarbe.withAlpha(140)
                 : const Color(0x14ffffff),
           ),
         ),
@@ -860,9 +866,11 @@ class _HoneyStockScreenState extends State<HoneyStockScreen> {
                   Text(
                     [
                       bucket.stateLabel,
+                      if (markierung != null)
+                        HoneyCrystallization.labelOf(markierung),
                       if (bucket.location != null) bucket.location!,
                     ].join(' · '),
-                    style: TextStyle(fontSize: 10, color: farbe),
+                    style: TextStyle(fontSize: 10, color: hinweisFarbe),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
@@ -884,7 +892,7 @@ class _HoneyStockScreenState extends State<HoneyStockScreen> {
             ),
             if (s.needsAttention && !bucket.isEmpty) ...[
               const SizedBox(width: 6),
-              Icon(Icons.priority_high, size: 15, color: farbe),
+              Icon(Icons.priority_high, size: 15, color: hinweisFarbe),
             ],
           ],
         ),

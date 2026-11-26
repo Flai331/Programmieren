@@ -145,4 +145,65 @@ void main() {
       expect(HoneyCrystallization.labelOf('weissnicht'), 'weissnicht');
     });
   });
+
+  group('Antippen eines Kästchens', () {
+    final n = HoneyStates.steps.length;
+
+    test('ein leeres Kästchen hakt alles bis dorthin an', () {
+      // Der Wunsch in einem Satz: „alle anharken wenn man das erste
+      // anharkt" – wer hinten hakt, hakt vorn mit.
+      for (var stand = 1; stand <= n; stand++) {
+        for (var tipp = stand + 1; tipp <= n; tipp++) {
+          expect(
+            HoneyStates.ticksAfterTap(current: stand, tapped: tipp),
+            tipp,
+            reason: 'Stand $stand, getippt $tipp',
+          );
+        }
+      }
+    });
+
+    test('der eigene Stand nimmt genau einen Haken zurück', () {
+      for (var stand = 2; stand <= n; stand++) {
+        expect(HoneyStates.ticksAfterTap(current: stand, tapped: stand),
+            stand - 1);
+      }
+    });
+
+    test('ein früherer Haken nimmt sich selbst und alles danach weg', () {
+      // Stand 4, Kästchen 2 angetippt: 2, 3 und 4 fallen, 1 bleibt.
+      expect(HoneyStates.ticksAfterTap(current: 4, tapped: 2), 1);
+      expect(HoneyStates.ticksAfterTap(current: 4, tapped: 3), 2);
+      expect(HoneyStates.ticksAfterTap(current: 3, tapped: 2), 1);
+    });
+
+    test('Kästchen 1 lässt sich nie abhaken', () {
+      for (var stand = 1; stand <= n; stand++) {
+        expect(HoneyStates.ticksAfterTap(current: stand, tapped: 1), isNull,
+            reason: 'Stand $stand');
+      }
+    });
+
+    test('jedes Ergebnis ist ein Zustand der Kette', () {
+      for (var stand = 1; stand <= n; stand++) {
+        for (var tipp = 1; tipp <= n; tipp++) {
+          final ziel =
+              HoneyStates.ticksAfterTap(current: stand, tapped: tipp);
+          if (ziel == null) continue;
+          expect(ziel, inInclusiveRange(1, n));
+          final zustand = HoneyStates.stateForTicks(ziel);
+          expect(HoneyStates.steps, contains(zustand));
+          // Und die Rechnung ist in sich geschlossen: der Zustand zählt
+          // genau die Haken, die er bekommen sollte.
+          expect(HoneyStates.ticksOf(zustand), ziel);
+        }
+      }
+    });
+
+    test('der letzte Schritt ist erreichbar und das Ende', () {
+      expect(HoneyStates.ticksAfterTap(current: 1, tapped: n), n);
+      expect(HoneyStates.stateForTicks(n), HoneyStates.readyToBottle);
+      expect(HoneyStates.next(HoneyStates.readyToBottle), isNull);
+    });
+  });
 }

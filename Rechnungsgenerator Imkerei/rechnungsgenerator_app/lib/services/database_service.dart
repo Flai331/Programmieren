@@ -19,6 +19,14 @@ class DatabaseService {
     return _database!;
   }
 
+  /// Nur für Tests: eine schon offene Datenbank unterschieben.
+  ///
+  /// Der Dienst ist ein Singleton und öffnet sonst die Datei auf dem Gerät.
+  /// Damit laufen die Dienste in Tests gegen eine Datenbank im Speicher –
+  /// `null` gibt den Platz wieder frei.
+  @visibleForTesting
+  set databaseForTests(Database? db) => _database = db;
+
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'beebrain.db');

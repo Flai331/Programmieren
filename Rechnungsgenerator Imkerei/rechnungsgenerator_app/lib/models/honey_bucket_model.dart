@@ -307,6 +307,9 @@ class HoneyEventKinds {
   static const String location = 'platz';
   static const String note = 'notiz';
 
+  /// Markierung gesetzt oder entfernt – grob kristallin, kandiert.
+  static const String crystallization = 'kristall';
+
   /// Eimer in den Wärmeschrank gestellt; `date` ist der Startpunkt der Uhr.
   static const String warmerIn = 'waermeschrank_ein';
 
@@ -319,6 +322,7 @@ class HoneyEventKinds {
     bottling: 'Abfüllung',
     location: 'Platz',
     note: 'Notiz',
+    crystallization: 'Markierung',
     warmerIn: 'In den Wärmeschrank',
     warmerOut: 'Aus dem Wärmeschrank',
   };
@@ -540,6 +544,22 @@ class HoneyStates {
     if (wert == empty) return _steps.length;
     final i = _steps.indexOf(wert);
     return i < 0 ? 1 : i + 1;
+  }
+
+  /// Welcher Haken-Stand gilt, wenn bei [current] Haken das Kästchen
+  /// [tapped] angetippt wird? Null heißt: alles bleibt, wie es ist.
+  ///
+  /// Die Regel in einem Satz: ein leeres Kästchen hakt alles bis dorthin mit
+  /// an, ein gesetztes nimmt sich selbst und alles danach wieder weg. Beides
+  /// folgt daraus, dass die Kette keine Lücken kennt – wer rührt, hat vorher
+  /// geimpft. Kästchen 1 bleibt stehen: geschleudert ist der Honig, sonst
+  /// gäbe es den Eimer nicht.
+  ///
+  /// Reine Rechnung, damit die Regel ohne Oberfläche prüfbar ist.
+  static int? ticksAfterTap({required int current, required int tapped}) {
+    if (tapped > current) return tapped;
+    if (tapped <= 1) return null;
+    return tapped - 1;
   }
 
   /// Der Zustand, der zu `anzahl` Haken gehört; 1 ist der erste Haken.

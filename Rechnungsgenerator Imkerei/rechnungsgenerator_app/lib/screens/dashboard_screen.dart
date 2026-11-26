@@ -421,9 +421,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   /// Ein Eimer, an dem etwas zu tun ist. Der nächste Schritt steht dran –
-  /// „noch zu rühren" allein sagt nicht, was zu tun ist.
+  /// der erreichte Zustand allein sagt nicht, was zu tun ist.
   Widget _honeyRow(HoneyBucketStatus s) {
-    final farbe = Color(HoneyStates.colorOf(s.bucket.state));
+    final markierung = s.bucket.crystallization;
+    final farbe = markierung == null
+        ? Color(HoneyStates.colorOf(s.bucket.state))
+        : Color(HoneyCrystallization.colorOf(markierung));
+    final naechster = HoneyStates.next(s.bucket.state);
+    // Ist der Honig grob oder kandiert, führt der Weg nicht weiter in der
+    // Kette, sondern durch das Melitherm.
+    final griff = markierung != null
+        ? 'Melitherm'
+        : (naechster == null ? 'ansehen' : HoneyStates.labelOf(naechster));
     return InkWell(
       onTap: () => _openBucket(s.bucket.id),
       borderRadius: BorderRadius.circular(8),
@@ -447,9 +456,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: const TextStyle(
                           fontSize: 12, fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis),
-                  Text('${s.bucket.stateLabel} · ${s.currentLabel}',
+                  Text(
+                      [
+                        s.bucket.stateLabel,
+                        if (markierung != null)
+                          HoneyCrystallization.labelOf(markierung),
+                        s.currentLabel,
+                      ].join(' · '),
                       style: const TextStyle(
-                          fontSize: 10, color: Color(0xFF8a8a94))),
+                          fontSize: 10, color: Color(0xFF8a8a94)),
+                      overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
@@ -463,9 +479,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 border: Border.all(color: farbe, width: 1),
               ),
               child: Text(
-                HoneyStates.next(s.bucket.state) == null
-                    ? 'ansehen'
-                    : HoneyStates.labelOf(HoneyStates.next(s.bucket.state)!),
+                griff,
                 style: TextStyle(
                     fontSize: 10, color: farbe, fontWeight: FontWeight.w600),
               ),

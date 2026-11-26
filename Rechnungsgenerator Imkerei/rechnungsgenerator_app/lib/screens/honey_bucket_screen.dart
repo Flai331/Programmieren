@@ -101,84 +101,133 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
     if (bucket == null) return;
     final naechster = HoneyStates.next(bucket.state);
     if (naechster == null) return;
-    try {
-      await _honey.advanceState(bucket);
-      _dirty = true;
-      await _load();
-      if (!mounted) return;
-      final striche = HoneyStates.strokeHint(naechster);
-      _snack(striche.isEmpty
-          ? '✓ ${HoneyStates.labelOf(naechster)}'
-          : '✓ ${HoneyStates.labelOf(naechster)} – '
-              'jetzt $striche auf den Eimer');
-    } catch (e) {
-      _snack('Fehler: $e', err: true);
-    }
+    await _applyState(naechster);
   }
 
-  /// Einen anderen Zustand wählen – auch die Abzweige grob und fest.
-  Future<void> _chooseState() async {
+  /// Einen Haken setzen oder wieder wegnehmen.
+  ///
+  /// Die Kette kennt keine Lücken: Haken 3 heißt, dass 1 und 2 vorbei sind.
+  /// Darum hakt ein Antippen alles bis dorthin mit an, und ein gesetzter
+  /// Haken nimmt sich selbst und alles danach wieder weg. Haken 1 bleibt
+  /// stehen – geschleudert ist der Honig, sonst gäbe es den Eimer nicht.
+  Future<void> _toggleTick(int nummer) async {
     final bucket = _bucket;
     if (bucket == null) return;
+    final gesetzt = HoneyStates.ticksOf(bucket.state);
+    final ziel = HoneyStates.ticksAfterTap(current: gesetzt, tapped: nummer);
+    if (ziel == null) {
+      _snack('Geschleudert ist er auf jeden Fall – der Haken bleibt.');
+      return;
+    }
 
-    final gewaehlt = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text('Zustand setzen',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
-            ),
-            for (final z in HoneyStates.all)
-              ListTile(
-                dense: true,
-                leading: Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: Color(HoneyStates.colorOf(z)),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                title: Text(HoneyStates.labelOf(z),
-                    style: TextStyle(
-                        fontWeight: z == bucket.state
-                            ? FontWeight.w700
-                            : FontWeight.normal)),
-                subtitle: Text(
-                  HoneyStates.strokeHint(z).isEmpty
-                      ? 'kein Strich am Eimer'
-                      : '${HoneyStates.strokeHint(z)} am Eimer',
-                  style: const TextStyle(fontSize: 10, color: _muted),
-                ),
-                trailing: z == bucket.state
-                    ? const Icon(Icons.check, size: 16, color: _peach)
-                    : null,
-                onTap: () => Navigator.pop(ctx, z),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (gewaehlt == null || gewaehlt == bucket.state) return;
+    // Mehr als einen Haken auf einmal zu verlieren ist selten Absicht.
+    if (gesetzt - ziel > 1) {
+      final zurueck = HoneyStates.labelOf(HoneyStates.stateForTicks(ziel));
+      final ok = await _confirm(
+        titel: 'Haken zurücknehmen',
+        text: 'Das nimmt ${gesetzt - ziel} Haken weg. Der Eimer steht '
+            'danach wieder auf „$zurueck".',
+        knopf: 'Zurücknehmen',
+      );
+      if (ok != true) return;
+    }
 
+    await _applyState(HoneyStates.stateForTicks(ziel));
+  }
+
+  /// Den Zustand schreiben und sagen, was jetzt auf den Eimer gehört.
+  Future<void> _applyState(String neuer) async {
+    final bucket = _bucket;
+    if (bucket == null || neuer == bucket.state) return;
     try {
-      await _honey.setState(bucket, gewaehlt);
+      await _honey.setState(bucket, neuer);
       _dirty = true;
       await _load();
       if (!mounted) return;
-      final striche = HoneyStates.strokeHint(gewaehlt);
-      _snack(striche.isEmpty
-          ? '✓ ${HoneyStates.labelOf(gewaehlt)}'
-          : '✓ ${HoneyStates.labelOf(gewaehlt)} – '
-              'jetzt $striche auf den Eimer');
+      _snackState(neuer);
     } catch (e) {
       _snack('Fehler: $e', err: true);
     }
   }
+
+  void _snackState(String zustand) {
+    final striche = HoneyStates.strokeHint(zustand);
+    _snack(striche.isEmpty
+        ? '✓ ${HoneyStates.labelOf(zustand)}'
+        : '✓ ${HoneyStates.labelOf(zustand)} – jetzt $striche auf den Eimer');
+  }
+
+  // ── Markierung ─────────────────────────────────────────────────
+
+  /// Grob kristallin oder kandiert vermerken – nochmal tippen nimmt es weg.
+  ///
+  /// Das ist kein Haken: der Honig bleibt stehen, wo er stand. Die Markierung
+  /// sagt nur, dass er so nicht abgefüllt werden kann.
+  Future<void> _toggleCrystallization(String wert) async {
+    final bucket = _bucket;
+    if (bucket == null) return;
+    final neu = bucket.crystallization == wert ? null : wert;
+    try {
+      await _honey.setCrystallization(bucket, neu);
+      _dirty = true;
+      await _load();
+      if (!mounted) return;
+      _snack(neu == null
+          ? 'Markierung abgenommen'
+          : '${HoneyCrystallization.labelOf(neu)} vermerkt');
+    } catch (e) {
+      _snack('Fehler: $e', err: true);
+    }
+  }
+
+  /// Durch das Melitherm – der Weg zurück aus grob und kandiert.
+  Future<void> _throughMelitherm() async {
+    final bucket = _bucket;
+    if (bucket == null) return;
+    final erster = HoneyStates.stateForTicks(1);
+    final ok = await _confirm(
+      titel: 'Durch das Melitherm',
+      text: 'Danach ist der Honig wieder flüssig: die Markierung fällt weg '
+          'und der Eimer steht wieder auf '
+          '„${HoneyStates.labelOf(erster)}". Impfen und Rühren kommen '
+          'also noch einmal.',
+      knopf: 'Ist durchgelaufen',
+    );
+    if (ok != true) return;
+    try {
+      await _honey.throughMelitherm(bucket);
+      _dirty = true;
+      await _load();
+      if (!mounted) return;
+      _snackState(erster);
+    } catch (e) {
+      _snack('Fehler: $e', err: true);
+    }
+  }
+
+  /// Rückfrage im Stil der übrigen – ja oder nein, nichts dazwischen.
+  Future<bool?> _confirm({
+    required String titel,
+    required String text,
+    required String knopf,
+  }) =>
+      showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(titel),
+          content:
+              Text(text, style: const TextStyle(fontSize: 13, height: 1.4)),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Abbrechen')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(knopf, style: const TextStyle(color: _peach)),
+            ),
+          ],
+        ),
+      );
 
   // ── Lagerplatz ─────────────────────────────────────────────────
 
@@ -834,67 +883,217 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
     );
   }
 
-  // ── Zustand ────────────────────────────────────────────────────
+  // ── Hakenliste ─────────────────────────────────────────────────
+
+  /// Die Hakenliste: eine Zeile je Schritt, abgehakt bis zum erreichten.
+  ///
+  /// Gespeichert wird nur ein Zustand – der weiteste erreichte Schritt. Die
+  /// Haken davor ergeben sich daraus, denn die Kette hat keine Lücken: wer
+  /// rührt, hat vorher geimpft. Darum hakt ein Antippen alles bis dorthin
+  /// mit an.
   Widget _stateCard(HoneyBucketModel bucket, String? naechster) {
-    final farbe = Color(HoneyStates.colorOf(bucket.state));
+    final schritte = HoneyStates.steps;
+    final gesetzt = HoneyStates.ticksOf(bucket.state);
+    final leer = bucket.isEmpty;
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        InkWell(
-          onTap: _chooseState,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            decoration: BoxDecoration(
-              color: farbe.withAlpha(26),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: farbe.withAlpha(140)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration:
-                      BoxDecoration(color: farbe, shape: BoxShape.circle),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF18181c),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0x14ffffff)),
+          ),
+          child: Column(
+            children: [
+              for (var i = 0; i < schritte.length; i++) ...[
+                if (i > 0)
+                  const Divider(
+                      height: 1, thickness: 1, color: Color(0x0dffffff)),
+                _tickRow(
+                  nummer: i + 1,
+                  schritt: schritte[i],
+                  erledigt: i + 1 <= gesetzt,
+                  aktuell: i + 1 == gesetzt && !leer,
+                  tippbar: !leer,
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(bucket.stateLabel,
-                      style: TextStyle(
-                          fontSize: 14,
-                          color: farbe,
-                          fontWeight: FontWeight.w700)),
-                ),
-                if (bucket.needsAttention)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 6),
-                    child: Text('wartet auf dich',
-                        style: TextStyle(fontSize: 10, color: _muted)),
-                  ),
-                const Icon(Icons.unfold_more, size: 16, color: _muted),
               ],
-            ),
+            ],
           ),
         ),
-        if (naechster != null) ...[
+        if (leer) ...[
           const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _advance,
-              icon: const Icon(Icons.arrow_forward, size: 16),
-              label: Text('Weiter zu „${HoneyStates.labelOf(naechster)}"'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Color(HoneyStates.colorOf(naechster)),
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(44),
+          Text(
+            '${bucket.stateLabel} – alles aus diesem Eimer ist abgefüllt. '
+            'Die Haken sind damit erledigt.',
+            style: const TextStyle(fontSize: 10, color: _muted, height: 1.35),
+          ),
+        ] else if (naechster != null) ...[
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+            onPressed: _advance,
+            icon: const Icon(Icons.arrow_forward, size: 16),
+            label: Text('Weiter zu „${HoneyStates.labelOf(naechster)}"'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Color(HoneyStates.colorOf(naechster)),
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(44),
+            ),
+          ),
+        ] else ...[
+          const SizedBox(height: 8),
+          const Text(
+            'Alle Haken sitzen – weiter geht es beim Abfüllen.',
+            style: TextStyle(fontSize: 10, color: _muted, height: 1.35),
+          ),
+        ],
+        const SizedBox(height: 16),
+        _markerCard(bucket),
+      ],
+    );
+  }
+
+  /// Eine Zeile der Hakenliste. Rechts steht, was dann auf den Eimer gehört.
+  Widget _tickRow({
+    required int nummer,
+    required String schritt,
+    required bool erledigt,
+    required bool aktuell,
+    required bool tippbar,
+  }) {
+    final farbe = Color(HoneyStates.colorOf(schritt));
+    final striche = HoneyStates.strokeHint(schritt);
+    final hakenFarbe = aktuell ? farbe : (erledigt ? _green : _muted);
+
+    return InkWell(
+      onTap: tippbar ? () => _toggleTick(nummer) : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        child: Row(
+          children: [
+            Icon(
+              erledigt ? Icons.check_box : Icons.check_box_outline_blank,
+              size: 20,
+              color: hakenFarbe,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                HoneyStates.labelOf(schritt),
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.3,
+                  color: aktuell
+                      ? farbe
+                      : (erledigt ? Colors.white : _muted),
+                  fontWeight: aktuell ? FontWeight.w700 : FontWeight.normal,
+                ),
               ),
+            ),
+            if (aktuell && HoneyStates.needsAttention(schritt))
+              const Padding(
+                padding: EdgeInsets.only(left: 6),
+                child: Text('wartet auf dich',
+                    style: TextStyle(fontSize: 10, color: _muted)),
+              ),
+            if (striche.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Text(
+                striche,
+                style: TextStyle(
+                  fontSize: 15,
+                  height: 1.1,
+                  fontWeight: FontWeight.w700,
+                  color: hakenFarbe,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Die eigene Markierung neben der Kette – grob kristallin, kandiert.
+  Widget _markerCard(HoneyBucketModel bucket) {
+    final gesetzt = bucket.crystallization;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text('Eigene Markierung',
+            style: TextStyle(
+                fontSize: 10,
+                color: _muted,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final wert in HoneyCrystallization.all)
+              _markerChip(wert, wert == gesetzt),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          gesetzt == null
+              ? 'Der Honig ist in Ordnung. Wird er grob oder kandiert, hier '
+                  'antippen – die Haken bleiben dabei, wie sie sind.'
+              : 'Nochmal antippen nimmt die Markierung weg. Der richtige Weg '
+                  'zurück führt durch das Melitherm.',
+          style: const TextStyle(fontSize: 10, color: _muted, height: 1.35),
+        ),
+        if (gesetzt != null) ...[
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _throughMelitherm,
+            icon: const Icon(Icons.local_fire_department_outlined, size: 16),
+            label: const Text('Durch das Melitherm'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _peach,
+              side: const BorderSide(color: _peach),
+              minimumSize: const Size.fromHeight(42),
             ),
           ),
         ],
       ],
+    );
+  }
+
+  Widget _markerChip(String wert, bool aktiv) {
+    final farbe = Color(HoneyCrystallization.colorOf(wert));
+
+    return InkWell(
+      onTap: () => _toggleCrystallization(wert),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: aktiv ? farbe.withAlpha(38) : const Color(0xFF18181c),
+          borderRadius: BorderRadius.circular(20),
+          border:
+              Border.all(color: aktiv ? farbe : const Color(0x22ffffff)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(aktiv ? Icons.warning_amber_rounded : Icons.add,
+                size: 14, color: aktiv ? farbe : _muted),
+            const SizedBox(width: 6),
+            Text(
+              HoneyCrystallization.labelOf(wert),
+              style: TextStyle(
+                fontSize: 12,
+                color: aktiv ? farbe : _muted,
+                fontWeight: aktiv ? FontWeight.w700 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

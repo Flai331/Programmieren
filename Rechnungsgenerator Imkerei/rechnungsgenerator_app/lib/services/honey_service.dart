@@ -225,6 +225,54 @@ class HoneyService {
     return setState(bucket, naechster);
   }
 
+  /// Die Markierung setzen oder entfernen – grob kristallin, kandiert.
+  ///
+  /// Ändert die Haken nicht: das ist kein Arbeitsschritt, sondern etwas, das
+  /// dazwischenkommt. Der Weg zurück ist [throughMelitherm].
+  Future<HoneyBucketModel> setCrystallization(
+    HoneyBucketModel bucket,
+    String? value,
+  ) async {
+    final geaendert = bucket.copyWith(
+      crystallization: value,
+      clearCrystallization: value == null,
+      updatedAt: DateTime.now(),
+    );
+    await _db.updateHoneyBucket(geaendert);
+    await _logEvent(
+      bucketId: bucket.id,
+      date: DateTime.now(),
+      kind: HoneyEventKinds.crystallization,
+      note: value == null
+          ? 'Markierung entfernt'
+          : HoneyCrystallization.labelOf(value),
+    );
+    return geaendert;
+  }
+
+  /// Durch das Melitherm: Markierung weg, zurück auf den ersten Haken.
+  ///
+  /// Geschleudert und Melitherm sind derselbe Zustand – danach ist der Honig
+  /// flüssig, und die Kette beginnt von vorn. Dabei gehen die späteren Haken
+  /// verloren, deshalb fragt die Oberfläche vorher nach.
+  Future<HoneyBucketModel> throughMelitherm(HoneyBucketModel bucket) async {
+    final erster = HoneyStates.stateForTicks(1);
+    final geaendert = bucket.copyWith(
+      state: erster,
+      clearCrystallization: true,
+      updatedAt: DateTime.now(),
+    );
+    await _db.updateHoneyBucket(geaendert);
+    await _logEvent(
+      bucketId: bucket.id,
+      date: DateTime.now(),
+      kind: HoneyEventKinds.state,
+      state: erster,
+      note: 'durch das Melitherm',
+    );
+    return geaendert;
+  }
+
   /// Lagerplatz setzen und im Verlauf festhalten.
   Future<HoneyBucketModel> setLocation(
     HoneyBucketModel bucket,
