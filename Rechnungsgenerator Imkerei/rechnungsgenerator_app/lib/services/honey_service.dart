@@ -273,6 +273,41 @@ class HoneyService {
     return geaendert;
   }
 
+  // ── Wärmeschrank ───────────────────────────────────────────────
+
+  /// Die Uhr starten: der Eimer steht jetzt im Wärmeschrank.
+  ///
+  /// Von Hand gestartet, mit Absicht. Ein Haken beschreibt den Honig und
+  /// sagt nichts darüber, wo der Eimer steht – deshalb hängt die Uhr nicht
+  /// an der Hakenliste.
+  ///
+  /// Gespeichert wird allein die Verlaufszeile; Fälligkeit und Restzeit
+  /// rechnet [HoneyWarmer.fromEvents] daraus. Keine neue Spalte, keine
+  /// zweite Wahrheit. Die Stundenzahl steht als Notiz dabei, damit der
+  /// Verlauf für einen Menschen lesbar bleibt.
+  Future<HoneyWarmer> startWarmer(HoneyBucketModel bucket,
+      {DateTime? at}) async {
+    final jetzt = at ?? DateTime.now();
+    final verlauf = await _db.getHoneyEvents(bucket.id);
+    final stunden =
+        HoneyWarmer.hoursFor(wasInBefore: HoneyWarmer.wasInBeforeFrom(verlauf));
+    await _logEvent(
+      bucketId: bucket.id,
+      date: jetzt,
+      kind: HoneyEventKinds.warmerIn,
+      note: '$stunden h',
+    );
+    return HoneyWarmer(startedAt: jetzt, requiredHours: stunden);
+  }
+
+  /// Herausgenommen – die Uhr hört auf.
+  Future<void> stopWarmer(HoneyBucketModel bucket, {DateTime? at}) =>
+      _logEvent(
+        bucketId: bucket.id,
+        date: at ?? DateTime.now(),
+        kind: HoneyEventKinds.warmerOut,
+      );
+
   /// Lagerplatz setzen und im Verlauf festhalten.
   Future<HoneyBucketModel> setLocation(
     HoneyBucketModel bucket,

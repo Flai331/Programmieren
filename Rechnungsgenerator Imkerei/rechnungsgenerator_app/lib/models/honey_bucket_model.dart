@@ -666,10 +666,35 @@ class HoneyCrystallization {
 /// sie von Hand.
 class HoneyWarmer {
   /// Beim ersten Mal braucht ein Eimer 48 Stunden.
-  static const int firstHours = 48;
+  static const int defaultFirstHours = 48;
 
   /// War er schon einmal drin, genügen 24.
-  static const int repeatHours = 24;
+  static const int defaultRepeatHours = 24;
+
+  static int _firstHours = defaultFirstHours;
+  static int _repeatHours = defaultRepeatHours;
+
+  /// Die eingestellten Stunden, siehe [AppNumbers]. Von Haus aus 48 und 24.
+  static int get firstHours => _firstHours;
+  static int get repeatHours => _repeatHours;
+
+  /// Die Einstellung übernehmen. Unbrauchbares fällt auf die Vorgabe zurück –
+  /// eine Uhr mit null Stunden wäre keine.
+  static void apply({double? firstHours, double? repeatHours}) {
+    _firstHours = _stunden(firstHours, defaultFirstHours);
+    _repeatHours = _stunden(repeatHours, defaultRepeatHours);
+  }
+
+  static void useDefaults() {
+    _firstHours = defaultFirstHours;
+    _repeatHours = defaultRepeatHours;
+  }
+
+  static int _stunden(double? wert, int vorgabe) {
+    if (wert == null || wert.isNaN) return vorgabe;
+    final gerundet = wert.round();
+    return (gerundet < 1 || gerundet > 500) ? vorgabe : gerundet;
+  }
 
   /// Wann der Eimer hineingestellt wurde.
   final DateTime startedAt;
@@ -685,6 +710,42 @@ class HoneyWarmer {
   /// im Schrank, ist er durchgewärmt und braucht weniger.
   static int hoursFor({required bool wasInBefore}) =>
       wasInBefore ? repeatHours : firstHours;
+
+  /// Die laufende Uhr eines Eimers, aus seinem Verlauf gelesen.
+  ///
+  /// Null heißt: es läuft keine – entweder stand der Eimer noch nie im
+  /// Schrank, oder er ist wieder heraus. Gespeichert sind nur die beiden
+  /// Zeilen `waermeschrank_ein` und `_aus`; alles andere ergibt sich daraus,
+  /// deshalb braucht die Uhr keine Spalte.
+  ///
+  /// Reine Rechnung ohne Datenbank: dieselben Zeilen ergeben immer dieselbe
+  /// Uhr.
+  static HoneyWarmer? fromEvents(List<HoneyBucketEventModel> events) {
+    DateTime? ein;
+    for (final e in events) {
+      if (e.kind != HoneyEventKinds.warmerIn) continue;
+      if (ein == null || e.date.isAfter(ein)) ein = e.date;
+    }
+    if (ein == null) return null;
+
+    final hinein = ein;
+    // Nach dem Herausnehmen läuft keine Uhr mehr.
+    final wiederHeraus = events.any((e) =>
+        e.kind == HoneyEventKinds.warmerOut && !e.date.isBefore(hinein));
+    if (wiederHeraus) return null;
+
+    final schonEinmal = events.any((e) =>
+        e.kind == HoneyEventKinds.warmerOut && e.date.isBefore(hinein));
+    return HoneyWarmer(
+      startedAt: hinein,
+      requiredHours: hoursFor(wasInBefore: schonEinmal),
+    );
+  }
+
+  /// Stand der Eimer schon einmal im Wärmeschrank? Entscheidet über die
+  /// Stundenzahl des nächsten Durchgangs.
+  static bool wasInBeforeFrom(List<HoneyBucketEventModel> events) =>
+      events.any((e) => e.kind == HoneyEventKinds.warmerOut);
 
   /// Wann er fertig ist.
   DateTime get dueAt => startedAt.add(Duration(hours: requiredHours));

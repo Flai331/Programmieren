@@ -171,4 +171,71 @@ void main() {
       expect(geaendert.crystallization, isNull);
     });
   });
+
+  group('Wärmeschrank – die Uhr liegt im Verlauf', () {
+    test('die erste Uhr läuft 48 Stunden', () async {
+      final service = await dienst();
+      final bucket = await eimer(service, state: HoneyStates.readyToBottle);
+
+      final uhr = await service
+          .startWarmer(bucket, at: DateTime(2026, 11, 24, 9));
+
+      expect(uhr.requiredHours, HoneyWarmer.defaultFirstHours);
+      expect(uhr.dueAt, DateTime(2026, 11, 26, 9));
+
+      // Gespeichert ist nur die Zeile – die Uhr rechnet sich daraus.
+      final verlauf = await DatabaseService().getHoneyEvents('b1');
+      expect(verlauf, hasLength(1));
+      expect(verlauf.first.kind, HoneyEventKinds.warmerIn);
+      expect(verlauf.first.note, '48 h');
+      final gelesen = HoneyWarmer.fromEvents(verlauf);
+      expect(gelesen!.startedAt, DateTime(2026, 11, 24, 9));
+      expect(gelesen.requiredHours, 48);
+    });
+
+    test('Herausnehmen beendet sie', () async {
+      final service = await dienst();
+      final bucket = await eimer(service);
+
+      await service.startWarmer(bucket, at: DateTime(2026, 11, 24, 9));
+      await service.stopWarmer(bucket, at: DateTime(2026, 11, 26, 10));
+
+      final verlauf = await DatabaseService().getHoneyEvents('b1');
+      expect(verlauf, hasLength(2));
+      expect(HoneyWarmer.fromEvents(verlauf), isNull);
+    });
+
+    test('der zweite Durchgang braucht nur 24 Stunden', () async {
+      final service = await dienst();
+      final bucket = await eimer(service);
+
+      await service.startWarmer(bucket, at: DateTime(2026, 11, 24, 9));
+      await service.stopWarmer(bucket, at: DateTime(2026, 11, 26, 10));
+      final zweite = await service
+          .startWarmer(bucket, at: DateTime(2026, 12, 1, 8));
+
+      expect(zweite.requiredHours, HoneyWarmer.defaultRepeatHours);
+      expect(zweite.dueAt, DateTime(2026, 12, 2, 8));
+
+      final verlauf = await DatabaseService().getHoneyEvents('b1');
+      expect(verlauf, hasLength(3));
+      final gelesen = HoneyWarmer.fromEvents(verlauf);
+      expect(gelesen!.requiredHours, 24,
+          reason: 'die Zahl der früheren Austritte entscheidet');
+      expect(gelesen.startedAt, DateTime(2026, 12, 1, 8));
+    });
+
+    test('die Haken bleiben davon unberührt', () async {
+      // Ein Haken beschreibt den Honig, die Uhr den Ort. Die beiden dürfen
+      // einander nicht anfassen.
+      final service = await dienst();
+      final bucket = await eimer(service, state: HoneyStates.stirred);
+
+      await service.startWarmer(bucket, at: DateTime(2026, 11, 24, 9));
+
+      final gelesen = await DatabaseService().getHoneyBucket('b1');
+      expect(gelesen!.state, HoneyStates.stirred);
+      expect(gelesen.crystallization, isNull);
+    });
+  });
 }

@@ -138,6 +138,109 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // ── Wärmeschrank ───────────────────────────────────────────────
+
+  /// Die beiden Stundenzahlen. Geändert wird hier, gerechnet am Eimer.
+  Widget _buildWarmerCard() => Card(
+        child: Column(
+          children: [
+            _warmerRow(
+              titel: 'Beim ersten Mal',
+              stunden: HoneyWarmer.firstHours,
+              name: AppNumbers.warmerFirstHours,
+              vorgabe: HoneyWarmer.defaultFirstHours,
+            ),
+            const Divider(height: 1),
+            _warmerRow(
+              titel: 'Wenn er schon einmal drin war',
+              stunden: HoneyWarmer.repeatHours,
+              name: AppNumbers.warmerRepeatHours,
+              vorgabe: HoneyWarmer.defaultRepeatHours,
+            ),
+          ],
+        ),
+      );
+
+  Widget _warmerRow({
+    required String titel,
+    required int stunden,
+    required String name,
+    required int vorgabe,
+  }) =>
+      ListTile(
+        dense: true,
+        title: Text(titel, style: const TextStyle(fontSize: 13)),
+        subtitle: Text(
+          stunden == vorgabe ? 'Vorgabe' : 'geändert, Vorgabe $vorgabe h',
+          style: const TextStyle(fontSize: 10, color: Color(0xFF8a8a94)),
+        ),
+        trailing: Text('$stunden h',
+            style: const TextStyle(
+                fontSize: 14, fontWeight: FontWeight.w700)),
+        onTap: () => _editWarmerHours(
+            titel: titel, name: name, stunden: stunden, vorgabe: vorgabe),
+      );
+
+  Future<void> _editWarmerHours({
+    required String titel,
+    required String name,
+    required int stunden,
+    required int vorgabe,
+  }) async {
+    final ctrl = TextEditingController(text: '$stunden');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(titel),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Stunden',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => Navigator.pop(ctx, true),
+            ),
+            const SizedBox(height: 8),
+            Text('Vorgabe: $vorgabe h',
+                style: const TextStyle(
+                    fontSize: 10, color: Color(0xFF8a8a94))),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Abbrechen')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Speichern')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    final wert = int.tryParse(ctrl.text.trim());
+    if (wert == null || wert < 1 || wert > 500) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Zwischen 1 und 500 Stunden, bitte als ganze Zahl')),
+      );
+      return;
+    }
+    await PersonalizationService().setNumber(name, wert.toDouble());
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('$titel: $wert h')));
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -404,6 +507,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 label: const Text('Auswahllisten anpassen'),
               ),
             ),
+            const SizedBox(height: 32),
+
+            // ── Wärmeschrank ──────────────────────────────────────
+            const Text(
+              'Wärmeschrank',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Wie lange ein Eimer im Wärmeschrank steht. Beim ersten Mal '
+              'länger, danach genügt weniger – die Uhr am Eimer rechnet '
+              'damit.',
+              style: TextStyle(fontSize: 12, color: Color(0xFF8a8a94)),
+            ),
+            const SizedBox(height: 12),
+            _buildWarmerCard(),
             const SizedBox(height: 32),
 
             // ── Fehlerberichte ────────────────────────────────────

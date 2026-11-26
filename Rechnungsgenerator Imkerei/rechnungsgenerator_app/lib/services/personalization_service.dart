@@ -97,6 +97,10 @@ class PersonalizationService {
     HoneyCrystallization.catalog
         .apply(entries(Catalogs.honeyCrystallization));
     HoneyVarieties.catalog.apply(entries(Catalogs.honeyVariety));
+    HoneyWarmer.apply(
+      firstHours: _zahlen[AppNumbers.warmerFirstHours],
+      repeatHours: _zahlen[AppNumbers.warmerRepeatHours],
+    );
     StockCategories.catalog.apply(entries(Catalogs.stockCategory));
     StockReasons.catalog.apply(entries(Catalogs.stockReason));
     HiveActionTypes.catalog.apply(entries(Catalogs.hiveActionType));
@@ -106,6 +110,7 @@ class PersonalizationService {
     HoneyStates.useDefaults();
     HoneyCrystallization.catalog.useDefaults();
     HoneyVarieties.catalog.useDefaults();
+    HoneyWarmer.useDefaults();
     StockCategories.catalog.useDefaults();
     StockReasons.catalog.useDefaults();
     HiveActionTypes.catalog.useDefaults();
@@ -351,11 +356,17 @@ class PersonalizationService {
     await _reload();
   }
 
+  /// Eine einstellbare Zahl setzen.
+  ///
+  /// Danach [_apply]: die Zahlen stecken in den Modellklassen, und wer gerade
+  /// eine Zahl geändert hat, will sie sofort sehen – nicht erst nach einem
+  /// Neustart.
   Future<void> setNumber(String name, double value) async {
     final db = await _datenbank;
     await db.insert('app_settings', {'name': name, 'value': '$value'},
         conflictAlgorithm: ConflictAlgorithm.replace);
     _zahlen[name] = value;
+    _apply();
   }
 
   Future<void> _reload() async {

@@ -392,6 +392,25 @@ void main() {
       expect(BucketCode.format('LZ', 1), 'LZ-001');
     });
 
+    test('eine geänderte Stundenzahl gilt sofort', () async {
+      await frischeDb();
+      await dienst.load();
+      addTearDown(HoneyWarmer.useDefaults);
+      expect(HoneyWarmer.firstHours, HoneyWarmer.defaultFirstHours);
+
+      await dienst.setNumber(AppNumbers.warmerFirstHours, 36);
+
+      // Sofort, nicht erst beim nächsten Start: der Bildschirm zeigt die
+      // Zahl unmittelbar nach dem Speichern an.
+      expect(HoneyWarmer.firstHours, 36);
+      expect(dienst.number(AppNumbers.warmerFirstHours, 48), 36);
+
+      // Und sie übersteht den Neustart.
+      dienst.resetForTests();
+      await dienst.load();
+      expect(HoneyWarmer.firstHours, 36);
+    });
+
     test('derselbe Schlüssel wird durchgezählt', () {
       expect(PersonalizationService.freeKey('raps', {}), 'raps');
       expect(PersonalizationService.freeKey('raps', {'raps'}), 'raps_2');

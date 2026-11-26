@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -56,6 +57,18 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
   /// jeder Buchung neu, und ein zweiter Dialog wäre eine Falle.
   bool _bottlingOffered = false;
 
+  /// Hält die Wärmeschrank-Uhr am Laufen, solange eine läuft.
+  ///
+  /// Einmal je Minute genügt: die Uhr zählt Stunden. Läuft keine, läuft auch
+  /// kein Timer – ein Bildschirm, der ohne Not aufwacht, kostet nur Strom.
+  Timer? _ticker;
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -75,6 +88,7 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
         _events = events;
         _loading = false;
       });
+      _syncTicker(HoneyWarmer.fromEvents(events) != null);
       if (widget.startBottling && !_bottlingOffered && bucket != null) {
         _bottlingOffered = true;
         // Erst nach dem Aufbau: Der Dialog braucht einen fertigen
@@ -200,6 +214,49 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
       await _load();
       if (!mounted) return;
       _snackState(erster);
+    } catch (e) {
+      _snack('Fehler: $e', err: true);
+    }
+  }
+
+  // ── Wärmeschrank ───────────────────────────────────────────────
+
+  void _syncTicker(bool laeuft) {
+    if (laeuft) {
+      _ticker ??= Timer.periodic(
+          const Duration(minutes: 1), (_) => mounted ? setState(() {}) : null);
+    } else {
+      _ticker?.cancel();
+      _ticker = null;
+    }
+  }
+
+  /// Den Eimer in den Schrank stellen. Von Hand – ein Haken sagt nicht, wo
+  /// der Eimer steht.
+  Future<void> _startWarmer() async {
+    final bucket = _bucket;
+    if (bucket == null) return;
+    try {
+      final uhr = await _honey.startWarmer(bucket);
+      _dirty = true;
+      await _load();
+      if (!mounted) return;
+      _snack('Uhr läuft – ${uhr.requiredHours} h, '
+          '${_fertigText(uhr.dueAt)}');
+    } catch (e) {
+      _snack('Fehler: $e', err: true);
+    }
+  }
+
+  Future<void> _stopWarmer() async {
+    final bucket = _bucket;
+    if (bucket == null) return;
+    try {
+      await _honey.stopWarmer(bucket);
+      _dirty = true;
+      await _load();
+      if (!mounted) return;
+      _snack('Herausgenommen – die Uhr ist aus');
     } catch (e) {
       _snack('Fehler: $e', err: true);
     }
@@ -666,6 +723,10 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
             _stateCard(bucket, naechster),
             const SizedBox(height: 18),
 
+            _section('Wärmeschrank'),
+            _warmerCard(),
+            const SizedBox(height: 18),
+
             _section('Lagerplatz'),
             InkWell(
               onTap: _setLocation,
@@ -1014,6 +1075,136 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
       ),
     );
   }
+
+  /// Die Wärmeschrank-Uhr. Gestartet wird hier und nur hier, von Hand.
+  ///
+  /// Sie hängt ausdrücklich nicht an der Hakenliste: ein Haken beschreibt den
+  /// Honig und heißt nicht, dass der Eimer im Schrank steht.
+  Widget _warmerCard() {
+    final uhr = HoneyWarmer.fromEvents(_events);
+    if (uhr == null) return _warmerStart();
+
+    final jetzt = DateTime.now();
+    final faellig = uhr.isDue(jetzt);
+    final farbe = faellig ? _green : _peach;
+    final anteil = (uhr.elapsed(jetzt).inMinutes / (uhr.requiredHours * 60))
+        .clamp(0.0, 1.0);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: farbe.withAlpha(20),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: farbe.withAlpha(140)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.thermostat, size: 17, color: farbe),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      faellig ? 'Fertig – er kann heraus' : 'Im Wärmeschrank',
+                      style: TextStyle(
+                          fontSize: 14,
+                          color: farbe,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Text('${uhr.requiredHours} h',
+                      style: const TextStyle(fontSize: 11, color: _muted)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'seit ${_dauer(uhr.elapsed(jetzt))} · '
+                '${uhr.readableRemaining(jetzt)}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${_fertigText(uhr.dueAt)} · hineingestellt '
+                '${AppUtils.formatDateTime(uhr.startedAt)}',
+                style: const TextStyle(fontSize: 10, color: _muted),
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: anteil,
+                  minHeight: 6,
+                  backgroundColor: const Color(0x14ffffff),
+                  valueColor: AlwaysStoppedAnimation(farbe),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _stopWarmer,
+          icon: const Icon(Icons.output, size: 16),
+          label: const Text('Herausgenommen'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: farbe,
+            side: BorderSide(color: farbe),
+            minimumSize: const Size.fromHeight(42),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _warmerStart() {
+    final schonEinmal = HoneyWarmer.wasInBeforeFrom(_events);
+    final stunden = HoneyWarmer.hoursFor(wasInBefore: schonEinmal);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _startWarmer,
+          icon: const Icon(Icons.thermostat, size: 16),
+          label: Text('Timer starten · $stunden h'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: _peach,
+            side: const BorderSide(color: _peach),
+            minimumSize: const Size.fromHeight(44),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          schonEinmal
+              ? 'Der Eimer war schon einmal im Schrank, deshalb genügen '
+                  '$stunden h. Die Uhr läuft erst, wenn du sie hier '
+                  'startest.'
+              : 'Beim ersten Mal $stunden h. Die Uhr läuft erst, wenn du sie '
+                  'hier startest – ein Haken sagt nichts darüber, wo der '
+                  'Eimer steht.',
+          style: const TextStyle(fontSize: 10, color: _muted, height: 1.35),
+        ),
+      ],
+    );
+  }
+
+  /// „14 h", und unter einer Stunde Minuten – am Schrank hilft nichts anderes.
+  String _dauer(Duration d) =>
+      d.inMinutes < 60 ? '${d.inMinutes} min' : '${d.inHours} h';
+
+  /// „fertig Do 09:00". Der Wochentag genügt, weil nie mehr als zwei Tage
+  /// dazwischenliegen.
+  String _fertigText(DateTime wann) =>
+      'fertig ${_wochentage[wann.weekday - 1]} '
+      '${AppUtils.formatTime(wann)}';
+
+  static const List<String> _wochentage = [
+    'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So',
+  ];
 
   /// Die eigene Markierung neben der Kette – grob kristallin, kandiert.
   Widget _markerCard(HoneyBucketModel bucket) {

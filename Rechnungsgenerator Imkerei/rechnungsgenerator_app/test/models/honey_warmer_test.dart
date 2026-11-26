@@ -81,4 +81,121 @@ void main() {
           'seit 24 h fällig');
     });
   });
+
+  group('Die Uhr aus dem Verlauf', () {
+    // Der Verlauf kommt aus der Datenbank nach Datum absteigend – die
+    // Rechnung darf sich darauf nicht verlassen, also steht hier bewusst
+    // beides durcheinander.
+    HoneyBucketEventModel ereignis(String kind, DateTime wann) =>
+        HoneyBucketEventModel(
+          id: '$kind-${wann.millisecondsSinceEpoch}',
+          bucketId: 'b1',
+          date: wann,
+          kind: kind,
+          createdAt: wann,
+        );
+
+    final ein1 = ereignis(HoneyEventKinds.warmerIn, DateTime(2026, 11, 20, 8));
+    final aus1 = ereignis(HoneyEventKinds.warmerOut, DateTime(2026, 11, 22, 8));
+    final ein2 = ereignis(HoneyEventKinds.warmerIn, DateTime(2026, 11, 24, 9));
+    final aus2 = ereignis(HoneyEventKinds.warmerOut, DateTime(2026, 11, 25, 9));
+    final anderes =
+        ereignis(HoneyEventKinds.state, DateTime(2026, 11, 23, 12));
+
+    tearDown(HoneyWarmer.useDefaults);
+
+    test('ohne Zeilen läuft keine Uhr', () {
+      expect(HoneyWarmer.fromEvents(const []), isNull);
+      expect(HoneyWarmer.fromEvents([anderes]), isNull);
+    });
+
+    test('ein Hineinstellen startet 48 Stunden', () {
+      final uhr = HoneyWarmer.fromEvents([anderes, ein1]);
+      expect(uhr, isNotNull);
+      expect(uhr!.startedAt, ein1.date);
+      expect(uhr.requiredHours, HoneyWarmer.defaultFirstHours);
+      expect(uhr.dueAt, DateTime(2026, 11, 22, 8));
+    });
+
+    test('nach dem Herausnehmen läuft keine', () {
+      expect(HoneyWarmer.fromEvents([aus1, ein1]), isNull);
+      expect(HoneyWarmer.fromEvents([aus2, ein2, aus1, ein1]), isNull);
+    });
+
+    test('der zweite Durchgang braucht nur 24 Stunden', () {
+      // Genau das ist die Entscheidung dahinter: 48 beim ersten Mal, 24
+      // wenn der Eimer schon einmal drin war.
+      final uhr = HoneyWarmer.fromEvents([ein2, aus1, ein1]);
+      expect(uhr, isNotNull);
+      expect(uhr!.startedAt, ein2.date);
+      expect(uhr.requiredHours, HoneyWarmer.defaultRepeatHours);
+      expect(uhr.dueAt, DateTime(2026, 11, 25, 9));
+    });
+
+    test('die Reihenfolge der Zeilen ist gleichgültig', () {
+      final vorwaerts = HoneyWarmer.fromEvents([ein1, aus1, anderes, ein2]);
+      final rueckwaerts = HoneyWarmer.fromEvents([ein2, anderes, aus1, ein1]);
+      expect(vorwaerts!.startedAt, rueckwaerts!.startedAt);
+      expect(vorwaerts.requiredHours, rueckwaerts.requiredHours);
+    });
+
+    test('war er schon einmal drin?', () {
+      expect(HoneyWarmer.wasInBeforeFrom(const []), isFalse);
+      expect(HoneyWarmer.wasInBeforeFrom([ein1]), isFalse,
+          reason: 'drin, aber noch nie durchgewärmt heraus');
+      expect(HoneyWarmer.wasInBeforeFrom([ein1, aus1]), isTrue);
+    });
+  });
+
+  group('Die Stundenzahlen sind einstellbar', () {
+    tearDown(HoneyWarmer.useDefaults);
+
+    test('von Haus aus 48 und 24', () {
+      expect(HoneyWarmer.firstHours, 48);
+      expect(HoneyWarmer.repeatHours, 24);
+    });
+
+    test('eigene Zahlen gelten überall', () {
+      HoneyWarmer.apply(firstHours: 12, repeatHours: 6);
+      expect(HoneyWarmer.firstHours, 12);
+      expect(HoneyWarmer.repeatHours, 6);
+      expect(HoneyWarmer.hoursFor(wasInBefore: false), 12);
+      expect(HoneyWarmer.hoursFor(wasInBefore: true), 6);
+
+      final uhr = HoneyWarmer.fromEvents([
+        HoneyBucketEventModel(
+          id: 'e1',
+          bucketId: 'b1',
+          date: DateTime(2026, 11, 26, 8),
+          kind: HoneyEventKinds.warmerIn,
+          createdAt: DateTime(2026, 11, 26, 8),
+        ),
+      ]);
+      expect(uhr!.requiredHours, 12);
+      expect(uhr.dueAt, DateTime(2026, 11, 26, 20));
+    });
+
+    test('Unbrauchbares fällt auf die Vorgabe zurück', () {
+      // Eine Uhr mit null Stunden wäre keine.
+      for (final wert in [0.0, -5.0, 9999.0, double.nan]) {
+        HoneyWarmer.apply(firstHours: wert, repeatHours: wert);
+        expect(HoneyWarmer.firstHours, HoneyWarmer.defaultFirstHours,
+            reason: '$wert');
+        expect(HoneyWarmer.repeatHours, HoneyWarmer.defaultRepeatHours,
+            reason: '$wert');
+      }
+    });
+
+    test('nichts eingestellt heißt Vorgabe', () {
+      HoneyWarmer.apply();
+      expect(HoneyWarmer.firstHours, HoneyWarmer.defaultFirstHours);
+      expect(HoneyWarmer.repeatHours, HoneyWarmer.defaultRepeatHours);
+    });
+
+    test('krumme Zahlen werden gerundet', () {
+      HoneyWarmer.apply(firstHours: 36.6, repeatHours: 18.2);
+      expect(HoneyWarmer.firstHours, 37);
+      expect(HoneyWarmer.repeatHours, 18);
+    });
+  });
 }
