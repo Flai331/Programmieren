@@ -1,3 +1,4 @@
+import 'catalog_entry_model.dart';
 import 'hive_action_model.dart';
 
 /// Imkerei: Eine Lagerbewegung – Zugang, Abgang oder Korrektur.
@@ -125,7 +126,19 @@ class StockReasons {
   /// Gläsern.
   static const String bottling = 'abfuellung';
 
-  static const Map<String, String> _labels = {
+  /// Reihenfolge der Auswahl in der Werkseinstellung.
+  static const List<String> defaultAll = [
+    purchase,
+    harvest,
+    sale,
+    consumption,
+    ownUse,
+    loss,
+    bottling,
+    correction,
+  ];
+
+  static const Map<String, String> defaultLabels = {
     purchase: 'Zugang',
     harvest: 'Ernte',
     sale: 'Verkauf',
@@ -136,20 +149,53 @@ class StockReasons {
     bottling: 'Abfüllung',
   };
 
-  static String labelOf(String reason) => _labels[reason] ?? reason;
+  /// In welche Richtung jeder Grund von Haus aus zählt.
+  ///
+  /// Abfüllung und Korrektur zählen in beide: die Abfüllung nimmt Honig aus
+  /// dem Eimer und legt Gläser ins Regal, und eine Inventur kann in jede
+  /// Richtung ausgehen. Ein selbst angelegter Grund muss seine Richtung
+  /// mitsagen, sonst könnte das Lager ihn nicht einordnen.
+  static const Map<String, String> defaultDirections = {
+    purchase: CatalogDirections.inbound,
+    harvest: CatalogDirections.inbound,
+    sale: CatalogDirections.outbound,
+    consumption: CatalogDirections.outbound,
+    ownUse: CatalogDirections.outbound,
+    loss: CatalogDirections.outbound,
+    bottling: CatalogDirections.both,
+    correction: CatalogDirections.both,
+  };
+
+  static final SimpleCatalog catalog = SimpleCatalog(
+    name: Catalogs.stockReason,
+    defaultKeys: defaultAll,
+    defaultLabels: defaultLabels,
+  );
+
+  static List<String> get all => catalog.keys;
+
+  static String labelOf(String reason) => catalog.labelOf(reason);
+
+  /// Die Richtung eines Grundes.
+  ///
+  /// Ohne Angabe „beide Richtungen": lieber in beiden Auswahllisten
+  /// auftauchen als in keiner und damit unerreichbar sein.
+  static String directionOf(String reason) =>
+      catalog.directionOf(reason) ??
+      defaultDirections[reason] ??
+      CatalogDirections.both;
 
   /// Gründe für einen Zugang, in der Reihenfolge der Auswahl.
-  static const List<String> inbound = [purchase, harvest, bottling, correction];
+  static List<String> get inbound => [
+        for (final grund in catalog.keys)
+          if (CatalogDirections.countsInbound(directionOf(grund))) grund,
+      ];
 
   /// Gründe für einen Abgang.
-  static const List<String> outbound = [
-    sale,
-    consumption,
-    ownUse,
-    loss,
-    bottling,
-    correction,
-  ];
+  static List<String> get outbound => [
+        for (final grund in catalog.keys)
+          if (CatalogDirections.countsOutbound(directionOf(grund))) grund,
+      ];
 
   /// Grund, mit dem eine Maßnahme ins Lager gebucht wird.
   static String forActionType(String actionType) =>

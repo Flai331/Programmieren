@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'catalog_entry_model.dart';
+
 /// Imkerei: Maßnahme an einem Volk – der Verlauf einer Stockkarte.
 ///
 /// Deckt die in der Projektplanung genannten Arbeiten ab: Durchsicht,
@@ -212,8 +214,8 @@ class HiveActionTypes {
   static const String combs = 'wabenerneuerung';
   static const String other = 'sonstiges';
 
-  /// Reihenfolge der Auswahl in der App.
-  static const List<String> all = [
+  /// Reihenfolge der Auswahl in der Werkseinstellung.
+  static const List<String> defaultAll = [
     inspection,
     feeding,
     varroa,
@@ -224,7 +226,7 @@ class HiveActionTypes {
     other,
   ];
 
-  static const Map<String, String> _labels = {
+  static const Map<String, String> defaultLabels = {
     inspection: 'Durchsicht',
     feeding: 'Fütterung',
     varroa: 'Varroabehandlung',
@@ -235,7 +237,20 @@ class HiveActionTypes {
     other: 'Sonstiges',
   };
 
-  static String labelOf(String type) => _labels[type] ?? type;
+  static final SimpleCatalog catalog = SimpleCatalog(
+    name: Catalogs.hiveActionType,
+    defaultKeys: defaultAll,
+    defaultLabels: defaultLabels,
+  );
+
+  static List<String> get all => catalog.keys;
+
+  static String labelOf(String type) => catalog.labelOf(type);
+
+  /// Eine selbst angelegte Maßnahmenart ist ein schlichter Eintrag: ohne
+  /// Einheit, ohne Mengen- und Wabenzählung und ohne Lagerbuchung. Das
+  /// entscheidet der Code unten, nicht das Verzeichnis – diese Eigenschaften
+  /// hängen daran, was die Maßnahme tut, nicht daran, wie sie heißt.
 
   /// Vorbelegte Einheit für die Mengenangabe.
   static String defaultUnitOf(String type) => switch (type) {

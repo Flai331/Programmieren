@@ -1,3 +1,5 @@
+export 'catalog_entry_model.dart';
+export 'catalog_defaults.dart';
 export 'company_model.dart';
 export 'customer_model.dart';
 export 'invoice_model.dart';

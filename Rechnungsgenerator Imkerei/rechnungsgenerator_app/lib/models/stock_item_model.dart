@@ -1,3 +1,4 @@
+import 'catalog_entry_model.dart';
 import 'hive_action_model.dart';
 
 /// Imkerei: Ein Posten im Lager – Honig, Gläser, Futter, Material.
@@ -154,8 +155,8 @@ class StockCategories {
   static const String tools = 'werkzeug';
   static const String other = 'sonstiges';
 
-  /// Reihenfolge der Auswahl in der App.
-  static const List<String> all = [
+  /// Reihenfolge der Auswahl in der Werkseinstellung.
+  static const List<String> defaultAll = [
     honey,
     jars,
     feed,
@@ -166,7 +167,7 @@ class StockCategories {
     other,
   ];
 
-  static const Map<String, String> _labels = {
+  static const Map<String, String> defaultLabels = {
     honey: 'Honig',
     jars: 'Gläser & Etiketten',
     feed: 'Futter',
@@ -177,7 +178,15 @@ class StockCategories {
     other: 'Sonstiges',
   };
 
-  static String labelOf(String category) => _labels[category] ?? category;
+  static final SimpleCatalog catalog = SimpleCatalog(
+    name: Catalogs.stockCategory,
+    defaultKeys: defaultAll,
+    defaultLabels: defaultLabels,
+  );
+
+  static List<String> get all => catalog.keys;
+
+  static String labelOf(String category) => catalog.labelOf(category);
 
   /// Vorbelegte Einheit einer Warengruppe.
   static String defaultUnitOf(String category) => switch (category) {

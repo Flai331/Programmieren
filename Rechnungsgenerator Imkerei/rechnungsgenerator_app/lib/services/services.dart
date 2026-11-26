@@ -11,3 +11,4 @@ export 'honey_service.dart';
 export 'bucket_scan_service.dart';
 export 'import_service.dart';
 export 'update_service.dart';
+export 'personalization_service.dart';

@@ -41,6 +41,11 @@ void main() async {
   await dbService.database;
   FeedbackService.log('✓ Lokale Datenbank initialisiert');
 
+  // ── Anpassbare Verzeichnisse laden ──────────────────────────
+  // Muss vor runApp stehen: die Bildschirme fragen die Beschriftungen
+  // synchron aus ihren build()-Methoden ab.
+  await PersonalizationService().load();
+
   final connectivityService = ConnectivityService();
   await connectivityService.initialize();
   FeedbackService.log('✓ Connectivity-Service initialisiert');

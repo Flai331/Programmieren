@@ -361,6 +361,75 @@ void main() {
     });
   });
 
+  group('Migration v6 → v7: die anpassbaren Verzeichnisse', () {
+    test('legt die zwei Tabellen an', () async {
+      final db = await openV4();
+      addTearDown(db.close);
+
+      expect(await tables(db), isNot(contains('catalog_entries')));
+
+      await DatabaseService.createPersonalizationTables(db);
+
+      expect(await tables(db),
+          containsAll(['catalog_entries', 'app_settings']));
+    });
+
+    test('legt sie leer an – gesät wird beim Start', () async {
+      // Absicht: Die Werkseinstellung kennt der PersonalizationService, nicht
+      // die Migration. So gilt für Neuanlage und Hochziehen derselbe Weg.
+      final db = await openV4();
+      addTearDown(db.close);
+
+      await DatabaseService.createPersonalizationTables(db);
+
+      expect(await db.query('catalog_entries'), isEmpty);
+      expect(await db.query('app_settings'), isEmpty);
+    });
+
+    test('ein zweiter Durchlauf ändert nichts', () async {
+      final db = await openV4();
+      addTearDown(db.close);
+
+      await DatabaseService.createPersonalizationTables(db);
+      await db.insert('app_settings', {'name': 'probe', 'value': '7'});
+      await DatabaseService.createPersonalizationTables(db);
+
+      expect((await db.query('app_settings')).single['value'], '7');
+    });
+
+    test('ein Schlüssel kommt genau einmal je Verzeichnis vor', () async {
+      // Der Primärschlüssel ist (catalog, entry_key): derselbe Schlüssel darf
+      // in zwei Verzeichnissen stehen, in einem aber nicht zweimal.
+      final db = await openV4();
+      addTearDown(db.close);
+      await DatabaseService.createPersonalizationTables(db);
+
+      await db.insert('catalog_entries', {
+        'catalog': Catalogs.honeyState,
+        'entry_key': 'sonstiges',
+        'label': 'Erster',
+        'sort_order': 0,
+      });
+      await db.insert('catalog_entries', {
+        'catalog': Catalogs.hiveActionType,
+        'entry_key': 'sonstiges',
+        'label': 'Geht auch',
+        'sort_order': 0,
+      });
+      expect(await db.query('catalog_entries'), hasLength(2));
+
+      await expectLater(
+        db.insert('catalog_entries', {
+          'catalog': Catalogs.honeyState,
+          'entry_key': 'sonstiges',
+          'label': 'Zweiter',
+          'sort_order': 1,
+        }),
+        throwsA(isA<DatabaseException>()),
+      );
+    });
+  });
+
   group('Migration v5 → v6: Zustände werden Haken', () {
     Future<Database> openV5() async {
       final db = await databaseFactory.openDatabase(

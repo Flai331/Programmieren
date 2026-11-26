@@ -33,7 +33,7 @@ class DatabaseService {
 
   /// Schema-Version. Bei Erhöhung immer auch [_onUpgrade] ergänzen, sonst
   /// verlieren bestehende Installationen beim Update ihre Tabellen.
-  static const int _dbVersion = 6;
+  static const int _dbVersion = 7;
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     FeedbackService.log('🗄️ SQLite-Migration $oldVersion → $newVersion');
@@ -53,6 +53,9 @@ class DatabaseService {
     }
     if (oldVersion < 6) {
       await migrateHoneyStatesToTicks(db);
+    }
+    if (oldVersion < 7) {
+      await createPersonalizationTables(db);
     }
   }
 
@@ -237,6 +240,56 @@ class DatabaseService {
   /// Methode, damit ein Test genau diesen Schritt gegen eine echte
   /// Datenbank fahren kann statt die Reihenfolge nachzubauen.
   @visibleForTesting
+  /// DDL der anpassbaren Verzeichnisse.
+  ///
+  /// Eine Tabelle für alle sechs Verzeichnisse, mit typabhängig leeren
+  /// Spalten – `marks` und `needs_attention` bedeuten nur bei den
+  /// Honig-Zuständen etwas, `direction` nur bei den Buchungsgründen. Dasselbe
+  /// Muster wie beim Eimer-Verlauf.
+  ///
+  /// `entry_key` statt `key`: KEY ist in SQL ein Schlüsselwort, und ein
+  /// Spaltenname, der je nach Stelle anders gelesen wird, ist eine Falle.
+  @visibleForTesting
+  static const String catalogEntriesTableSql = '''
+      CREATE TABLE IF NOT EXISTS catalog_entries (
+        catalog TEXT NOT NULL,
+        entry_key TEXT NOT NULL,
+        label TEXT NOT NULL,
+        sort_order INTEGER NOT NULL,
+        color INTEGER,
+        marks TEXT,
+        needs_attention INTEGER,
+        direction TEXT,
+        archived INTEGER NOT NULL DEFAULT 0,
+        built_in INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (catalog, entry_key)
+      )
+    ''';
+
+  /// DDL der einstellbaren Zahlen und Schalter.
+  ///
+  /// Alles als Text gespeichert, gelesen wird mit `double.tryParse`: ein
+  /// Wert, der nicht lesbar ist, fällt damit auf die Vorgabe zurück statt die
+  /// App zu zerlegen.
+  @visibleForTesting
+  static const String appSettingsTableSql = '''
+      CREATE TABLE IF NOT EXISTS app_settings (
+        name TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''';
+
+  /// Schritt auf v7: die Tabellen für die anpassbaren Verzeichnisse.
+  ///
+  /// Gesät werden sie nicht hier, sondern beim Start durch den
+  /// PersonalizationService – der kennt die Werkseinstellung, und so gilt für
+  /// Neuanlage und Migration derselbe Weg.
+  @visibleForTesting
+  static Future<void> createPersonalizationTables(Database db) async {
+    await db.execute(catalogEntriesTableSql);
+    await db.execute(appSettingsTableSql);
+  }
+
   static Future<void> createStockTables(Database db) async {
     await db.execute(stockItemsTableSql);
     await db.execute(stockMovementsTableSql);
@@ -420,6 +473,7 @@ class DatabaseService {
 
     await _createHiveActionsTable(db);
     await createStockTables(db);
+    await createPersonalizationTables(db);
 
     FeedbackService.log('🗄️ SQLite-Schema erstellt (v$_dbVersion)');
   }

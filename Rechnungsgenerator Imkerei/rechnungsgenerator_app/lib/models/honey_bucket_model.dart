@@ -1,3 +1,5 @@
+import 'catalog_entry_model.dart';
+
 /// Imkerei: Ein Eimer Honig – ein Einzelstück mit eigener Geschichte.
 ///
 /// Anders als Gläser sind Eimer nicht untereinander gleich: Jeder hat seine
@@ -343,8 +345,8 @@ class HoneyVarieties {
   /// Alles andere – der Name wird am Eimer frei eingetragen.
   static const String other = 'XX';
 
-  /// Reihenfolge der Auswahl in der App.
-  static const List<String> all = [
+  /// Reihenfolge der Auswahl in der Werkseinstellung.
+  static const List<String> defaultAll = [
     spring,
     summer,
     rape,
@@ -356,7 +358,7 @@ class HoneyVarieties {
     other,
   ];
 
-  static const Map<String, String> _labels = {
+  static const Map<String, String> defaultLabels = {
     spring: 'Frühjahrsblüte',
     summer: 'Sommerblüte',
     rape: 'Raps',
@@ -368,9 +370,17 @@ class HoneyVarieties {
     other: 'Sonstige',
   };
 
-  static String labelOf(String variety) => _labels[variety] ?? variety;
+  static final SimpleCatalog catalog = SimpleCatalog(
+    name: Catalogs.honeyVariety,
+    defaultKeys: defaultAll,
+    defaultLabels: defaultLabels,
+  );
 
-  static bool isKnown(String variety) => _labels.containsKey(variety);
+  static List<String> get all => catalog.keys;
+
+  static String labelOf(String variety) => catalog.labelOf(variety);
+
+  static bool isKnown(String variety) => catalog.isKnown(variety);
 }
 
 /// Der Weg des Honigs im Eimer – eine Hakenliste, keine Auswahl.
@@ -394,6 +404,13 @@ class HoneyVarieties {
 /// den Zustand selbst und bleibt die Wahrheit. Die Striche sind allein für
 /// das Auge am Regal.
 class HoneyStates {
+  // ── Werkseinstellung ────────────────────────────────────────────
+  //
+  // Die Schlüssel sind und bleiben Konstanten: der Code verweist auf sie,
+  // sie stehen in der Datenbank, und [empty] setzt der Dienst selbst.
+  // Änderbar ist, was darum herum steht – Beschriftung, Reihenfolge, Striche,
+  // Farbe –, und das kommt aus dem Verzeichnis.
+
   /// Frisch geschleudert – oder aus dem Melitherm. Derselbe Zustand.
   static const String extracted = 'geschleudert';
 
@@ -404,21 +421,19 @@ class HoneyStates {
   static const String readyToBottle = 'abfuellfertig';
 
   /// Leergeräumt. Kein Haken zum Antippen: das setzt der HoneyService selbst,
-  /// sobald nichts mehr im Eimer ist.
+  /// sobald nichts mehr im Eimer ist. Deshalb steht dieser Zustand außerhalb
+  /// der Kette und lässt sich nicht umsortieren – nur umbenennen.
   static const String empty = 'leer';
 
-  /// Die Haken, in der Reihenfolge der Arbeit.
-  static const List<String> steps = [
+  /// Die Kette, mit der die App ausgeliefert wird.
+  static const List<String> defaultSteps = [
     extracted,
     seeded,
     stirred,
     readyToBottle,
   ];
 
-  /// Jeder Wert, den ein Eimer tragen kann: die Haken und dazu [empty].
-  static const List<String> all = [...steps, empty];
-
-  static const Map<String, String> _labels = {
+  static const Map<String, String> defaultLabels = {
     extracted: 'geschleudert / Melitherm',
     seeded: 'geimpft – täglich rühren',
     stirred: 'fertig gerührt',
@@ -426,7 +441,62 @@ class HoneyStates {
     empty: 'abgefüllt, leer',
   };
 
-  static String labelOf(String state) => _labels[normalize(state)] ?? state;
+  static const Map<String, int> defaultColors = {
+    extracted: 0xFF60a5fa, // blau – frisch, noch zu impfen
+    seeded: 0xFFf59e0b, // gelb – wartet täglich auf mich
+    stirred: 0xFF4ade80, // grün – auf gutem Weg
+    readyToBottle: 0xFF22c55e, // grün – fertig
+    empty: 0xFF8a8a94, // grau – erledigt
+  };
+
+  /// Welche Schritte von Haus aus auf eine Arbeit warten.
+  static const Set<String> defaultNeedsAttention = {extracted, seeded};
+
+  /// Farbe für einen Schritt, den es in der Werkseinstellung nicht gibt.
+  static const int fallbackColor = 0xFF8a8a94;
+
+  // ── Was gerade gilt ─────────────────────────────────────────────
+
+  static List<String> _steps = defaultSteps;
+  static Map<String, CatalogEntry> _eintraege = const {};
+
+  /// Das geladene Verzeichnis übernehmen. Ruft der PersonalizationService
+  /// beim Start und nach jeder Änderung.
+  ///
+  /// Ein Verzeichnis ohne jeden Kettenschritt wäre eine unbenutzbare App,
+  /// deshalb bleibt dann die Werkseinstellung stehen.
+  static void apply(List<CatalogEntry> eintraege) {
+    final sortiert = [...eintraege]
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    _eintraege = {for (final e in sortiert) e.key: e};
+    final schritte = sortiert
+        .where((e) => !e.archived && e.key != empty)
+        .map((e) => e.key)
+        .toList(growable: false);
+    _steps = schritte.isEmpty ? defaultSteps : schritte;
+  }
+
+  /// Zurück auf die Werkseinstellung – für „Zurücksetzen" und für Tests.
+  static void useDefaults() {
+    _steps = defaultSteps;
+    _eintraege = const {};
+  }
+
+  /// Die Haken, in der Reihenfolge der Arbeit.
+  static List<String> get steps => _steps;
+
+  /// Jeder Wert, den ein Eimer tragen kann: die Haken und dazu [empty].
+  ///
+  /// [empty] steht immer darin, auch wenn es im Verzeichnis fehlt – sonst
+  /// könnte der Dienst einen leergeräumten Eimer nicht mehr ablegen.
+  static List<String> get all => [..._steps, empty];
+
+  static String labelOf(String state) {
+    final schluessel = normalize(state);
+    return _eintraege[schluessel]?.label ??
+        defaultLabels[schluessel] ??
+        schluessel;
+  }
 
   /// Zustandswerte aus älteren Fassungen auf die heutige Kette abbilden.
   ///
@@ -452,18 +522,23 @@ class HoneyStates {
   /// Unbekanntes wird zum ersten Haken: lieber behaupten, es sei noch nichts
   /// getan, als Arbeit als erledigt ausgeben, die niemand getan hat.
   static String normalize(String state) {
-    if (all.contains(state)) return state;
-    return legacy[state] ?? extracted;
+    if (state == empty || _steps.contains(state)) return state;
+    // Ein ausgeblendeter Schritt steht nicht mehr in der Kette, bleibt an
+    // alten Eimern aber gültig und behält seine Beschriftung.
+    if (_eintraege.containsKey(state)) return state;
+    final abgebildet = legacy[state];
+    if (abgebildet != null) return abgebildet;
+    return _steps.first;
   }
 
-  /// Wie viele Haken sitzen? 1 bis 4.
+  /// Wie viele Haken sitzen? 1 bis zur Länge der Kette.
   ///
   /// Der erste Haken sitzt immer – der Eimer existiert, weil geschleudert
   /// wurde. Ein leerer Eimer ist durch und zählt als voll abgehakt.
   static int ticksOf(String state) {
     final wert = normalize(state);
-    if (wert == empty) return steps.length;
-    final i = steps.indexOf(wert);
+    if (wert == empty) return _steps.length;
+    final i = _steps.indexOf(wert);
     return i < 0 ? 1 : i + 1;
   }
 
@@ -472,7 +547,7 @@ class HoneyStates {
   /// Unter 1 gibt es nichts, deshalb die Klammer: Haken 1 lässt sich nicht
   /// abhaken.
   static String stateForTicks(int anzahl) =>
-      steps[anzahl.clamp(1, steps.length) - 1];
+      _steps[anzahl.clamp(1, _steps.length) - 1];
 
   /// Ist `schritt` erledigt, wenn der Eimer auf `state` steht?
   static bool isDone(String state, String schritt) =>
@@ -480,44 +555,45 @@ class HoneyStates {
 
   /// Der nächste Schritt, null am Ende der Kette.
   ///
-  /// Nach [readyToBottle] kommt nichts mehr zum Anhaken: was folgt, ist das
+  /// Nach dem letzten Haken kommt nichts mehr zum Anhaken: was folgt, ist das
   /// Abfüllen, und [empty] setzt der Dienst selbst.
   static String? next(String state) {
-    final i = steps.indexOf(normalize(state));
-    if (i < 0 || i + 1 >= steps.length) return null;
-    return steps[i + 1];
+    final i = _steps.indexOf(normalize(state));
+    if (i < 0 || i + 1 >= _steps.length) return null;
+    return _steps[i + 1];
   }
 
   /// Wartet dieser Zustand auf eine Arbeit von mir?
   ///
-  /// [extracted] heißt: noch zu impfen. [seeded] heißt: täglich rühren – und
-  /// das bleibt Arbeit, bis „fertig gerührt" gehakt ist.
+  /// Von Haus aus: [extracted] heißt „noch zu impfen", [seeded] heißt „täglich
+  /// rühren" – und das bleibt Arbeit, bis der nächste Haken sitzt.
   static bool needsAttention(String state) {
     final wert = normalize(state);
-    return wert == extracted || wert == seeded;
+    return _eintraege[wert]?.needsAttention ??
+        defaultNeedsAttention.contains(wert);
   }
 
   /// Striche für das handgemalte Kästchen auf dem Eimer.
   ///
-  /// Sie wachsen mit der Zahl der Haken und bleiben genau die, die heute schon
-  /// auf den Eimern stehen.
-  static String strokeHint(String state) => switch (normalize(state)) {
-        seeded => '|',
-        stirred => '||',
-        readyToBottle => '|||',
-        empty => '✕',
-        _ => '',
-      };
+  /// Ohne eigene Angabe im Verzeichnis: ein Strich je erledigtem Haken außer
+  /// dem ersten. Damit wachsen die Striche von selbst mit der Kette, auch bei
+  /// einem Schritt, den du erst hinzugefügt hast, und es bleiben genau die
+  /// Striche, die heute schon auf den Eimern stehen.
+  static String strokeHint(String state) {
+    final wert = normalize(state);
+    if (wert == empty) return _eintraege[empty]?.marks ?? '✕';
+    final eigene = _eintraege[wert]?.marks;
+    if (eigene != null) return eigene;
+    return '|' * (ticksOf(wert) - 1);
+  }
 
   /// Farbe zur Anzeige, als ARGB-Wert. Bewusst eine Zahl statt `Color`.
-  static int colorOf(String state) => switch (normalize(state)) {
-        extracted => 0xFF60a5fa, // blau – frisch, noch zu impfen
-        seeded => 0xFFf59e0b, // gelb – wartet täglich auf mich
-        stirred => 0xFF4ade80, // grün – auf gutem Weg
-        readyToBottle => 0xFF22c55e, // grün – fertig
-        empty => 0xFF8a8a94, // grau – erledigt
-        _ => 0xFF8a8a94,
-      };
+  static int colorOf(String state) {
+    final wert = normalize(state);
+    return _eintraege[wert]?.color ??
+        defaultColors[wert] ??
+        fallbackColor;
+  }
 }
 
 /// Grob kristalliner und kandierter Honig.
@@ -533,19 +609,29 @@ class HoneyCrystallization {
   static const String coarse = 'grob';
   static const String solid = 'fest';
 
-  static const List<String> all = [coarse, solid];
+  static const List<String> defaultAll = [coarse, solid];
 
-  static const Map<String, String> _labels = {
+  static const Map<String, String> defaultLabels = {
     coarse: 'grob kristallin',
     solid: 'kandiert / fest',
   };
 
-  static String labelOf(String value) => _labels[value] ?? value;
-
-  static bool isKnown(String value) => _labels.containsKey(value);
-
   /// Rot, wie die Abzweige vorher: da ist etwas schiefgegangen.
-  static const int color = 0xFFff6b7a;
+  static const int defaultColor = 0xFFff6b7a;
+
+  static final SimpleCatalog catalog = SimpleCatalog(
+    name: Catalogs.honeyCrystallization,
+    defaultKeys: defaultAll,
+    defaultLabels: defaultLabels,
+  );
+
+  static List<String> get all => catalog.keys;
+
+  static String labelOf(String value) => catalog.labelOf(value);
+
+  static bool isKnown(String value) => catalog.isKnown(value);
+
+  static int colorOf(String value) => catalog.colorOf(value) ?? defaultColor;
 }
 
 /// Die Wärmeschrank-Uhr eines Eimers.
