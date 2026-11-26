@@ -44,7 +44,7 @@ class _HoneyBucketNewScreenState extends State<HoneyBucketNewScreen> {
 
   String _variety = HoneyVarieties.summer;
   DateTime _date = DateTime.now();
-  String _state = HoneyStates.fresh;
+  String _state = HoneyStates.extracted;
 
   /// Der Code, den dieser Eimer bekommen wird – aus der höchsten bisher
   /// vergebenen Nummer. Nur eine Vorschau: Vergeben wird er beim Speichern.
@@ -326,15 +326,9 @@ class _HoneyBucketNewScreenState extends State<HoneyBucketNewScreen> {
             spacing: 6,
             runSpacing: 6,
             children: [
-              // Beim Anlegen kommen nur die Zustände in Frage, in denen ein
-              // frisch geschleuderter Eimer tatsächlich stehen kann.
-              for (final z in const [
-                HoneyStates.fresh,
-                HoneyStates.toSeed,
-                HoneyStates.seeded,
-                HoneyStates.toStir,
-                HoneyStates.readyToBottle,
-              ])
+              // Die vier Haken der Kette. „Leer" fehlt mit Absicht: einen
+              // leeren Eimer legt man nicht an, das setzt der Dienst selbst.
+              for (final z in HoneyStates.steps)
                 ChoiceChip(
                   label: Text(HoneyStates.labelOf(z),
                       style: const TextStyle(fontSize: 11)),

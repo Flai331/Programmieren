@@ -36,6 +36,44 @@ const _v4Invoices = '''
   )
 ''';
 
+/// Die Eimer-Tabelle in Version 5: ohne die Spalte `crystallization`, mit den
+/// neun alten Zustandswerten. Eine eingefrorene Kopie, denn
+/// [DatabaseService.honeyBucketsTableSql] beschreibt inzwischen v6 – nur so
+/// prüft der Test den Schritt und nicht sich selbst.
+const _v5HoneyBuckets = '''
+  CREATE TABLE honey_buckets (
+    id TEXT PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    number INTEGER NOT NULL,
+    variety TEXT NOT NULL,
+    variety_name TEXT,
+    harvest_date TEXT NOT NULL,
+    bucket_size_kg REAL,
+    filled_kg REAL NOT NULL,
+    water_content REAL,
+    state TEXT NOT NULL,
+    location TEXT,
+    label_photo TEXT,
+    note TEXT,
+    created_at TEXT,
+    updated_at TEXT
+  )
+''';
+
+/// Die neun Zustände, die ein Eimer vor v6 tragen konnte, und was aus jedem
+/// werden muss. Geschichte, nicht ableitbar – deshalb hier von Hand.
+const _v5Zustaende = <String, (String, String?)>{
+  'frisch': (HoneyStates.extracted, null),
+  'zu_impfen': (HoneyStates.extracted, null),
+  'geimpft': (HoneyStates.seeded, null),
+  'zu_ruehren': (HoneyStates.seeded, null),
+  'geruehrt': (HoneyStates.stirred, null),
+  'abfuellfertig': (HoneyStates.readyToBottle, null),
+  'leer': (HoneyStates.empty, null),
+  'grob': (HoneyStates.extracted, HoneyCrystallization.coarse),
+  'fest': (HoneyStates.extracted, HoneyCrystallization.solid),
+};
+
 void main() {
   setUpAll(() {
     sqfliteFfiInit();
@@ -202,7 +240,7 @@ void main() {
       expect(gelesen.number, 42);
       expect(gelesen.filledKg, 25);
       expect(gelesen.waterContent, 17.2);
-      expect(gelesen.state, HoneyStates.fresh);
+      expect(gelesen.state, HoneyStates.extracted);
     });
 
     test('derselbe Code kann nicht zweimal vergeben werden', () async {
@@ -322,6 +360,143 @@ void main() {
       expect(await db.query('honey_bucket_events'), isEmpty);
     });
   });
+
+  group('Migration v5 → v6: Zustände werden Haken', () {
+    Future<Database> openV5() async {
+      final db = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(version: 5),
+      );
+      await db.execute(_v5HoneyBuckets);
+      await db.execute(DatabaseService.honeyEventsTableSql);
+      // Je ein Eimer in jedem der neun alten Zustände.
+      var nr = 0;
+      for (final alt in _v5Zustaende.keys) {
+        nr++;
+        await db.insert('honey_buckets', {
+          'id': 'b$nr',
+          'code': 'SO-${nr.toString().padLeft(3, '0')}',
+          'number': nr,
+          'variety': HoneyVarieties.summer,
+          'harvest_date': DateTime(2026, 7, 14).toIso8601String(),
+          'filled_kg': 25.0,
+          'state': alt,
+          'created_at': DateTime(2026, 7, 14).toIso8601String(),
+        });
+      }
+      return db;
+    }
+
+    Future<Map<String, HoneyBucketModel>> eimerNachAltzustand(
+        Database db) async {
+      final reihen = await db.query('honey_buckets', orderBy: 'number');
+      final nachNummer = {
+        for (final r in reihen)
+          (r['number'] as int): HoneyBucketModel.fromMap(r)
+      };
+      var nr = 0;
+      return {
+        for (final alt in _v5Zustaende.keys) alt: nachNummer[++nr]!,
+      };
+    }
+
+    test('jeder der neun alten Werte landet auf dem richtigen Haken',
+        () async {
+      final db = await openV5();
+      addTearDown(db.close);
+
+      await DatabaseService.migrateHoneyStatesToTicks(db);
+
+      final eimer = await eimerNachAltzustand(db);
+      _v5Zustaende.forEach((alt, erwartet) {
+        final (zustand, markierung) = erwartet;
+        expect(eimer[alt]!.state, zustand,
+            reason: '\'$alt\' muss zu \'$zustand\' werden');
+        expect(eimer[alt]!.crystallization, markierung,
+            reason: 'Markierung von \'$alt\'');
+      });
+    });
+
+    test('kein alter Wert bleibt in der Tabelle stehen', () async {
+      final db = await openV5();
+      addTearDown(db.close);
+
+      await DatabaseService.migrateHoneyStatesToTicks(db);
+
+      final reihen = await db.query('honey_buckets', columns: ['state']);
+      for (final r in reihen) {
+        expect(HoneyStates.all, contains(r['state'] as String));
+      }
+    });
+
+    test('der Honig gilt nie als weiter, als er ist', () async {
+      // Der böse Fehler wäre ein stilles Umkippen nach vorn: ein Eimer, der
+      // nur geschleudert war, dürfte nach der Migration nicht als gerührt
+      // gelten. Also: nie mehr Haken als vorher.
+      final db = await openV5();
+      addTearDown(db.close);
+
+      await DatabaseService.migrateHoneyStatesToTicks(db);
+
+      final eimer = await eimerNachAltzustand(db);
+      _v5Zustaende.forEach((alt, _) {
+        final vorher = HoneyStates.ticksOf(HoneyStates.normalize(alt));
+        expect(HoneyStates.ticksOf(eimer[alt]!.state),
+            lessThanOrEqualTo(vorher),
+            reason: '\'$alt\' hat Haken dazugewonnen');
+      });
+    });
+
+    test('ein zweiter Durchlauf ändert nichts mehr', () async {
+      // ALTER TABLE kennt kein IF NOT EXISTS; liefe der Schritt doch zweimal,
+      // bräche er sonst ab.
+      final db = await openV5();
+      addTearDown(db.close);
+
+      await DatabaseService.migrateHoneyStatesToTicks(db);
+      final ersterLauf = await db.query('honey_buckets', orderBy: 'number');
+      await DatabaseService.migrateHoneyStatesToTicks(db);
+      final zweiterLauf = await db.query('honey_buckets', orderBy: 'number');
+
+      expect(zweiterLauf.toString(), ersterLauf.toString());
+    });
+
+    test('die Spalte fehlt vorher und ist hinterher da', () async {
+      final db = await openV5();
+      addTearDown(db.close);
+
+      Future<bool> hatSpalte() async {
+        final s = await db.rawQuery('PRAGMA table_info(honey_buckets)');
+        return s.any((r) => r['name'] == 'crystallization');
+      }
+
+      expect(await hatSpalte(), isFalse);
+      await DatabaseService.migrateHoneyStatesToTicks(db);
+      expect(await hatSpalte(), isTrue);
+    });
+
+    test('der Verlauf bleibt unangetastet', () async {
+      // Dort steht, was damals geschah. Beim Anzeigen bringt normalize() die
+      // alten Werte auf die heutigen Beschriftungen.
+      final db = await openV5();
+      addTearDown(db.close);
+      await db.insert('honey_bucket_events', {
+        'id': 'e1',
+        'bucket_id': 'b1',
+        'date': DateTime(2026, 7, 20).toIso8601String(),
+        'kind': HoneyEventKinds.state,
+        'state': 'zu_ruehren',
+        'created_at': DateTime(2026, 7, 20).toIso8601String(),
+      });
+
+      await DatabaseService.migrateHoneyStatesToTicks(db);
+
+      final reihen = await db.query('honey_bucket_events');
+      expect(reihen.single['state'], 'zu_ruehren');
+      expect(HoneyStates.labelOf('zu_ruehren'), 'geimpft – täglich rühren');
+    });
+  });
+
 }
 
 StockItemModel _glas() => StockItemModel(
@@ -361,7 +536,7 @@ HoneyBucketModel _eimer({String id = 'b1'}) => HoneyBucketModel(
       bucketSizeKg: 25,
       filledKg: 25,
       waterContent: 17.2,
-      state: HoneyStates.fresh,
+      state: HoneyStates.extracted,
       createdAt: DateTime(2026, 7, 14, 18),
     );
 

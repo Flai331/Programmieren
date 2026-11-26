@@ -33,7 +33,7 @@ class DatabaseService {
 
   /// Schema-Version. Bei Erhöhung immer auch [_onUpgrade] ergänzen, sonst
   /// verlieren bestehende Installationen beim Update ihre Tabellen.
-  static const int _dbVersion = 5;
+  static const int _dbVersion = 6;
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     FeedbackService.log('🗄️ SQLite-Migration $oldVersion → $newVersion');
@@ -51,6 +51,47 @@ class DatabaseService {
     if (oldVersion < 5) {
       await createStockTables(db);
     }
+    if (oldVersion < 6) {
+      await migrateHoneyStatesToTicks(db);
+    }
+  }
+
+  /// Schritt auf v6: Die Eimer-Zustände werden eine Hakenliste.
+  ///
+  /// „noch zu impfen" und „noch zu rühren" fallen weg – in einer Hakenliste
+  /// sagt das leere Kästchen das schon. Grob kristallin und kandiert sind
+  /// keine Schritte mehr, sondern eine Markierung neben der Liste: sie wandern
+  /// in die neue Spalte, und der Eimer geht auf den ersten Haken zurück, genau
+  /// wie nach dem Melitherm.
+  ///
+  /// Die Abbildung kommt aus [HoneyStates.legacy], damit Dart und SQLite nicht
+  /// auseinanderlaufen können.
+  ///
+  /// Der Verlauf in `honey_bucket_events` bleibt unangetastet: dort steht, was
+  /// damals geschah, und das umzuschreiben wäre Geschichtsfälschung. Beim
+  /// Anzeigen bringt [HoneyStates.normalize] die alten Werte auf die heutigen
+  /// Beschriftungen.
+  @visibleForTesting
+  static Future<void> migrateHoneyStatesToTicks(Database db) async {
+    await addColumnIfMissing(db, 'honey_buckets', 'crystallization', 'TEXT');
+
+    // Zuerst die Markierung aus dem alten Zustand retten, sonst ist die
+    // Information nach dem Umschreiben verloren.
+    final markiert = await db.rawUpdate(
+      'UPDATE honey_buckets SET crystallization = state WHERE state IN (?, ?)',
+      [HoneyCrystallization.coarse, HoneyCrystallization.solid],
+    );
+
+    var umgeschrieben = 0;
+    for (final paar in HoneyStates.legacy.entries) {
+      umgeschrieben += await db.rawUpdate(
+        'UPDATE honey_buckets SET state = ? WHERE state = ?',
+        [paar.value, paar.key],
+      );
+    }
+    FeedbackService.log(
+        '🗄️ Eimer-Zustände auf Haken umgestellt: $umgeschrieben Eimer, '
+        'davon $markiert kristallin');
   }
 
   /// Spalte nachrüsten. SQLite kennt kein `ADD COLUMN IF NOT EXISTS`, ein
@@ -157,6 +198,7 @@ class DatabaseService {
         filled_kg REAL NOT NULL,
         water_content REAL,
         state TEXT NOT NULL,
+        crystallization TEXT,
         location TEXT,
         label_photo TEXT,
         note TEXT,

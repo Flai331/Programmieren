@@ -11,7 +11,8 @@ HoneyBucketModel _bucket({
   String? varietyName,
   double filledKg = 25,
   double? bucketSizeKg = 25,
-  String state = HoneyStates.fresh,
+  String state = HoneyStates.extracted,
+  String? crystallization,
   String? location,
 }) =>
     HoneyBucketModel(
@@ -25,6 +26,7 @@ HoneyBucketModel _bucket({
       filledKg: filledKg,
       waterContent: 17.2,
       state: state,
+      crystallization: crystallization,
       location: location,
       createdAt: DateTime(2026, 7, 14, 18),
     );
@@ -123,10 +125,10 @@ void main() {
     });
   });
 
-  group('Zustände – die Kette mit Abzweig', () {
-    test('geht vom frischen Honig bis zum leeren Eimer', () {
-      final kette = <String>[HoneyStates.fresh];
-      var aktuell = HoneyStates.fresh;
+  group('Zustände – die Hakenliste', () {
+    test('„Weiter" läuft die vier Haken ab und hört dann auf', () {
+      final kette = <String>[HoneyStates.extracted];
+      var aktuell = HoneyStates.extracted;
       for (var i = 0; i < 10; i++) {
         final naechster = HoneyStates.next(aktuell);
         if (naechster == null) break;
@@ -134,37 +136,20 @@ void main() {
         aktuell = naechster;
       }
 
-      expect(kette, [
-        HoneyStates.fresh,
-        HoneyStates.toSeed,
-        HoneyStates.seeded,
-        HoneyStates.toStir,
-        HoneyStates.stirred,
-        HoneyStates.readyToBottle,
-        HoneyStates.empty,
-      ]);
-      // Hinter 'leer' geht es nicht weiter.
+      expect(kette, HoneyStates.steps);
+      // Nach 'abfüllfertig' kommt kein Haken mehr: es folgt das Abfüllen, und
+      // 'leer' setzt der Dienst selbst.
+      expect(HoneyStates.next(HoneyStates.readyToBottle), isNull);
       expect(HoneyStates.next(HoneyStates.empty), isNull);
     });
 
-    test('die Abzweige führen zurück ins Rühren', () {
-      expect(HoneyStates.next(HoneyStates.coarse), HoneyStates.toStir);
-      expect(HoneyStates.next(HoneyStates.solid), HoneyStates.toStir);
-    });
-
-    test('nur Zustände, die auf mich warten, fordern Handlung', () {
-      for (final zustand in [
-        HoneyStates.toSeed,
-        HoneyStates.toStir,
-        HoneyStates.coarse,
-        HoneyStates.solid,
-      ]) {
+    test('geschleudert und täglich rühren warten auf mich', () {
+      // 'geschleudert' heißt: noch zu impfen. 'geimpft' heißt: täglich rühren.
+      for (final zustand in [HoneyStates.extracted, HoneyStates.seeded]) {
         expect(HoneyStates.needsAttention(zustand), isTrue,
             reason: '$zustand sollte Handlungsbedarf anzeigen');
       }
       for (final zustand in [
-        HoneyStates.fresh,
-        HoneyStates.seeded,
         HoneyStates.stirred,
         HoneyStates.readyToBottle,
         HoneyStates.empty,
@@ -172,6 +157,17 @@ void main() {
         expect(HoneyStates.needsAttention(zustand), isFalse,
             reason: '$zustand sollte ruhen');
       }
+    });
+
+    test('eine Markierung fordert Handlung, auf welchem Haken auch immer', () {
+      expect(_bucket(state: HoneyStates.stirred).needsAttention, isFalse);
+      expect(
+        _bucket(
+          state: HoneyStates.stirred,
+          crystallization: HoneyCrystallization.coarse,
+        ).needsAttention,
+        isTrue,
+      );
     });
   });
 
@@ -184,10 +180,9 @@ void main() {
       expect(_bucket(state: HoneyStates.empty).labelHint, 'SO-042  [✕]');
     });
 
-    test('beim frischen Eimer steht nur der Code', () {
-      // Frisch geschleudert ist noch kein Strich zu malen.
-      expect(_bucket(state: HoneyStates.fresh).labelHint, 'SO-042');
-      expect(_bucket(state: HoneyStates.toSeed).labelHint, 'SO-042');
+    test('beim geschleuderten Eimer steht nur der Code', () {
+      // Vor dem Impfen ist noch kein Strich zu malen.
+      expect(_bucket(state: HoneyStates.extracted).labelHint, 'SO-042');
     });
 
     test('ein Strich mehr heißt ein Schritt weiter', () {
@@ -210,7 +205,7 @@ void main() {
   group('Auswertungen über alle Eimer', () {
     final staende = HoneyService.buildStatuses(
       buckets: [
-        _bucket(id: 'b1', filledKg: 25, state: HoneyStates.toStir),
+        _bucket(id: 'b1', filledKg: 25, state: HoneyStates.seeded),
         _bucket(
             id: 'b2',
             code: 'FR-017',
@@ -223,7 +218,10 @@ void main() {
             code: 'SO-043',
             number: 43,
             filledKg: 25,
-            state: HoneyStates.coarse),
+            // Ruhender Haken, aber kristallin: allein die Markierung macht
+            // hier den Handlungsbedarf.
+            state: HoneyStates.stirred,
+            crystallization: HoneyCrystallization.coarse),
         // Leer – darf in keiner Menge mitzählen.
         _bucket(
             id: 'b4',
@@ -253,7 +251,12 @@ void main() {
 
     test('ein leerer Eimer fordert keine Handlung mehr', () {
       final leerUndGrob = HoneyService.buildStatuses(
-        buckets: [_bucket(id: 'x', state: HoneyStates.empty)],
+        buckets: [
+          _bucket(
+              id: 'x',
+              state: HoneyStates.empty,
+              crystallization: HoneyCrystallization.coarse)
+        ],
         bottled: {'x': 25},
       );
       expect(HoneyService.needingAttention(leerUndGrob), isEmpty);
@@ -261,7 +264,7 @@ void main() {
 
     test('gruppiert nach Zustand', () {
       final nachZustand = HoneyService.byState(staende);
-      expect(nachZustand[HoneyStates.toStir]!.single.bucket.id, 'b1');
+      expect(nachZustand[HoneyStates.seeded]!.single.bucket.id, 'b1');
       expect(nachZustand[HoneyStates.readyToBottle]!.single.bucket.id, 'b2');
     });
   });

@@ -44,6 +44,13 @@ class HoneyBucketModel {
   /// Siehe [HoneyStates].
   final String state;
 
+  /// Grob kristallin oder kandiert, siehe [HoneyCrystallization]; null, wenn
+  /// der Honig in Ordnung ist.
+  ///
+  /// Steht neben dem Zustand statt in der Kette: das ist kein Arbeitsschritt,
+  /// sondern etwas, das dazwischenkommt. Der Weg zurück ist das Melitherm.
+  final String? crystallization;
+
   /// Lagerplatz, z.B. 'Keller Regal B3'.
   final String? location;
 
@@ -66,6 +73,7 @@ class HoneyBucketModel {
     required this.filledKg,
     this.waterContent,
     required this.state,
+    this.crystallization,
     this.location,
     this.labelPhoto,
     this.note,
@@ -85,9 +93,14 @@ class HoneyBucketModel {
   String get stateLabel => HoneyStates.labelOf(state);
 
   /// Ist an diesem Eimer etwas zu tun?
-  bool get needsAttention => HoneyStates.needsAttention(state);
+  ///
+  /// Der Zustand sagt das meiste, eine gesetzte Markierung kommt dazu. Die
+  /// Wärmeschrank-Uhr kennt das Modell nicht – die steckt im Verlauf, deshalb
+  /// liegt jener Teil beim HoneyService.
+  bool get needsAttention =>
+      HoneyStates.needsAttention(state) || crystallization != null;
 
-  bool get isEmpty => state == HoneyStates.empty;
+  bool get isEmpty => HoneyStates.normalize(state) == HoneyStates.empty;
 
   /// Was auf den Eimer zu malen ist, z.B. 'SO-042  [||]'.
   String get labelHint {
@@ -106,6 +119,7 @@ class HoneyBucketModel {
         'filled_kg': filledKg,
         'water_content': waterContent,
         'state': state,
+        'crystallization': crystallization,
         'location': location,
         'label_photo': labelPhoto,
         'note': note,
@@ -123,7 +137,9 @@ class HoneyBucketModel {
         bucketSizeKg: (m['bucket_size_kg'] as num?)?.toDouble(),
         filledKg: (m['filled_kg'] as num?)?.toDouble() ?? 0,
         waterContent: (m['water_content'] as num?)?.toDouble(),
-        state: (m['state'] as String?) ?? HoneyStates.fresh,
+        state: HoneyStates.normalize(
+            (m['state'] as String?) ?? HoneyStates.extracted),
+        crystallization: m['crystallization'] as String?,
         location: m['location'] as String?,
         labelPhoto: m['label_photo'] as String?,
         note: m['note'] as String?,
@@ -133,6 +149,11 @@ class HoneyBucketModel {
             : null,
       );
 
+  /// Eine Kopie mit geänderten Feldern.
+  ///
+  /// [clearCrystallization] gibt es, weil `null` hier „unverändert" heißt: zum
+  /// Löschen der Markierung – nach dem Melitherm – braucht es einen eigenen
+  /// Schalter.
   HoneyBucketModel copyWith({
     String? id,
     String? code,
@@ -144,6 +165,8 @@ class HoneyBucketModel {
     double? filledKg,
     double? waterContent,
     String? state,
+    String? crystallization,
+    bool clearCrystallization = false,
     String? location,
     String? labelPhoto,
     String? note,
@@ -161,6 +184,9 @@ class HoneyBucketModel {
         filledKg: filledKg ?? this.filledKg,
         waterContent: waterContent ?? this.waterContent,
         state: state ?? this.state,
+        crystallization: clearCrystallization
+            ? null
+            : (crystallization ?? this.crystallization),
         location: location ?? this.location,
         labelPhoto: labelPhoto ?? this.labelPhoto,
         note: note ?? this.note,
@@ -279,11 +305,20 @@ class HoneyEventKinds {
   static const String location = 'platz';
   static const String note = 'notiz';
 
+  /// Eimer in den Wärmeschrank gestellt; `date` ist der Startpunkt der Uhr.
+  static const String warmerIn = 'waermeschrank_ein';
+
+  /// Eimer herausgenommen. Die Zahl dieser Zeilen entscheidet, ob der nächste
+  /// Durchgang 48 oder 24 Stunden braucht – siehe [HoneyWarmer].
+  static const String warmerOut = 'waermeschrank_aus';
+
   static const Map<String, String> _labels = {
     state: 'Zustand',
     bottling: 'Abfüllung',
     location: 'Platz',
     note: 'Notiz',
+    warmerIn: 'In den Wärmeschrank',
+    warmerOut: 'Aus dem Wärmeschrank',
   };
 
   static String labelOf(String kind) => _labels[kind] ?? kind;
@@ -338,109 +373,235 @@ class HoneyVarieties {
   static bool isKnown(String variety) => _labels.containsKey(variety);
 }
 
-/// Der Weg des Honigs im Eimer – eine Kette mit zwei Abzweigen.
+/// Der Weg des Honigs im Eimer – eine Hakenliste, keine Auswahl.
 ///
-/// Die Kette beschreibt den Normalfall vom Schleudern bis zum leeren Eimer.
-/// [coarse] und [solid] sind die Fälle, in denen es schiefgegangen ist; von
-/// dort führt der Weg zurück ins Rühren.
+/// Die vier Schritte bauen aufeinander auf: gerührt kann nicht sein, was nicht
+/// geimpft war. Darum trägt ein Eimer nur EINEN Wert – den weitesten
+/// erreichten Schritt – und welche Haken sitzen, ergibt sich daraus. Hakt man
+/// einen Schritt an, haken sich die vorherigen mit. Abgeleitet, nicht
+/// gespeichert.
+///
+/// Aus demselben Grund gibt es „noch zu impfen" und „noch zu rühren" nicht
+/// mehr als eigene Zustände: ein leeres Kästchen sagt das schon.
+///
+/// Grob kristalliner und kandierter Honig sind keine Schritte, sondern ein
+/// Zustand, der dazwischenkommt – sie stehen als [HoneyCrystallization] neben
+/// der Liste. Der Weg zurück ist das Melitherm, nach dem der Honig im selben
+/// Zustand ist wie frisch geschleuderter.
 ///
 /// Zu jedem Zustand gehört eine Strichzahl für das Kästchen, das von Hand
 /// auf den Eimer gemalt wird. Die App liest diese Striche nicht – sie führt
 /// den Zustand selbst und bleibt die Wahrheit. Die Striche sind allein für
 /// das Auge am Regal.
 class HoneyStates {
-  static const String fresh = 'frisch';
-  static const String toSeed = 'zu_impfen';
+  /// Frisch geschleudert – oder aus dem Melitherm. Derselbe Zustand.
+  static const String extracted = 'geschleudert';
+
+  /// Geimpft. Ab hier wird täglich gerührt, hier ruht nichts.
   static const String seeded = 'geimpft';
-  static const String toStir = 'zu_ruehren';
+
   static const String stirred = 'geruehrt';
   static const String readyToBottle = 'abfuellfertig';
+
+  /// Leergeräumt. Kein Haken zum Antippen: das setzt der HoneyService selbst,
+  /// sobald nichts mehr im Eimer ist.
   static const String empty = 'leer';
 
-  // ── Abzweige ────────────────────────────────────────────────
-  static const String coarse = 'grob';
-  static const String solid = 'fest';
-
-  /// Reihenfolge der Auswahl in der App: erst die Kette, dann die Abzweige.
-  static const List<String> all = [
-    fresh,
-    toSeed,
+  /// Die Haken, in der Reihenfolge der Arbeit.
+  static const List<String> steps = [
+    extracted,
     seeded,
-    toStir,
     stirred,
     readyToBottle,
-    empty,
-    coarse,
-    solid,
   ];
 
+  /// Jeder Wert, den ein Eimer tragen kann: die Haken und dazu [empty].
+  static const List<String> all = [...steps, empty];
+
   static const Map<String, String> _labels = {
-    fresh: 'frisch geschleudert',
-    toSeed: 'noch zu impfen',
-    seeded: 'geimpft, ruht',
-    toStir: 'noch zu rühren',
-    stirred: 'gerührt',
+    extracted: 'geschleudert / Melitherm',
+    seeded: 'geimpft – täglich rühren',
+    stirred: 'fertig gerührt',
     readyToBottle: 'abfüllfertig',
     empty: 'abgefüllt, leer',
-    coarse: 'grob kristallin',
-    solid: 'kandiert / fest',
   };
 
-  static String labelOf(String state) => _labels[state] ?? state;
+  static String labelOf(String state) => _labels[normalize(state)] ?? state;
+
+  /// Zustandswerte aus älteren Fassungen auf die heutige Kette abbilden.
+  ///
+  /// Die Migration auf Schema v6 schreibt die Datenbank einmalig um. Diese
+  /// Abbildung ist der Gürtel dazu: taucht doch ein alter Wert auf – aus einer
+  /// Sicherung, aus einem Gerät, das die Migration nie gesehen hat –, fällt er
+  /// nicht als unbekannter Zustand durch.
+  ///
+  /// Dass `grob` und `fest` hier beide auf [extracted] zeigen, verliert die
+  /// Information, DASS der Honig kristallin war. Genau deshalb setzt die
+  /// Migration zusätzlich die Spalte `crystallization`; eine Abbildung von
+  /// Zeichenkette auf Zeichenkette kann das nicht leisten.
+  static const Map<String, String> legacy = {
+    'frisch': extracted,
+    'zu_impfen': extracted,
+    'zu_ruehren': seeded,
+    'grob': extracted,
+    'fest': extracted,
+  };
+
+  /// Einen gespeicherten Wert auf einen heute gültigen bringen.
+  ///
+  /// Unbekanntes wird zum ersten Haken: lieber behaupten, es sei noch nichts
+  /// getan, als Arbeit als erledigt ausgeben, die niemand getan hat.
+  static String normalize(String state) {
+    if (all.contains(state)) return state;
+    return legacy[state] ?? extracted;
+  }
+
+  /// Wie viele Haken sitzen? 1 bis 4.
+  ///
+  /// Der erste Haken sitzt immer – der Eimer existiert, weil geschleudert
+  /// wurde. Ein leerer Eimer ist durch und zählt als voll abgehakt.
+  static int ticksOf(String state) {
+    final wert = normalize(state);
+    if (wert == empty) return steps.length;
+    final i = steps.indexOf(wert);
+    return i < 0 ? 1 : i + 1;
+  }
+
+  /// Der Zustand, der zu `anzahl` Haken gehört; 1 ist der erste Haken.
+  ///
+  /// Unter 1 gibt es nichts, deshalb die Klammer: Haken 1 lässt sich nicht
+  /// abhaken.
+  static String stateForTicks(int anzahl) =>
+      steps[anzahl.clamp(1, steps.length) - 1];
+
+  /// Ist `schritt` erledigt, wenn der Eimer auf `state` steht?
+  static bool isDone(String state, String schritt) =>
+      ticksOf(state) >= ticksOf(schritt);
 
   /// Der nächste Schritt, null am Ende der Kette.
   ///
-  /// Von den Abzweigen führt der Weg zurück ins Rühren: Grob kristalliner
-  /// und fester Honig werden nachgerührt, nicht weggeworfen.
-  static String? next(String state) => switch (state) {
-        fresh => toSeed,
-        toSeed => seeded,
-        seeded => toStir,
-        toStir => stirred,
-        stirred => readyToBottle,
-        readyToBottle => empty,
-        coarse => toStir,
-        solid => toStir,
-        _ => null,
-      };
+  /// Nach [readyToBottle] kommt nichts mehr zum Anhaken: was folgt, ist das
+  /// Abfüllen, und [empty] setzt der Dienst selbst.
+  static String? next(String state) {
+    final i = steps.indexOf(normalize(state));
+    if (i < 0 || i + 1 >= steps.length) return null;
+    return steps[i + 1];
+  }
 
   /// Wartet dieser Zustand auf eine Arbeit von mir?
   ///
-  /// „Noch zu impfen" und „noch zu rühren" sind Aufträge. „Geimpft, ruht"
-  /// ist keiner – da wartet der Honig, nicht der Imker. Grob kristallin und
-  /// fest sind Aufträge, weil nachgerührt werden muss.
-  static bool needsAttention(String state) =>
-      state == toSeed || state == toStir || state == coarse || state == solid;
+  /// [extracted] heißt: noch zu impfen. [seeded] heißt: täglich rühren – und
+  /// das bleibt Arbeit, bis „fertig gerührt" gehakt ist.
+  static bool needsAttention(String state) {
+    final wert = normalize(state);
+    return wert == extracted || wert == seeded;
+  }
 
   /// Striche für das handgemalte Kästchen auf dem Eimer.
   ///
-  /// Ein Strich je erreichtem Meilenstein, der leere Eimer wird
-  /// durchgestrichen. Frühe Zustände bleiben ohne Strich – da ist noch
-  /// nichts passiert, was man abhaken könnte.
-  static String strokeHint(String state) => switch (state) {
+  /// Sie wachsen mit der Zahl der Haken und bleiben genau die, die heute schon
+  /// auf den Eimern stehen.
+  static String strokeHint(String state) => switch (normalize(state)) {
         seeded => '|',
-        toStir => '|',
         stirred => '||',
-        coarse => '||',
         readyToBottle => '|||',
         empty => '✕',
         _ => '',
       };
 
-  /// Farbe zur Anzeige, als ARGB-Wert.
-  ///
-  /// Bewusst eine Zahl statt `Color`: Die Modelle bleiben frei von
-  /// Flutter-Abhängigkeiten, die Screens wickeln den Wert in `Color()`.
-  static int colorOf(String state) => switch (state) {
-        fresh => 0xFF60a5fa, // blau – flüssig, frisch
-        toSeed => 0xFFf59e0b, // gelb – wartet auf mich
-        seeded => 0xFF8a8a94, // grau – ruht
-        toStir => 0xFFf59e0b, // gelb – wartet auf mich
+  /// Farbe zur Anzeige, als ARGB-Wert. Bewusst eine Zahl statt `Color`.
+  static int colorOf(String state) => switch (normalize(state)) {
+        extracted => 0xFF60a5fa, // blau – frisch, noch zu impfen
+        seeded => 0xFFf59e0b, // gelb – wartet täglich auf mich
         stirred => 0xFF4ade80, // grün – auf gutem Weg
         readyToBottle => 0xFF22c55e, // grün – fertig
         empty => 0xFF8a8a94, // grau – erledigt
-        coarse => 0xFFff6b7a, // rot – da ist was schiefgegangen
-        solid => 0xFFff6b7a,
         _ => 0xFF8a8a94,
       };
+}
+
+/// Grob kristalliner und kandierter Honig.
+///
+/// Kein Arbeitsschritt, sondern ein Zustand, der dazwischenkommt – deshalb
+/// eine Markierung neben der Hakenliste und kein Haken in der Kette. Der Weg
+/// zurück ist das Melitherm: danach ist der Honig im selben Zustand wie frisch
+/// geschleuderter, also wieder auf dem ersten Haken.
+///
+/// Bewusst nicht auf den Eimer gemalt: kandierten Honig sieht man durch den
+/// Eimer, dafür braucht es keinen Strich.
+class HoneyCrystallization {
+  static const String coarse = 'grob';
+  static const String solid = 'fest';
+
+  static const List<String> all = [coarse, solid];
+
+  static const Map<String, String> _labels = {
+    coarse: 'grob kristallin',
+    solid: 'kandiert / fest',
+  };
+
+  static String labelOf(String value) => _labels[value] ?? value;
+
+  static bool isKnown(String value) => _labels.containsKey(value);
+
+  /// Rot, wie die Abzweige vorher: da ist etwas schiefgegangen.
+  static const int color = 0xFFff6b7a;
+}
+
+/// Die Wärmeschrank-Uhr eines Eimers.
+///
+/// Ein reiner Wert ohne Datenbankzugriff, damit die Rechnung ohne Gerät
+/// prüfbar bleibt. Gespeichert wird nur, WANN der Eimer hineingestellt wurde –
+/// als Ereigniszeile im Eimer-Verlauf. Fälligkeit und Restzeit ergeben sich
+/// daraus.
+///
+/// Die Uhr hängt ausdrücklich nicht an der Hakenliste: ein Haken beschreibt
+/// den Honig und heißt nicht, dass der Eimer im Schrank steht. Gestartet wird
+/// sie von Hand.
+class HoneyWarmer {
+  /// Beim ersten Mal braucht ein Eimer 48 Stunden.
+  static const int firstHours = 48;
+
+  /// War er schon einmal drin, genügen 24.
+  static const int repeatHours = 24;
+
+  /// Wann der Eimer hineingestellt wurde.
+  final DateTime startedAt;
+
+  /// Wie lange er diesmal braucht – [firstHours] oder [repeatHours].
+  final int requiredHours;
+
+  const HoneyWarmer({required this.startedAt, required this.requiredHours});
+
+  /// Die Stundenzahl für den nächsten Durchgang.
+  ///
+  /// `wasInBefore` kommt aus dem Eimer-Verlauf: stand der Eimer schon einmal
+  /// im Schrank, ist er durchgewärmt und braucht weniger.
+  static int hoursFor({required bool wasInBefore}) =>
+      wasInBefore ? repeatHours : firstHours;
+
+  /// Wann er fertig ist.
+  DateTime get dueAt => startedAt.add(Duration(hours: requiredHours));
+
+  /// Wie lange er schon drin steht.
+  Duration elapsed(DateTime now) => now.difference(startedAt);
+
+  /// Wie lange noch – negativ, wenn er überfällig ist.
+  Duration remaining(DateTime now) => dueAt.difference(now);
+
+  bool isDue(DateTime now) => !now.isBefore(dueAt);
+
+  /// „noch 34 h", „noch 45 min", „seit 3 h fällig".
+  ///
+  /// Stunden und Minuten, keine Tage: eine 48-Stunden-Uhr in Tagen zu lesen
+  /// hilft am Wärmeschrank niemandem.
+  String readableRemaining(DateTime now) {
+    if (isDue(now)) {
+      final ueber = -remaining(now).inMinutes;
+      return ueber < 60 ? 'fällig' : 'seit ${ueber ~/ 60} h fällig';
+    }
+    final rest = remaining(now);
+    if (rest.inMinutes < 60) return 'noch ${rest.inMinutes} min';
+    return 'noch ${rest.inHours} h';
+  }
 }

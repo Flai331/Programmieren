@@ -156,7 +156,7 @@ class HoneyService {
     required double filledKg,
     double? bucketSizeKg,
     double? waterContent,
-    String state = HoneyStates.fresh,
+    String state = HoneyStates.extracted,
     String? location,
     String? labelPhoto,
     String? note,
