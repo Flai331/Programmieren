@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/honey_service.dart';
+import '../services/warmer_alarms.dart';
 import '../utils/app_utils.dart';
 import '../utils/feedback_service.dart';
 import '../utils/photo_storage.dart';
@@ -43,6 +44,11 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
 
   final _db = DatabaseService();
   final _honey = HoneyService();
+  final _alarms = WarmerAlarms();
+
+  /// Darf die App melden? Erst gefragt, wenn eine Uhr läuft – vorher gilt
+  /// keine Nachricht als gute Nachricht.
+  bool _canNotify = true;
 
   HoneyBucketModel? _bucket;
   double _bottledKg = 0;
@@ -88,7 +94,12 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
         _events = events;
         _loading = false;
       });
-      _syncTicker(HoneyWarmer.fromEvents(events) != null);
+      final uhr = HoneyWarmer.fromEvents(events);
+      _syncTicker(uhr != null);
+      if (uhr != null) {
+        final darf = await _alarms.canNotify();
+        if (mounted && darf != _canNotify) setState(() => _canNotify = darf);
+      }
       if (widget.startBottling && !_bottlingOffered && bucket != null) {
         _bottlingOffered = true;
         // Erst nach dem Aufbau: Der Dialog braucht einen fertigen
@@ -239,10 +250,20 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
     try {
       final uhr = await _honey.startWarmer(bucket);
       _dirty = true;
+
+      // Erst jetzt nach der Erlaubnis fragen: hier ist der Grund sichtbar.
+      var darf = await _alarms.canNotify();
+      if (!darf) darf = await _alarms.requestPermission();
+      final gesetzt = darf &&
+          await _alarms.schedule(bucket: bucket, warmer: uhr);
+
       await _load();
       if (!mounted) return;
-      _snack('Uhr läuft – ${uhr.requiredHours} h, '
-          '${_fertigText(uhr.dueAt)}');
+      _snack(gesetzt
+          ? 'Uhr läuft – ${uhr.requiredHours} h, ${_fertigText(uhr.dueAt)}. '
+              'Ich melde mich.'
+          : 'Uhr läuft – ${uhr.requiredHours} h, ${_fertigText(uhr.dueAt)}. '
+              'Ohne Meldung: schau am Eimer nach.');
     } catch (e) {
       _snack('Fehler: $e', err: true);
     }
@@ -253,6 +274,7 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
     if (bucket == null) return;
     try {
       await _honey.stopWarmer(bucket);
+      await _alarms.cancel(bucket.id);
       _dirty = true;
       await _load();
       if (!mounted) return;
@@ -642,6 +664,7 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
     if (ok != true) return;
     try {
       final foto = bucket.labelPhoto;
+      await _alarms.cancel(bucket.id);
       await _db.deleteHoneyBucket(bucket.id);
       if (foto != null) await PhotoStorage.delete(foto);
       if (mounted) Navigator.of(context).pop(true);
@@ -1132,6 +1155,16 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
                 '${AppUtils.formatDateTime(uhr.startedAt)}',
                 style: const TextStyle(fontSize: 10, color: _muted),
               ),
+              if (!_canNotify) ...[
+                const SizedBox(height: 6),
+                const Text(
+                  'Meldungen sind für diese App aus – die Uhr läuft, sie '
+                  'meldet sich nur nicht. Umschalten geht in den '
+                  'Android-Einstellungen.',
+                  style:
+                      TextStyle(fontSize: 10, color: _muted, height: 1.35),
+                ),
+              ],
               const SizedBox(height: 8),
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),

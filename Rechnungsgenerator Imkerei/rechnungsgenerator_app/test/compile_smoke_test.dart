@@ -55,6 +55,9 @@ void main() {
     expect(
         const CatalogEntriesScreen(catalog: Catalogs.honeyState), isNotNull);
     expect(PersonalizationService(), same(PersonalizationService()));
+    // Wärmeschrank-Meldung: Dienst erreichbar, Kanalname wie im Kotlin.
+    expect(WarmerAlarms(), same(WarmerAlarms()));
+    expect(WarmerAlarms.channel.name, 'beebrain/warmer');
     expect(Catalogs.all, isNotEmpty);
     // Aktualisierung: Der Dienst lässt sich anlegen, ohne das Netz
     // anzufassen – geprüft wird nur, dass er über das Barrel erreichbar ist

@@ -1394,6 +1394,30 @@ class DatabaseService {
   }
 
   /// Verlauf eines Eimers, neuestes Ereignis zuerst.
+  /// Alle Verlaufszeilen bestimmter Arten, über alle Eimer hinweg.
+  ///
+  /// Für die Wärmeschrank-Uhren beim Start: eine Abfrage statt einer je
+  /// Eimer.
+  Future<List<HoneyBucketEventModel>> getHoneyEventsOfKinds(
+      List<String> kinds) async {
+    if (kinds.isEmpty) return const [];
+    try {
+      final db = await database;
+      final platzhalter = List.filled(kinds.length, '?').join(', ');
+      final result = await db.query(
+        'honey_bucket_events',
+        where: 'kind IN ($platzhalter)',
+        whereArgs: kinds,
+        orderBy: 'date DESC, created_at DESC',
+      );
+      return result.map((m) => HoneyBucketEventModel.fromMap(m)).toList();
+    } catch (e) {
+      FeedbackService.logError('getHoneyEventsOfKinds: $e',
+          context: 'honey_bucket_events');
+      return [];
+    }
+  }
+
   Future<List<HoneyBucketEventModel>> getHoneyEvents(String bucketId) async {
     try {
       final db = await database;

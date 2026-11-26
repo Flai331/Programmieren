@@ -46,6 +46,14 @@ class HoneyBucketStatus {
   String get currentLabel => '${AppUtils.formatNumber(currentKg)} kg';
 }
 
+/// Ein Eimer mit laufender Wärmeschrank-Uhr.
+class WarmerTimer {
+  final HoneyBucketModel bucket;
+  final HoneyWarmer warmer;
+
+  const WarmerTimer({required this.bucket, required this.warmer});
+}
+
 /// Rechnung einer Abfüllung: kg im Eimer gegen Gläser im Regal.
 class BottlingPlan {
   /// Entnommene Menge in kg.
@@ -298,6 +306,29 @@ class HoneyService {
       note: '$stunden h',
     );
     return HoneyWarmer(startedAt: jetzt, requiredHours: stunden);
+  }
+
+  /// Alle Eimer, bei denen gerade eine Uhr läuft.
+  ///
+  /// Beim Start gebraucht: Weckzeiten überleben keinen Neustart des Handys,
+  /// die Zeilen im Verlauf schon. Also werden die offenen Uhren daraus neu
+  /// angemeldet.
+  Future<List<WarmerTimer>> runningWarmers() async {
+    final buckets = await _db.getAllHoneyBuckets();
+    final zeilen = await _db.getHoneyEventsOfKinds(
+        [HoneyEventKinds.warmerIn, HoneyEventKinds.warmerOut]);
+
+    final jeEimer = <String, List<HoneyBucketEventModel>>{};
+    for (final zeile in zeilen) {
+      (jeEimer[zeile.bucketId] ??= []).add(zeile);
+    }
+
+    final offen = <WarmerTimer>[];
+    for (final bucket in buckets) {
+      final uhr = HoneyWarmer.fromEvents(jeEimer[bucket.id] ?? const []);
+      if (uhr != null) offen.add(WarmerTimer(bucket: bucket, warmer: uhr));
+    }
+    return offen;
   }
 
   /// Herausgenommen – die Uhr hört auf.

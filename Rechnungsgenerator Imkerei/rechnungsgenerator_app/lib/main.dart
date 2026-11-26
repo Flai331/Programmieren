@@ -46,6 +46,12 @@ void main() async {
   // synchron aus ihren build()-Methoden ab.
   await PersonalizationService().load();
 
+  // ── Wärmeschrank-Uhren neu anmelden ─────────────────────────
+  // Ein Neustart des Handys löscht alle Weckzeiten; die Uhren selbst stehen
+  // im Eimer-Verlauf. Also von dort wiederherstellen. Scheitert das, läuft
+  // die App weiter – die Uhr am Eimer stimmt auch ohne Meldung.
+  await WarmerAlarms().reregister();
+
   final connectivityService = ConnectivityService();
   await connectivityService.initialize();
   FeedbackService.log('✓ Connectivity-Service initialisiert');
