@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jalousie-Box Generator</title>
+<style>
+  :root{
+    --bg:#0f1012; --panel:#17181b; --line:#2a2c31; --text:#e9e7e2; --muted:#9a9890;
+    --accent:#e8c26a; --warn:#f0a34a; --err:#ff6b6b; --ok:#7fc98b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  body{display:flex;min-height:100vh}
+  aside{width:360px;flex:none;background:var(--panel);border-right:1px solid var(--line);
+    overflow-y:auto;height:100vh;padding:18px 18px 40px}
+  main{flex:1;position:relative;min-width:0;height:100vh}
+  canvas{display:block;width:100%;height:100%}
+  h1{font-size:18px;margin:0 0 2px;letter-spacing:.2px}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:14px}
+  details{border-top:1px solid var(--line);padding:8px 0}
+  summary{cursor:pointer;font-weight:600;padding:4px 0;color:var(--accent);list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"▸ ";color:var(--muted)}
+  details[open] summary::before{content:"▾ "}
+  .row{display:grid;grid-template-columns:1fr 70px;gap:4px 8px;align-items:center;margin:7px 0}
+  .row label{font-size:12.5px;color:#cfccc4;grid-column:1/3}
+  .row input[type=range]{width:100%;accent-color:var(--accent)}
+  .row input[type=number]{width:70px;background:#0e0f11;border:1px solid var(--line);color:var(--text);
+    border-radius:6px;padding:3px 6px;font:inherit;font-size:12.5px}
+  .chk{display:flex;gap:8px;align-items:center;margin:8px 0;font-size:13px}
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0 6px}
+  button{background:#24262b;color:var(--text);border:1px solid #34373d;border-radius:8px;
+    padding:9px 10px;font:inherit;font-size:13px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button:disabled{opacity:.5;cursor:wait}
+  button.primary{background:var(--accent);color:#1a1a1a;border-color:var(--accent);font-weight:600}
+  #info{font-size:12.5px;background:#111215;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:10px}
+  #info div{margin:2px 0}
+  #info .w{color:var(--warn)} #info .e{color:var(--err)} #info .o{color:var(--ok)}
+  .hint{font-size:12.5px;color:#c9c6bd}
+  .hint ol{padding-left:18px;margin:6px 0}
+  .hint li{margin:4px 0}
+  #overlay{position:absolute;left:14px;bottom:12px;color:var(--muted);font-size:12px;pointer-events:none}
+  #loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);pointer-events:none}
+  @media (max-width:800px){
+    body{flex-direction:column}
+    aside{width:100%;height:auto;border-right:0;border-bottom:1px solid var(--line);padding:16px}
+    main{height:60vh;flex:none}
+  }
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<aside>
+  <h1>Jalousie-Box Generator</h1>
+  <div class="sub">Rolldeckel-Box · 100 % druckbar: keine Stützen, kein Kleber, Jalousie print-in-place · Maße in mm</div>
+  <div id="controls"></div>
+
+  <details open>
+    <summary>Ansicht</summary>
+    <div class="row"><label>Jalousie öffnen (%)</label>
+      <input type="range" id="open" min="0" max="100" step="1" value="35">
+      <input type="number" id="openN" min="0" max="100" step="1" value="35"></div>
+    <label class="chk"><input type="checkbox" id="hideLeft"> Linke Seitenwand ausblenden (Nut sehen)</label>
+    <label class="chk"><input type="checkbox" id="showTam" checked> Jalousie anzeigen</label>
+    <label class="chk"><input type="checkbox" id="showStop" checked> Endstopp-Leiste anzeigen</label>
+  </details>
+
+  <div class="btns">
+    <button class="primary" id="exBody">⬇ Korpus STL</button>
+    <button class="primary" id="exTam">⬇ Jalousie STL</button>
+    <button id="exStop">⬇ Endstopp STL</button>
+    <button id="exAll">⬇ Alle 3 Dateien</button>
+    <button id="reset">Werte zurücksetzen</button>
+    <button id="fit">Kamera zentrieren</button>
+  </div>
+
+  <div id="info">Lade …</div>
+
+  <details open>
+    <summary>Druck &amp; Montage</summary>
+    <div class="hint">
+      <ol>
+        <li><b>Korpus</b> aufrecht drucken (Boden aufs Bett). Keine Stützen – die Nut-Decke (≈ Nuttiefe) wird frei überhängend gedruckt.</li>
+        <li><b>Jalousie</b> flach drucken, wie exportiert (Innenseite unten). Sie ist <i>print-in-place</i>: Lamellen hängen über Bolzen-Scharniere zusammen, Löcher sind tropfenförmig (stützfrei). Nach dem Druck jedes Gelenk einmal vorsichtig durchbiegen.</li>
+        <li>Elefantenfuß/erste Schicht sauber kalibrieren, sonst verschmelzen die Gelenke am Bett. Bei 0,4-mm-Düse Gelenk-Spiel ≥ 0,35.</li>
+        <li><b>Einsetzen:</b> Die Nut ist hinten unten offen. Jalousie mit der Griffleiste voran, Griff nach außen, von unten hinten mit den Zapfen in beide Nuten schieben, hoch und über die Rundung nach vorn.</li>
+        <li><b>Endstopp-Leiste</b> von unten in die beiden Nutschlitze drücken – hält per Klemmrippen, ohne Kleber.</li>
+        <li>Klemmt es: <i>Spiel</i> erhöhen. Knickt es in der Kurve: <i>Lamellenbreite</i> verkleinern.</li>
+      </ol>
+    </div>
+  </details>
+</aside>
+<main>
+  <canvas id="c"></canvas>
+  <div id="loading">Lade 3D- und CSG-Engine …</div>
+  <div id="overlay">Drehen: linke Maustaste · Verschieben: rechte · Zoom: Mausrad</div>
+</main>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import ManifoldModule from 'https://cdn.jsdelivr.net/npm/manifold-3d@3.0.0/manifold.js';
+
+const wasm = await ManifoldModule(); wasm.setup();
+
+/* ---------- Parameter ---------- */
+const SPEC = [
+  {g:'Außenmaße & Form', open:true, items:[
+    ['W','Breite',40,400,1,160],
+    ['D','Tiefe',40,400,1,100],
+    ['H','Höhe',25,300,1,100],
+    ['Rf','Radius vorne oben',8,150,0.5,25],
+    ['Rb','Radius hinten oben',8,150,0.5,30],
+  ]},
+  {g:'Wände & Fächer', open:false, items:[
+    ['wall','Seitenwand-Stärke',3,15,0.1,5],
+    ['floor','Bodenstärke',1,10,0.1,3],
+    ['back','Rückwand-Stärke (0 = keine)',0,10,0.1,2.4],
+    ['fwH','Frontwand-Höhe (0 = keine)',0,250,1,50],
+    ['fwT','Frontwand-Stärke (mind. bis Jalousie-Innenseite)',1,20,0.1,2.4],
+    ['div','Trennwände längs (teilen die Breite)',0,12,1,0],
+    ['divQ','Trennwände quer (teilen die Tiefe)',0,12,1,0],
+    ['divT','Trennwand-Stärke',0.8,5,0.1,1.6],
+    ['divH','Trennwand-Höhe',5,250,1,40],
+  ]},
+  {g:'Führungsnut', open:false, items:[
+    ['rim','Abstand Nut zur Außenkante',0.8,10,0.1,1.6],
+    ['gw','Nutbreite',2.5,10,0.1,4],
+    ['gd','Nuttiefe',1.2,10,0.1,2.5],
+    ['clr','Spiel Zapfen in Nut',0.1,1.5,0.05,0.4],
+    ['stopH','Endstopp-Höhe',3,30,0.5,6],
+  ]},
+  {g:'Jalousie (print-in-place)', open:true, items:[
+    ['sw','Lamellenbreite (Rastermaß)',5,30,0.5,10],
+    ['tt','Lamellenstärke',2.5,8,0.1,4.5],
+    ['kl','Gelenk-Segmentlänge',4,40,0.5,12],
+    ['rp','Gelenkbolzen-Radius',0.6,3,0.05,1.1],
+    ['hclr','Gelenk-Spiel',0.15,0.8,0.05,0.35],
+    ['hh','Griffleisten-Höhe (0 = kein Griff)',0,10,0.5,3],
+  ]},
+];
+const DEF = {}; SPEC.forEach(g=>g.items.forEach(it=>DEF[it[0]]=it[5]));
+
+// GEO-START
+/* ---------- Geometrie (reine Funktionen, auch in Node testbar) ---------- */
+function makeGeo(wasm){
+  const { Manifold, CrossSection } = wasm;
+  const PI = Math.PI, SEG = 48;
+
+  // 2D-Profil in (a,b) über Länge L entlang X extrudieren → Welt (x, a, b)
+  function extrudeX(cs, x0, x1){
+    return cs.extrude(x1 - x0).transform([0,1,0,0, 0,0,1,0, 1,0,0,0, x0,0,0,1]);
+  }
+  const rect = (a0,b0,a1,b1) => new CrossSection([[a0,b0],[a1,b0],[a1,b1],[a0,b1]]);
+  const circ = (a,b,r) => CrossSection.circle(r, SEG).translate([a,b]);
+  function polyCS(pts){
+    let A=0; for(let i=0;i<pts.length;i++){const p=pts[i],q=pts[(i+1)%pts.length];A+=p[0]*q[1]-q[0]*p[1];}
+    return new CrossSection(A<0?pts.slice().reverse():pts);
+  }
+  const box = (x0,y0,z0,x1,y1,z1) => Manifold.cube([x1-x0,y1-y0,z1-z0]).translate([x0,y0,z0]);
+  const unionAll = arr => arr.length ? Manifold.union(arr) : null;
+
+  function derive(P){
+    const p = {...P};
+    const warn = [], err = [];
+    p.c = p.rim + p.gw/2;                       // Nut-Mittellinie: Abstand zur Außenkante
+    p.rk = p.tt/2;                              // Gelenkaugen-Radius
+    p.pr = p.gw/2 - p.clr;                      // Führungszapfen-Radius
+    const minR = p.c + Math.max(p.gw/2, p.rk) + 2;
+    for (const k of ['Rf','Rb']) if (p[k] < minR){ p[k] = minR; warn.push(`${k==='Rf'?'Radius vorne':'Radius hinten'} auf ${minR.toFixed(1)} mm angehoben (Nut braucht Platz).`); }
+    if (p.Rf + p.Rb > p.D - 2){ const s=(p.D-2)/(p.Rf+p.Rb); p.Rf*=s; p.Rb*=s; warn.push('Radien zusammen größer als die Tiefe – verkleinert.'); }
+    p.Rf = Math.min(p.Rf, p.H - p.floor - 5); p.Rb = Math.min(p.Rb, p.H - p.stopH - 10);
+    if (p.Rf < minR || p.Rb < minR) err.push('Box zu niedrig für diese Radien/Nut.');
+    const r = Math.min(p.Rf, p.Rb) - p.c;       // engster Bahnradius
+    p.rMin = r;
+    p.sag = r > p.sw/2 ? r - Math.sqrt(r*r - p.sw*p.sw/4) : p.sw/2;
+    p.jointAngle = r > p.sw/2 ? 2*Math.asin(p.sw/(2*r))*180/PI : 180;
+    p.gap = p.clr + 0.5;
+    p.ic = Math.max(p.rim + p.gw, p.c + p.rk + p.sag) + p.gap;   // Innenraum beginnt hier
+    p.zF0 = p.fwH > 0 ? Math.max(p.fwH, p.floor) : p.floor;      // Nut-Anfang vorne
+    if (p.zF0 > p.H - p.Rf - 2){ p.zF0 = Math.max(p.floor, p.H - p.Rf - 2); warn.push('Frontwand reicht bis in die Rundung – gekürzt.'); }
+    p.Wt = p.W - 2*p.wall - 2*p.clr;           // Jalousie-Breite (zwischen den Wänden)
+    if (p.wall < p.gd + 1.2) err.push(`Seitenwand zu dünn für die Nut (mind. Nuttiefe + 1,2 = ${(p.gd+1.2).toFixed(1)} mm).`);
+    if (p.c - p.rk < 0) warn.push('Lamellen dicker als Nut-Abstand – Jalousie steht außen über die Seitenwände.');
+    if (p.pr < 0.8) err.push('Nut zu schmal für Führungszapfen.');
+    p.holeR = p.rp + p.hclr;
+    p.holeCap = Math.min(p.holeR*1.3, p.rk - 0.45);
+    if (p.holeCap < p.holeR + 0.05) err.push('Gelenkbolzen zu dick für die Lamellenstärke (Bolzen-Radius verkleinern oder Lamelle dicker).');
+    if (p.rp < 0.8) warn.push('Gelenkbolzen sehr dünn – bricht leicht.');
+    p.webLen = p.sw - 2*(p.rk + p.hclr);
+    if (p.webLen < 1.2) err.push('Lamellenbreite zu klein für Stärke + Gelenk-Spiel.');
+    if (p.jointAngle > 75) err.push(`Knickwinkel ${p.jointAngle.toFixed(0)}° pro Gelenk zu groß – Radien größer oder Lamellen schmaler.`);
+    else if (p.jointAngle > 50) warn.push(`Knickwinkel ${p.jointAngle.toFixed(0)}° pro Gelenk – Lauf etwas holprig.`);
+    let n = Math.max(3, Math.round(p.Wt / p.kl)); if (n % 2 === 0) n += 1;
+    p.nSeg = n;
+    if (p.Wt / n < 2*p.hclr + 2) err.push('Gelenk-Segmente zu kurz.');
+    p.zEnd = p.stopH + Math.max(p.rk, p.pr) + 0.3;   // tiefster Gelenkpunkt hinten
+    p.warn = warn; p.err = err;
+    return p;
+  }
+
+  /* --- Bahn (Mittellinie der Nut) im Profil (y,z) --- */
+  function makePath(p){
+    const segs = [];
+    const line = (a,b) => { const L=Math.hypot(b[0]-a[0],b[1]-a[1]); segs.push({t:'l',a,b,L}); };
+    const arc = (cx,cz,r,t0,t1) => segs.push({t:'a',cx,cz,r,t0,t1,L:Math.abs(t1-t0)*r});
+    const {c,H,D,Rf,Rb} = p;
+    line([c,p.zF0],[c,H-Rf]);
+    arc(Rf,H-Rf,Rf-c,PI,PI/2);
+    line([Rf,H-c],[D-Rb,H-c]);
+    arc(D-Rb,H-Rb,Rb-c,PI/2,0);
+    line([D-c,H-Rb],[D-c,-2]);
+    let s=0; segs.forEach(g=>{g.s0=s; s+=g.L;}); const total=s;
+    const sTopEnd = segs[3].s0;
+    const sStraightBack = segs[4].s0;
+    const sEnd = sStraightBack + (H-Rb - p.zEnd);
+    function at(s){
+      s = Math.max(0, Math.min(total, s));
+      let g = segs[segs.length-1]; for (const q of segs) if (s <= q.s0 + q.L){ g=q; break; }
+      const f = g.L ? (s - g.s0)/g.L : 0;
+      if (g.t==='l'){
+        const dy=(g.b[0]-g.a[0])/g.L, dz=(g.b[1]-g.a[1])/g.L;
+        return {y:g.a[0]+(g.b[0]-g.a[0])*f, z:g.a[1]+(g.b[1]-g.a[1])*f, ty:dy, tz:dz};
+      }
+      const t = g.t0 + (g.t1-g.t0)*f, sg = Math.sign(g.t1-g.t0);
+      return {y:g.cx+g.r*Math.cos(t), z:g.cz+g.r*Math.sin(t), ty:-Math.sin(t)*sg, tz:Math.cos(t)*sg};
+    }
+    return {segs,total,sTopEnd,sEnd,at};
+  }
+
+  // Gelenkpunkte: Abstand (Sehne) = Rastermaß
+  function joints(path, p, sFront, N){
+    const out=[sFront]; let s=sFront;
+    for (let k=0;k<N;k++){
+      const P0=path.at(s); let lo=s, hi=s+p.sw*1.8;
+      for (let i=0;i<40;i++){ const m=(lo+hi)/2, q=path.at(m); (Math.hypot(q.y-P0.y,q.z-P0.z) < p.sw ? lo=m : hi=m); }
+      s=(lo+hi)/2; out.push(s);
+    }
+    return out;
+  }
+
+  function layout(p){
+    const path = makePath(p);
+    p.sJ0 = Math.max(p.gw/2, p.rk) + 0.2;
+    // Anzahl Lamellen: geschlossen bis Beginn der hinteren Rundung
+    let N=1;
+    while (N < 400){ const j=joints(path,p,p.sJ0,N); if (j[N] >= path.sTopEnd) break; N++; }
+    const jc = joints(path,p,p.sJ0,N);
+    if (jc[N] > path.sEnd) p.err.push('Rückseite zu kurz – Jalousie passt geschlossen nicht in die Bahn (Box höher oder Endstopp niedriger).');
+    // maximale Öffnung
+    let lo=p.sJ0, hi=path.sTopEnd;
+    const ok = sf => joints(path,p,sf,N)[N] <= path.sEnd;
+    if (!ok(lo)) hi=lo;
+    else if (ok(hi)) lo=hi;
+    else for (let i=0;i<40;i++){ const m=(lo+hi)/2; ok(m)?lo=m:hi=m; }
+    p.N=N; p.sFrontMax=lo; p.tamLen = N*p.sw;
+    p.openFrac = (lo - p.sJ0)/(path.sTopEnd - p.sJ0);
+    if (p.openFrac < 0.98) p.warn.push(`Rückseite zu kurz für volle Öffnung – Deckel öffnet nur ${(p.openFrac*100).toFixed(0)} % (Box höher oder Radius hinten größer).`);
+    return path;
+  }
+
+  /* --- Korpus --- */
+  function outerProfile(p){
+    const pts=[[0,0],[p.D,0]];
+    const arcPts=(cx,cz,r,t0,t1)=>{const n=Math.max(8,Math.ceil(Math.abs(t1-t0)*r/0.8));for(let i=0;i<=n;i++){const t=t0+(t1-t0)*i/n;pts.push([cx+r*Math.cos(t),cz+r*Math.sin(t)]);}};
+    arcPts(p.D-p.Rb,p.H-p.Rb,p.Rb,0,PI/2);
+    arcPts(p.Rf,p.H-p.Rf,p.Rf,PI/2,PI);
+    return polyCS(pts);
+  }
+  function grooveCS(p, path){
+    const ss=[]; for(const g of path.segs){ const n=g.t==='a'?Math.max(6,Math.ceil(g.L/0.7)):1; for(let i=0;i<n;i++) ss.push(g.s0+g.L*i/n); }
+    ss.push(path.total);
+    const L=[],R=[];
+    for (const s of ss){ const q=path.at(s), ny=-q.tz, nz=q.ty, h=p.gw/2;
+      L.push([q.y+ny*h,q.z+nz*h]); R.push([q.y-ny*h,q.z-nz*h]); }
+    return polyCS(L.concat(R.reverse()));
+  }
+  function body(p, path){
+    const prof = outerProfile(p);
+    const groove = grooveCS(p, path);
+    const ext = 0.02;
+    const gL = extrudeX(groove, p.wall-p.gd, p.wall+ext);
+    const gR = extrudeX(groove, p.W-p.wall-ext, p.W-p.wall+p.gd);
+    const left  = extrudeX(prof,0,p.wall).subtract(gL);
+    const right = extrudeX(prof,p.W-p.wall,p.W).subtract(gR);
+    const inner = extrudeX(prof.offset(-p.ic,'Round',2,SEG), 0, p.W);
+    const parts=[right];
+    const yBackOut = p.D - p.ic;
+    parts.push(box(p.wall-ext,0,0,p.W-p.wall+ext,yBackOut,p.floor));
+    let yFrontIn = p.ic;
+    if (p.fwH>0){ const t=Math.max(p.fwT,p.ic); yFrontIn=t;
+      parts.push(box(p.wall-ext,0,0,p.W-p.wall+ext,t,p.zF0)); }
+    let yBackIn = yBackOut;
+    if (p.back>0){ yBackIn = yBackOut - p.back;
+      parts.push(box(p.wall-ext,yBackIn,0,p.W-p.wall+ext,yBackOut,p.H).intersect(inner)); }
+    const zTop = Math.min(p.H, p.floor + p.divH);
+    for (let i=1;i<=p.div;i++){
+      const x = p.wall + (p.W-2*p.wall)*i/(p.div+1);
+      parts.push(box(x-p.divT/2,0,0,x+p.divT/2,yBackIn+ext,zTop).intersect(inner));
+    }
+    for (let i=1;i<=p.divQ;i++){
+      const y = yFrontIn + (yBackIn-yFrontIn)*i/(p.divQ+1);
+      parts.push(box(p.wall-ext,y-p.divT/2,0,p.W-p.wall+ext,y+p.divT/2,zTop).intersect(inner));
+    }
+    const rest = unionAll(parts);
+    p.inner = {w:p.W-2*p.wall, d:yBackIn-yFrontIn, h:p.H-p.floor};
+    return {left, rest};
+  }
+
+  /* --- Endstopp-Leiste --- */
+  function stopBar(p){
+    const yc = p.D - p.c, h = (p.gw-0.1)/2, x0=p.wall-p.gd+0.1, x1=p.W-p.wall+p.gd-0.1;
+    const parts=[box(x0,yc-h,0,x1,yc+h,p.stopH)];
+    for (const xc of [(x0+p.wall)/2, (x1+p.W-p.wall)/2]){
+      parts.push(box(xc-0.4,yc-h-0.2,0.6,xc+0.4,yc+h+0.2,p.stopH));
+    }
+    return unionAll(parts);
+  }
+
+  /* --- Lamelle in lokalen Koordinaten (x, u, w): Gelenke bei u=0 und u=sw, w=0 --- */
+  function slat(p, isFirst, isLast){
+    const {sw,tt,rk,hclr,Wt,nSeg} = p, h2=hclr/2;
+    const b = []; for (let j=0;j<=nSeg;j++) b.push(Wt*j/nSeg);
+    // Besitzer eines x: 'A' = vordere Lamelle (Bolzen), 'B' = hintere (Loch), 'G' = Spalt
+    function owner(x){
+      for (let j=1;j<nSeg;j++) if (Math.abs(x-b[j]) < h2) return 'G';
+      const j = Math.min(nSeg-1, Math.floor(x/Wt*nSeg));
+      return j%2===0 ? 'A' : 'B';
+    }
+    const cuts=[0,Wt]; for (let j=1;j<nSeg;j++){ cuts.push(b[j]-h2, b[j]+h2); }
+    cuts.sort((a,c)=>a-c);
+    const tear = (() => {
+      const r=p.holeR, pts=[];
+      for (let i=0;i<=SEG;i++){ const t=PI/4*3 + (2*PI-PI/2)*i/SEG; pts.push([r*Math.cos(t), r*Math.sin(t)]); }
+      pts.push([0, r*Math.SQRT2]);
+      return polyCS(pts).intersect(rect(-r-1,-r-1,r+1,p.holeCap));
+    })();
+    const bed = rect(-sw, -tt/2, 2*sw, tt*4);
+    const parts=[];
+    for (let i=0;i<cuts.length-1;i++){
+      const x0=cuts[i], x1=cuts[i+1]; if (x1-x0 < 1e-6) continue;
+      const o = owner((x0+x1)/2);
+      let cs = rect(0,-tt/2,sw,tt/2);
+      // vorderes Gelenk (u=0): eigene Augen = B
+      if (isFirst) cs = cs.add(circ(0,0,rk));
+      else if (o==='B') cs = cs.add(circ(0,0,rk)).subtract(tear);
+      else cs = cs.subtract(circ(0,0,rk+hclr));
+      // hinteres Gelenk (u=sw): eigene Augen = A + durchgehender Bolzen
+      if (isLast || o==='A') cs = cs.add(circ(sw,0,rk));
+      else cs = cs.subtract(circ(sw,0,rk+hclr)).add(circ(sw,0,p.rp));
+      parts.push(extrudeX(cs.intersect(bed), x0, x1));
+    }
+    // Führungszapfen
+    const pin = u => circ(u,0,p.pr).intersect(bed);
+    const pinUs = isFirst ? [0, sw] : [sw];
+    for (const u of pinUs){ parts.push(extrudeX(pin(u),-p.gd,0.01)); parts.push(extrudeX(pin(u),Wt-0.01,Wt+p.gd)); }
+    // Griffleiste
+    if (isFirst && p.hh>0){
+      const u0=sw*0.25, u1=sw*0.65, w0=tt/2-0.01, w1=tt/2+p.hh;
+      const g = polyCS([[u0,w0],[u1,w0],[u1-0.6,w1],[u0+0.6,w1]]);
+      parts.push(extrudeX(g, Math.min(4,Wt*0.1), Wt-Math.min(4,Wt*0.1)));
+    }
+    return unionAll(parts);
+  }
+
+  function tambourFlat(p){
+    const mids = {};
+    const get = (f,l) => { const k=f+'_'+l; return mids[k] || (mids[k]=slat(p,f,l)); };
+    const arr=[];
+    for (let k=0;k<p.N;k++) arr.push(get(k===0,k===p.N-1).translate([0,k*p.sw,p.tt/2]));
+    return unionAll(arr);
+  }
+
+  return {derive, layout, body, stopBar, slat, tambourFlat, joints, Manifold};
+}
+// GEO-END
+
+const GEO = makeGeo(wasm);
+
+/* ---------- UI ---------- */
+let P = {...DEF};
+try { const s = JSON.parse(localStorage.getItem('jalousieBox') || '{}'); for (const k in s) if (k in DEF) P[k] = +s[k]; } catch(e) {}
+const ctl = document.getElementById('controls');
+const inputs = {};
+function buildControls(){
+  ctl.innerHTML='';
+  for (const g of SPEC){
+    const d=document.createElement('details'); d.open=g.open;
+    d.innerHTML=`<summary>${g.g}</summary>`;
+    for (const [k,l,mn,mx,st] of g.items){
+      const row=document.createElement('div'); row.className='row';
+      row.innerHTML=`<label>${l}</label><input type="range" min="${mn}" max="${mx}" step="${st}"><input type="number" min="${mn}" max="${mx}" step="${st}">`;
+      const [r,n]=row.querySelectorAll('input'); r.value=n.value=P[k];
+      r.oninput=()=>{n.value=r.value;set(k,+r.value);};
+      n.onchange=()=>{let v=+n.value; if(isNaN(v)) v=DEF[k]; v=Math.min(mx,Math.max(mn,v)); n.value=r.value=v; set(k,v);};
+      inputs[k]=[r,n]; d.appendChild(row);
+    }
+    ctl.appendChild(d);
+  }
+}
+function set(k,v){ P[k]=v; try{localStorage.setItem('jalousieBox',JSON.stringify(P));}catch(e){} schedule(); }
+buildControls();
+
+/* ---------- Szene ---------- */
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(2,devicePixelRatio));
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0f1012);
+const camera=new THREE.PerspectiveCamera(40,1,1,5000);
+camera.up.set(0,0,1);
+const controls=new OrbitControls(camera,canvas); controls.enableDamping=true;
+scene.add(new THREE.HemisphereLight(0xffffff,0x303038,1.6));
+const dl=new THREE.DirectionalLight(0xffffff,1.6); dl.position.set(-1,-2,3); scene.add(dl);
+const dl2=new THREE.DirectionalLight(0xffffff,0.5); dl2.position.set(2,1,1); scene.add(dl2);
+const grid=new THREE.GridHelper(1000,100,0x2a2c31,0x1d1f23); grid.rotation.x=Math.PI/2; scene.add(grid);
+
+const matBody=new THREE.MeshStandardMaterial({color:0xc9b48a,roughness:.75,metalness:0});
+const matTam=new THREE.MeshStandardMaterial({color:0x6b4d33,roughness:.6,metalness:0});
+const matStop=new THREE.MeshStandardMaterial({color:0xe8c26a,roughness:.5,metalness:0});
+const group=new THREE.Group(); scene.add(group);
+let meshLeft, meshRest, meshStop, tamGroup, cur=null;
+
+function toGeom(man){
+  const m=man.getMesh(), g=new THREE.BufferGeometry();
+  const np=m.numProp, v=m.vertProperties, t=m.triVerts, pos=new Float32Array(t.length*3);
+  for (let i=0;i<t.length;i++){ const j=t[i]*np; pos[i*3]=v[j]; pos[i*3+1]=v[j+1]; pos[i*3+2]=v[j+2]; }
+  g.setAttribute('position',new THREE.BufferAttribute(pos,3)); g.computeVertexNormals(); return g;
+}
+function clearGroup(){ group.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); group.clear(); }
+
+function resize(){ const r=canvas.parentElement.getBoundingClientRect(); renderer.setSize(r.width,r.height,false); camera.aspect=r.width/r.height; camera.updateProjectionMatrix(); }
+addEventListener('resize',resize);
+function fit(){
+  if(!cur) return; const p=cur.p, R=Math.hypot(p.W,p.D,p.H);
+  controls.target.set(p.W/2,p.D/2,p.H/2);
+  camera.position.set(p.W/2 - R*0.9, p.D/2 - R*1.4, p.H/2 + R*0.9);
+  camera.near=R/100; camera.far=R*50; camera.updateProjectionMatrix();
+}
+(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene,camera); })();
+
+/* ---------- Aufbau ---------- */
+let timer=null;
+function schedule(){ clearTimeout(timer); timer=setTimeout(rebuild,180); }
+function rebuild(){
+  const t0=performance.now();
+  const p=GEO.derive(P); const path=GEO.layout(p);
+  clearGroup();
+  const {left,rest}=GEO.body(p,path);
+  const stop=GEO.stopBar(p);
+  meshLeft=new THREE.Mesh(toGeom(left),matBody); meshRest=new THREE.Mesh(toGeom(rest),matBody);
+  meshStop=new THREE.Mesh(toGeom(stop),matStop);
+  group.add(meshLeft,meshRest,meshStop);
+  const types={};
+  const typ=(f,l)=>{const k=f+'_'+l; return types[k]||(types[k]=toGeom(GEO.slat(p,f,l)));};
+  tamGroup=new THREE.Group(); group.add(tamGroup);
+  for (let k=0;k<p.N;k++){ const m=new THREE.Mesh(typ(k===0,k===p.N-1),matTam); m.matrixAutoUpdate=false; tamGroup.add(m); }
+  const firstBuild=!cur;
+  cur={p,path,vol:left.volume()+rest.volume()};
+  left.delete?.(); rest.delete?.(); stop.delete?.();
+  placeTambour(); applyVis(); info(performance.now()-t0);
+  document.getElementById('loading').style.display='none';
+  if(firstBuild) fit();
+}
+function placeTambour(){
+  if(!cur) return; const {p,path}=cur;
+  const f=(+document.getElementById('open').value)/100;
+  const sF=p.sJ0+(p.sFrontMax-p.sJ0)*f;
+  const js=GEO.joints(path,p,sF,p.N);
+  tamGroup.children.forEach((m,k)=>{
+    const a=path.at(js[k]), b=path.at(js[k+1]);
+    let dy=b.y-a.y, dz=b.z-a.z; const L=Math.hypot(dy,dz)||1; dy/=L; dz/=L;
+    const ny=-dz, nz=dy;
+    m.matrix.set(1,0,0,p.wall+p.clr, 0,dy,ny,a.y, 0,dz,nz,a.z, 0,0,0,1);
+  });
+}
+function applyVis(){
+  if(!meshLeft) return;
+  meshLeft.visible=!document.getElementById('hideLeft').checked;
+  tamGroup.visible=document.getElementById('showTam').checked;
+  meshStop.visible=document.getElementById('showStop').checked;
+}
+function info(ms){
+  const p=cur.p, f=n=>n.toFixed(1).replace('.',',');
+  const rows=[];
+  rows.push(`<div>Außen: <b>${f(p.W)} × ${f(p.D)} × ${f(p.H)}</b> mm</div>`);
+  rows.push(`<div>Innen (ca.): ${f(p.inner.w)} × ${f(p.inner.d)} × ${f(p.inner.h)} mm</div>`);
+  rows.push(`<div>Jalousie: ${p.N} Lamellen à ${f(p.sw)} mm · ${f(p.tamLen)} × ${f(p.Wt)} mm flach · ${p.nSeg} Gelenk-Segmente</div>`);
+  rows.push(`<div>Knickwinkel je Gelenk: ${p.jointAngle.toFixed(0)}° · engster Bahnradius ${f(p.rMin)} mm</div>`);
+  rows.push(`<div>Max. Öffnung: ${(p.openFrac*100).toFixed(0)} % · Korpus ≈ ${f(cur.vol/1000)} cm³</div>`);
+  for (const e of p.err) rows.push(`<div class="e">✖ ${e}</div>`);
+  for (const w of p.warn) rows.push(`<div class="w">⚠ ${w}</div>`);
+  if (!p.err.length && !p.warn.length) rows.push(`<div class="o">✔ Alles druckbar.</div>`);
+  rows.push(`<div style="color:var(--muted)">berechnet in ${ms.toFixed(0)} ms</div>`);
+  document.getElementById('info').innerHTML=rows.join('');
+}
+
+/* ---------- Export ---------- */
+function stl(man,name){
+  const m=man.getMesh(), np=m.numProp, v=m.vertProperties, t=m.triVerts, n=t.length/3;
+  const buf=new ArrayBuffer(84+n*50), dv=new DataView(buf);
+  const hdr='Jalousie-Box Generator'; for(let i=0;i<hdr.length;i++) dv.setUint8(i,hdr.charCodeAt(i));
+  dv.setUint32(80,n,true);
+  for (let i=0;i<n;i++){
+    const o=84+i*50, A=[],B=[],C=[];
+    for(let c=0;c<3;c++){A.push(v[t[i*3]*np+c]);B.push(v[t[i*3+1]*np+c]);C.push(v[t[i*3+2]*np+c]);}
+    const ux=B[0]-A[0],uy=B[1]-A[1],uz=B[2]-A[2],wx=C[0]-A[0],wy=C[1]-A[1],wz=C[2]-A[2];
+    let nx=uy*wz-uz*wy, ny=uz*wx-ux*wz, nz=ux*wy-uy*wx; const l=Math.hypot(nx,ny,nz)||1;
+    [nx/l,ny/l,nz/l,...A,...B,...C].forEach((x,j)=>dv.setFloat32(o+j*4,x,true));
+  }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([buf],{type:'model/stl'}));
+  a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+const tag=()=>`${P.W}x${P.D}x${P.H}`;
+async function busy(fn){ const bs=document.querySelectorAll('.btns button'); bs.forEach(b=>b.disabled=true);
+  await new Promise(r=>setTimeout(r,30)); try{ fn(); } catch(e){ alert('Fehler: '+e.message); } bs.forEach(b=>b.disabled=false); }
+function exBody(){ const p=GEO.derive(P), path=GEO.layout(p), {left,rest}=GEO.body(p,path); stl(left.add(rest),`jalousie-box_korpus_${tag()}.stl`); }
+function exTam(){ const p=GEO.derive(P); GEO.layout(p); stl(GEO.tambourFlat(p),`jalousie-box_jalousie_${tag()}.stl`); }
+function exStop(){ const p=GEO.derive(P); GEO.layout(p); const s=GEO.stopBar(p), bb=s.boundingBox(); stl(s.translate([-bb.min[0],-bb.min[1],0]),`jalousie-box_endstopp_${tag()}.stl`); }
+document.getElementById('exBody').onclick=()=>busy(exBody);
+document.getElementById('exTam').onclick=()=>busy(exTam);
+document.getElementById('exStop').onclick=()=>busy(exStop);
+document.getElementById('exAll').onclick=()=>busy(()=>{exBody();exTam();exStop();});
+document.getElementById('reset').onclick=()=>{ P={...DEF}; try{localStorage.removeItem('jalousieBox');}catch(e){} buildControls(); rebuild(); fit(); };
+document.getElementById('fit').onclick=fit;
+const oR=document.getElementById('open'), oN=document.getElementById('openN');
+oR.oninput=()=>{oN.value=oR.value; placeTambour();};
+oN.onchange=()=>{oR.value=Math.min(100,Math.max(0,+oN.value||0)); oN.value=oR.value; placeTambour();};
+['hideLeft','showTam','showStop'].forEach(id=>document.getElementById(id).onchange=applyVis);
+
+resize();
+try { rebuild(); } catch(e){ document.getElementById('loading').textContent='Fehler: '+e.message; console.error(e); }
+</script>
+</body>
+</html>
