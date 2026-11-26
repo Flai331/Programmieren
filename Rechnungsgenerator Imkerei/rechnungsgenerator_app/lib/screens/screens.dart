@@ -38,3 +38,6 @@ export 'honey_bucket_screen.dart';
 export 'honey_bucket_new_screen.dart';
 export 'stock_screen.dart';
 export 'stock_item_screen.dart';
+
+// Anpassbare Verzeichnisse
+export 'catalog_screen.dart';

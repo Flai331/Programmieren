@@ -150,6 +150,69 @@ class PersonalizationService {
   /// Eine einstellbare Zahl, mit Vorgabe.
   double number(String name, double fallback) => _zahlen[name] ?? fallback;
 
+  /// Welche Tabelle und Spalte ein Verzeichnis tatsächlich benutzt.
+  ///
+  /// Nur was hier steht, kann gezählt werden – und nur was zählbar ist, darf
+  /// die Oberfläche zum Löschen anbieten.
+  static const Map<String, List<List<String>>> usageSources = {
+    Catalogs.honeyState: [
+      ['honey_buckets', 'state'],
+      // Der Verlauf zählt mit: ein gelöschter Zustand machte alte Zeilen
+      // unlesbar.
+      ['honey_bucket_events', 'state'],
+    ],
+    Catalogs.honeyCrystallization: [
+      ['honey_buckets', 'crystallization'],
+    ],
+    Catalogs.honeyVariety: [
+      ['honey_buckets', 'variety'],
+    ],
+    Catalogs.stockCategory: [
+      ['stock_items', 'category'],
+    ],
+    Catalogs.stockReason: [
+      ['stock_movements', 'reason'],
+    ],
+    Catalogs.hiveActionType: [
+      ['hive_actions', 'type'],
+    ],
+  };
+
+  /// Wie oft jeder Eintrag eines Verzeichnisses in den Daten vorkommt.
+  ///
+  /// Das ist die Antwort auf die Frage „darf das weg?": was niemand benutzt,
+  /// kann gelöscht werden; alles andere wird ausgeblendet, damit alte
+  /// Datensätze lesbar bleiben. Die Zahl steht in der Oberfläche daneben,
+  /// damit sichtbar ist, warum der Mülleimer fehlt.
+  ///
+  /// Eine Tabelle, die es noch nicht gibt, zählt als „nicht benutzt" – sonst
+  /// stünde der Bildschirm auf einer frischen Installation still.
+  Future<Map<String, int>> usageCounts(String catalog) async {
+    final quellen = usageSources[catalog];
+    if (quellen == null) return const {};
+
+    final db = await _datenbank;
+    final summe = <String, int>{};
+    for (final quelle in quellen) {
+      final tabelle = quelle[0];
+      final spalte = quelle[1];
+      try {
+        final zeilen = await db.rawQuery(
+          'SELECT $spalte AS k, COUNT(*) AS n FROM $tabelle '
+          'WHERE $spalte IS NOT NULL GROUP BY $spalte',
+        );
+        for (final zeile in zeilen) {
+          final k = zeile['k'] as String?;
+          if (k == null) continue;
+          summe[k] = (summe[k] ?? 0) + ((zeile['n'] as int?) ?? 0);
+        }
+      } catch (e) {
+        FeedbackService.log('⚠️ $tabelle nicht zählbar: $e');
+      }
+    }
+    return summe;
+  }
+
   // ── Schreiben ───────────────────────────────────────────────────
 
   /// Einen Eintrag anlegen oder ändern. Der Schlüssel bleibt, wie er ist.
@@ -158,6 +221,82 @@ class PersonalizationService {
     await db.insert('catalog_entries', eintrag.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace);
     await _reload();
+  }
+
+  /// Einen eigenen Eintrag anlegen.
+  ///
+  /// Der Schlüssel wird aus der Beschriftung gebildet, wenn keiner mitkommt.
+  /// Bei den Honigsorten kommt einer mit: dort ist der Schlüssel das Kürzel,
+  /// das auf dem Eimer steht. Einmal angelegt, bleibt er – umbenennen ändert
+  /// nur die Beschriftung.
+  Future<CatalogEntry> add(
+    String catalog, {
+    required String label,
+    String? key,
+    String? direction,
+    int? color,
+    String? marks,
+    bool needsAttention = false,
+  }) async {
+    final belegt = entries(catalog).map((e) => e.key).toSet();
+    final schluessel = freeKey(
+      key == null ? keyFromLabel(label) : keyAsGiven(key),
+      belegt,
+    );
+    var hoechste = -1;
+    for (final e in entries(catalog)) {
+      if (e.sortOrder > hoechste) hoechste = e.sortOrder;
+    }
+
+    final eintrag = CatalogEntry(
+      catalog: catalog,
+      key: schluessel,
+      label: label,
+      sortOrder: hoechste + 1,
+      color: color,
+      marks: marks,
+      needsAttention: needsAttention,
+      direction: direction,
+    );
+    await save(eintrag);
+    return eintrag;
+  }
+
+  /// Ein mitgegebener Schlüssel bleibt so geschrieben, wie er kommt.
+  ///
+  /// Bei den Honigsorten ist er das Kürzel auf dem Eimer, und dort gilt
+  /// Großschreibung: aus `LZ` darf nicht `lz` werden, sonst stünde auf dem
+  /// nächsten Eimer `lz-001` neben `SO-042`. Entfernt wird nur, was in Daten
+  /// und Code störte.
+  @visibleForTesting
+  static String keyAsGiven(String key) {
+    final sauber = key.trim().replaceAll(RegExp(r'[^A-Za-z0-9_]'), '');
+    return sauber.isEmpty ? 'eigener' : sauber;
+  }
+
+  /// Aus einer Beschriftung einen Schlüssel machen: klein, ohne Umlaute,
+  /// ohne Zeichen, die in SQL oder im Code stören.
+  @visibleForTesting
+  static String keyFromLabel(String label) {
+    const ersatz = {
+      'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'ß': 'ss',
+      'Ä': 'ae', 'Ö': 'oe', 'Ü': 'ue',
+    };
+    var text = label.trim().toLowerCase();
+    ersatz.forEach((von, nach) => text = text.replaceAll(von, nach));
+    text = text.replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+    text = text.replaceAll(RegExp(r'^_+|_+$'), '');
+    return text.isEmpty ? 'eigener' : text;
+  }
+
+  /// Denselben Schlüssel zweimal darf es nicht geben – also durchzählen.
+  @visibleForTesting
+  static String freeKey(String basis, Set<String> belegt) {
+    if (!belegt.contains(basis)) return basis;
+    for (var i = 2; i < 100; i++) {
+      if (!belegt.contains('${basis}_$i')) return '${basis}_$i';
+    }
+    return '${basis}_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   /// Die Reihenfolge eines Verzeichnisses neu setzen.
@@ -176,13 +315,18 @@ class PersonalizationService {
     await _reload();
   }
 
-  /// Einen selbst angelegten Eintrag löschen.
+  /// Einen selbst angelegten, unbenutzten Eintrag löschen.
   ///
-  /// Werkseinträge bleiben: der Code verweist auf ihre Schlüssel. Wer sie
-  /// nicht mehr sehen will, blendet sie aus.
+  /// Zwei Dinge bleiben: Werkseinträge, denn der Code verweist auf ihre
+  /// Schlüssel, und alles, was in den Daten vorkommt – ein gelöschter Eintrag
+  /// hinterließe dort den nackten Schlüssel. Wer so etwas nicht mehr sehen
+  /// will, blendet es aus. Diese Regel steht hier und nicht nur in der
+  /// Oberfläche, damit sie nicht an einem Knopf hängt.
   Future<bool> remove(String catalog, String key) async {
     final vorhanden = entry(catalog, key);
     if (vorhanden == null || vorhanden.builtIn) return false;
+    final benutzt = (await usageCounts(catalog))[key] ?? 0;
+    if (benutzt > 0) return false;
     final db = await _datenbank;
     await db.delete('catalog_entries',
         where: 'catalog = ? AND entry_key = ?', whereArgs: [catalog, key]);

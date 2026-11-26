@@ -7,6 +7,7 @@ import '../services/services.dart';
 import '../models/models.dart';
 import '../utils/utils.dart';
 import '../utils/feedback_service.dart';
+import 'catalog_screen.dart';
 import 'company_screen.dart';
 import 'honey_stock_screen.dart';
 import 'report_list_screen.dart';
@@ -372,6 +373,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
                 icon: const Icon(Icons.inventory_2_outlined),
                 label: const Text('Gläser und Material'),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // ── Verzeichnisse ─────────────────────────────────────
+            const Text(
+              'Verzeichnisse',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Was die App zur Auswahl stellt: Zustände am Eimer, '
+              'Honigsorten, Lager-Kategorien, Buchungsgründe und Maßnahmen '
+              'am Volk. Beschriftungen, Reihenfolge und Farben sind deine; '
+              'eigene Einträge kannst du dazunehmen.',
+              style: TextStyle(fontSize: 12, color: Color(0xFF8a8a94)),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const CatalogScreen()),
+                  );
+                },
+                icon: const Icon(Icons.list_alt_outlined),
+                label: const Text('Auswahllisten anpassen'),
               ),
             ),
             const SizedBox(height: 32),

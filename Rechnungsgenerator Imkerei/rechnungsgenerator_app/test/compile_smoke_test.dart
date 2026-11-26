@@ -50,6 +50,12 @@ void main() {
     expect(BucketScanService(), isNotNull);
     expect(const BucketScanReading.empty().isEmpty, isTrue);
     expect(StockCategories.all, isNotEmpty);
+    // Anpassbare Verzeichnisse: Bildschirm und Dienst kommen aus dem Barrel.
+    expect(const CatalogScreen(), isNotNull);
+    expect(
+        const CatalogEntriesScreen(catalog: Catalogs.honeyState), isNotNull);
+    expect(PersonalizationService(), same(PersonalizationService()));
+    expect(Catalogs.all, isNotEmpty);
     // Aktualisierung: Der Dienst lässt sich anlegen, ohne das Netz
     // anzufassen – geprüft wird nur, dass er über das Barrel erreichbar ist
     // und übersetzt. Das Nachsehen selbst prüft update_service_test.dart.

@@ -4,6 +4,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:beebrain/models/models.dart';
 import 'package:beebrain/services/database_service.dart';
 import 'package:beebrain/services/personalization_service.dart';
+import 'package:beebrain/utils/bucket_code.dart';
 
 /// Die anpassbaren Verzeichnisse: Aussaat, Änderung, Rückfall.
 ///
@@ -320,6 +321,186 @@ void main() {
       expect(StockReasons.outbound, contains('messe'));
       expect(StockReasons.inbound, isNot(contains('messe')));
       expect(StockReasons.directionOf('messe'), CatalogDirections.outbound);
+    });
+  });
+
+  group('Anlegen und zählen', () {
+    /// Eine Datenbank, die auch die Datentabellen kennt – nur damit lässt
+    /// sich zählen, wer einen Eintrag benutzt.
+    Future<Database> dbMitDaten() async {
+      final db = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(version: 7),
+      );
+      await DatabaseService.createPersonalizationTables(db);
+      await DatabaseService.createStockTables(db);
+      dienst.databaseOverride = db;
+      addTearDown(() async {
+        dienst.databaseOverride = null;
+        dienst.resetForTests();
+        await db.close();
+      });
+      return db;
+    }
+
+    var zaehler = 0;
+    Future<void> eimerMit(Database db, String sorte, String zustand) {
+      final nr = ++zaehler;
+      return db.insert('honey_buckets', {
+          'id': 'b$nr',
+          'code': '$sorte-${nr.toString().padLeft(3, '0')}',
+          'number': nr,
+          'variety': sorte,
+          'harvest_date': DateTime(2026, 7, 1).toIso8601String(),
+          'filled_kg': 25.0,
+          'state': zustand,
+          'created_at': DateTime(2026, 7, 1).toIso8601String(),
+      });
+    }
+
+    test('aus der Beschriftung wird ein brauchbarer Schlüssel', () {
+      expect(PersonalizationService.keyFromLabel('Messeverkauf'),
+          'messeverkauf');
+      expect(PersonalizationService.keyFromLabel('Für Bekannte'),
+          'fuer_bekannte');
+      expect(PersonalizationService.keyFromLabel('  Löwenzahn / Mai  '),
+          'loewenzahn_mai');
+      expect(PersonalizationService.keyFromLabel('Größe 500g'),
+          'groesse_500g');
+      // Nichts Verwertbares darf keinen leeren Schlüssel ergeben.
+      expect(PersonalizationService.keyFromLabel('???'), 'eigener');
+    });
+
+    test('ein mitgegebener Schlüssel bleibt, wie er geschrieben ist', () {
+      expect(PersonalizationService.keyAsGiven('LZ'), 'LZ');
+      expect(PersonalizationService.keyAsGiven('  lz  '), 'lz');
+      expect(PersonalizationService.keyAsGiven('L-Z!'), 'LZ');
+      expect(PersonalizationService.keyAsGiven('!!'), 'eigener');
+    });
+
+    test('eine eigene Sorte ist sofort als Code gültig', () async {
+      // Die Kamera und die Eingabe von Hand prüfen gegen das Verzeichnis –
+      // eine neue Sorte muss dort ankommen, sonst wäre ihr Eimer nicht
+      // auffindbar.
+      await frischeDb();
+      await dienst.load();
+      expect(BucketCode.isWellFormed('LZ-001'), isFalse);
+
+      await dienst.add(Catalogs.honeyVariety, key: 'LZ', label: 'Löwenzahn');
+
+      expect(BucketCode.isWellFormed('LZ-001'), isTrue);
+      expect(BucketCode.format('LZ', 1), 'LZ-001');
+    });
+
+    test('derselbe Schlüssel wird durchgezählt', () {
+      expect(PersonalizationService.freeKey('raps', {}), 'raps');
+      expect(PersonalizationService.freeKey('raps', {'raps'}), 'raps_2');
+      expect(PersonalizationService.freeKey('raps', {'raps', 'raps_2'}),
+          'raps_3');
+    });
+
+    test('ein neuer Eintrag hängt sich hinten an', () async {
+      await frischeDb();
+      await dienst.load();
+      final vorher = dienst.entries(Catalogs.hiveActionType);
+
+      final eintrag = await dienst
+          .add(Catalogs.hiveActionType, label: 'Waben umhängen');
+
+      expect(eintrag.key, 'waben_umhaengen');
+      expect(eintrag.builtIn, isFalse);
+      final nachher = dienst.entries(Catalogs.hiveActionType);
+      expect(nachher.length, vorher.length + 1);
+      expect(nachher.last.key, eintrag.key);
+      // Und er ist in der App angekommen, nicht nur in der Tabelle.
+      expect(HiveActionTypes.all, contains(eintrag.key));
+      expect(HiveActionTypes.labelOf(eintrag.key), 'Waben umhängen');
+    });
+
+    test('eine eigene Sorte behält ihr Kürzel als Schlüssel', () async {
+      await frischeDb();
+      await dienst.load();
+
+      final eintrag = await dienst.add(Catalogs.honeyVariety,
+          key: 'LZ', label: 'Löwenzahn');
+
+      // Das Kürzel steht auf dem Eimer – es darf weder aus der
+      // Beschriftung gebildet noch kleingeschrieben werden, sonst stünde
+      // auf dem nächsten Eimer `lz-001` neben `SO-042`.
+      expect(eintrag.key, 'LZ');
+      expect(HoneyVarieties.labelOf('LZ'), 'Löwenzahn');
+      expect(HoneyVarieties.all, contains('LZ'));
+    });
+
+    test('gezählt wird, was in den Daten steht', () async {
+      final db = await dbMitDaten();
+      await dienst.load();
+      await eimerMit(db, HoneyVarieties.summer, HoneyStates.extracted);
+      await eimerMit(db, HoneyVarieties.summer, HoneyStates.seeded);
+      await eimerMit(db, HoneyVarieties.rape, HoneyStates.seeded);
+
+      final sorten = await dienst.usageCounts(Catalogs.honeyVariety);
+      expect(sorten[HoneyVarieties.summer], 2);
+      expect(sorten[HoneyVarieties.rape], 1);
+      expect(sorten[HoneyVarieties.lime], isNull);
+
+      final zustaende = await dienst.usageCounts(Catalogs.honeyState);
+      expect(zustaende[HoneyStates.seeded], 2);
+      expect(zustaende[HoneyStates.extracted], 1);
+    });
+
+    test('der Verlauf zählt mit', () async {
+      final db = await dbMitDaten();
+      await dienst.load();
+      await db.insert('honey_bucket_events', {
+        'id': 'e1',
+        'bucket_id': 'b1',
+        'date': DateTime(2026, 7, 2).toIso8601String(),
+        'kind': HoneyEventKinds.state,
+        'state': HoneyStates.stirred,
+        'created_at': DateTime(2026, 7, 2).toIso8601String(),
+      });
+
+      final zustaende = await dienst.usageCounts(Catalogs.honeyState);
+      expect(zustaende[HoneyStates.stirred], 1,
+          reason: 'ein gelöschter Zustand machte alte Verlaufszeilen '
+              'unlesbar');
+    });
+
+    test('ohne Datentabellen zählt nichts und stürzt nichts', () async {
+      // Auf einer frischen Installation gibt es die Tabellen noch nicht.
+      await frischeDb();
+      await dienst.load();
+      expect(await dienst.usageCounts(Catalogs.honeyState), isEmpty);
+    });
+
+    test('ein benutzter eigener Eintrag wird nicht gelöscht', () async {
+      final db = await dbMitDaten();
+      await dienst.load();
+      final eintrag =
+          await dienst.add(Catalogs.honeyVariety, key: 'LZ', label: 'Löwenzahn');
+      await eimerMit(db, eintrag.key, HoneyStates.extracted);
+
+      expect(await dienst.remove(Catalogs.honeyVariety, eintrag.key), isFalse,
+          reason: 'sonst zeigte der Eimer nur noch den nackten Schlüssel');
+      expect(dienst.entry(Catalogs.honeyVariety, eintrag.key), isNotNull);
+
+      // Ausblenden geht dagegen immer.
+      await dienst.save(eintrag.copyWith(archived: true));
+      expect(dienst.entries(Catalogs.honeyVariety, withArchived: false)
+          .map((e) => e.key), isNot(contains(eintrag.key)));
+      expect(HoneyVarieties.labelOf(eintrag.key), 'Löwenzahn',
+          reason: 'am alten Eimer bleibt die Beschriftung lesbar');
+    });
+
+    test('ein unbenutzter eigener Eintrag darf weg', () async {
+      await dbMitDaten();
+      await dienst.load();
+      final eintrag =
+          await dienst.add(Catalogs.honeyVariety, key: 'LZ', label: 'Löwenzahn');
+
+      expect(await dienst.remove(Catalogs.honeyVariety, eintrag.key), isTrue);
+      expect(dienst.entry(Catalogs.honeyVariety, eintrag.key), isNull);
     });
   });
 }
