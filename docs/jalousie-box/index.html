@@ -29,6 +29,7 @@
   .row input[type=range]{width:100%;accent-color:var(--accent)}
   .row input[type=number]{width:70px;background:#0e0f11;border:1px solid var(--line);color:var(--text);
     border-radius:6px;padding:3px 6px;font:inherit;font-size:12.5px}
+  .row select{background:#0e0f11;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:5px 6px;font:inherit;font-size:12.5px}
   .chk{display:flex;gap:8px;align-items:center;margin:8px 0;font-size:13px}
   .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0 6px}
   button{background:#24262b;color:var(--text);border:1px solid #34373d;border-radius:8px;
@@ -89,9 +90,9 @@
     <div class="hint">
       <ol>
         <li><b>Korpus</b> aufrecht drucken (Boden aufs Bett). Keine Stützen – die Nut-Decke (≈ Nuttiefe) wird frei überhängend gedruckt.</li>
-        <li><b>Jalousie</b> flach drucken, wie exportiert (Innenseite unten). Sie ist <i>print-in-place</i>: Lamellen hängen über Bolzen-Scharniere zusammen, Löcher sind tropfenförmig (stützfrei). Nach dem Druck jedes Gelenk einmal vorsichtig durchbiegen.</li>
-        <li>Elefantenfuß/erste Schicht sauber kalibrieren, sonst verschmelzen die Gelenke am Bett. Bei 0,4-mm-Düse Gelenk-Spiel ≥ 0,35.</li>
-        <li><b>Einsetzen:</b> Die Nut ist hinten unten offen. Jalousie mit der Griffleiste voran, Griff nach außen, von unten hinten mit den Zapfen in beide Nuten schieben, hoch und über die Rundung nach vorn.</li>
+        <li><b>Jalousie mit Filmscharnier</b> (Standard): ein einziges Teil, flach drucken wie exportiert – <i>Außenseite unten</i>, die ersten Schichten bilden den dünnen Film zwischen den Lamellen. PETG (oder PLA mit 3–4 Schichten Film) nehmen, 100 % Infill, Filmstärke = ganzzahliges Vielfaches der Schichthöhe. Danach die Jalousie einmal komplett in beide Richtungen durchbiegen.</li>
+        <li><b>Jalousie mit Bolzen-Scharnieren</b> (Option): flach drucken, Innenseite unten, print-in-place, Löcher tropfenförmig (stützfrei). Erste Schicht sauber kalibrieren, bei 0,4-mm-Düse Gelenk-Spiel ≥ 0,35.</li>
+        <li><b>Einsetzen:</b> Die Nut ist hinten unten offen. Jalousie mit der Griff-Lamelle voran, Außenseite nach außen, von unten hinten mit den Laschen/Zapfen in beide Nuten schieben, hoch und über die Rundung nach vorn.</li>
         <li><b>Endstopp-Leiste</b> von unten in die beiden Nutschlitze drücken – hält per Klemmrippen, ohne Kleber.</li>
         <li>Klemmt es: <i>Spiel</i> erhöhen. Knickt es in der Kurve: <i>Lamellenbreite</i> verkleinern.</li>
       </ol>
@@ -138,13 +139,16 @@ const SPEC = [
     ['clr','Spiel Zapfen in Nut',0.1,1.5,0.05,0.4],
     ['stopH','Endstopp-Höhe',3,30,0.5,6],
   ]},
-  {g:'Jalousie (print-in-place)', open:true, items:[
+  {g:'Jalousie', open:true, items:[
+    ['hinge','Gelenkart','sel',[[0,'Filmscharnier – ein Teil, dünne Stege'],[1,'Bolzen-Scharniere (print-in-place)']],0,0],
     ['sw','Lamellenbreite (Rastermaß)',5,30,0.5,10],
-    ['tt','Lamellenstärke',2.5,8,0.1,4.5],
-    ['kl','Gelenk-Segmentlänge',4,40,0.5,12],
-    ['rp','Gelenkbolzen-Radius',0.6,3,0.05,1.1],
-    ['hclr','Gelenk-Spiel',0.15,0.8,0.05,0.35],
-    ['hh','Griffleisten-Höhe (0 = kein Griff)',0,10,0.5,3],
+    ['tt','Lamellenstärke',2.5,8,0.1,4],
+    ['ft','Filmstärke (nur Filmscharnier)',0.2,1.5,0.05,0.6],
+    ['fg','Filmspalt zwischen Lamellen (nur Filmscharnier)',0.4,4,0.1,1.2],
+    ['kl','Gelenk-Segmentlänge (nur Bolzen)',4,40,0.5,12],
+    ['rp','Gelenkbolzen-Radius (nur Bolzen)',0.6,3,0.05,1.1],
+    ['hclr','Gelenk-Spiel (nur Bolzen)',0.15,0.8,0.05,0.35],
+    ['hh','Griff: Mulde-Tiefe (Film) / Leisten-Höhe (Bolzen), 0 = keiner',0,10,0.5,2],
   ]},
 ];
 const DEF = {}; SPEC.forEach(g=>g.items.forEach(it=>DEF[it[0]]=it[5]));
@@ -179,40 +183,68 @@ function makeGeo(wasm){
     if (p.Rf + p.Rb > p.D - 2){ const s=(p.D-2)/(p.Rf+p.Rb); p.Rf*=s; p.Rb*=s; warn.push('Radien zusammen größer als die Tiefe – verkleinert.'); }
     p.Rf = Math.min(p.Rf, p.H - p.floor - 5); p.Rb = Math.min(p.Rb, p.H - p.stopH - 10);
     if (p.Rf < minR || p.Rb < minR) err.push('Box zu niedrig für diese Radien/Nut.');
-    const r = Math.min(p.Rf, p.Rb) - p.c;       // engster Bahnradius
-    p.rMin = r;
-    p.sag = r > p.sw/2 ? r - Math.sqrt(r*r - p.sw*p.sw/4) : p.sw/2;
-    p.jointAngle = r > p.sw/2 ? 2*Math.asin(p.sw/(2*r))*180/PI : 180;
+    p.flex = +p.hinge === 0;
     p.gap = p.clr + 0.5;
-    p.ic = Math.max(p.rim + p.gw, p.c + p.rk + p.sag) + p.gap;   // Innenraum beginnt hier
+    const sagOf = r => r > p.sw/2 ? r - Math.sqrt(r*r - p.sw*p.sw/4) : p.sw/2;
+    if (p.flex){
+      // Gelenkpunkte liegen auf der Außenseite (Film); Laschen (Dicke te) laufen mittig in der Nut
+      p.sag = 0.6;
+      for (let i=0;i<4;i++){
+        p.te = p.gw - 2*p.clr - p.sag;
+        p.cf = p.c - p.te/2;
+        p.rMin = Math.min(p.Rf, p.Rb) - p.cf;
+        p.sag = sagOf(p.rMin);
+      }
+      p.te = p.gw - 2*p.clr - p.sag; p.cf = p.c - p.te/2;
+      p.ic = Math.max(p.rim + p.gw, p.cf + p.tt + p.sag) + p.gap;
+    } else {
+      p.rMin = Math.min(p.Rf, p.Rb) - p.c;
+      p.sag = sagOf(p.rMin);
+      p.ic = Math.max(p.rim + p.gw, p.c + p.rk + p.sag) + p.gap;   // Innenraum beginnt hier
+    }
+    const r = p.rMin;
+    p.jointAngle = r > p.sw/2 ? 2*Math.asin(p.sw/(2*r))*180/PI : 180;
     p.zF0 = p.fwH > 0 ? Math.max(p.fwH, p.floor) : p.floor;      // Nut-Anfang vorne
     if (p.zF0 > p.H - p.Rf - 2){ p.zF0 = Math.max(p.floor, p.H - p.Rf - 2); warn.push('Frontwand reicht bis in die Rundung – gekürzt.'); }
     p.Wt = p.W - 2*p.wall - 2*p.clr;           // Jalousie-Breite (zwischen den Wänden)
     if (p.wall < p.gd + 1.2) err.push(`Seitenwand zu dünn für die Nut (mind. Nuttiefe + 1,2 = ${(p.gd+1.2).toFixed(1)} mm).`);
-    if (p.c - p.rk < 0) warn.push('Lamellen dicker als Nut-Abstand – Jalousie steht außen über die Seitenwände.');
-    if (p.pr < 0.8) err.push('Nut zu schmal für Führungszapfen.');
-    p.holeR = p.rp + p.hclr;
-    p.holeCap = Math.min(p.holeR*1.3, p.rk - 0.45);
-    if (p.holeCap < p.holeR + 0.05) err.push('Gelenkbolzen zu dick für die Lamellenstärke (Bolzen-Radius verkleinern oder Lamelle dicker).');
-    if (p.rp < 0.8) warn.push('Gelenkbolzen sehr dünn – bricht leicht.');
-    p.webLen = p.sw - 2*(p.rk + p.hclr);
-    if (p.webLen < 1.2) err.push('Lamellenbreite zu klein für Stärke + Gelenk-Spiel.');
     if (p.jointAngle > 75) err.push(`Knickwinkel ${p.jointAngle.toFixed(0)}° pro Gelenk zu groß – Radien größer oder Lamellen schmaler.`);
     else if (p.jointAngle > 50) warn.push(`Knickwinkel ${p.jointAngle.toFixed(0)}° pro Gelenk – Lauf etwas holprig.`);
-    let n = Math.max(3, Math.round(p.Wt / p.kl)); if (n % 2 === 0) n += 1;
-    p.nSeg = n;
-    if (p.Wt / n < 2*p.hclr + 2) err.push('Gelenk-Segmente zu kurz.');
-    p.zEnd = p.stopH + Math.max(p.rk, p.pr) + 0.3;   // tiefster Gelenkpunkt hinten
+    if (p.flex){
+      // Flanken schräg, damit sich die Lamellen in der engsten Kurve nicht berühren
+      p.alpha = Math.min(40, p.jointAngle/2 + 6) * PI/180;
+      p.topW = p.sw - p.fg - 2*p.tt*Math.tan(p.alpha);
+      if (p.topW < 1.5) err.push('Lamellen zu dick/schmal für die Kurve – Lamellenstärke kleiner oder Lamellenbreite größer.');
+      if (p.te < 1.2) err.push('Nut zu schmal für die Führungslaschen (Nutbreite erhöhen oder Spiel verkleinern).');
+      if (p.ft > p.tt - 0.8) err.push('Film fast so dick wie die Lamelle.');
+      if (p.ft < 0.4) warn.push('Film sehr dünn – reißt leicht (mind. 2 Schichten).');
+      if (p.ft > 0.9) warn.push('Dicker Film wird steif – Jalousie läuft schwer.');
+      p.nSeg = 1;
+      p.zEnd = p.stopH + 0.5;
+    } else {
+      if (p.c - p.rk < 0) warn.push('Lamellen dicker als Nut-Abstand – Jalousie steht außen über die Seitenwände.');
+      if (p.pr < 0.8) err.push('Nut zu schmal für Führungszapfen.');
+      p.holeR = p.rp + p.hclr;
+      p.holeCap = Math.min(p.holeR*1.3, p.rk - 0.45);
+      if (p.holeCap < p.holeR + 0.05) err.push('Gelenkbolzen zu dick für die Lamellenstärke (Bolzen-Radius verkleinern oder Lamelle dicker).');
+      if (p.rp < 0.8) warn.push('Gelenkbolzen sehr dünn – bricht leicht.');
+      p.webLen = p.sw - 2*(p.rk + p.hclr);
+      if (p.webLen < 1.2) err.push('Lamellenbreite zu klein für Stärke + Gelenk-Spiel.');
+      let n = Math.max(3, Math.round(p.Wt / p.kl)); if (n % 2 === 0) n += 1;
+      p.nSeg = n;
+      if (p.Wt / n < 2*p.hclr + 2) err.push('Gelenk-Segmente zu kurz.');
+      p.zEnd = p.stopH + Math.max(p.rk, p.pr) + 0.3;   // tiefster Gelenkpunkt hinten
+    }
     p.warn = warn; p.err = err;
     return p;
   }
 
   /* --- Bahn (Mittellinie der Nut) im Profil (y,z) --- */
-  function makePath(p){
+  function makePath(p, c){
     const segs = [];
     const line = (a,b) => { const L=Math.hypot(b[0]-a[0],b[1]-a[1]); segs.push({t:'l',a,b,L}); };
     const arc = (cx,cz,r,t0,t1) => segs.push({t:'a',cx,cz,r,t0,t1,L:Math.abs(t1-t0)*r});
-    const {c,H,D,Rf,Rb} = p;
+    const {H,D,Rf,Rb} = p;
     line([c,p.zF0],[c,H-Rf]);
     arc(Rf,H-Rf,Rf-c,PI,PI/2);
     line([Rf,H-c],[D-Rb,H-c]);
@@ -248,8 +280,10 @@ function makeGeo(wasm){
   }
 
   function layout(p){
-    const path = makePath(p);
-    p.sJ0 = Math.max(p.gw/2, p.rk) + 0.2;
+    const groove = makePath(p, p.c);
+    const path = p.flex ? makePath(p, p.cf) : groove;   // Bahn der Gelenkpunkte
+    groove.j = path;
+    p.sJ0 = p.flex ? 0.3 : Math.max(p.gw/2, p.rk) + 0.2;
     // Anzahl Lamellen: geschlossen bis Beginn der hinteren Rundung
     let N=1;
     while (N < 400){ const j=joints(path,p,p.sJ0,N); if (j[N] >= path.sTopEnd) break; N++; }
@@ -264,7 +298,7 @@ function makeGeo(wasm){
     p.N=N; p.sFrontMax=lo; p.tamLen = N*p.sw;
     p.openFrac = (lo - p.sJ0)/(path.sTopEnd - p.sJ0);
     if (p.openFrac < 0.98) p.warn.push(`Rückseite zu kurz für volle Öffnung – Deckel öffnet nur ${(p.openFrac*100).toFixed(0)} % (Box höher oder Radius hinten größer).`);
-    return path;
+    return groove;
   }
 
   /* --- Korpus --- */
@@ -326,7 +360,23 @@ function makeGeo(wasm){
   }
 
   /* --- Lamelle in lokalen Koordinaten (x, u, w): Gelenke bei u=0 und u=sw, w=0 --- */
-  function slat(p, isFirst, isLast){
+  /* --- Filmscharnier-Lamelle: Außenseite (Film) bei w=0, Lamelle nach innen (w<0) --- */
+  function slatFlex(p, isFirst, isLast){
+    const {sw,tt,ft,fg,Wt,te} = p, ta = Math.tan(p.alpha);
+    let cs = rect(0,-ft,sw,0).add(polyCS([[fg/2,0],[sw-fg/2,0],[sw-fg/2-tt*ta,-tt],[fg/2+tt*ta,-tt]]));
+    if (isFirst && p.hh>0){   // Griffmulde in der Außenseite der ersten Lamelle
+      const d = Math.min(p.hh, tt-1.2);
+      if (d > 0.2) cs = cs.subtract(polyCS([[sw*0.22,1],[sw*0.78,1],[sw*0.78,-d+0.4],[sw*0.6,-d],[sw*0.4,-d],[sw*0.22,-d+0.4]]));
+    }
+    const parts=[extrudeX(cs,0,Wt)];
+    const tab = rect(sw*0.25,-te,sw*0.75,0);   // Führungslasche in der Nut
+    parts.push(extrudeX(tab,-p.gd,0.01), extrudeX(tab,Wt-0.01,Wt+p.gd));
+    return unionAll(parts);
+  }
+
+  function slat(p, isFirst, isLast){ return p.flex ? slatFlex(p,isFirst,isLast) : slatPin(p,isFirst,isLast); }
+
+  function slatPin(p, isFirst, isLast){
     const {sw,tt,rk,hclr,Wt,nSeg} = p, h2=hclr/2;
     const b = []; for (let j=0;j<=nSeg;j++) b.push(Wt*j/nSeg);
     // Besitzer eines x: 'A' = vordere Lamelle (Bolzen), 'B' = hintere (Loch), 'G' = Spalt
@@ -375,6 +425,11 @@ function makeGeo(wasm){
     const mids = {};
     const get = (f,l) => { const k=f+'_'+l; return mids[k] || (mids[k]=slat(p,f,l)); };
     const arr=[];
+    if (p.flex){
+      // ein Teil: Außenseite (Film) aufs Bett → um Y drehen (x→-x, w→-w)
+      for (let k=0;k<p.N;k++) arr.push(get(k===0,k===p.N-1).translate([0,k*p.sw,0]));
+      return unionAll(arr).transform([-1,0,0,0, 0,1,0,0, 0,0,-1,0, p.Wt,0,0,1]);
+    }
     for (let k=0;k<p.N;k++) arr.push(get(k===0,k===p.N-1).translate([0,k*p.sw,p.tt/2]));
     return unionAll(arr);
   }
@@ -387,7 +442,7 @@ const GEO = makeGeo(wasm);
 
 /* ---------- UI ---------- */
 let P = {...DEF};
-try { const s = JSON.parse(localStorage.getItem('jalousieBox') || '{}'); for (const k in s) if (k in DEF) P[k] = +s[k]; } catch(e) {}
+try { const s = JSON.parse(localStorage.getItem('jalousieBox2') || '{}'); for (const k in s) if (k in DEF) P[k] = +s[k]; } catch(e) {}
 const ctl = document.getElementById('controls');
 const inputs = {};
 function buildControls(){
@@ -397,6 +452,11 @@ function buildControls(){
     d.innerHTML=`<summary>${g.g}</summary>`;
     for (const [k,l,mn,mx,st] of g.items){
       const row=document.createElement('div'); row.className='row';
+      if (mn==='sel'){
+        row.innerHTML=`<label>${l}</label><select style="grid-column:1/3">${mx.map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select>`;
+        const s=row.querySelector('select'); s.value=P[k]; s.onchange=()=>set(k,+s.value);
+        d.appendChild(row); continue;
+      }
       row.innerHTML=`<label>${l}</label><input type="range" min="${mn}" max="${mx}" step="${st}"><input type="number" min="${mn}" max="${mx}" step="${st}">`;
       const [r,n]=row.querySelectorAll('input'); r.value=n.value=P[k];
       r.oninput=()=>{n.value=r.value;set(k,+r.value);};
@@ -406,7 +466,7 @@ function buildControls(){
     ctl.appendChild(d);
   }
 }
-function set(k,v){ P[k]=v; try{localStorage.setItem('jalousieBox',JSON.stringify(P));}catch(e){} schedule(); }
+function set(k,v){ P[k]=v; try{localStorage.setItem('jalousieBox2',JSON.stringify(P));}catch(e){} schedule(); }
 buildControls();
 
 /* ---------- Szene ---------- */
@@ -473,9 +533,9 @@ function placeTambour(){
   if(!cur) return; const {p,path}=cur;
   const f=(+document.getElementById('open').value)/100;
   const sF=p.sJ0+(p.sFrontMax-p.sJ0)*f;
-  const js=GEO.joints(path,p,sF,p.N);
+  const jp=path.j, js=GEO.joints(jp,p,sF,p.N);
   tamGroup.children.forEach((m,k)=>{
-    const a=path.at(js[k]), b=path.at(js[k+1]);
+    const a=jp.at(js[k]), b=jp.at(js[k+1]);
     let dy=b.y-a.y, dz=b.z-a.z; const L=Math.hypot(dy,dz)||1; dy/=L; dz/=L;
     const ny=-dz, nz=dy;
     m.matrix.set(1,0,0,p.wall+p.clr, 0,dy,ny,a.y, 0,dz,nz,a.z, 0,0,0,1);
@@ -492,7 +552,7 @@ function info(ms){
   const rows=[];
   rows.push(`<div>Außen: <b>${f(p.W)} × ${f(p.D)} × ${f(p.H)}</b> mm</div>`);
   rows.push(`<div>Innen (ca.): ${f(p.inner.w)} × ${f(p.inner.d)} × ${f(p.inner.h)} mm</div>`);
-  rows.push(`<div>Jalousie: ${p.N} Lamellen à ${f(p.sw)} mm · ${f(p.tamLen)} × ${f(p.Wt)} mm flach · ${p.nSeg} Gelenk-Segmente</div>`);
+  rows.push(`<div>Jalousie: ${p.N} Lamellen à ${f(p.sw)} mm · ${f(p.tamLen)} × ${f(p.Wt)} mm flach · ${p.flex ? `ein Teil, Film ${f(p.ft)} mm, Laschen ${f(p.te)} mm` : `${p.nSeg} Gelenk-Segmente`}</div>`);
   rows.push(`<div>Knickwinkel je Gelenk: ${p.jointAngle.toFixed(0)}° · engster Bahnradius ${f(p.rMin)} mm</div>`);
   rows.push(`<div>Max. Öffnung: ${(p.openFrac*100).toFixed(0)} % · Korpus ≈ ${f(cur.vol/1000)} cm³</div>`);
   for (const e of p.err) rows.push(`<div class="e">✖ ${e}</div>`);
@@ -528,7 +588,7 @@ document.getElementById('exBody').onclick=()=>busy(exBody);
 document.getElementById('exTam').onclick=()=>busy(exTam);
 document.getElementById('exStop').onclick=()=>busy(exStop);
 document.getElementById('exAll').onclick=()=>busy(()=>{exBody();exTam();exStop();});
-document.getElementById('reset').onclick=()=>{ P={...DEF}; try{localStorage.removeItem('jalousieBox');}catch(e){} buildControls(); rebuild(); fit(); };
+document.getElementById('reset').onclick=()=>{ P={...DEF}; try{localStorage.removeItem('jalousieBox2');}catch(e){} buildControls(); rebuild(); fit(); };
 document.getElementById('fit').onclick=fit;
 const oR=document.getElementById('open'), oN=document.getElementById('openN');
 oR.oninput=()=>{oN.value=oR.value; placeTambour();};
