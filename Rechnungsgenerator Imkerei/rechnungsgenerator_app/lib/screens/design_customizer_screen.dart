@@ -8,6 +8,7 @@ import '../models/models.dart';
 import '../utils/feedback_service.dart';
 import '../widgets/feedback_actions.dart';
 import '../widgets/invoice_layout_canvas.dart';
+import '../widgets/cached_picture.dart';
 
 class DesignCustomizerScreen extends StatefulWidget {
   final String companyId;
@@ -565,24 +566,22 @@ class _DesignCustomizerScreenState extends State<DesignCustomizerScreen> {
           id: 'header_image',
           label: 'Header-Bild',
           isImage: true,
-          builder: (_) => Image.network(ds.topHeaderUrl!,
+          builder: (_) => CachedPicture(ds.topHeaderUrl!,
               fit: BoxFit.fill,
               width: double.infinity,
               height: double.infinity,
-              errorBuilder: (_, __, ___) =>
-                  Container(color: Colors.red.shade100)),
+              error: Container(color: Colors.red.shade100)),
         ),
       if (ds.logoUrl != null && ds.logoUrl!.isNotEmpty)
         LayoutElement(
           id: 'logo',
           label: 'Logo',
           isImage: true,
-          builder: (_) => Image.network(ds.logoUrl!,
+          builder: (_) => CachedPicture(ds.logoUrl!,
               fit: BoxFit.fill,
               width: double.infinity,
               height: double.infinity,
-              errorBuilder: (_, __, ___) =>
-                  Container(color: Colors.red.shade100)),
+              error: Container(color: Colors.red.shade100)),
         ),
       LayoutElement(
         id: 'company_header',
@@ -795,11 +794,10 @@ class _DesignCustomizerScreenState extends State<DesignCustomizerScreen> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(7),
-              child: Image.network(
+              child: CachedPicture(
                 imageUrl,
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) =>
-                    const Center(child: Text('Bild nicht ladbar')),
+                error: const Center(child: Text('Bild nicht ladbar')),
               ),
             ),
           ),

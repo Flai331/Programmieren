@@ -2,7 +2,7 @@ name: beebrain
 description: "BeeBrain – Second Brain für Imker. Völker-Verwaltung, Maßnahmen-Doku, Saisonkalender, Rechnungen/Angebote/Briefe."
 publish_to: 'none'
 
-version: 1.0.0+18
+version: 1.0.0+19
 
 environment:
   sdk: ^3.11.4
@@ -63,9 +63,31 @@ dev_dependencies:
   flutter_launcher_icons: ^0.13.1
   flutter_native_splash: ^2.3.0
   sqflite_common_ffi: ^2.4.2+1
+  # Nur für test/services/pdf_fonts_test.dart: der Test liest den
+  # assets-Block aus dieser Datei, damit Pfade und Paketinhalt nicht
+  # auseinanderlaufen. Lag schon als Unterabhängigkeit bereit.
+  yaml: ^3.1.2
 
 flutter:
   uses-material-design: true
+
+  # Die Schriften für die PDFs liegen im Paket, nicht im Netz.
+  #
+  # Vorher holte `PdfGoogleFonts.robotoRegular()` sie bei jedem PDF von
+  # fonts.gstatic.com – der Zwischenspeicher des printing-Pakets ist
+  # `PdfMemoryCache`, also nach jedem App-Start leer. Drei Downloads je
+  # Rechnung, ohne Zeitgrenze. Am Bienenstand mit einem Balken Netz ist das
+  # der Unterschied zwischen einer Rechnung und keiner.
+  #
+  # Es ist dieselbe Roboto-Fassung, die Flutter selbst mitbringt
+  # (bin/cache/artifacts/material_fonts), Apache-2.0; die Lizenz liegt
+  # daneben und wird in main.dart bei der LicenseRegistry angemeldet, damit
+  # sie unter „Lizenzen" in der App erscheint. 508 KB für alle drei.
+  assets:
+    - assets/fonts/Roboto-Regular.ttf
+    - assets/fonts/Roboto-Bold.ttf
+    - assets/fonts/Roboto-Italic.ttf
+    - assets/fonts/Roboto_LICENSE.txt
 
 # App Icons Configuration
 flutter_launcher_icons:

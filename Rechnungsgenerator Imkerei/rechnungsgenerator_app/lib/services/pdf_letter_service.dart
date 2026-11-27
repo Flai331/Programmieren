@@ -1,8 +1,9 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import '../models/models.dart';
+import '../utils/feedback_service.dart';
+import 'pdf_fonts.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  PDF LETTER SERVICE — DIN 5008 Geschäftsbrief
@@ -57,8 +58,11 @@ class PdfLetterService {
     required LetterModel letter,
     required CompanyModel? company,
   }) async {
-    final base = await PdfGoogleFonts.robotoRegular();
-    final bold = await PdfGoogleFonts.robotoBold();
+    // Roboto aus dem Paket statt aus dem Netz — siehe PdfFonts.
+    final (base, bold) = await FeedbackService.measure(
+      'Schriften laden',
+      () async => (await PdfFonts.regular(), await PdfFonts.bold()),
+    );
 
     final doc = pw.Document();
     final form = letter.letterForm;

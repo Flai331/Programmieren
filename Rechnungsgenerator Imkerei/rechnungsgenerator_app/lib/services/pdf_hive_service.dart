@@ -1,8 +1,9 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import '../models/models.dart';
+import '../utils/feedback_service.dart';
+import 'pdf_fonts.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  PDF HIVE SERVICE — Stockkarte mit QR-Code
@@ -22,8 +23,11 @@ class PdfHiveService {
     required HiveModel hive,
     List<HiveActionModel> actions = const [],
   }) async {
-    final base = await PdfGoogleFonts.robotoRegular();
-    final bold = await PdfGoogleFonts.robotoBold();
+    // Roboto aus dem Paket statt aus dem Netz — siehe PdfFonts.
+    final (base, bold) = await FeedbackService.measure(
+      'Schriften laden',
+      () async => (await PdfFonts.regular(), await PdfFonts.bold()),
+    );
 
     final doc = pw.Document();
     doc.addPage(

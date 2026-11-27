@@ -1,10 +1,12 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:vector_math/vector_math_64.dart' show Matrix4;
 import 'package:intl/intl.dart';
 import '../models/models.dart';
+import '../utils/feedback_service.dart';
 import '../widgets/invoice_layout_canvas.dart';
+import 'image_cache_service.dart';
+import 'pdf_fonts.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  PDF SERVICE — generiert professionelle DIN-A4-Rechnungen
@@ -18,6 +20,15 @@ class PdfService {
 
   static const _peach = PdfColor(0.992, 0.627, 0.522); // #fda085
 
+  /// Ein Bild für das PDF, oder null. Wirft nicht: ein nicht erreichbares
+  /// Logo darf keine Rechnung verhindern.
+  Future<pw.ImageProvider?> _bild(String? url, String was) async {
+    if (url == null || url.trim().isEmpty) return null;
+    final bytes = await FeedbackService.measure(
+        '$was holen', () => ImageCacheService().bytes(url));
+    return bytes == null ? null : pw.MemoryImage(bytes);
+  }
+
   Future<pw.Document> generateInvoicePdf({
     required InvoiceModel invoice,
     required CompanyModel company,
@@ -25,26 +36,26 @@ class PdfService {
     required List<InvoiceItemModel> items,
     required DesignSettingsModel designSettings,
   }) async {
-    // Roboto-Font laden (Unicode-fähig, kennt €)
-    final base = await PdfGoogleFonts.robotoRegular();
-    final bold = await PdfGoogleFonts.robotoBold();
-    final italic = await PdfGoogleFonts.robotoItalic();
+    // Roboto aus dem Paket (Unicode-fähig, kennt €). Vorher holte
+    // `PdfGoogleFonts` jede der drei Schriften bei jedem PDF aus dem
+    // Netz — siehe PdfFonts.
+    final (base, bold, italic) = await FeedbackService.measure(
+      'Schriften laden',
+      () async => (
+        await PdfFonts.regular(),
+        await PdfFonts.bold(),
+        await PdfFonts.italic(),
+      ),
+    );
 
-    // Logo + Header-Bild laden (falls URL gesetzt)
-    pw.ImageProvider? logoImg;
-    pw.ImageProvider? headerImg;
-    try {
-      if (designSettings.logoUrl != null &&
-          designSettings.logoUrl!.isNotEmpty) {
-        logoImg = await networkImage(designSettings.logoUrl!);
-      }
-    } catch (_) {}
-    try {
-      if (designSettings.topHeaderUrl != null &&
-          designSettings.topHeaderUrl!.isNotEmpty) {
-        headerImg = await networkImage(designSettings.topHeaderUrl!);
-      }
-    } catch (_) {}
+    // Logo und Kopfbild: ein Pfad auf dem Gerät wird gelesen, eine
+    // Netzadresse einmal geholt und dann aufbewahrt, mit Zeitgrenze. Fehlt
+    // eines, entsteht die Rechnung ohne — ein Blatt ohne Logo ist besser
+    // als keines.
+    final pw.ImageProvider? logoImg =
+        await _bild(designSettings.logoUrl, 'Logo');
+    final pw.ImageProvider? headerImg =
+        await _bild(designSettings.topHeaderUrl, 'Kopfbild');
 
     // Layout-Positionen aus JSON (oder Default)
     final layout = InvoiceLayoutCanvas.decodeLayout(designSettings.layoutJson);

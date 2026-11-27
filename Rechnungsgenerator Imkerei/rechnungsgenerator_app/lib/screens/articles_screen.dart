@@ -31,7 +31,8 @@ class _ArticlesScreenState extends State<ArticlesScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final list = await _dbService.getAllArticles();
+    final list = await FeedbackService.measure(
+        'Artikel laden', _dbService.getAllArticles);
     if (mounted) {
       setState(() {
         _articles = list;
@@ -39,6 +40,7 @@ class _ArticlesScreenState extends State<ArticlesScreen> {
         _loading = false;
       });
     }
+    FeedbackService.logScreenReady('Artikel');
   }
 
   void _filter() {

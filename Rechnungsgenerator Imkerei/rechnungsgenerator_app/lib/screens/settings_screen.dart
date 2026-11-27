@@ -69,7 +69,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadCompany() async {
-    final companies = await DatabaseService().getAllCompanies();
+    final companies = await FeedbackService.measure(
+        'Einstellungen: Firma laden', DatabaseService().getAllCompanies);
     if (!mounted) return;
     if (companies.isNotEmpty) {
       setState(() {
@@ -78,6 +79,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _updatePreview();
       });
     }
+    // Hält die Uhr an, die initState mit logScreenLoad gestartet hat. Damit
+    // steht im Protokoll, wie lange dieser Reiter vom Antippen bis zur
+    // Anzeige gebraucht hat — nicht nur, wie lange die Abfrage lief.
+    FeedbackService.logScreenReady('Settings');
   }
 
   void _updatePreview() {

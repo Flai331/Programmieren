@@ -18,7 +18,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   void initState() {
     super.initState();
     FeedbackService.logScreenLoad('Statistiken');
-    statisticsFuture = _loadDetailedStatistics();
+    statisticsFuture =
+        FeedbackService.measure('Statistiken rechnen', _loadDetailedStatistics);
   }
 
   Future<Map<String, dynamic>> _loadDetailedStatistics() async {
@@ -66,7 +67,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       body: RefreshIndicator(
         onRefresh: () async {
           setState(() {
-            statisticsFuture = _loadDetailedStatistics();
+            statisticsFuture =
+        FeedbackService.measure('Statistiken rechnen', _loadDetailedStatistics);
           });
         },
         child: FutureBuilder<Map<String, dynamic>>(

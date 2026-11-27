@@ -8,6 +8,7 @@ import '../services/services.dart';
 import '../services/pdf_service.dart';
 import '../models/models.dart';
 import '../utils/utils.dart';
+import '../utils/feedback_service.dart';
 import 'invoice_edit_screen.dart';
 
 class InvoiceListScreen extends StatefulWidget {
@@ -47,7 +48,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     _syncService = SyncService();
     _filter = widget.initialFilter;
     _docType = widget.initialDocType;
-    _invoicesFuture = _dbService.getAllInvoices();
+    _invoicesFuture =
+        FeedbackService.measure('Rechnungen laden', _dbService.getAllInvoices);
   }
 
   @override

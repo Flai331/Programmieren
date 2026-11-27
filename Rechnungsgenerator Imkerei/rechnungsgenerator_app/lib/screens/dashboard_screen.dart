@@ -119,7 +119,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const _TileDef('draft',     'Entwurf',     Icons.edit_outlined,         _C.neutral),
       const _TileDef('honey',     'Honig',       Icons.hive_outlined,         _C.warning),
     ];
-    _statsFuture = _load();
+    _statsFuture = FeedbackService.measure('Dashboard laden', _load);
   }
 
   /// Neu laden. Eigene Methode statt `setState(() => _statsFuture = _load())`:
@@ -128,7 +128,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _reload() {
     if (!mounted) return;
     setState(() {
-      _statsFuture = _load();
+      _statsFuture = FeedbackService.measure('Dashboard laden', _load);
     });
   }
 

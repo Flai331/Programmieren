@@ -1,5 +1,8 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart'
+    show LicenseEntryWithLineBreaks, LicenseRegistry;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:provider/provider.dart';
 import 'services/services.dart';
 import 'screens/screens.dart';
@@ -7,6 +10,16 @@ import 'utils/feedback_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── Schriftlizenz anmelden ───────────────────────────────────
+  // Roboto liegt als Datei im Paket (siehe PdfFonts) und steht unter der
+  // Apache-2.0-Lizenz. Die verlangt, dass der Lizenztext mitgeliefert wird;
+  // damit steht er unter „Lizenzen" in den Einstellungen. Wird erst
+  // gelesen, wenn jemand nachschaut.
+  LicenseRegistry.addLicense(() async* {
+    final text = await rootBundle.loadString(PdfFonts.licenseAsset);
+    yield LicenseEntryWithLineBreaks(const ['Roboto'], text);
+  });
 
   // ── Fehler-Abfangen ──────────────────────────────────────────
   bool isIgnorable(String msg) =>

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../services/services.dart';
 import '../models/models.dart';
+import '../utils/feedback_service.dart';
 
 class AddressBookScreen extends StatefulWidget {
   const AddressBookScreen({Key? key}) : super(key: key);
@@ -25,7 +26,8 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
   }
 
   Future<void> _load() async {
-    final list = await _dbService.getAllCustomers();
+    final list = await FeedbackService.measure(
+        'Kunden laden', _dbService.getAllCustomers);
     if (mounted) setState(() { _customers = list; _loading = false; });
   }
 

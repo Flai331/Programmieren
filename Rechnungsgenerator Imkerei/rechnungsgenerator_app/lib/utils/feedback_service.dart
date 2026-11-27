@@ -2,7 +2,8 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, debugPrint, visibleForTesting;
 import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -107,8 +108,51 @@ class FeedbackService {
 
   static void logScreenLoad(String screenName, {String? additionalInfo}) {
     setCurrentScreen(screenName);
+    _begonnen[screenName] = Stopwatch()..start();
     log('📄 SCREEN: $screenName'
         '${additionalInfo != null ? ' ($additionalInfo)' : ''}');
+  }
+
+  // ── Stoppuhren ──────────────────────────────────────────────
+  //
+  // „Lädt lange" ist im Protokoll bisher nicht zu sehen: es stehen
+  // Zeitstempel auf die Sekunde da, und ein Bildschirm, der zwei Sekunden
+  // braucht, sieht genauso aus wie einer, der sofort da ist. Also wird
+  // gemessen — und zwar dort, wo die Arbeit passiert, nicht nur am Anfang.
+
+  /// Je Bildschirm die Uhr, die [logScreenLoad] gestartet hat.
+  static final Map<String, Stopwatch> _begonnen = {};
+
+  /// Der Bildschirm steht. Schreibt die Zeit seit [logScreenLoad] ins
+  /// Protokoll. Ohne gestartete Uhr passiert nichts — dann ist eben nur
+  /// der Anfang gemeldet worden.
+  static void logScreenReady(String screenName) {
+    final uhr = _begonnen.remove(screenName);
+    if (uhr == null) return;
+    uhr.stop();
+    logDuration('$screenName geladen', uhr.elapsed);
+  }
+
+  /// Eine gemessene Dauer ins Protokoll. Ab einer Sekunde mit Ausruf —
+  /// das ist die Grenze, ab der man das Warten merkt.
+  static void logDuration(String what, Duration dauer) {
+    final ms = dauer.inMilliseconds;
+    final lang = ms >= 1000 ? '  ⟵ das dauert' : '';
+    log('⏱ $what in $ms ms$lang');
+  }
+
+  /// [arbeit] ausführen und die Dauer melden. Gibt zurück, was [arbeit]
+  /// zurückgibt, und lässt einen Fehler durch — gemessen wird dann
+  /// trotzdem, denn ein Fehlschlag nach acht Sekunden ist genau der Fall,
+  /// den man sehen will.
+  static Future<T> measure<T>(String what, Future<T> Function() arbeit) async {
+    final uhr = Stopwatch()..start();
+    try {
+      return await arbeit();
+    } finally {
+      uhr.stop();
+      logDuration(what, uhr.elapsed);
+    }
   }
 
   static void logUserAction(String action, {Map<String, String>? context}) {
@@ -270,6 +314,15 @@ class FeedbackService {
 
   // ── Öffentliche API ─────────────────────────────────────────
   static List<String> get logEntries => List.unmodifiable(_log);
+
+  /// Nur für Tests: Protokoll und laufende Stoppuhren leeren, damit ein
+  /// Test nicht sieht, was ein anderer hinterlassen hat. Die Klasse ist
+  /// durchweg statisch, also gibt es nichts Frisches zum Anlegen.
+  @visibleForTesting
+  static void clearLogsForTests() {
+    _log.clear();
+    _begonnen.clear();
+  }
 
   static String buildReportText(String? userNote) =>
       _buildPlain(userNote);

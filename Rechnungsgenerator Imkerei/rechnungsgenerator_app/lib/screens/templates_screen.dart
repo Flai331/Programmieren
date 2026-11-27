@@ -25,8 +25,10 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
   }
 
   Future<void> _load() async {
-    final list = await DesignTemplateService().loadAll();
+    final list = await FeedbackService.measure(
+        'Vorlagen laden', DesignTemplateService().loadAll);
     if (mounted) setState(() { _saved = list; _loading = false; });
+    FeedbackService.logScreenReady('Vorlagen');
   }
 
   // ── DIN Standard anwenden ──────────────────────────────────────

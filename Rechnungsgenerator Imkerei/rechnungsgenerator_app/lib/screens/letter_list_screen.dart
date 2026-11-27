@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../utils/app_utils.dart';
+import '../utils/feedback_service.dart';
 import 'letter_edit_screen.dart';
 
 class LetterListScreen extends StatefulWidget {
@@ -19,7 +20,7 @@ class _LetterListScreenState extends State<LetterListScreen> {
   @override
   void initState() {
     super.initState();
-    _future = _db.getAllLetters();
+    _future = FeedbackService.measure('Briefe laden', _db.getAllLetters);
   }
 
   void _reload() => setState(() => _future = _db.getAllLetters());
