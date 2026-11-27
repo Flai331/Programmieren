@@ -53,6 +53,11 @@ class PdfFonts {
     return pw.Font.ttf(daten);
   }
 
+  /// Nur für Tests: einen beliebigen Pfad laden, um zu zeigen, dass ein
+  /// falscher Pfad wirft und nicht stillschweigend ins Netz ausweicht.
+  @visibleForTesting
+  static Future<pw.Font> loadForTests(String pfad) => _laden(pfad);
+
   /// Nur für Tests: die gemerkten Schriften vergessen, damit ein Test den
   /// ersten Ladevorgang beobachten kann.
   @visibleForTesting

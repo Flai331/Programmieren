@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:beebrain/services/pdf_fonts.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:yaml/yaml.dart';
 
 /// Hält die Schriftdateien, die Pfade in [PdfFonts] und den `assets:`-Block
@@ -13,6 +14,9 @@ import 'package:yaml/yaml.dart';
 /// stillschweigend wieder aus dem Netz lädt. Genau das soll nicht
 /// zurückkommen, ohne dass es jemand merkt.
 void main() {
+  // Für rootBundle: ohne Bindung gibt es kein Asset-Bündel.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late List<String> imPubspec;
 
   setUpAll(() {
@@ -57,6 +61,54 @@ void main() {
     ].map((p) => File(p).lengthSync()).toSet();
     expect(inhalte.length, 3,
         reason: 'gleiche Größe heißt vermutlich dreimal dieselbe Datei');
+  });
+
+  group('wirklich laden', () {
+    // Der eigentliche Beweis. „Die Datei liegt im Projekt" ist nicht „die
+    // Schrift lädt": der Pfad muss auch im Bündel ankommen. Hier geht es
+    // über denselben rootBundle-Weg wie auf dem Gerät.
+
+    setUp(PdfFonts.forgetForTests);
+
+    test('rootBundle gibt jeden Schnitt her', () async {
+      for (final laden in [PdfFonts.regular, PdfFonts.bold, PdfFonts.italic]) {
+        final schrift = await laden();
+        expect(schrift, isA<pw.Font>());
+        expect(schrift.fontName, isNotEmpty);
+      }
+    });
+
+    test('die Schnitte sind nicht alle dieselbe Schrift', () async {
+      final namen = {
+        (await PdfFonts.regular()).fontName,
+        (await PdfFonts.bold()).fontName,
+        (await PdfFonts.italic()).fontName,
+      };
+      expect(namen.length, 3, reason: 'sonst zeigt fett dasselbe wie normal');
+    });
+
+    test('ein Thema für die PDF-Dienste kommt heraus', () async {
+      expect(await PdfFonts.theme(), isA<pw.ThemeData>());
+    });
+
+    test('zweimal fragen liest die Datei nur einmal', () async {
+      final erste = PdfFonts.regular();
+      final zweite = PdfFonts.regular();
+      expect(identical(erste, zweite), isTrue,
+          reason: 'gemerkt wird die Future, nicht erst das Ergebnis — sonst '
+              'zerlegen zwei gleichzeitige PDFs die TTF doppelt');
+      expect(await erste, same(await zweite));
+    });
+
+    test('ein falscher Pfad wirft, statt heimlich ins Netz zu gehen', () async {
+      // Das ist der Grund für rootBundle statt der Asset-Abkürzung von
+      // PdfGoogleFonts: die fällt bei einem Tippfehler auf den Download
+      // zurück, und niemand merkt es.
+      await expectLater(
+        PdfFonts.loadForTests('assets/fonts/Roboto-Gibtsnicht.ttf'),
+        throwsA(anything),
+      );
+    });
   });
 
   test('die Lizenz ist die von Roboto', () {
