@@ -60,40 +60,44 @@
 <body>
 <aside>
   <h1>Jalousie-Box Generator</h1>
-  <div class="sub">Box mit flexiblem Rippen-Schiebedeckel · ein Teil, keine Stützen, kein Kleber · Maße in mm<br>Standard: 2 Fächer für je 70–80 Magic-Karten in Hülle (66 × 91 mm)</div>
+  <div class="sub">Rolldeckel-Box: flexible Rippen-Jalousie aus einem Teil gleitet über die hintere Rundung an der Rückseite herunter · keine Stützen, kein Kleber · Maße in mm<br>Standard: 2 Fächer für je 70–80 Magic-Karten in Hülle (66 × 91 mm)</div>
   <div id="controls"></div>
 
   <details open>
     <summary>Ansicht</summary>
-    <div class="row"><label>Deckel herausziehen (%)</label>
+    <div class="row"><label>Jalousie öffnen (%)</label>
       <input type="range" id="open" min="0" max="100" step="1" value="0">
       <input type="number" id="openN" min="0" max="100" step="1" value="0"></div>
     <label class="chk"><input type="checkbox" id="hideLeft"> Linke Seitenwand ausblenden (Nut sehen)</label>
-    <label class="chk"><input type="checkbox" id="showLid" checked> Deckel anzeigen</label>
+    <label class="chk"><input type="checkbox" id="showLid" checked> Jalousie anzeigen</label>
+    <label class="chk"><input type="checkbox" id="showStop" checked> Endstopp-Leiste anzeigen</label>
   </details>
 
   <div class="btns">
     <button class="primary" id="exBody">⬇ Korpus STL</button>
-    <button class="primary" id="exLid">⬇ Deckel STL</button>
-    <button id="exAll">⬇ Beide Dateien</button>
+    <button class="primary" id="exLid">⬇ Jalousie STL</button>
+    <button id="exStop">⬇ Endstopp STL</button>
+    <button id="exAll">⬇ Alle 3 Dateien</button>
     <button id="fit">Kamera zentrieren</button>
-    <button id="reset" style="grid-column:1/3">Werte zurücksetzen</button>
+    <button id="reset">Werte zurücksetzen</button>
   </div>
 
   <div id="info">Lade …</div>
   <div class="hint" style="margin-top:8px">Fertig zum Drucken (Standardwerte, 2 MTG-Fächer):
-    <a href="stl/mtg-2-faecher_korpus_75.5x122x100.stl" download style="color:var(--accent)">Korpus</a> ·
-    <a href="stl/mtg-2-faecher_deckel_75.5x122x100.stl" download style="color:var(--accent)">Deckel</a></div>
+    <a href="stl/mtg-2-faecher_korpus.stl" download style="color:var(--accent)">Korpus</a> ·
+    <a href="stl/mtg-2-faecher_jalousie.stl" download style="color:var(--accent)">Jalousie</a> ·
+    <a href="stl/mtg-2-faecher_endstopp.stl" download style="color:var(--accent)">Endstopp</a></div>
 
   <details open>
     <summary>Druck &amp; Montage</summary>
     <div class="hint">
       <ol>
-        <li><b>Korpus</b> aufrecht drucken (Boden aufs Bett), ohne Stützen. Die Nut-Decke hängt nur ≈ Nuttiefe über; die Querleiste hinten oben ist eine kurze gerade Brücke, die Abdeckung vorne folgt der Rundung (bis 45° überhangfrei).</li>
-        <li><b>Deckel</b> flach drucken, wie exportiert: der dünne Film liegt auf dem Bett (Innenseite), die Rippen und der Griff zeigen nach oben (Außenseite). Filmstärke = genau 1–2 Schichten (Standard 0,2 mm bei 0,2-mm-Schichten). PLA oder PETG.</li>
-        <li><b>Einsetzen:</b> Deckel mit dem Rippen-Ende voran, Rippen nach außen, hinten durch den Schlitz in die beiden Nuten schieben, bis er vorne um die Rundung unter die Abdeckung läuft und der Griff an der Rückwand anschlägt.</li>
-        <li><b>Öffnen:</b> am Griff nach hinten herausziehen.</li>
-        <li>Klemmt es: <i>Spiel</i> erhöhen. Bricht der Film in der Rundung: <i>Radius vorne</i> größer oder Film eine Schicht dicker.</li>
+        <li><b>Korpus</b> aufrecht drucken (Boden aufs Bett), ohne Stützen. Die Nut-Decke hängt nur ≈ Nuttiefe über; die feste Kappe vorne oben ist eine kurze gerade Brücke.</li>
+        <li><b>Jalousie</b> flach drucken, wie exportiert: der dünne Film liegt auf dem Bett (Innenseite), Rippen und Griff zeigen nach oben (Außenseite). Filmstärke = genau 1–2 Schichten (Standard 0,2 mm bei 0,2-mm-Schichten). PLA oder PETG.</li>
+        <li><b>Einsetzen:</b> Box auf die Vorderseite legen. Jalousie mit dem Griff voran, Rippen nach außen, hinten unten in beide Nuten schieben – hoch, über die hintere Rundung und über den Deckel, bis der Griff vorne an der Kappe anliegt.</li>
+        <li><b>Endstopp-Leiste</b> von unten in die beiden Nutschlitze hinten drücken – hält per Klemmrippen, die Jalousie kann nicht mehr herausrutschen.</li>
+        <li><b>Öffnen:</b> Griff nach hinten schieben – die Jalousie läuft über die Rundung an der Rückseite herunter.</li>
+        <li>Klemmt es: <i>Spiel</i> erhöhen. Bricht der Film in der Rundung: <i>Radius hinten</i> größer oder Film eine Schicht dicker.</li>
       </ol>
     </div>
   </details>
@@ -114,38 +118,36 @@ const wasm = await ManifoldModule(); wasm.setup();
 /* ---------- Parameter ---------- */
 const SPEC = [
   {g:'Außenmaße & Form', open:true, items:[
-    ['W','Breite',30,400,0.5,75.5],
-    ['D','Tiefe',30,400,0.5,122],
-    ['H','Höhe',25,300,0.5,100],
-    ['Rf','Radius vorne oben (Deckel läuft herum)',5,80,0.5,10],
-    ['Rb','Radius hinten oben',0,5,0.1,1.2],
+    ['W','Breite',30,400,0.5,144.5],
+    ['D','Tiefe',30,400,0.5,64],
+    ['H','Höhe',25,300,0.5,101],
+    ['Rf','Radius vorne oben (feste Kappe)',1,60,0.5,8],
+    ['Rb','Radius hinten oben (Jalousie läuft herum)',6,80,0.5,12],
   ]},
   {g:'Wände & Fächer', open:false, items:[
     ['wall','Seitenwand-Stärke',2,15,0.1,3.6],
     ['floor','Bodenstärke',0.8,10,0.1,2],
-    ['back','Rückwand-Stärke',0.8,10,0.1,1.6],
+    ['back','Rückwand-Stärke (hinter der Jalousie)',0.8,10,0.1,1.6],
     ['fwT','Frontwand-Stärke',0.8,10,0.1,2],
-    ['bb','Querleiste hinten oben, Tiefe (0 = keine)',0,15,0.5,3],
-    ['skinA','Abdeckung der Rundung vorne (Grad, 0 = keine)',0,70,1,45],
-    ['div','Trennwände längs (teilen die Breite)',0,12,1,0],
-    ['divQ','Trennwände quer (teilen die Tiefe)',0,12,1,1],
+    ['div','Trennwände längs (teilen die Breite)',0,12,1,1],
+    ['divQ','Trennwände quer (teilen die Tiefe)',0,12,1,0],
     ['divT','Trennwand-Stärke',0.6,5,0.1,1.2],
-    ['divH','Trennwand-Höhe',5,300,1,60],
+    ['divH','Trennwand-Höhe (max = stützt die Jalousie)',5,300,1,300],
   ]},
   {g:'Führungsnut', open:false, items:[
     ['rim','Abstand Nut zur Außenkante',0.8,6,0.1,1.4],
     ['gd','Nuttiefe (in die Seitenwand)',0.8,6,0.05,1.45],
-    ['clr','Spiel Deckel in Nut (je Seite)',0.1,1,0.05,0.4],
-    ['tclr','Spiel Deckelkante zum Nutgrund',0.1,1,0.05,0.35],
+    ['clr','Spiel Jalousie in Nut (je Seite)',0.1,1,0.05,0.4],
+    ['tclr','Spiel Jalousiekante zum Nutgrund',0.1,1,0.05,0.35],
+    ['stopH','Endstopp-Höhe',3,30,0.5,6],
   ]},
-  {g:'Deckel (flexibel, ein Teil)', open:true, items:[
+  {g:'Jalousie (flexibel, ein Teil)', open:true, items:[
     ['ft','Filmstärke (durchgehend, Innenseite)',0.1,1.2,0.05,0.2],
     ['rh','Rippenhöhe (über dem Film)',0.2,3,0.05,0.6],
     ['rw','Rippenbreite',0.4,6,0.05,1.2],
     ['rg','Spalt zwischen Rippen',0.3,4,0.05,0.8],
-    ['fDown','Deckel reicht vorne unter die Rundung',0,150,0.5,0],
-    ['hl','Grifflänge',3,30,0.5,10],
-    ['hh','Griffhöhe über dem Deckel',0.5,10,0.1,2.9],
+    ['hu','Griffleiste: Breite',2,10,0.5,4],
+    ['hh','Griffleiste: Höhe über der Jalousie',0.5,8,0.1,2.9],
   ]},
 ];
 const DEF = {}; SPEC.forEach(g=>g.items.forEach(it=>DEF[it[0]]=it[5]));
@@ -170,37 +172,38 @@ function makeGeo(wasm){
 
   function derive(P){
     const p = {...P}, warn = [], err = [];
-    p.lt = p.ft + p.rh;                     // Deckelstärke
+    p.lt = p.ft + p.rh;                     // Jalousie-Stärke
     p.gw = p.lt + 2*p.clr;                  // Nutbreite
     p.c  = p.rim + p.gw/2;                  // Nut-Mittellinie (Abstand zur Außenkante)
     p.ic = p.rim + p.gw;                    // Innenraum beginnt hier
     p.pitch = p.rw + p.rg;
-    if (p.Rb > p.rim - 0.1){ p.Rb = Math.max(0, p.rim - 0.1); warn.push(`Radius hinten auf ${p.Rb.toFixed(1)} mm begrenzt (sonst schneidet die Nut die Kante an).`); }
-    const minRf = p.ic + 3;
-    if (p.Rf < minRf){ p.Rf = minRf; warn.push(`Radius vorne auf ${minRf.toFixed(1)} mm angehoben.`); }
-    if (p.Rf > p.D*0.6 || p.Rf > p.H*0.6){ p.Rf = Math.min(p.D, p.H)*0.6; warn.push('Radius vorne zu groß für die Box – verkleinert.'); }
-    p.rMin = p.Rf - p.c;
+    const minRb = p.ic + 4;
+    if (p.Rb < minRb){ p.Rb = minRb; warn.push(`Radius hinten auf ${minRb.toFixed(1)} mm angehoben.`); }
+    if (p.Rb > Math.min(p.D, p.H)*0.45){ p.Rb = Math.min(p.D, p.H)*0.45; warn.push('Radius hinten zu groß – verkleinert.'); }
+    if (p.Rf > Math.min(p.D, p.H)*0.3){ p.Rf = Math.min(p.D, p.H)*0.3; warn.push('Radius vorne zu groß – verkleinert.'); }
+    p.yS = Math.max(p.Rf + 1, p.fwT + 4);   // Nut-Anfang vorne (hinter der festen Kappe)
+    p.rMin = p.Rb - p.c;
     p.jointAngle = 2*Math.asin(Math.min(1, p.pitch/(2*p.rMin)))*180/PI;
     if (p.wall < p.gd + 1.2) err.push(`Seitenwand zu dünn für die Nut (mind. Nuttiefe + 1,2 = ${(p.gd+1.2).toFixed(1)} mm).`);
-    if (p.tclr >= p.gd - 0.4) err.push('Deckelkante greift kaum in die Nut (Nuttiefe größer oder Spiel kleiner).');
+    if (p.tclr >= p.gd - 0.4) err.push('Jalousiekante greift kaum in die Nut (Nuttiefe größer oder Spiel kleiner).');
     if (p.ft < 0.15) warn.push('Film sehr dünn – unter einer Schicht nicht druckbar.');
-    if (p.ft > 0.6) warn.push('Dicker Film – Deckel wird steif und läuft schwer um die Rundung.');
-    if (p.rMin < 5) warn.push(`Enge Rundung (Bahnradius ${p.rMin.toFixed(1)} mm) – Film wird stark gebogen.`);
+    if (p.ft > 0.6) warn.push('Dicker Film – Jalousie wird steif und läuft schwer um die Rundung.');
+    if (p.rMin < 6) warn.push(`Enge Rundung (Bahnradius ${p.rMin.toFixed(1)} mm) – Film wird stark gebogen.`);
     if (p.jointAngle > 40) warn.push(`Knick ${p.jointAngle.toFixed(0)}° je Rippe in der Rundung – Rippen schmaler machen.`);
-    if (p.skinA > 45) warn.push(`Abdeckung ${p.skinA}° – oberhalb 45° hängt sie über (Brückenleistung nötig).`);
-    p.Wl = p.W - 2*(p.wall - p.gd + p.tclr);  // Deckelbreite
+    p.Wl = p.W - 2*(p.wall - p.gd + p.tclr);          // Jalousie-Breite (Kanten in der Nut)
+    p.hm = (p.Wl - (p.W - 2*p.wall - 3))/2;           // Griffleiste schmaler als lichte Weite
+    p.zEnd = p.stopH + 0.6;                           // tiefster Punkt des Jalousie-Endes hinten
     p.warn = warn; p.err = err;
     return p;
   }
 
-  /* --- Bahn der Nut-Mittellinie im Profil (y,z): von hinten außen → oben → Rundung → vorne runter --- */
+  /* --- Bahn der Nut-Mittellinie im Profil (y,z): vorne oben → hinten → Rundung → Rückseite runter --- */
   function makePath(p){
-    const {c,H,D,Rf} = p, segs=[];
-    const Lout = p.Lout;
+    const {c,H,D,Rb} = p, segs=[];
     const line = (a,b) => segs.push({t:'l',a,b,L:Math.hypot(b[0]-a[0],b[1]-a[1])});
-    line([D+Lout, H-c],[Rf, H-c]);
-    segs.push({t:'a',cx:Rf,cz:H-Rf,r:Rf-c,t0:PI/2,t1:PI,L:(Rf-c)*PI/2});
-    line([c, H-Rf],[c, p.floor + 1]);
+    line([p.yS, H-c],[D-Rb, H-c]);
+    segs.push({t:'a',cx:D-Rb,cz:H-Rb,r:Rb-c,t0:PI/2,t1:0,L:(Rb-c)*PI/2});
+    line([D-c, H-Rb],[D-c, -3]);
     let s=0; segs.forEach(g=>{g.s0=s; s+=g.L;});
     function at(s){
       s=Math.max(0,Math.min(segs.at(-1).s0+segs.at(-1).L,s));
@@ -208,9 +211,10 @@ function makeGeo(wasm){
       const f=g.L?(s-g.s0)/g.L:0;
       if (g.t==='l') return {y:g.a[0]+(g.b[0]-g.a[0])*f, z:g.a[1]+(g.b[1]-g.a[1])*f, ty:(g.b[0]-g.a[0])/g.L, tz:(g.b[1]-g.a[1])/g.L};
       const t=g.t0+(g.t1-g.t0)*f;
-      return {y:g.cx+g.r*Math.cos(t), z:g.cz+g.r*Math.sin(t), ty:-Math.sin(t), tz:Math.cos(t)};
+      return {y:g.cx+g.r*Math.cos(t), z:g.cz+g.r*Math.sin(t), ty:Math.sin(t), tz:-Math.cos(t)};
     }
-    return {segs,total:s,at,sD:Lout,sArc0:segs[1].s0,sArc1:segs[2].s0};
+    const sArc0=segs[1].s0, sArc1=segs[2].s0;
+    return {segs,total:s,at,sArc0,sArc1,sEnd:sArc1+(H-Rb-p.zEnd)};
   }
 
   // Gelenkpunkte entlang der Bahn, Sehnenabstände = lens[i]
@@ -225,41 +229,36 @@ function makeGeo(wasm){
   }
 
   function layout(p){
-    // Länge des flexiblen Teils: Rückwand bis Ende der Rundung (+ fDown)
-    const top = p.D - p.Rf, arc = (p.Rf - p.c)*PI/2;
-    p.N = Math.max(4, Math.round((top + arc + p.fDown)/p.pitch));
-    p.Lf = p.N*p.pitch;
-    p.Lout = p.Lf + p.hl + 15;
     const path = makePath(p);
-    p.lens = [p.hl, ...Array(p.N).fill(p.pitch)];
-    p.sClosed = path.sD - p.hl - 0.2;             // hinteres Griffende im geschlossenen Zustand
-    const js = chain(path, p.sClosed, p.lens);
-    p.sFront = js.at(-1);
-    p.sGEnd = p.sFront + 1.5;                      // Nut-Ende vorne
-    if (p.sGEnd > path.total) p.err.push('Box zu niedrig für die Deckellänge vorne (fDown kleiner).');
-    p.zGEnd = path.at(p.sGEnd).z;
-    p.skinS0 = path.sArc1, p.skinS1 = path.sArc1 - (p.Rf-p.c)*p.skinA*PI/180;
-    if (p.skinA > 0 && p.sFront < p.skinS1 + 2) p.warn.push('Deckel endet vor der Abdeckung – wird vorne nicht festgehalten.');
-    p.pullMax = p.Lf + 2;
+    p.s0 = 0.3;                                   // Jalousie-Vorderkante (geschlossen)
+    // geschlossen: von vorne bis Ende der hinteren Rundung
+    p.N = Math.max(4, Math.round((path.sArc1 - p.s0 - p.hu)/p.pitch));
+    p.lens = [p.hu, ...Array(p.N).fill(p.pitch)];
+    p.Lf = p.hu + p.N*p.pitch;
+    const tail = s0 => chain(path, s0, p.lens).at(-1);
+    if (tail(p.s0) > path.sEnd) p.err.push('Rückseite zu kurz – Jalousie passt geschlossen nicht in die Bahn (Box höher oder tiefer).');
+    // maximaler Weg: Griff bis Ende der hinteren Rundung, Ende bis zum Endstopp
+    let hi = path.sArc1 - p.hu - 0.5, lo = p.s0;
+    if (tail(hi) > path.sEnd){ for (let i=0;i<40;i++){ const m=(lo+hi)/2; tail(m)<=path.sEnd?lo=m:hi=m; } hi=lo; }
+    p.sOpen = Math.max(p.s0, hi);
+    p.openLen = p.sOpen - p.s0;
+    p.openFrac = Math.min(1, p.openLen / (path.sArc0 - p.s0));
+    if (p.openFrac < 0.97) p.warn.push(`Rückseite zu kurz für volle Öffnung – Deckel öffnet ${(p.openFrac*100).toFixed(0)} % (Box höher machen).`);
     return path;
   }
 
   function outerProfile(p){
     const pts=[[0,0],[p.D,0]];
-    if (p.Rb>0.05) arcPts(p.D-p.Rb,p.H-p.Rb,p.Rb,0,PI/2,pts); else pts.push([p.D,p.H]);
-    arcPts(p.Rf,p.H-p.Rf,p.Rf,PI/2,PI,pts);
+    arcPts(p.D-p.Rb,p.H-p.Rb,p.Rb,0,PI/2,pts);
+    if (p.Rf>0.05) arcPts(p.Rf,p.H-p.Rf,p.Rf,PI/2,PI,pts); else pts.push([0,p.H]);
     return polyCS(pts);
   }
   function grooveCS(p, path){
-    const s0 = path.sD - 3, s1 = p.sGEnd, ss=[];
-    for (const g of path.segs){
-      const a=Math.max(s0,g.s0), b=Math.min(s1,g.s0+g.L); if (b<=a) continue;
-      const n = g.t==='a' ? Math.max(6,Math.ceil((b-a)/0.5)) : 1;
-      for (let i=0;i<n;i++) ss.push(a+(b-a)*i/n);
-    }
-    ss.push(s1);
+    const ss=[];
+    for (const g of path.segs){ const n = g.t==='a' ? Math.max(6,Math.ceil(g.L/0.5)) : 1; for (let i=0;i<n;i++) ss.push(g.s0+g.L*i/n); }
+    ss.push(path.total);
     const L=[],R=[], h=p.gw/2;
-    for (const s of ss){ const q=path.at(s), ny=q.tz, nz=-q.ty;   // nach außen
+    for (const s of ss){ const q=path.at(s), ny=-q.tz, nz=q.ty;
       L.push([q.y+ny*h,q.z+nz*h]); R.push([q.y-ny*h,q.z-nz*h]); }
     return polyCS(L.concat(R.reverse()));
   }
@@ -272,65 +271,62 @@ function makeGeo(wasm){
     const right = extrudeX(prof,p.W-p.wall,p.W).subtract(extrudeX(groove, p.W-p.wall-ext, p.W-p.wall+p.gd));
     const outer = extrudeX(prof, 0, p.W);
     const inner = extrudeX(prof.offset(-p.ic,'Round',2,SEG), 0, p.W);
-    const zIn = p.H - p.ic;                                       // Unterkante Deckel-Kanal oben
+    const zIn = p.H - p.ic, yB = p.D - p.ic - p.back, yF = p.fwT;
     const parts=[right];
-    parts.push(box(x0,0,0,x1,p.D,p.floor).intersect(outer));      // Boden
-    const yF = p.ic + p.fwT, yB = p.D - p.back;
-    // Front: unten massiv bis Nut-Ende, darüber Innenwand hinter dem Kanal
-    const zSolid = Math.max(p.floor, p.zGEnd);
-    parts.push(box(x0,0,0,x1,yF,zSolid).intersect(outer));
-    parts.push(box(x0,0,0,x1,p.rim,p.H-p.Rf+0.01));               // Außenhaut bis zur Rundung (verdeckt Nut-Ende)
-    parts.push(box(x0,p.ic,0,x1,yF,p.H).intersect(inner));
-    // Abdeckung über der Rundung
-    if (p.skinA > 0){
-      const cz=p.H-p.Rf, t1=PI, t0=PI - p.skinA*PI/180, pts=[];
-      arcPts(p.Rf,cz,p.Rf+0.01,t1,t0,pts); arcPts(p.Rf,cz,p.Rf-p.rim,t0,t1,pts);
-      parts.push(extrudeX(polyCS(pts),x0,x1).intersect(outer));
-    }
-    // Rückwand unter dem Kanal, Querleiste darüber
-    parts.push(box(x0,yB,0,x1,p.D,zIn));
-    if (p.bb > 0) parts.push(box(x0,p.D-p.bb,p.H-p.rim,x1,p.D,p.H).intersect(outer));
+    parts.push(box(x0,0,0,x1,p.D-p.ic,p.floor));                         // Boden (endet vor dem Kanal hinten)
+    parts.push(box(x0,0,0,x1,yF,p.H).intersect(outer));                  // Frontwand
+    // feste Kappe vorne oben (Anschlag für den Griff), unten 45°-Fase, dann gerade Brücke
+    const cap = polyCS([[0,zIn-3],[yF,zIn-3],[yF+3,zIn],[p.yS,zIn],[p.yS,p.H+1],[0,p.H+1]]);
+    parts.push(extrudeX(cap,x0,x1).intersect(outer));
+    // Rückwand hinter dem Jalousie-Kanal
+    parts.push(box(x0,yB,0,x1,p.D-p.ic,p.H).intersect(inner));
     // Trennwände
-    const zTop = Math.min(zIn, p.floor + p.divH), space = inner.add(box(0,p.D/2,0,p.W,p.D,zIn));
+    const zTop = Math.min(zIn, p.floor + p.divH);
     for (let i=1;i<=p.div;i++){
       const x = p.wall + (p.W-2*p.wall)*i/(p.div+1);
-      parts.push(box(x-p.divT/2,yF-ext,0,x+p.divT/2,yB+ext,zTop).intersect(space));
+      parts.push(box(x-p.divT/2,yF-ext,0,x+p.divT/2,yB+ext,zTop).intersect(inner));
     }
     for (let i=1;i<=p.divQ;i++){
       const y = yF + (yB-yF)*i/(p.divQ+1);
-      parts.push(box(x0,y-p.divT/2,0,x1,y+p.divT/2,zTop).intersect(space));
+      parts.push(box(x0,y-p.divT/2,0,x1,y+p.divT/2,zTop).intersect(inner));
     }
     p.inner = {w:p.W-2*p.wall, d:yB-yF, h:zIn-p.floor};
     return {left, rest: unionAll(parts)};
   }
 
-  /* --- Deckel, lokal: x quer (0..Wl), u längs (0 = Griffende hinten), w Dicke (0 = Film/Innenseite) --- */
-  function lidHandle(p){
-    const {hl,lt,hh,Wl} = p, top = lt + hh;
-    let cs = polyCS([[0,0],[hl,0],[hl,lt],[hl-0.6,top],[0.6,top],[0,top-0.6]]);
-    for (let i=0;i<3;i++){ const u = hl*(0.25 + 0.25*i); cs = cs.subtract(rect(u-0.5, top-Math.min(0.8,hh*0.4), u+0.5, top+1)); }
-    const m = Math.min(3, Wl*0.08);
-    return extrudeX(cs,0,Wl).intersect(box(0,0,0,Wl,hl,top).subtract(box(-1,-1,top-0.6,m,hl+1,top+1)).subtract(box(Wl-m,-1,top-0.6,Wl+1,hl+1,top+1)));
-  }
-  function lidSeg(p){
-    const {pitch,ft,lt,rw,rg,Wl} = p;
-    const cs = rect(0,0,pitch,ft).add(rect(rg/2,0,rg/2+rw,lt));
-    return extrudeX(cs,0,Wl);
-  }
-  function lidFlat(p){
-    const seg = lidSeg(p), parts=[lidHandle(p)];
-    for (let k=0;k<p.N;k++) parts.push(seg.translate([0,p.hl+k*p.pitch,0]));
+  /* --- Endstopp-Leiste: steckt unten hinten in beiden Nuten --- */
+  function stopBar(p){
+    const yc = p.D - p.c, h = (p.gw-0.1)/2, x0=p.wall-p.gd+0.1, x1=p.W-p.wall+p.gd-0.1;
+    const parts=[box(x0,yc-h,0,x1,yc+h,p.stopH)];
+    for (const xc of [(x0+p.wall)/2, (x1+p.W-p.wall)/2]) parts.push(box(xc-0.4,yc-h-0.15,0.6,xc+0.4,yc+h+0.15,p.stopH));
     return unionAll(parts);
   }
 
-  return {derive, layout, body, lidHandle, lidSeg, lidFlat, chain};
+  /* --- Jalousie, lokal: x quer (0..Wl), u längs (0 = Vorderkante mit Griff), w Dicke (0 = Film/Innenseite) --- */
+  function lidHandle(p){
+    const {hu,ft,lt,hh,rg,Wl,hm} = p, uR = hu - rg/2, top = lt + hh;
+    const base = extrudeX(rect(0,0,hu,ft).add(rect(0,0,uR,lt)),0,Wl);
+    const ridge = extrudeX(polyCS([[0,lt-0.01],[uR,lt-0.01],[uR,top-0.5],[uR-0.5,top],[0,top]]), hm, Wl-hm);
+    return base.add(ridge);
+  }
+  function lidSeg(p){
+    const {pitch,ft,lt,rw,rg,Wl} = p;
+    return extrudeX(rect(0,0,pitch,ft).add(rect(rg/2,0,rg/2+rw,lt)),0,Wl);
+  }
+  function lidFlat(p){
+    const seg = lidSeg(p), parts=[lidHandle(p)];
+    for (let k=0;k<p.N;k++) parts.push(seg.translate([0,p.hu+k*p.pitch,0]));
+    return unionAll(parts);
+  }
+
+  return {derive, layout, body, stopBar, lidHandle, lidSeg, lidFlat, chain};
 }
 // GEO-END
 
 const GEO = makeGeo(wasm);
 
 /* ---------- UI ---------- */
-const KEY = 'jalousieBox4';
+const KEY = 'jalousieBox5';
 let P = {...DEF};
 try { const s = JSON.parse(localStorage.getItem(KEY) || '{}'); for (const k in s) if (k in DEF) P[k] = +s[k]; } catch(e) {}
 const ctl = document.getElementById('controls');
@@ -368,8 +364,9 @@ const grid=new THREE.GridHelper(1000,100,0x2a2c31,0x1d1f23); grid.rotation.x=Mat
 
 const matBody=new THREE.MeshStandardMaterial({color:0xc9b48a,roughness:.75,metalness:0});
 const matLid=new THREE.MeshStandardMaterial({color:0x6b4d33,roughness:.6,metalness:0});
+const matStop=new THREE.MeshStandardMaterial({color:0xe8c26a,roughness:.5,metalness:0});
 const group=new THREE.Group(); scene.add(group);
-let meshLeft, meshRest, lidGroup, cur=null;
+let meshLeft, meshRest, meshStop, lidGroup, cur=null;
 
 function toGeom(man){
   const m=man.getMesh(), g=new THREE.BufferGeometry();
@@ -398,8 +395,8 @@ function rebuild(){
   clearGroup();
   const {left,rest}=GEO.body(p,path);
   meshLeft=new THREE.Mesh(toGeom(left),matBody); meshRest=new THREE.Mesh(toGeom(rest),matBody);
-  group.add(meshLeft,meshRest);
-  // Deckel-Teile in lokalen Koordinaten (w um Deckelmitte zentriert)
+  meshStop=new THREE.Mesh(toGeom(GEO.stopBar(p)),matStop);
+  group.add(meshLeft,meshRest,meshStop);
   const gH=toGeom(GEO.lidHandle(p).translate([0,0,-p.lt/2])), gS=toGeom(GEO.lidSeg(p).translate([0,0,-p.lt/2]));
   lidGroup=new THREE.Group(); group.add(lidGroup);
   for (let k=0;k<=p.N;k++){ const m=new THREE.Mesh(k?gS:gH,matLid); m.matrixAutoUpdate=false; lidGroup.add(m); }
@@ -412,19 +409,20 @@ function rebuild(){
 function placeLid(){
   if(!cur) return; const {p,path}=cur;
   const f=(+document.getElementById('open').value)/100;
-  const js=GEO.chain(path, p.sClosed - f*p.pullMax, p.lens);
-  const x0=(p.W+p.Wl)/2;
+  const js=GEO.chain(path, p.s0 + f*p.openLen, p.lens);
+  const x0=(p.W-p.Wl)/2;
   lidGroup.children.forEach((m,k)=>{
     const a=path.at(js[k]), b=path.at(js[k+1]);
     let dy=b.y-a.y, dz=b.z-a.z; const L=Math.hypot(dy,dz)||1; dy/=L; dz/=L;
-    const ny=dz, nz=-dy;                       // nach außen
-    m.matrix.set(-1,0,0,x0, 0,dy,ny,a.y, 0,dz,nz,a.z, 0,0,0,1);
+    const ny=-dz, nz=dy;                        // nach außen
+    m.matrix.set(1,0,0,x0, 0,dy,ny,a.y, 0,dz,nz,a.z, 0,0,0,1);
   });
 }
 function applyVis(){
   if(!meshLeft) return;
   meshLeft.visible=!document.getElementById('hideLeft').checked;
   lidGroup.visible=document.getElementById('showLid').checked;
+  meshStop.visible=document.getElementById('showStop').checked;
 }
 function info(ms){
   const p=cur.p, f=n=>n.toFixed(1).replace('.',','), f2=n=>n.toFixed(2).replace('.',',');
@@ -433,8 +431,8 @@ function info(ms){
   rows.push(`<div>Innen (ca.): ${f(p.inner.w)} × ${f(p.inner.d)} × ${f(p.inner.h)} mm</div>`);
   const fd=(p.inner.d - p.divQ*p.divT)/(p.divQ+1), fw=(p.inner.w - p.div*p.divT)/(p.div+1);
   rows.push(`<div>Fächer: ${(p.div+1)*(p.divQ+1)} × ${f(fw)} breit × ${f(fd)} tief · ≈ ${Math.floor(fd/0.7)}–${Math.floor(fd/0.6)} Karten in Hülle je Fach</div>`);
-  rows.push(`<div>Deckel: ${f(p.Lf+p.hl)} × ${f(p.Wl)} × ${f2(p.lt)} mm · ${p.N} Rippen · Film ${f2(p.ft)} mm</div>`);
-  rows.push(`<div>Nut: ${f2(p.gw)} breit, ${f2(p.gd)} tief · Bahnradius vorne ${f(p.rMin)} mm</div>`);
+  rows.push(`<div>Jalousie: ${f(p.Lf)} × ${f(p.Wl)} × ${f2(p.lt)} mm · ${p.N} Rippen · Film ${f2(p.ft)} mm</div>`);
+  rows.push(`<div>Öffnung: ${f(p.openLen)} mm (${(p.openFrac*100).toFixed(0)} %) · Bahnradius hinten ${f(p.rMin)} mm</div>`);
   rows.push(`<div>Korpus ≈ ${f(cur.vol/1000)} cm³</div>`);
   for (const e of p.err) rows.push(`<div class="e">✖ ${e}</div>`);
   for (const w of p.warn) rows.push(`<div class="w">⚠ ${w}</div>`);
@@ -463,16 +461,18 @@ const tag=()=>`${P.W}x${P.D}x${P.H}`;
 async function busy(fn){ const bs=document.querySelectorAll('.btns button'); bs.forEach(b=>b.disabled=true);
   await new Promise(r=>setTimeout(r,30)); try{ fn(); } catch(e){ alert('Fehler: '+e.message); } bs.forEach(b=>b.disabled=false); }
 function exBody(){ const p=GEO.derive(P), path=GEO.layout(p), {left,rest}=GEO.body(p,path); stl(left.add(rest),`jalousie-box_korpus_${tag()}.stl`); }
-function exLid(){ const p=GEO.derive(P); GEO.layout(p); stl(GEO.lidFlat(p),`jalousie-box_deckel_${tag()}.stl`); }
+function exLid(){ const p=GEO.derive(P); GEO.layout(p); stl(GEO.lidFlat(p),`jalousie-box_jalousie_${tag()}.stl`); }
+function exStop(){ const p=GEO.derive(P); GEO.layout(p); const s=GEO.stopBar(p), bb=s.boundingBox(); stl(s.translate([-bb.min[0],-bb.min[1],0]),`jalousie-box_endstopp_${tag()}.stl`); }
 document.getElementById('exBody').onclick=()=>busy(exBody);
 document.getElementById('exLid').onclick=()=>busy(exLid);
-document.getElementById('exAll').onclick=()=>busy(()=>{exBody();exLid();});
+document.getElementById('exStop').onclick=()=>busy(exStop);
+document.getElementById('exAll').onclick=()=>busy(()=>{exBody();exLid();exStop();});
 document.getElementById('reset').onclick=()=>{ P={...DEF}; try{localStorage.removeItem(KEY);}catch(e){} buildControls(); rebuild(); fit(); };
 document.getElementById('fit').onclick=fit;
 const oR=document.getElementById('open'), oN=document.getElementById('openN');
 oR.oninput=()=>{oN.value=oR.value; placeLid();};
 oN.onchange=()=>{oR.value=Math.min(100,Math.max(0,+oN.value||0)); oN.value=oR.value; placeLid();};
-['hideLeft','showLid'].forEach(id=>document.getElementById(id).onchange=applyVis);
+['hideLeft','showLid','showStop'].forEach(id=>document.getElementById(id).onchange=applyVis);
 
 resize();
 try { rebuild(); } catch(e){ document.getElementById('loading').textContent='Fehler: '+e.message; console.error(e); }
