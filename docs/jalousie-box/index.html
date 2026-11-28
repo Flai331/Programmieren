@@ -60,7 +60,7 @@
 <body>
 <aside>
   <h1>Jalousie-Box Generator</h1>
-  <div class="sub">Box mit flexiblem Rippen-Schiebedeckel · ein Teil, keine Stützen, kein Kleber · Maße in mm</div>
+  <div class="sub">Box mit flexiblem Rippen-Schiebedeckel · ein Teil, keine Stützen, kein Kleber · Maße in mm<br>Standard: 2 Fächer für je 70–80 Magic-Karten in Hülle (66 × 91 mm)</div>
   <div id="controls"></div>
 
   <details open>
@@ -81,6 +81,9 @@
   </div>
 
   <div id="info">Lade …</div>
+  <div class="hint" style="margin-top:8px">Fertig zum Drucken (Standardwerte, 2 MTG-Fächer):
+    <a href="stl/mtg-2-faecher_korpus_75.5x122x100.stl" download style="color:var(--accent)">Korpus</a> ·
+    <a href="stl/mtg-2-faecher_deckel_75.5x122x100.stl" download style="color:var(--accent)">Deckel</a></div>
 
   <details open>
     <summary>Druck &amp; Montage</summary>
@@ -111,9 +114,9 @@ const wasm = await ManifoldModule(); wasm.setup();
 /* ---------- Parameter ---------- */
 const SPEC = [
   {g:'Außenmaße & Form', open:true, items:[
-    ['W','Breite',30,400,0.5,70],
-    ['D','Tiefe',30,400,0.5,82],
-    ['H','Höhe',25,300,0.5,102],
+    ['W','Breite',30,400,0.5,75.5],
+    ['D','Tiefe',30,400,0.5,122],
+    ['H','Höhe',25,300,0.5,100],
     ['Rf','Radius vorne oben (Deckel läuft herum)',5,80,0.5,10],
     ['Rb','Radius hinten oben',0,5,0.1,1.2],
   ]},
@@ -125,7 +128,7 @@ const SPEC = [
     ['bb','Querleiste hinten oben, Tiefe (0 = keine)',0,15,0.5,3],
     ['skinA','Abdeckung der Rundung vorne (Grad, 0 = keine)',0,70,1,45],
     ['div','Trennwände längs (teilen die Breite)',0,12,1,0],
-    ['divQ','Trennwände quer (teilen die Tiefe)',0,12,1,0],
+    ['divQ','Trennwände quer (teilen die Tiefe)',0,12,1,1],
     ['divT','Trennwand-Stärke',0.6,5,0.1,1.2],
     ['divH','Trennwand-Höhe',5,300,1,60],
   ]},
@@ -327,7 +330,7 @@ function makeGeo(wasm){
 const GEO = makeGeo(wasm);
 
 /* ---------- UI ---------- */
-const KEY = 'jalousieBox3';
+const KEY = 'jalousieBox4';
 let P = {...DEF};
 try { const s = JSON.parse(localStorage.getItem(KEY) || '{}'); for (const k in s) if (k in DEF) P[k] = +s[k]; } catch(e) {}
 const ctl = document.getElementById('controls');
@@ -428,6 +431,8 @@ function info(ms){
   const rows=[];
   rows.push(`<div>Außen: <b>${f(p.W)} × ${f(p.D)} × ${f(p.H)}</b> mm</div>`);
   rows.push(`<div>Innen (ca.): ${f(p.inner.w)} × ${f(p.inner.d)} × ${f(p.inner.h)} mm</div>`);
+  const fd=(p.inner.d - p.divQ*p.divT)/(p.divQ+1), fw=(p.inner.w - p.div*p.divT)/(p.div+1);
+  rows.push(`<div>Fächer: ${(p.div+1)*(p.divQ+1)} × ${f(fw)} breit × ${f(fd)} tief · ≈ ${Math.floor(fd/0.7)}–${Math.floor(fd/0.6)} Karten in Hülle je Fach</div>`);
   rows.push(`<div>Deckel: ${f(p.Lf+p.hl)} × ${f(p.Wl)} × ${f2(p.lt)} mm · ${p.N} Rippen · Film ${f2(p.ft)} mm</div>`);
   rows.push(`<div>Nut: ${f2(p.gw)} breit, ${f2(p.gd)} tief · Bahnradius vorne ${f(p.rMin)} mm</div>`);
   rows.push(`<div>Korpus ≈ ${f(cur.vol/1000)} cm³</div>`);
