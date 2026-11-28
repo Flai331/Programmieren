@@ -116,9 +116,20 @@ class _CompanyScreenState extends State<CompanyScreen> {
         bank: _bankController.text.isEmpty ? null : _bankController.text,
         paypal: _paypalController.text.isEmpty ? null : _paypalController.text,
         createdAt: _company?.createdAt ?? DateTime.now(),
+        // Mitnehmen statt überschreiben. Die Spalte wird seit v8 nicht mehr
+        // gelesen — das Format steht in den App-Einstellungen —, aber eine
+        // Datenbank, deren Migration noch aussteht, soll ihr Format behalten.
+        invoiceNumberPattern: _company?.invoiceNumberPattern ??
+            InvoiceNumberGenerator.defaultPattern,
       );
 
       await _dbService.insertCompany(company);
+
+      // Sofort merken, nicht erst am Ende. Vorher stand das unter den
+      // Design-Einstellungen — und als deren Speichern warf, blieb `_company`
+      // leer. Der nächste Druck auf „Speichern" zog dann eine neue Kennung
+      // und legte eine weitere Firma an, eine je Versuch.
+      _company = company;
 
       // Create default design settings if not exists
       final existingDesign = await _dbService.getDesignSettings(company.id);
@@ -138,7 +149,6 @@ class _CompanyScreenState extends State<CompanyScreen> {
         data: company.toMap(),
       );
 
-      _company = company;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Firmendaten gespeichert')),
       );

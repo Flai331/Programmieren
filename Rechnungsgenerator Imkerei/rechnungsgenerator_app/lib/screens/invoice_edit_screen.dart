@@ -62,10 +62,18 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
   /// Angebot = 'AN-' + Firmen-Pattern → AN-Prefix, gleiche KUNDENNR-Logik,
   /// eigene laufende Zählung (AN-Prefix isoliert die {NR}-Sequenz von Rechnungen).
   String _numberPattern() {
-    final base = _company?.invoiceNumberPattern ??
-        InvoiceNumberGenerator.defaultPattern;
+    // Seit v8 aus den App-Einstellungen statt von der Firma: so gilt das
+    // eingestellte Format auch, bevor Firmendaten angelegt sind.
+    final base = PersonalizationService().text(
+        AppTexts.invoiceNumberPattern, InvoiceNumberGenerator.defaultPattern);
     return _isQuote ? 'AN-$base' : base;
   }
+
+  /// Worauf ausgewichen wird, wenn das eingestellte Format nicht taugt.
+  /// Beim Angebot auf das Angebots-Format, sonst bliebe das „AN-" weg.
+  String _patternFallback() => _isQuote
+      ? InvoiceNumberGenerator.quoteDefaultPattern
+      : InvoiceNumberGenerator.defaultPattern;
 
   // ── Tab 2: Absender ─────────────────────────────────────────
   late TextEditingController _companyNameCtrl;
@@ -171,26 +179,37 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
   Future<void> _initialize() async {
     setState(() => _isLoading = true);
     try {
-      final companies = await _dbService.getAllCompanies();
+      final companies = await FeedbackService.measure(
+          'Rechnung: Firma laden', _dbService.getAllCompanies);
       if (companies.isNotEmpty) {
         _company = companies.first;
         _fillCompanyFields(_company!);
       }
       if (_company != null) {
-        _designSettings = await _dbService.getDesignSettings(_company!.id);
+        _designSettings = await FeedbackService.measure('Rechnung: Design laden',
+            () => _dbService.getDesignSettings(_company!.id));
       }
       if (widget.invoiceId != null) {
-        _currentInvoice = await _dbService.getInvoice(widget.invoiceId!);
-        _items = await _dbService.getInvoiceItems(widget.invoiceId!);
+        await FeedbackService.measure('Rechnung: Beleg laden', () async {
+          _currentInvoice = await _dbService.getInvoice(widget.invoiceId!);
+          _items = await _dbService.getInvoiceItems(widget.invoiceId!);
+        });
         _selectedCustomerId = _currentInvoice?.customerId;
         _populateForm();
       } else {
         // Nummer aus konfiguriertem Pattern generieren (Angebot = AN-Prefix)
+        //
+        // Gemessen, weil hier *alle* bisherigen Rechnungsnummern aus der
+        // Datenbank kommen und die Suche nach der höchsten Laufnummer über
+        // die ganze Liste geht: dieser Schritt wächst mit dem Bestand mit.
         final pattern = _numberPattern();
-        final existingNumbers = await _dbService.getAllInvoiceNumbers();
-        _invoiceNumberCtrl.text = InvoiceNumberGenerator.generate(
-          pattern: pattern,
-          existingNumbers: existingNumbers,
+        _invoiceNumberCtrl.text = await FeedbackService.measure(
+          'Rechnungsnummer erzeugen',
+          () async => InvoiceNumberGenerator.generate(
+            pattern: pattern,
+            fallback: _patternFallback(),
+            existingNumbers: await _dbService.getAllInvoiceNumbers(),
+          ),
         );
         _invoiceDateCtrl.text = AppUtils.formatDate(DateTime.now());
       }
@@ -201,6 +220,10 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
             .showSnackBar(SnackBar(content: Text('Fehler: $e')));
       }
     } finally {
+      // Hält die Uhr an, die initState mit logScreenLoad gestartet hat —
+      // ausdrücklich außerhalb der mounted-Prüfung, sonst bliebe die Uhr
+      // stehen, wenn der Bildschirm vor dem Ende des Ladens verlassen wird.
+      FeedbackService.logScreenReady('InvoiceEdit');
       if (mounted) {
         setState(() => _isLoading = false);
         _schedulePreviewRefresh(); // Initiale Vorschau
@@ -1042,7 +1065,30 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
 
   Widget _buildInvoicePreviewCanvas() {
     final ds = _designSettings;
-    if (ds == null) return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()));
+    if (ds == null) {
+      // Hier drehte sich ein Rädchen für immer, wenn es keine
+      // Design-Einstellungen gab — und die gab es nie, solange
+      // `insertDesignSettings` an sechs fehlenden Spalten scheiterte.
+      // `null` hieß an dieser Stelle zweierlei; jetzt entscheidet
+      // `_isLoading`, ob wirklich noch etwas unterwegs ist.
+      if (_isLoading) {
+        return const SizedBox(
+            height: 200, child: Center(child: CircularProgressIndicator()));
+      }
+      return const SizedBox(
+        height: 200,
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'Keine Design-Einstellungen — erst Firmendaten anlegen.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Color(0xFF8a8a94)),
+            ),
+          ),
+        ),
+      );
+    }
 
     final layout = InvoiceLayoutCanvas.decodeLayout(ds.layoutJson);
     final textOverrides = InvoiceLayoutCanvas.decodeTexts(ds.layoutJson);
@@ -1332,6 +1378,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
                       _invoiceNumberCtrl.text =
                           InvoiceNumberGenerator.generate(
                         pattern: pattern,
+                        fallback: _patternFallback(),
                         existingNumbers: existingNumbers,
                         customerName: selected.name,
                         customerNumber: selected.customerNumber,
@@ -1365,6 +1412,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen>
               setState(() {
                 _invoiceNumberCtrl.text = InvoiceNumberGenerator.generate(
                   pattern: pattern,
+                  fallback: _patternFallback(),
                   existingNumbers: existingNumbers,
                   customerName: _customerNameCtrl.text,
                   customerNumber: int.tryParse(_customerNumberCtrl.text),

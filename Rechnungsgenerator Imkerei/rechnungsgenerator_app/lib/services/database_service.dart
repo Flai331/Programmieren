@@ -3,6 +3,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/models.dart';
 import '../utils/feedback_service.dart';
+import '../utils/invoice_number_generator.dart';
+import 'app_settings_keys.dart';
 
 /// Lokale SQLite-Datenbank via sqflite (offline-only, Play-Store-ready).
 class DatabaseService {
@@ -41,7 +43,16 @@ class DatabaseService {
 
   /// Schema-Version. Bei Erhöhung immer auch [_onUpgrade] ergänzen, sonst
   /// verlieren bestehende Installationen beim Update ihre Tabellen.
-  static const int _dbVersion = 7;
+  static const int _dbVersion = 8;
+
+  /// Nur für Tests: das frische Schema anlegen, wie beim ersten Start.
+  @visibleForTesting
+  Future<void> createSchemaForTests(Database db) => _onCreate(db, _dbVersion);
+
+  /// Nur für Tests: von einer alten Fassung heraufziehen, wie beim Update.
+  @visibleForTesting
+  Future<void> upgradeForTests(Database db, int from) =>
+      _onUpgrade(db, from, _dbVersion);
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     FeedbackService.log('🗄️ SQLite-Migration $oldVersion → $newVersion');
@@ -65,6 +76,133 @@ class DatabaseService {
     if (oldVersion < 7) {
       await createPersonalizationTables(db);
     }
+    if (oldVersion < 8) {
+      await repairDesignSettings(db);
+      await consolidateCompanies(db);
+      await moveInvoiceNumberPattern(db);
+    }
+  }
+
+  /// Schritt auf v8, dritte Hälfte: das Rechnungsnummer-Format zieht von der
+  /// Firma in die App-Einstellungen.
+  ///
+  /// An der Firma war es am falschen Ort: ohne angelegte Firmendaten war es
+  /// nicht einzustellen, und der Firmen-Bildschirm setzte es bei jedem
+  /// Speichern still zurück, weil er die Firma ohne das Format neu aufbaute.
+  ///
+  /// Übernommen wird nur ein Format, das auch taugt. Die alte Vorgabe
+  /// `RE-{YEAR}-{SEQ:3}` tut das nicht – sie zu übernehmen hieße, einen
+  /// Unfall zur Einstellung zu erheben.
+  @visibleForTesting
+  static Future<void> moveInvoiceNumberPattern(Database db) async {
+    final schon = await db.query('app_settings',
+        where: 'name = ?', whereArgs: [AppTexts.invoiceNumberPattern]);
+    if (schon.isNotEmpty) return;
+
+    final firmen = await db.query('companies', columns: ['invoice_number_pattern']);
+    for (final firma in firmen) {
+      final format = (firma['invoice_number_pattern'] as String?)?.trim() ?? '';
+      if (format.isEmpty || !InvoiceNumberGenerator.isUsable(format)) continue;
+      if (format == InvoiceNumberGenerator.defaultPattern) continue;
+      await db.insert('app_settings',
+          {'name': AppTexts.invoiceNumberPattern, 'value': format});
+      FeedbackService.log('🗄️ Rechnungsnummer-Format übernommen: $format');
+      return;
+    }
+  }
+
+  /// Schritt auf v8, erste Hälfte: die sechs Spalten, die `design_settings`
+  /// nie hatte.
+  ///
+  /// Das war kein vergessener Umbau, sondern eine unvollständige Tabelle: im
+  /// `CREATE TABLE` fehlten `logo_width`, `logo_height` und die vier
+  /// Spiegel-Schalter, obwohl `DesignSettingsModel.toMap()` sie schreibt.
+  /// Also schlug `insertDesignSettings` auf **jedem** Gerät fehl, auch bei
+  /// einer frischen Installation — mit der Folge, dass es nie
+  /// Design-Einstellungen gab: kein Logo, kein Kopfbild, und der
+  /// Firmen-Bildschirm brach beim Speichern ab.
+  ///
+  /// Eine frische Installation bekommt die Spalten jetzt schon aus dem
+  /// `CREATE TABLE`; hierher kommt, wer die unvollständige Tabelle bereits
+  /// auf dem Gerät hat — auch wer sie als frische v7 bekam. `addColumnIfMissing`
+  /// macht den Schritt gefahrlos wiederholbar.
+  @visibleForTesting
+  static Future<void> repairDesignSettings(Database db) async {
+    for (final spalte in designSettingsRepairColumns.entries) {
+      await addColumnIfMissing(db, 'design_settings', spalte.key, spalte.value);
+    }
+  }
+
+  /// Die Spalten aus [repairDesignSettings] — hier, damit der Test sie nicht
+  /// abschreiben muss und beide nicht auseinanderlaufen können.
+  @visibleForTesting
+  static const Map<String, String> designSettingsRepairColumns = {
+    'logo_width': 'REAL',
+    'logo_height': 'REAL',
+    'logo_flip_h': 'INTEGER',
+    'logo_flip_v': 'INTEGER',
+    'header_flip_h': 'INTEGER',
+    'header_flip_v': 'INTEGER',
+  };
+
+  /// Die Tabellen, die auf eine Firma zeigen. Beim Zusammenlegen müssen alle
+  /// mitgenommen werden, sonst zeigen Zeilen ins Leere.
+  @visibleForTesting
+  static const List<String> companyReferencingTables = [
+    'invoices',
+    'design_settings',
+    'address_templates',
+    'letters',
+  ];
+
+  /// Schritt auf v8, zweite Hälfte: mehrfach angelegte Firmen zusammenlegen.
+  ///
+  /// Solange [repairDesignSettings] fehlte, brach der Firmen-Bildschirm nach
+  /// dem `INSERT` der Firma ab. Damit bekam er die gespeicherte Firma nie zu
+  /// sehen und zog beim nächsten „Speichern" eine neue Kennung — eine
+  /// weitere Firma je Versuch.
+  ///
+  /// Gelöscht wird hier nichts, was irgendwo gebraucht wird: erst zeigen alle
+  /// Verweise auf die behaltene Firma, dann verschwinden die leeren Hüllen.
+  /// Behalten wird die mit den meisten ausgefüllten Feldern — bei Gleichstand
+  /// die älteste, denn an der hängt am ehesten schon etwas.
+  @visibleForTesting
+  static Future<void> consolidateCompanies(Database db) async {
+    final firmen = await db.query('companies');
+    if (firmen.length < 2) return;
+
+    int gefuellt(Map<String, Object?> firma) => firma.values
+        .where((w) => w != null && w.toString().trim().isNotEmpty)
+        .length;
+
+    final sortiert = [...firmen]..sort((a, b) {
+        final nachInhalt = gefuellt(b).compareTo(gefuellt(a));
+        if (nachInhalt != 0) return nachInhalt;
+        return (a['created_at'] as String? ?? '')
+            .compareTo(b['created_at'] as String? ?? '');
+      });
+
+    final behalten = sortiert.first['id'] as String;
+    final weg = sortiert.skip(1).map((f) => f['id'] as String).toList();
+
+    var umgehaengt = 0;
+    for (final tabelle in companyReferencingTables) {
+      for (final alt in weg) {
+        umgehaengt += await db.update(
+          tabelle,
+          {'company_id': behalten},
+          where: 'company_id = ?',
+          whereArgs: [alt],
+        );
+      }
+    }
+
+    for (final alt in weg) {
+      await db.delete('companies', where: 'id = ?', whereArgs: [alt]);
+    }
+
+    FeedbackService.log('🗄️ ${weg.length} doppelte Firma(en) zusammengelegt, '
+        '$umgehaengt Zeile(n) umgehängt');
   }
 
   /// Schritt auf v6: Die Eimer-Zustände werden eine Hakenliste.
@@ -393,10 +531,16 @@ class DatabaseService {
         top_header_url TEXT,
         logo_x REAL,
         logo_y REAL,
+        logo_width REAL,
+        logo_height REAL,
         header_x REAL,
         header_y REAL,
         header_width REAL,
         header_height REAL,
+        logo_flip_h INTEGER,
+        logo_flip_v INTEGER,
+        header_flip_h INTEGER,
+        header_flip_v INTEGER,
         layout_json TEXT,
         table_header_color TEXT,
         created_at TEXT,

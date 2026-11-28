@@ -2,7 +2,7 @@ name: beebrain
 description: "BeeBrain – Second Brain für Imker. Völker-Verwaltung, Maßnahmen-Doku, Saisonkalender, Rechnungen/Angebote/Briefe."
 publish_to: 'none'
 
-version: 1.0.0+19
+version: 1.0.0+20
 
 environment:
   sdk: ^3.11.4

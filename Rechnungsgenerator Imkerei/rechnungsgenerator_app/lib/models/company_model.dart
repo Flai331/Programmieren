@@ -1,3 +1,5 @@
+import '../utils/invoice_number_generator.dart';
+
 class CompanyModel {
   final String id;
   final String name;
@@ -15,7 +17,17 @@ class CompanyModel {
   final String? paypal;
   final DateTime createdAt;
   final DateTime? updatedAt;
-  /// Pattern für Rechnungsnummern (z.B. 'RE-{YEAR}-{SEQ:3}')
+  /// Pattern für Rechnungsnummern (z.B. 'RE-{JAHR}-{NR:3}').
+  ///
+  /// Altlast: seit Schema v8 steht das Format in `app_settings` unter
+  /// [AppTexts.invoiceNumberPattern] und nicht mehr an der Firma. Die Spalte
+  /// bleibt, damit alte Datenbanken lesbar sind und die Migration das dort
+  /// Eingestellte übernehmen kann – gelesen wird sie sonst nirgends mehr.
+  ///
+  /// Die Vorgabe stand hier einmal auf `RE-{YEAR}-{SEQ:3}`, also auf
+  /// englischen Platzhaltern, die der Generator nicht kennt. Jede so
+  /// angelegte Firma hätte ihre Rechnungen wörtlich „RE-{YEAR}-{SEQ:3}"
+  /// genannt – jede Rechnung gleich.
   final String invoiceNumberPattern;
 
   CompanyModel({
@@ -35,7 +47,7 @@ class CompanyModel {
     this.paypal,
     required this.createdAt,
     this.updatedAt,
-    this.invoiceNumberPattern = 'RE-{YEAR}-{SEQ:3}',
+    this.invoiceNumberPattern = InvoiceNumberGenerator.defaultPattern,
   });
 
   // Convert to JSON for API/Database
@@ -83,7 +95,7 @@ class CompanyModel {
           ? DateTime.parse(map['updated_at'] as String)
           : null,
       invoiceNumberPattern: map['invoice_number_pattern'] as String? ??
-          'RE-{YEAR}-{SEQ:3}',
+          InvoiceNumberGenerator.defaultPattern,
     );
   }
 

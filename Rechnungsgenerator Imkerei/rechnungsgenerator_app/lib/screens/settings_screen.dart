@@ -26,9 +26,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const Color _gold = Color(0xFFf6d365);
 
   CompanyModel? _company;
+
+  /// Die Abfrage nach der Firma ist durch – ob sie eine gefunden hat oder
+  /// nicht.
+  ///
+  /// Ohne dieses Feld hieße `_company == null` zweierlei: „wird noch geladen"
+  /// und „es gibt keine". Die Karte nahm immer das erste an und zeigte ein
+  /// Rädchen, das sich nie beruhigte, solange keine Firmendaten angelegt
+  /// waren.
+  bool _companyLoaded = false;
+
   late TextEditingController _patternCtrl;
   bool _patternSaving = false;
   String _patternPreview = '';
+
+  /// Was am eingegebenen Format nicht stimmt. Leer heißt: in Ordnung.
+  List<String> _patternProblems = const [];
 
   // ── Aktualisierung ──
   final UpdateService _updates = UpdateService();
@@ -55,7 +68,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _patternCtrl = TextEditingController();
+    // Das Format steht seit v8 in den App-Einstellungen und nicht mehr an der
+    // Firma: so lässt es sich einstellen, bevor Firmendaten angelegt sind,
+    // und das Speichern der Firmendaten kann es nicht mehr überschreiben.
+    // Der Dienst hat beim App-Start geladen und antwortet ohne Warten — die
+    // Karte hat damit gar nichts mehr, worauf sie warten müsste.
+    _patternCtrl = TextEditingController(
+      text: PersonalizationService().text(
+          AppTexts.invoiceNumberPattern, InvoiceNumberGenerator.defaultPattern),
+    );
+    _recomputePreview();
     _patternCtrl.addListener(_updatePreview);
     FeedbackService.logScreenLoad('Settings');
     _loadCompany();
@@ -72,40 +94,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final companies = await FeedbackService.measure(
         'Einstellungen: Firma laden', DatabaseService().getAllCompanies);
     if (!mounted) return;
-    if (companies.isNotEmpty) {
-      setState(() {
-        _company = companies.first;
-        _patternCtrl.text = _company!.invoiceNumberPattern;
-        _updatePreview();
-      });
-    }
+    setState(() {
+      _companyLoaded = true;
+      _company = companies.isNotEmpty ? companies.first : null;
+    });
     // Hält die Uhr an, die initState mit logScreenLoad gestartet hat. Damit
     // steht im Protokoll, wie lange dieser Reiter vom Antippen bis zur
     // Anzeige gebraucht hat — nicht nur, wie lange die Abfrage lief.
     FeedbackService.logScreenReady('Settings');
   }
 
+  /// Vorschau und Hinweise neu rechnen — ohne `setState`, damit das auch aus
+  /// `initState` heraus geht.
+  void _recomputePreview() {
+    final eingabe = _patternCtrl.text.trim();
+    final format =
+        eingabe.isEmpty ? InvoiceNumberGenerator.defaultPattern : eingabe;
+    // Die Vorschau zeigt, was wirklich auf der Rechnung stünde — bei einem
+    // untauglichen Format also die Vorgabe. Dass ausgewichen wurde, sagen die
+    // Hinweise darunter.
+    _patternPreview =
+        InvoiceNumberGenerator.preview(format, customerName: 'Mustermann');
+    _patternProblems = InvoiceNumberGenerator.problems(format);
+  }
+
   void _updatePreview() {
     if (!mounted) return;
-    setState(() {
-      _patternPreview = InvoiceNumberGenerator.preview(
-        _patternCtrl.text.trim().isEmpty
-            ? InvoiceNumberGenerator.defaultPattern
-            : _patternCtrl.text.trim(),
-        customerName: 'Mustermann',
-      );
-    });
+    setState(_recomputePreview);
   }
 
   Future<void> _savePattern() async {
-    if (_company == null) return;
     final pattern = _patternCtrl.text.trim();
     if (pattern.isEmpty) return;
     setState(() => _patternSaving = true);
     try {
-      final updated = _company!.copyWith(invoiceNumberPattern: pattern);
-      await DatabaseService().updateCompany(updated);
-      setState(() => _company = updated);
+      await PersonalizationService()
+          .setText(AppTexts.invoiceNumberPattern, pattern);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -411,14 +435,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
+            // Klartext statt Schweigen: ohne Firmendaten hat jede Rechnung
+            // keinen Absender. Bisher stand hier nur ein Knopf, und dass er
+            // noch nie gedrückt wurde, sagte niemand.
+            if (_companyLoaded && _company == null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: _gold.withAlpha(30),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _gold.withAlpha(120)),
+                ),
+                child: const Text(
+                  'Firmendaten sind noch nicht angelegt — eine Rechnung hätte '
+                  'damit keinen Absender. Das Rechnungsnummer-Format oben '
+                  'lässt sich trotzdem schon einstellen.',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF8a8a94)),
+                ),
+              ),
+            ],
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).push(
+                onPressed: () async {
+                  await Navigator.of(context).push(
                     MaterialPageRoute(
                         builder: (_) => const CompanyScreen()),
                   );
+                  // Nach der Rückkehr neu nachsehen: sonst stünde der Hinweis
+                  // noch da, obwohl die Firmendaten gerade angelegt wurden.
+                  await _loadCompany();
                 },
                 icon: const Icon(Icons.business),
                 label: const Text('Firmendaten'),
@@ -814,16 +862,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ── Rechnungsnummer-Karte ──────────────────────────────────────
+  /// Die Karte „Rechnungsnummern".
+  ///
+  /// Hier stand ein Rädchen, solange `_company == null` war — und gesetzt
+  /// wurde `_company` nur, wenn die Datenbank eine Firma hergab. Ohne
+  /// angelegte Firmendaten drehte es sich deshalb für immer: es wartete auf
+  /// etwas, das nie kommen konnte.
+  ///
+  /// Jetzt gibt es hier gar kein Warten mehr. Das Format kommt aus dem
+  /// [PersonalizationService], der beim App-Start geladen hat und ohne
+  /// Verzögerung antwortet. Kein Rädchen, kein Ladezustand, keine Firma.
   Widget _buildInvoiceNumberCard() {
-    if (_company == null) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      );
-    }
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -851,6 +900,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
+
+            // Was am Format nicht stimmt. Der Generator weicht in dem Fall auf
+            // die Vorgabe aus, damit nie geschweifte Klammern auf einem Beleg
+            // landen — aber stillschweigend soll das nicht passieren.
+            if (_patternProblems.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFff6b7a).withAlpha(30),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFff6b7a)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final hinweis in _patternProblems)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Text('⚠ $hinweis',
+                            style: const TextStyle(
+                                fontSize: 12, color: Color(0xFFff6b7a))),
+                      ),
+                    const Text(
+                      'Solange das so ist, wird die Vorgabe benutzt.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF8a8a94)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
 
             // Verfügbare Variablen (Chips)

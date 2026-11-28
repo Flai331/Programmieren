@@ -23,6 +23,67 @@ class InvoiceNumberGenerator {
   static const String defaultPattern = 'RE-{JAHR}-{NR:3}';
   static const String quoteDefaultPattern = 'AN-{JAHR}-{NR:3}';
 
+  /// Die Platzhalter, die dieser Generator kennt.
+  ///
+  /// `KUNDENNR` steht vor `KUNDE`, sonst schluckte die kürzere Alternative
+  /// den Anfang der längeren.
+  static final RegExp _bekannt = RegExp(
+      r'^\{(JAHR2|JAHR|MONAT|NR(?::\d+)?|KUNDENNR(?::\d+)?|KUNDE(?::\d+)?)\}$');
+
+  /// Irgendein geschweiftes Gebilde – bekannt oder nicht.
+  static final RegExp _geschweift = RegExp(r'\{[^{}]*\}');
+
+  /// Eine Laufnummer, ohne die jede Rechnung gleich hieße.
+  static final RegExp _laufnummer = RegExp(r'\{NR(?::(\d+))?\}');
+
+  /// Platzhalter im Format, die der Generator nicht kennt.
+  ///
+  /// Die bleiben sonst wörtlich stehen: aus `RE-{YEAR}-{SEQ:3}` wird keine
+  /// Nummer, sondern genau diese Zeichenkette – auf jeder Rechnung dieselbe.
+  static List<String> unknownPlaceholders(String pattern) => _geschweift
+      .allMatches(pattern)
+      .map((m) => m.group(0)!)
+      .where((p) => !_bekannt.hasMatch(p))
+      .toList();
+
+  /// Enthält das Format eine Laufnummer?
+  static bool hasSequence(String pattern) => _laufnummer.hasMatch(pattern);
+
+  /// Was an einem Format nicht stimmt, in Klartext.
+  ///
+  /// Leer heißt: brauchbar. Die Liste steht in den Einstellungen unter dem
+  /// Eingabefeld, damit ein Tippfehler auffällt, bevor er auf einem Beleg
+  /// landet.
+  static List<String> problems(String pattern) {
+    final gefunden = <String>[];
+    if (pattern.trim().isEmpty) {
+      gefunden.add('Das Format ist leer.');
+      return gefunden;
+    }
+    final unbekannt = unknownPlaceholders(pattern);
+    if (unbekannt.isNotEmpty) {
+      gefunden.add(unbekannt.length == 1
+          ? 'Den Platzhalter ${unbekannt.first} gibt es nicht.'
+          : 'Diese Platzhalter gibt es nicht: ${unbekannt.join(', ')}.');
+    }
+    if (!hasSequence(pattern)) {
+      gefunden.add('Ohne {NR} bekäme jede Rechnung dieselbe Nummer.');
+    }
+    return gefunden;
+  }
+
+  /// Taugt das Format, um daraus Nummern zu erzeugen?
+  static bool isUsable(String pattern) => problems(pattern).isEmpty;
+
+  /// Das Format, das wirklich benutzt wird: das eigene, wenn es taugt, sonst
+  /// die Vorgabe.
+  ///
+  /// Lieber eine richtige Nummer nach Vorgabe als geschweifte Klammern auf
+  /// einer Rechnung – und zweimal dieselbe Nummer wäre schlimmer als ein
+  /// Format, das nicht nach Wunsch aussieht.
+  static String effectivePattern(String pattern, {String? fallback}) =>
+      isUsable(pattern) ? pattern : (fallback ?? defaultPattern);
+
   /// Generiert die nächste Rechnungsnummer aus Pattern + Kontext.
   static String generate({
     required String pattern,
@@ -30,7 +91,9 @@ class InvoiceNumberGenerator {
     String? customerName,
     int? customerNumber,
     DateTime? date,
+    String? fallback,
   }) {
+    pattern = effectivePattern(pattern, fallback: fallback);
     final now = date ?? DateTime.now();
 
     final seqMatch = RegExp(r'\{NR(?::(\d+))?\}').firstMatch(pattern);
@@ -70,10 +133,15 @@ class InvoiceNumberGenerator {
   }
 
   /// Vorschau ohne echten NR (zeigt Platzhalter-Nummer).
+  ///
+  /// Zeigt, was wirklich auf der Rechnung stünde – also die Vorgabe, wenn das
+  /// eigene Format nicht taugt. Dass ausgewichen wurde, sagt daneben
+  /// [problems]; stillschweigend etwas anderes zu zeigen als zu drucken wäre
+  /// die schlechteste aller Möglichkeiten.
   static String preview(String pattern,
-      {String? customerName, int? customerNumber}) {
+      {String? customerName, int? customerNumber, String? fallback}) {
     final now = DateTime.now();
-    String result = pattern;
+    String result = effectivePattern(pattern, fallback: fallback);
     result = result.replaceAll('{JAHR}', now.year.toString());
     result = result.replaceAll(
         '{JAHR2}', now.year.toString().substring(2));

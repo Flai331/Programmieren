@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../services/database_service.dart';
+import '../services/personalization_service.dart';
 import '../services/season_service.dart';
 import '../models/models.dart';
 import '../utils/feedback_service.dart';
@@ -236,10 +237,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
     if (ok != true) return;
     try {
-      final companies = await _dbService.getAllCompanies();
-      final pattern = companies.isNotEmpty
-          ? companies.first.invoiceNumberPattern
-          : InvoiceNumberGenerator.defaultPattern;
+      // Das Format steht seit v8 in den App-Einstellungen, nicht mehr an der
+      // Firma — es gilt also auch, bevor Firmendaten angelegt sind.
+      final pattern = PersonalizationService().text(
+          AppTexts.invoiceNumberPattern, InvoiceNumberGenerator.defaultPattern);
       final existing = await _dbService.getAllInvoiceNumbers();
       final customer = await _dbService.getCustomer(quote.customerId);
       final newNumber = InvoiceNumberGenerator.generate(

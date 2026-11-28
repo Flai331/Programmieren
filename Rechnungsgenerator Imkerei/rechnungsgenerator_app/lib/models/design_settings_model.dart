@@ -65,15 +65,32 @@ class DesignSettingsModel {
       'header_y': headerY,
       'header_width': headerWidth,
       'header_height': headerHeight,
-      'logo_flip_h': logoFlipH,
-      'logo_flip_v': logoFlipV,
-      'header_flip_h': headerFlipH,
-      'header_flip_v': headerFlipV,
+      // 0/1 statt true/false: SQLite kennt kein Wahrheitswert-Feld, und
+      // sqflite weigert sich, ein Dart-`bool` überhaupt zu binden
+      // („Invalid sql argument type 'bool'"). Stand hier ein `bool`, schlug
+      // jedes Speichern fehl — zusammen mit den sechs Spalten, die der
+      // Tabelle fehlten, war das der Grund, warum Firmendaten nie zu
+      // speichern waren.
+      'logo_flip_h': logoFlipH ? 1 : 0,
+      'logo_flip_v': logoFlipV ? 1 : 0,
+      'header_flip_h': headerFlipH ? 1 : 0,
+      'header_flip_v': headerFlipV ? 1 : 0,
       'table_header_color': tableHeaderColor,
       'layout_json': layoutJson,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };
+  }
+
+  /// Einen Wahrheitswert aus der Datenbank lesen.
+  ///
+  /// Aus SQLite kommt 0 oder 1, nicht `true`/`false` — `as bool?` wirft dort.
+  /// Zeilen, die vor dieser Fassung angelegt wurden, haben die Spalte gar
+  /// nicht, dann steht `null` darin. Beides heißt hier: aus.
+  static bool _flag(Object? wert) {
+    if (wert is bool) return wert;
+    if (wert is num) return wert != 0;
+    return false;
   }
 
   factory DesignSettingsModel.fromMap(Map<String, dynamic> map) {
@@ -92,10 +109,10 @@ class DesignSettingsModel {
       headerY: (map['header_y'] as num?)?.toDouble(),
       headerWidth: (map['header_width'] as num?)?.toDouble(),
       headerHeight: (map['header_height'] as num?)?.toDouble(),
-      logoFlipH: map['logo_flip_h'] as bool? ?? false,
-      logoFlipV: map['logo_flip_v'] as bool? ?? false,
-      headerFlipH: map['header_flip_h'] as bool? ?? false,
-      headerFlipV: map['header_flip_v'] as bool? ?? false,
+      logoFlipH: _flag(map['logo_flip_h']),
+      logoFlipV: _flag(map['logo_flip_v']),
+      headerFlipH: _flag(map['header_flip_h']),
+      headerFlipV: _flag(map['header_flip_v']),
       tableHeaderColor: map['table_header_color'] as String? ?? '#fda085',
       layoutJson: map['layout_json'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),

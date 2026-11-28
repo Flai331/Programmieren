@@ -1386,10 +1386,29 @@ class _HoneyBucketScreenState extends State<HoneyBucketScreen> {
     return FutureBuilder<String>(
       future: PhotoStorage.resolve(name),
       builder: (ctx, snap) {
-        final pfad = snap.data;
-        if (pfad == null) {
+        // Ein Rädchen nur, solange wirklich gesucht wird. Vorher hing es an
+        // `snap.data == null` — und das ist auch dann null, wenn das Suchen
+        // mit einem Fehler endete. Dann drehte es sich für immer.
+        if (snap.connectionState == ConnectionState.waiting) {
           return const SizedBox(
               height: 120, child: Center(child: CircularProgressIndicator()));
+        }
+        final pfad = snap.data;
+        if (pfad == null) {
+          return InkWell(
+            onTap: _photoSourceChooser,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              height: 120,
+              decoration: BoxDecoration(
+                color: const Color(0xFF18181c),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              alignment: Alignment.center,
+              child: const Text('Foto nicht gefunden — antippen zum Ersetzen',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF8a8a94))),
+            ),
+          );
         }
         return InkWell(
           onTap: _photoSourceChooser,

@@ -3,7 +3,13 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/models.dart';
 import '../utils/feedback_service.dart';
+import 'app_settings_keys.dart';
 import 'database_service.dart';
+
+// Die Namen der Einstellungen gehören zur Schnittstelle dieses Dienstes,
+// liegen aber in einer eigenen Datei, damit die Datenbank-Migrationen sie
+// benutzen können, ohne diesen Dienst zu importieren.
+export 'app_settings_keys.dart';
 
 /// Die anpassbaren Verzeichnisse und einstellbaren Zahlen.
 ///
@@ -37,6 +43,11 @@ class PersonalizationService {
 
   /// Die einstellbaren Zahlen, nach Namen.
   final Map<String, double> _zahlen = {};
+
+  /// Die einstellbaren Texte, nach Namen. In `app_settings` steht ohnehin
+  /// alles als Text; [_zahlen] ist nur die Teilmenge, die sich als Zahl
+  /// lesen lässt.
+  final Map<String, String> _texte = {};
 
   bool _geladen = false;
   bool get isLoaded => _geladen;
@@ -84,10 +95,14 @@ class PersonalizationService {
     }
 
     _zahlen.clear();
+    _texte.clear();
     final werte = await db.query('app_settings');
     for (final reihe in werte) {
-      final zahl = double.tryParse((reihe['value'] as String?) ?? '');
-      if (zahl != null) _zahlen[reihe['name'] as String] = zahl;
+      final name = reihe['name'] as String;
+      final wert = (reihe['value'] as String?) ?? '';
+      _texte[name] = wert;
+      final zahl = double.tryParse(wert);
+      if (zahl != null) _zahlen[name] = zahl;
     }
   }
 
@@ -123,6 +138,7 @@ class PersonalizationService {
   void resetForTests() {
     _verzeichnisse.clear();
     _zahlen.clear();
+    _texte.clear();
     _geladen = false;
     _useDefaults();
   }
@@ -154,6 +170,17 @@ class PersonalizationService {
 
   /// Eine einstellbare Zahl, mit Vorgabe.
   double number(String name, double fallback) => _zahlen[name] ?? fallback;
+
+  /// Ein einstellbarer Text, mit Vorgabe.
+  ///
+  /// Ein leer gespeicherter Wert zählt als „nicht gesetzt": sonst hinge an
+  /// einem versehentlich geleerten Feld eine Einstellung, die nichts mehr
+  /// aussagt — beim Rechnungsnummer-Format käme dann eine Rechnung ganz ohne
+  /// Nummer heraus.
+  String text(String name, String fallback) {
+    final wert = _texte[name]?.trim();
+    return wert == null || wert.isEmpty ? fallback : wert;
+  }
 
   /// Welche Tabelle und Spalte ein Verzeichnis tatsächlich benutzt.
   ///
@@ -366,6 +393,22 @@ class PersonalizationService {
     await db.insert('app_settings', {'name': name, 'value': '$value'},
         conflictAlgorithm: ConflictAlgorithm.replace);
     _zahlen[name] = value;
+    _texte[name] = '$value';
+    _apply();
+  }
+
+  /// Einen einstellbaren Text setzen.
+  Future<void> setText(String name, String value) async {
+    final db = await _datenbank;
+    await db.insert('app_settings', {'name': name, 'value': value},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+    _texte[name] = value;
+    final zahl = double.tryParse(value);
+    if (zahl != null) {
+      _zahlen[name] = zahl;
+    } else {
+      _zahlen.remove(name);
+    }
     _apply();
   }
 
@@ -374,16 +417,4 @@ class PersonalizationService {
     await _read(db);
     _apply();
   }
-}
-
-/// Die Namen der einstellbaren Zahlen.
-///
-/// Als Konstanten, weil sie in der Datenbank stehen: ein Tippfehler im Namen
-/// wäre eine stille Rückkehr zur Vorgabe.
-class AppNumbers {
-  /// Stunden im Wärmeschrank beim ersten Mal.
-  static const String warmerFirstHours = 'waermeschrank_erst_h';
-
-  /// Stunden, wenn der Eimer schon einmal drin war.
-  static const String warmerRepeatHours = 'waermeschrank_wieder_h';
 }

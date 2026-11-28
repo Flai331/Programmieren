@@ -179,11 +179,11 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     if (ok != true) return;
 
     try {
-      // Neue Rechnungsnummer aus Pattern
-      final companies = await _dbService.getAllCompanies();
-      final pattern = companies.isNotEmpty
-          ? companies.first.invoiceNumberPattern
-          : InvoiceNumberGenerator.defaultPattern;
+      // Neue Rechnungsnummer aus dem Format. Das steht seit v8 in den
+      // App-Einstellungen, nicht mehr an der Firma — es gilt also auch,
+      // bevor Firmendaten angelegt sind.
+      final pattern = PersonalizationService().text(
+          AppTexts.invoiceNumberPattern, InvoiceNumberGenerator.defaultPattern);
       final existing = await _dbService.getAllInvoiceNumbers();
       final customer = await _dbService.getCustomer(quote.customerId);
       final newNumber = InvoiceNumberGenerator.generate(
